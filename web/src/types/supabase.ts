@@ -80,6 +80,32 @@ export type Database = {
           },
         ]
       }
+      event_courts: {
+        Row: {
+          court_number: number
+          created_at: string
+          event_id: string
+        }
+        Insert: {
+          court_number: number
+          created_at?: string
+          event_id: string
+        }
+        Update: {
+          court_number?: number
+          created_at?: string
+          event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_courts_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_registrations: {
         Row: {
           created_at: string
@@ -90,6 +116,7 @@ export type Database = {
           partner_registration_id: string | null
           partner_status: Database["public"]["Enums"]["partner_status"]
           player_id: string
+          pool_index: number | null
           registered_at: string
           seed: number | null
           status: Database["public"]["Enums"]["registration_status"]
@@ -104,6 +131,7 @@ export type Database = {
           partner_registration_id?: string | null
           partner_status?: Database["public"]["Enums"]["partner_status"]
           player_id: string
+          pool_index?: number | null
           registered_at?: string
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
@@ -118,6 +146,7 @@ export type Database = {
           partner_registration_id?: string | null
           partner_status?: Database["public"]["Enums"]["partner_status"]
           player_id?: string
+          pool_index?: number | null
           registered_at?: string
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
@@ -162,9 +191,17 @@ export type Database = {
           min_age: number | null
           min_rating: number | null
           name: string
+          play_each_team_times: number
+          playoff_rounds: number
+          points_to_win: number
+          pool_count: number
           rating_source: Database["public"]["Enums"]["rating_source"] | null
+          status: Database["public"]["Enums"]["event_status"]
+          teams_advancing_to_playoff: number
+          timeouts_per_game: number
           tournament_id: string
           updated_at: string
+          win_by: number
         }
         Insert: {
           bracket_type?: Database["public"]["Enums"]["bracket_type"]
@@ -180,9 +217,17 @@ export type Database = {
           min_age?: number | null
           min_rating?: number | null
           name: string
+          play_each_team_times?: number
+          playoff_rounds?: number
+          points_to_win?: number
+          pool_count?: number
           rating_source?: Database["public"]["Enums"]["rating_source"] | null
+          status?: Database["public"]["Enums"]["event_status"]
+          teams_advancing_to_playoff?: number
+          timeouts_per_game?: number
           tournament_id: string
           updated_at?: string
+          win_by?: number
         }
         Update: {
           bracket_type?: Database["public"]["Enums"]["bracket_type"]
@@ -198,9 +243,17 @@ export type Database = {
           min_age?: number | null
           min_rating?: number | null
           name?: string
+          play_each_team_times?: number
+          playoff_rounds?: number
+          points_to_win?: number
+          pool_count?: number
           rating_source?: Database["public"]["Enums"]["rating_source"] | null
+          status?: Database["public"]["Enums"]["event_status"]
+          teams_advancing_to_playoff?: number
+          timeouts_per_game?: number
           tournament_id?: string
           updated_at?: string
+          win_by?: number
         }
         Relationships: [
           {
@@ -208,6 +261,92 @@ export type Database = {
             columns: ["tournament_id"]
             isOneToOne: false
             referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      matches: {
+        Row: {
+          court: string | null
+          created_at: string
+          event_id: string
+          id: string
+          notes: string | null
+          position: number
+          round: number
+          scheduled_at: string | null
+          stage: Database["public"]["Enums"]["match_stage"]
+          status: Database["public"]["Enums"]["match_status"]
+          team_a_reg_id: string | null
+          team_a_score: number | null
+          team_b_reg_id: string | null
+          team_b_score: number | null
+          updated_at: string
+          winner_reg_id: string | null
+        }
+        Insert: {
+          court?: string | null
+          created_at?: string
+          event_id: string
+          id?: string
+          notes?: string | null
+          position?: number
+          round: number
+          scheduled_at?: string | null
+          stage: Database["public"]["Enums"]["match_stage"]
+          status?: Database["public"]["Enums"]["match_status"]
+          team_a_reg_id?: string | null
+          team_a_score?: number | null
+          team_b_reg_id?: string | null
+          team_b_score?: number | null
+          updated_at?: string
+          winner_reg_id?: string | null
+        }
+        Update: {
+          court?: string | null
+          created_at?: string
+          event_id?: string
+          id?: string
+          notes?: string | null
+          position?: number
+          round?: number
+          scheduled_at?: string | null
+          stage?: Database["public"]["Enums"]["match_stage"]
+          status?: Database["public"]["Enums"]["match_status"]
+          team_a_reg_id?: string | null
+          team_a_score?: number | null
+          team_b_reg_id?: string | null
+          team_b_score?: number | null
+          updated_at?: string
+          winner_reg_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matches_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_team_a_reg_id_fkey"
+            columns: ["team_a_reg_id"]
+            isOneToOne: false
+            referencedRelation: "event_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_team_b_reg_id_fkey"
+            columns: ["team_b_reg_id"]
+            isOneToOne: false
+            referencedRelation: "event_registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_winner_reg_id_fkey"
+            columns: ["winner_reg_id"]
+            isOneToOne: false
+            referencedRelation: "event_registrations"
             referencedColumns: ["id"]
           },
         ]
@@ -592,6 +731,7 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          court_count: number
           created_at: string
           deleted_at: string | null
           description: string | null
@@ -610,6 +750,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          court_count?: number
           created_at?: string
           deleted_at?: string | null
           description?: string | null
@@ -628,6 +769,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          court_count?: number
           created_at?: string
           deleted_at?: string | null
           description?: string | null
@@ -675,6 +817,16 @@ export type Database = {
         | "pool_then_bracket"
       event_format: "singles" | "doubles"
       event_gender: "men" | "women" | "mixed"
+      event_status:
+        | "draft"
+        | "active"
+        | "complete"
+        | "ready"
+        | "on_hold"
+        | "medal_round"
+        | "verified"
+      match_stage: "round_robin" | "playoff"
+      match_status: "pending" | "in_progress" | "completed"
       org_role: "owner" | "admin" | "staff"
       org_stripe_status: "not_connected" | "pending" | "active" | "restricted"
       partner_invite_status:
@@ -843,6 +995,17 @@ export const Constants = {
       ],
       event_format: ["singles", "doubles"],
       event_gender: ["men", "women", "mixed"],
+      event_status: [
+        "draft",
+        "active",
+        "complete",
+        "ready",
+        "on_hold",
+        "medal_round",
+        "verified",
+      ],
+      match_stage: ["round_robin", "playoff"],
+      match_status: ["pending", "in_progress", "completed"],
       org_role: ["owner", "admin", "staff"],
       org_stripe_status: ["not_connected", "pending", "active", "restricted"],
       partner_invite_status: [

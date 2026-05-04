@@ -58,3 +58,24 @@ canvas {
   max-width: 100%;
   height: auto;
 }
+
+/* Print rules: hide app chrome (sidebar + page padding) so a route can
+   render to-paper exactly. Pages that print add their own per-card
+   styles inside a <style> tag scoped via a wrapper class. */
+@media print {
+  .admin-sidebar {
+    display: none !important;
+  }
+  .admin-main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    overflow: visible !important;
+    background: #fff !important;
+  }
+}

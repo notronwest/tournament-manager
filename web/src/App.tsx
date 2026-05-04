@@ -3,7 +3,12 @@ import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
+import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateTournamentPage from "./pages/admin/CreateTournamentPage";
+import EventConsolePage from "./pages/admin/EventConsolePage";
+import EventFormPage from "./pages/admin/EventFormPage";
+import ScorecardsPage from "./pages/admin/ScorecardsPage";
+import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
@@ -54,6 +59,30 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug"
           element={<TournamentDetailPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/courts"
+          element={<TournamentCourtManagerPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/new"
+          element={<EventFormPage mode="create" />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId"
+          element={<EventConsolePage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId/edit"
+          element={<EventFormPage mode="edit" />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId/courts"
+          element={<CourtManagerPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId/scorecards"
+          element={<ScorecardsPage />}
         />
       </Route>
 

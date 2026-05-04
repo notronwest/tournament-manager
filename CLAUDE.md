@@ -13,7 +13,7 @@ Mirrors `wmpc-rating-hub` (deliberately — see `~/.claude/CLAUDE.md` for the "w
 - **Frontend** (`web/`): Vite 7 + React 18 + TypeScript (strict) + React Router v6
 - **Charts** (when we need them): Recharts
 - **Auth & DB**: Supabase (Postgres + RLS + Auth + Edge Functions)
-- **Deploy**: Cloudflare Workers SPA via `web/wrangler.jsonc` (worker name `tournament-manager`)
+- **Deploy**: Cloudflare Pages with Git integration — auto-builds + auto-deploys on every push to `main`. SPA fallback via `web/public/_redirects` (`/* /index.html 200`).
 - **Styling**: inline styles, no CSS framework. Conventions in `docs/DESIGN_PREFERENCES.md`.
 
 ---
@@ -168,6 +168,44 @@ npm run typecheck    # tsc -b --noEmit
 npm run build        # production build → dist/
 npm run lint         # eslint
 ```
+
+---
+
+## Deployment (Cloudflare Pages)
+
+Cloudflare Pages is connected directly to the GitHub repo. Every push
+to `main` triggers a build + deploy automatically — no GitHub Actions,
+no API tokens stored in the repo. Preview deploys land for every PR
+branch.
+
+**One-time setup** (Cloudflare dashboard):
+
+1. **Workers & Pages → Create → Pages → Connect to Git** → pick
+   `notronwest/tournament-manager` → Begin setup.
+2. **Build configuration**:
+   - Project name: `tournament-manager`
+   - Production branch: `main`
+   - Framework preset: **None** (Cloudflare lists VitePress, which is the docs-site generator — a different product. We're plain Vite, so skip the preset and fill the fields manually.)
+   - Build command: `npm install && npm run build`
+   - Build output directory: `dist`
+   - Root directory: `web`  (so the build runs from `web/`, not the repo root)
+3. **Environment variables → Production** (also add the same to Preview):
+   - `VITE_SUPABASE_URL` = same value as `web/.env.local`
+   - `VITE_SUPABASE_ANON_KEY` = same value as `web/.env.local` (the `sb_publishable_...` key)
+4. **Save and deploy**. First build takes ~1-2 min and produces
+   `https://tournament-manager.pages.dev`.
+
+**SPA routing**: `web/public/_redirects` contains `/* /index.html 200`
+so deep-link reloads are handled by React Router rather than
+returning 404.
+
+**After the first deploy** add the production URL to
+**Supabase → Auth → URL Configuration → Redirect URLs**:
+- `https://tournament-manager.pages.dev/**`
+- (and any custom domain once attached)
+
+Without this, magic links and Google OAuth on the production site
+will reject the redirect.
 
 ---
 
