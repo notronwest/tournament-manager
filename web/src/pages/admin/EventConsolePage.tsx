@@ -10,6 +10,12 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import {
+  PlayerPicker,
+  emptySelection,
+  persistPlayerSelection,
+  type PlayerSelection,
+} from "../../components/PlayerPicker";
 import { eligibilityChips } from "../../lib/eligibility";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
@@ -346,56 +352,47 @@ function TeamsSection({
   onChange: () => Promise<void>;
 }) {
   const isDoubles = event.format === "doubles";
-  const [aFirst, setAFirst] = useState("");
-  const [aLast, setALast] = useState("");
-  const [bFirst, setBFirst] = useState("");
-  const [bLast, setBLast] = useState("");
+  const [selectionA, setSelectionA] = useState<PlayerSelection>(emptySelection);
+  const [selectionB, setSelectionB] = useState<PlayerSelection>(emptySelection);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Don't allow the same existing player on both sides of a doubles team.
+  const excludeForA =
+    selectionB.mode === "existing" ? [selectionB.player.id] : [];
+  const excludeForB =
+    selectionA.mode === "existing" ? [selectionA.player.id] : [];
 
   const onAdd = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!aFirst.trim() || !aLast.trim()) {
-      setError("Player A first and last name are required.");
+    if (selectionA.mode === "empty") {
+      setError("Pick or enter Player A.");
       return;
     }
-    if (isDoubles && (!bFirst.trim() || !bLast.trim())) {
-      setError("Player B first and last name are required.");
+    if (isDoubles && selectionB.mode === "empty") {
+      setError("Pick or enter Player B.");
       return;
     }
     setBusy(true);
 
-    const { data: playerA, error: pAErr } = await supabase
-      .from("players")
-      .insert({
-        first_name: aFirst.trim(),
-        last_name: aLast.trim(),
-      })
-      .select()
-      .single();
-    if (pAErr || !playerA) {
-      setError(pAErr?.message ?? "Failed to create player A.");
+    const aRes = await persistPlayerSelection(selectionA);
+    if (!aRes.player) {
+      setError(aRes.error ?? "Failed to save Player A.");
       setBusy(false);
       return;
     }
+    const playerA = aRes.player;
 
     let playerB: Player | null = null;
     if (isDoubles) {
-      const res = await supabase
-        .from("players")
-        .insert({
-          first_name: bFirst.trim(),
-          last_name: bLast.trim(),
-        })
-        .select()
-        .single();
-      if (res.error || !res.data) {
-        setError(res.error?.message ?? "Failed to create player B.");
+      const bRes = await persistPlayerSelection(selectionB);
+      if (!bRes.player) {
+        setError(bRes.error ?? "Failed to save Player B.");
         setBusy(false);
         return;
       }
-      playerB = res.data;
+      playerB = bRes.player;
     }
 
     const { data: regA, error: rAErr } = await supabase
@@ -444,10 +441,8 @@ function TeamsSection({
       }
     }
 
-    setAFirst("");
-    setALast("");
-    setBFirst("");
-    setBLast("");
+    setSelectionA(emptySelection);
+    setSelectionB(emptySelection);
     setBusy(false);
     await onChange();
   };
@@ -584,10 +579,9 @@ function TeamsSection({
       <form
         onSubmit={onAdd}
         style={{
-          display: "grid",
-          gridTemplateColumns: isDoubles ? "1fr 1fr 1fr 1fr auto" : "1fr 1fr auto",
-          gap: 8,
-          alignItems: "end",
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-start",
           marginBottom: 16,
           padding: 12,
           background: "#fafafa",
@@ -595,41 +589,25 @@ function TeamsSection({
           borderRadius: 6,
         }}
       >
-        <Mini label="Player A first">
-          <input
-            value={aFirst}
-            onChange={(e) => setAFirst(e.target.value)}
-            style={miniInput}
-          />
-        </Mini>
-        <Mini label="Player A last">
-          <input
-            value={aLast}
-            onChange={(e) => setALast(e.target.value)}
-            style={miniInput}
-          />
-        </Mini>
+        <PlayerPicker
+          label="Player A"
+          selection={selectionA}
+          onChange={setSelectionA}
+          excludePlayerIds={excludeForA}
+        />
         {isDoubles && (
-          <>
-            <Mini label="Player B first">
-              <input
-                value={bFirst}
-                onChange={(e) => setBFirst(e.target.value)}
-                style={miniInput}
-              />
-            </Mini>
-            <Mini label="Player B last">
-              <input
-                value={bLast}
-                onChange={(e) => setBLast(e.target.value)}
-                style={miniInput}
-              />
-            </Mini>
-          </>
+          <PlayerPicker
+            label="Player B"
+            selection={selectionB}
+            onChange={setSelectionB}
+            excludePlayerIds={excludeForB}
+          />
         )}
-        <button type="submit" disabled={busy} style={primaryBtn(busy)}>
-          {busy ? "Adding…" : "Add team"}
-        </button>
+        <div style={{ paddingTop: 18 }}>
+          <button type="submit" disabled={busy} style={primaryBtn(busy)}>
+            {busy ? "Adding…" : "Add team"}
+          </button>
+        </div>
       </form>
 
       {error && <ErrorBox message={error} />}
@@ -1680,22 +1658,6 @@ function SectionHeader({
   );
 }
 
-function Mini({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        fontSize: 12,
-        color: "#666",
-      }}
-    >
-      {label}
-      {children}
-    </label>
-  );
-}
 
 function Empty({ children }: { children: ReactNode }) {
   return (
@@ -1764,14 +1726,6 @@ const thStyle: CSSProperties = {
 
 const tdStyle: CSSProperties = {
   padding: "10px 12px",
-};
-
-const miniInput: CSSProperties = {
-  padding: "6px 10px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 13,
-  fontFamily: "inherit",
 };
 
 const scoreInputStyle: CSSProperties = {

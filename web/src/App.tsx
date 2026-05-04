@@ -3,6 +3,7 @@ import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
+import AttendeesPage from "./pages/admin/AttendeesPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateTournamentPage from "./pages/admin/CreateTournamentPage";
 import EventConsolePage from "./pages/admin/EventConsolePage";
@@ -63,6 +64,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/courts"
           element={<TournamentCourtManagerPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/attendees"
+          element={<AttendeesPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/events/new"

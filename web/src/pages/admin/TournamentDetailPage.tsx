@@ -267,7 +267,15 @@ export default function TournamentDetailPage() {
           gap: 12,
         }}
       >
-        <Stat label="Players registered" value={totalPlayers ?? "…"} />
+        <Stat
+          label="Players registered"
+          value={totalPlayers ?? "…"}
+          to={
+            totalPlayers && totalPlayers > 0
+              ? `/admin/${org.slug}/tournaments/${t.slug}/attendees`
+              : undefined
+          }
+        />
         <Stat label="Events" value={events.length} />
         <Stat label="Status" value={t.status} />
         <Stat
@@ -615,16 +623,17 @@ function EventStatusBadge({ status }: { status: EventStatus }) {
 // Bits
 // ─────────────────────────────────────────────────────────────────────
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div
-      style={{
-        padding: 12,
-        background: "#fafafa",
-        border: "1px solid #e5e7eb",
-        borderRadius: 6,
-      }}
-    >
+function Stat({
+  label,
+  value,
+  to,
+}: {
+  label: string;
+  value: string | number;
+  to?: string;
+}) {
+  const content = (
+    <>
       <div
         style={{
           fontSize: 11,
@@ -635,9 +644,45 @@ function Stat({ label, value }: { label: string; value: string | number }) {
       >
         {label}
       </div>
-      <div style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>{value}</div>
-    </div>
+      <div
+        style={{
+          fontSize: 18,
+          fontWeight: 600,
+          marginTop: 4,
+          color: to ? "#2563eb" : undefined,
+        }}
+      >
+        {value}
+        {to && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 400,
+              marginLeft: 6,
+              color: "#888",
+            }}
+          >
+            view →
+          </span>
+        )}
+      </div>
+    </>
   );
+  const baseStyle: CSSProperties = {
+    padding: 12,
+    background: "#fafafa",
+    border: "1px solid #e5e7eb",
+    borderRadius: 6,
+    display: "block",
+  };
+  if (to) {
+    return (
+      <Link to={to} style={{ ...baseStyle, textDecoration: "none" }}>
+        {content}
+      </Link>
+    );
+  }
+  return <div style={baseStyle}>{content}</div>;
 }
 
 function DtDd({ label, value }: { label: string; value: string }) {
