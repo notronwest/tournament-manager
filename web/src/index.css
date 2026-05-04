@@ -1,0 +1,60 @@
+/* Global base. The codebase favors inline styles, so this file mostly
+ * resets Vite boilerplate (dark mode, body flex) and sets sane defaults
+ * for layouts to render predictably on every device. Add targeted
+ * `!important` overrides at narrow viewports for layout containers /
+ * grids that don't reflow on their own — key each rule off a stable
+ * class name on the component.
+ */
+
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial,
+    sans-serif;
+  line-height: 1.5;
+  color: #222;
+  background-color: #fff;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Allow long URLs / labels to break inside narrow cards instead of
+     blowing the layout out horizontally. */
+  word-wrap: break-word;
+}
+
+/* Make padding count inside the declared width on every element —
+   without this an `<input style="width: 100%; padding: 10px">` gets
+   measured as `100% + 20px` and overflows its container, which on
+   mobile triggers the browser to zoom out the entire viewport. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: #fff;
+  color: #222;
+  /* Last-line defence against any one wide element (a long URL, a
+     misaligned chart) triggering a horizontal scroll that mobile
+     Safari then translates into "zoom the whole page out so it
+     fits". */
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Stop tables and SVGs from overflowing their container on narrow
+   screens. */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
