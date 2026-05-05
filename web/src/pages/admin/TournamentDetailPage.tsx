@@ -458,6 +458,27 @@ function EventCard({
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {/* Lifecycle: draft → ready → active.
+              Draft is for "still being configured"; Ready to play is
+              "configured + waiting to start"; Active is running. From
+              draft we offer both "Mark ready" (just stage it) and
+              "Start event" (skip ready, go straight to active) so the
+              organizer isn't forced through an extra click on event
+              day. */}
+          {event.status === "draft" && (
+            <button
+              onClick={() => onSetStatus(event.id, "ready")}
+              disabled={busyAction === `status:${event.id}` || teamCount < 2}
+              title={
+                teamCount < 2
+                  ? "Add at least 2 teams first."
+                  : "Mark this event configured and ready to play. Doesn't start match generation."
+              }
+              style={secondaryBtn}
+            >
+              Mark ready
+            </button>
+          )}
           {(event.status === "draft" || event.status === "ready") && (
             <button
               onClick={() => onSetStatus(event.id, "active")}
@@ -592,7 +613,7 @@ function EventCard({
 function EventStatusBadge({ status }: { status: EventStatus }) {
   const palette: Record<EventStatus, { bg: string; fg: string; label: string }> = {
     draft:       { bg: "#f3f4f6", fg: "#666",    label: "Draft" },
-    ready:       { bg: "#fef3c7", fg: "#92400e", label: "Ready" },
+    ready:       { bg: "#fef3c7", fg: "#92400e", label: "Ready to play" },
     active:      { bg: "#dcfce7", fg: "#166534", label: "Active" },
     on_hold:     { bg: "#ffedd5", fg: "#9a3412", label: "On hold" },
     medal_round: { bg: "#fde68a", fg: "#92400e", label: "Medal round" },

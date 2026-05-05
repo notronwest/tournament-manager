@@ -10,6 +10,7 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
+import { matchLabel } from "../../lib/matchLabel";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import type { Database } from "../../types/supabase";
 
@@ -178,6 +179,35 @@ export default function TournamentCourtManagerPage() {
     () => new Map(activeEvents.map((e) => [e.id, e])),
     [activeEvents],
   );
+  // Per-event match set, used to compute matchLabel (which needs the
+  // full event match list to disambiguate "Final" vs "Semi-1" etc).
+  const matchesByEvent = useMemo(() => {
+    const m = new Map<string, Match[]>();
+    for (const x of matches) {
+      const arr = m.get(x.event_id) ?? [];
+      arr.push(x);
+      m.set(x.event_id, arr);
+    }
+    return m;
+  }, [matches]);
+
+  // Active events whose round-robin is finished but whose playoff
+  // bracket hasn't been generated yet — surface a banner above the
+  // courts grid linking to the event console (where the actual
+  // generator lives) so the organizer can transition without leaving
+  // the dispatcher view.
+  const eventsAwaitingPlayoff = useMemo(() => {
+    return activeEvents.filter((ev) => {
+      // No playoff configured for this event → nothing to generate.
+      if (ev.teams_advancing_to_playoff <= 0) return false;
+      const evMatches = matchesByEvent.get(ev.id) ?? [];
+      const rr = evMatches.filter((m) => m.stage === "round_robin");
+      const playoff = evMatches.filter((m) => m.stage === "playoff");
+      const rrComplete =
+        rr.length > 0 && rr.every((m) => m.status === "completed");
+      return rrComplete && playoff.length === 0;
+    });
+  }, [activeEvents, matchesByEvent]);
 
   // Court number → owning active event id.
   const ownerByCourt = useMemo(() => {
@@ -519,7 +549,49 @@ export default function TournamentCourtManagerPage() {
         </Empty>
       )}
 
+      {eventsAwaitingPlayoff.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {eventsAwaitingPlayoff.map((ev) => (
+            <div
+              key={ev.id}
+              style={{
+                padding: "12px 16px",
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                borderRadius: 8,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontSize: 13, color: "#1e3a8a" }}>
+                <strong>{ev.name}</strong>: round-robin complete. Time to
+                generate the playoff bracket.
+              </div>
+              <Link
+                to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${ev.id}`}
+                style={{
+                  padding: "6px 12px",
+                  background: "#2563eb",
+                  color: "#fff",
+                  textDecoration: "none",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Generate playoffs →
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div
+        className="tcm-courts-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
@@ -586,6 +658,7 @@ export default function TournamentCourtManagerPage() {
                 <thead>
                   <tr style={{ background: "#fafafa" }}>
                     <th style={thStyle}>#</th>
+                    <th style={thStyle}>Match</th>
                     <th style={thStyle}>Event</th>
                     <th style={thStyle}>Team A</th>
                     <th style={thStyle}>Team B</th>
@@ -601,12 +674,28 @@ export default function TournamentCourtManagerPage() {
                     const teamB = match.team_b_reg_id
                       ? teamByAnyRegId.get(match.team_b_reg_id)
                       : null;
+                    const label = matchLabel(
+                      match,
+                      matchesByEvent.get(match.event_id) ?? [],
+                    );
                     return (
                       <tr
                         key={match.id}
                         style={{ borderBottom: "1px solid #f3f4f6" }}
                       >
                         <td style={{ ...tdStyle, color: "#888" }}>{i + 1}</td>
+                        <td
+                          style={{
+                            ...tdStyle,
+                            fontFamily:
+                              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                            fontSize: 12,
+                            color: "#555",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {label}
+                        </td>
                         <td style={tdStyle}>{ev?.name ?? "—"}</td>
                         <td style={tdStyle}>{teamA?.label ?? "—"}</td>
                         <td style={tdStyle}>{teamB?.label ?? "—"}</td>

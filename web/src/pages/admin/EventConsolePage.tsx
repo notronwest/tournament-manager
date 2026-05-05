@@ -287,7 +287,7 @@ export default function EventConsolePage() {
             >
               Edit format
             </Link>
-            {rrMatches.length > 0 && (
+            {matches.length > 0 && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/scorecards`}
                 style={{

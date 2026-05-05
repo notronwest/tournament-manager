@@ -196,15 +196,18 @@ export default function CourtManagerPage() {
     return m;
   }, [matches]);
 
-  // Pending RR matches scored by "longest-rested team", filtered to
-  // exclude busy teams. The score is max(lastPlayed_A, lastPlayed_B):
-  // lower means the team that played most recently in this pair did so
-  // longer ago — i.e. the pair as a whole has been waiting.
+  // Pending matches (RR or playoff) scored by "longest-rested team",
+  // filtered to exclude busy teams. The score is max(lastPlayed_A,
+  // lastPlayed_B): lower means the team that played most recently in
+  // this pair did so longer ago — i.e. the pair as a whole has been
+  // waiting. Playoff matches are eligible as soon as both teams are
+  // populated (feedForwardPlayoffWinners fills these in after each
+  // upstream match completes), so they appear in the queue exactly
+  // when they're ready to play.
   const rankedPending = useMemo(() => {
     return matches
       .filter(
         (m) =>
-          m.stage === "round_robin" &&
           m.status === "pending" &&
           m.team_a_reg_id &&
           m.team_b_reg_id,
@@ -212,9 +215,22 @@ export default function CourtManagerPage() {
       .map((m) => {
         const lastA = lastPlayedAt.get(m.team_a_reg_id!) ?? 0;
         const lastB = lastPlayedAt.get(m.team_b_reg_id!) ?? 0;
-        return { match: m, score: Math.max(lastA, lastB) };
+        // Stage tiebreak: when wait-time is equal, finish the RR
+        // round before serving up playoff. Comparators below sort
+        // by score, then stage (RR before playoff), then position.
+        return {
+          match: m,
+          score: Math.max(lastA, lastB),
+          stageRank: m.stage === "round_robin" ? 0 : 1,
+        };
       })
-      .sort((x, y) => x.score - y.score || x.match.position - y.match.position);
+      .sort(
+        (x, y) =>
+          x.score - y.score ||
+          x.stageRank - y.stageRank ||
+          x.match.round - y.match.round ||
+          x.match.position - y.match.position,
+      );
   }, [matches, lastPlayedAt]);
 
   const eligibleRanked = useMemo(
@@ -385,6 +401,7 @@ export default function CourtManagerPage() {
       </div>
 
       <div
+        className="tcm-courts-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
@@ -425,7 +442,7 @@ export default function CourtManagerPage() {
         {upNext.length === 0 ? (
           <Empty>
             {pendingCount === 0
-              ? "All round-robin matches are done."
+              ? "All matches are done."
               : "No more matches can start until current courts free up."}
           </Empty>
         ) : (

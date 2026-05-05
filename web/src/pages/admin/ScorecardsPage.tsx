@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { matchLabel } from "../../lib/matchLabel";
 import type { Database } from "../../types/supabase";
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
@@ -392,25 +393,6 @@ function buildTeamLookup(
     if (partnerReg) lookup.set(partnerReg.id, team);
   }
   return lookup;
-}
-
-function matchLabel(m: Match, all: Match[]): string {
-  if (m.stage === "round_robin") {
-    const rr = all
-      .filter((x) => x.stage === "round_robin")
-      .sort((a, b) => a.position - b.position);
-    const idx = rr.findIndex((x) => x.id === m.id);
-    return `RR-${idx + 1}`;
-  }
-  // playoff: round 1 = semis, round 2 = final (top-2 mode: round 1 = final)
-  const playoff = all
-    .filter((x) => x.stage === "playoff")
-    .sort((a, b) => a.round - b.round || a.position - b.position);
-  const sameRound = playoff.filter((x) => x.round === m.round);
-  if (sameRound.length === 1) return "Final";
-  if (sameRound.length === 2) return `Semi-${m.position + 1}`;
-  if (sameRound.length === 4) return `Quarter-${m.position + 1}`;
-  return `Playoff R${m.round}-${m.position + 1}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -59,6 +59,31 @@ canvas {
   height: auto;
 }
 
+/* Court manager grid. The default `auto-fit minmax(280px, 1fr)` works
+   well for arbitrary court counts but produces an ugly 3+1 layout for
+   exactly 4 courts at typical viewport widths. The breakpoint set
+   below skips the "3 columns" stop entirely:
+   - up to 600px:  1 column   (phones — wide cards stack vertically)
+   - 600-1099:     2 columns  (tablets — 4 courts → clean 2x2)
+   - 1100+:        auto-fit   (desktops — 4 courts fit in a single
+                               row at typical widths; bigger counts
+                               grow as space allows)
+   The grid still uses inline styles for everything else (gap, etc.);
+   we only override grid-template-columns here. */
+.tcm-courts-grid {
+  grid-template-columns: 1fr !important;
+}
+@media (min-width: 600px) {
+  .tcm-courts-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (min-width: 1100px) {
+  .tcm-courts-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+  }
+}
+
 /* Print rules: hide app chrome (sidebar + page padding) so a route can
    render to-paper exactly. Pages that print add their own per-card
    styles inside a <style> tag scoped via a wrapper class. */
