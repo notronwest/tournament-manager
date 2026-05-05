@@ -10,6 +10,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   PlayerPicker,
   emptySelection,
@@ -76,6 +77,8 @@ export default function EventConsolePage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug || !eventId) return;
@@ -191,6 +194,67 @@ export default function EventConsolePage() {
   const rrComplete =
     rrMatches.length > 0 && rrMatches.every((m) => m.status === "completed");
 
+  // Reset all match scores in this event back to 'pending' — clear
+  // scores, winner, and court, but keep the schedule intact (don't
+  // delete matches the way "Reset all matches" / "Reset playoff" do).
+  // For playoff matches in round > 1 we also null the team slots,
+  // because those teams were populated by feedForwardPlayoffWinners
+  // from upstream winners — replaying earlier rounds will refeed.
+  // If the event was complete/verified we also bump it back to
+  // active so it re-enters the court manager.
+  const onResetAllScores = async () => {
+    if (!event) return;
+    setResetting(true);
+    setError(null);
+
+    // supabase-js returns a thenable PostgrestFilterBuilder, not a
+    // strict Promise — Promise.all accepts it but type inference on
+    // the array is cleaner than explicitly typing.
+    const results = await Promise.all([
+      // Score-clearing pass — every match in the event.
+      supabase
+        .from("matches")
+        .update({
+          status: "pending",
+          team_a_score: null,
+          team_b_score: null,
+          winner_reg_id: null,
+          court: null,
+        })
+        .eq("event_id", event.id),
+      // Team-slot clearing for playoff round > 1 (feed-forward output).
+      supabase
+        .from("matches")
+        .update({ team_a_reg_id: null, team_b_reg_id: null })
+        .eq("event_id", event.id)
+        .eq("stage", "playoff")
+        .gt("round", 1),
+    ]);
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      setError(firstErr.message);
+      setResetting(false);
+      return;
+    }
+
+    // Bump status back if the event had drifted into a finished state.
+    if (event.status === "complete" || event.status === "verified") {
+      const { error: statusErr } = await supabase
+        .from("events")
+        .update({ status: "active" })
+        .eq("id", event.id);
+      if (statusErr) {
+        setError(statusErr.message);
+        setResetting(false);
+        return;
+      }
+    }
+
+    setResetting(false);
+    setResetConfirmOpen(false);
+    await reload();
+  };
+
   if (!org) return null;
   if (loading) return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
   if (error) {
@@ -305,6 +369,27 @@ export default function EventConsolePage() {
                 Print scorecards
               </Link>
             )}
+            {matches.some((m) => m.status !== "pending") && (
+              <button
+                onClick={() => setResetConfirmOpen(true)}
+                disabled={resetting}
+                title="Clear all scores and put every match back to pending. Keeps the schedule intact — won't delete or regenerate the bracket."
+                style={{
+                  padding: "8px 16px",
+                  background: "#fff",
+                  color: "#991b1b",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  border: "1px solid #fecaca",
+                  cursor: resetting ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {resetting ? "Resetting…" : "Reset all scores"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -335,6 +420,23 @@ export default function EventConsolePage() {
         rrComplete={rrComplete}
         onChange={reload}
       />
+
+      {resetConfirmOpen && (
+        <ConfirmModal
+          title="Reset all scores?"
+          body={
+            <div>
+              Every match in this event will go back to <strong>pending</strong>{" "}
+              — scores cleared, courts freed, winners reset. The schedule
+              and bracket stay intact; you can replay every match. If the
+              event was marked complete, it will return to <strong>active</strong>.
+            </div>
+          }
+          confirmLabel={resetting ? "Resetting…" : "Reset all scores"}
+          onCancel={() => setResetConfirmOpen(false)}
+          onConfirm={onResetAllScores}
+        />
+      )}
     </div>
   );
 }

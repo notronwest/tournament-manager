@@ -10,6 +10,10 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
+import {
+  playoffStageLabel,
+  playoffStageStyle,
+} from "../../lib/matchLabel";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import type { Database } from "../../types/supabase";
 
@@ -411,12 +415,23 @@ export default function CourtManagerPage() {
         {courts.map((court) => {
           const assigned = courtAssignments.get(court) ?? null;
           const suggestion = suggestionByCourt.get(court) ?? null;
+          // Stage labels — only meaningful for playoff matches; null
+          // for round-robin so the card doesn't show a badge during
+          // pool play.
+          const assignedStageLabel = assigned
+            ? playoffStageLabel(assigned, matches, event)
+            : null;
+          const suggestionStageLabel = suggestion
+            ? playoffStageLabel(suggestion, matches, event)
+            : null;
           return (
             <CourtCard
               key={`${court}:${assigned?.id ?? "empty"}`}
               court={court}
               assigned={assigned}
+              assignedStageLabel={assignedStageLabel}
               suggestion={suggestion}
+              suggestionStageLabel={suggestionStageLabel}
               teamByAnyRegId={teamByAnyRegId}
               onLoad={(matchId) => onLoad(matchId, court)}
               onCancel={onCancel}
@@ -498,7 +513,9 @@ export default function CourtManagerPage() {
 function CourtCard({
   court,
   assigned,
+  assignedStageLabel,
   suggestion,
+  suggestionStageLabel,
   teamByAnyRegId,
   pickerOptions,
   onLoad,
@@ -507,7 +524,9 @@ function CourtCard({
 }: {
   court: string;
   assigned: Match | null;
+  assignedStageLabel: string | null;
   suggestion: Match | null;
+  suggestionStageLabel: string | null;
   teamByAnyRegId: Map<string, Team>;
   pickerOptions: Match[];
   onLoad: (matchId: string) => Promise<void>;
@@ -551,6 +570,7 @@ function CourtCard({
     return (
       <div style={cardStyle("#dcfce7")}>
         <CardHeader court={court} status="In progress" statusColor="#166534" />
+        <StageBadge label={assignedStageLabel} />
         <div style={teamRow}>
           <span style={teamNameStyle}>{teamLabel(assigned.team_a_reg_id)}</span>
         </div>
@@ -632,6 +652,7 @@ function CourtCard({
   return (
     <div style={cardStyle("#fafafa")}>
       <CardHeader court={court} status="Empty" statusColor="#888" />
+      <StageBadge label={suggestionStageLabel} />
 
       {suggestion ? (
         <>
@@ -787,6 +808,33 @@ function CardHeader({
       >
         {status}
       </span>
+    </div>
+  );
+}
+
+// Small chip rendered between the card header and the team rows when
+// the match is part of a playoff. Gold/Bronze get the warm palettes
+// from playoffStageStyle; semis/quarters/final stay neutral blue.
+function StageBadge({ label }: { label: string | null }) {
+  if (!label) return null;
+  const palette = playoffStageStyle(label);
+  if (!palette) return null;
+  return (
+    <div
+      style={{
+        margin: "0 0 12px",
+        padding: "4px 10px",
+        background: palette.background,
+        color: palette.color,
+        border: `1px solid ${palette.border}`,
+        borderRadius: 4,
+        fontSize: 12,
+        fontWeight: 600,
+        textAlign: "center",
+        letterSpacing: 0.3,
+      }}
+    >
+      {label}
     </div>
   );
 }
