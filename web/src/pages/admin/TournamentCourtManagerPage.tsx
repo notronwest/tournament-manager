@@ -612,25 +612,23 @@ export default function TournamentCourtManagerPage() {
             : null;
           const suggestion = suggestionByCourt.get(cn) ?? null;
 
-          // Stage labels for the in-progress match and the suggested
-          // next match. Null for round-robin so the card only shows
-          // a stage badge during medal-round play.
-          const assignedStageLabel =
-            assigned && assignedEvent
-              ? playoffStageLabel(
-                  assigned,
-                  matchesByEvent.get(assignedEvent.id) ?? [],
-                  assignedEvent,
-                )
-              : null;
-          const suggestionStageLabel =
-            suggestion && owner
-              ? playoffStageLabel(
-                  suggestion,
-                  matchesByEvent.get(owner.id) ?? [],
-                  owner,
-                )
-              : null;
+          // Match label for the in-progress match and the suggested
+          // next match. Always present when there's a match — uses
+          // the verbose playoff label when applicable (Gold Medal
+          // Match, Semifinal 1, etc.) and falls back to the compact
+          // RR-N label so the organizer can call out a match by
+          // number even during round-robin play. Null only when
+          // there's no match on the card at all.
+          const labelFor = (m: Match | null, ev: Event | null) => {
+            if (!m) return null;
+            const evMatches = matchesByEvent.get(m.event_id) ?? [];
+            return (
+              (ev && playoffStageLabel(m, evMatches, ev)) ||
+              matchLabel(m, evMatches)
+            );
+          };
+          const assignedStageLabel = labelFor(assigned, assignedEvent);
+          const suggestionStageLabel = labelFor(suggestion, owner);
 
           return (
             <CourtCard

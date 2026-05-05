@@ -11,6 +11,7 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import {
+  matchLabel,
   playoffStageLabel,
   playoffStageStyle,
 } from "../../lib/matchLabel";
@@ -415,15 +416,17 @@ export default function CourtManagerPage() {
         {courts.map((court) => {
           const assigned = courtAssignments.get(court) ?? null;
           const suggestion = suggestionByCourt.get(court) ?? null;
-          // Stage labels — only meaningful for playoff matches; null
-          // for round-robin so the card doesn't show a badge during
-          // pool play.
-          const assignedStageLabel = assigned
-            ? playoffStageLabel(assigned, matches, event)
-            : null;
-          const suggestionStageLabel = suggestion
-            ? playoffStageLabel(suggestion, matches, event)
-            : null;
+          // Match label — verbose for playoff (Gold Medal Match,
+          // Semifinal 1, etc.), compact RR-N for round-robin.
+          // Always present when there's a match on the card so the
+          // organizer can refer to it by name.
+          const labelFor = (m: Match | null) =>
+            m
+              ? playoffStageLabel(m, matches, event) ??
+                matchLabel(m, matches)
+              : null;
+          const assignedStageLabel = labelFor(assigned);
+          const suggestionStageLabel = labelFor(suggestion);
           return (
             <CourtCard
               key={`${court}:${assigned?.id ?? "empty"}`}

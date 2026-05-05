@@ -297,7 +297,10 @@ function Scorecard({
           1 game to {pointsToWin} win by {winBy}
         </strong>
         <div className="scorecard-rule-headers">
-          <span className="scorecard-col-label">G:1</span>
+          {/* "G:1" column header removed — the bold rule above
+              already says one game. "Initials" stays so the
+              referee column reads correctly. */}
+          <span className="scorecard-col-label" aria-hidden="true" />
           <span className="scorecard-col-label">Initials</span>
         </div>
       </div>

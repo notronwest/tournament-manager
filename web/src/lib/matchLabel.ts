@@ -88,9 +88,11 @@ export function playoffStageLabel(
   return `Round ${m.round} Match ${m.position + 1}`;
 }
 
-// Visual treatment for a playoff stage label. Gold gets the amber
-// palette from design-prefs (note-to-self family); bronze gets a
-// muted copper. Other rounds (semis/quarters/final) stay neutral.
+// Visual treatment for a match label. Gold gets the amber palette
+// from design-prefs (note-to-self family); bronze gets a muted
+// copper; bracket rounds (Final / Semifinal / Quarterfinal) stay
+// neutral blue; everything else (RR-N, etc.) gets a neutral gray.
+// Returns null only when given a null label.
 export function playoffStageStyle(
   label: string | null,
 ): { color: string; background: string; border: string } | null {
@@ -101,6 +103,15 @@ export function playoffStageStyle(
   if (label.startsWith("Bronze")) {
     return { color: "#7c2d12", background: "#fff7ed", border: "#fed7aa" };
   }
-  // Final / Semifinal / Quarterfinal — neutral.
-  return { color: "#1e3a8a", background: "#eff6ff", border: "#bfdbfe" };
+  if (
+    label === "Final" ||
+    label.startsWith("Semifinal") ||
+    label.startsWith("Quarterfinal")
+  ) {
+    return { color: "#1e3a8a", background: "#eff6ff", border: "#bfdbfe" };
+  }
+  // RR-N or any other compact label — neutral gray badge so the
+  // match name reads as informational without competing with the
+  // medal-round badges.
+  return { color: "#6b7280", background: "#f9fafb", border: "#e5e7eb" };
 }
