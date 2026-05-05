@@ -7,7 +7,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
@@ -23,6 +23,8 @@ import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import type { Database } from "../../types/supabase";
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
+
+type TabKey = "settings" | "teams" | "games" | "standings";
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type EventRegistration =
@@ -79,6 +81,23 @@ export default function EventConsolePage() {
   const [error, setError] = useState<string | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+
+  // Active tab — driven by ?tab=... so refresh + browser-back keeps
+  // the user where they were. "teams" is the default landing tab
+  // because that's where most pre-event work happens.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = ((): TabKey => {
+    const t = searchParams.get("tab");
+    if (t === "settings" || t === "teams" || t === "games" || t === "standings") {
+      return t;
+    }
+    return "teams";
+  })();
+  const setActiveTab = (t: TabKey) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", t);
+    setSearchParams(next, { replace: true });
+  };
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug || !eventId) return;
@@ -334,23 +353,9 @@ export default function EventConsolePage() {
               </div>
             )}
           </div>
+          {/* Edit format moved into the Settings tab below — header
+              keeps cross-cutting actions only (Print, Reset). */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link
-              to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/edit`}
-              style={{
-                padding: "8px 16px",
-                background: "#fff",
-                color: "#555",
-                textDecoration: "none",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-                border: "1px solid #e2e2e2",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Edit format
-            </Link>
             {matches.length > 0 && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/scorecards`}
@@ -394,32 +399,48 @@ export default function EventConsolePage() {
         </div>
       </div>
 
-      <TeamsSection
-        event={event}
-        teams={teams}
-        canDelete={matches.length === 0}
-        onChange={reload}
-      />
+      <TabStrip active={activeTab} onChange={setActiveTab} />
 
-      <RoundRobinSection
-        event={event}
-        teams={teams}
-        matches={rrMatches}
-        teamByAnyRegId={teamByAnyRegId}
-        onChange={reload}
-      />
+      {activeTab === "settings" && (
+        <SettingsTab
+          event={event}
+          editUrl={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/edit`}
+        />
+      )}
 
-      <StandingsSection event={event} standings={standings} />
+      {activeTab === "teams" && (
+        <TeamsSection
+          event={event}
+          teams={teams}
+          canDelete={matches.length === 0}
+          onChange={reload}
+        />
+      )}
 
-      <PlayoffSection
-        event={event}
-        standings={standings}
-        teamByAnyRegId={teamByAnyRegId}
-        teamByCaptainId={teamByCaptainId}
-        playoffMatches={playoffMatches}
-        rrComplete={rrComplete}
-        onChange={reload}
-      />
+      {activeTab === "games" && (
+        <>
+          <RoundRobinSection
+            event={event}
+            teams={teams}
+            matches={rrMatches}
+            teamByAnyRegId={teamByAnyRegId}
+            onChange={reload}
+          />
+          <PlayoffSection
+            event={event}
+            standings={standings}
+            teamByAnyRegId={teamByAnyRegId}
+            teamByCaptainId={teamByCaptainId}
+            playoffMatches={playoffMatches}
+            rrComplete={rrComplete}
+            onChange={reload}
+          />
+        </>
+      )}
+
+      {activeTab === "standings" && (
+        <StandingsSection event={event} standings={standings} />
+      )}
 
       {resetConfirmOpen && (
         <ConfirmModal
@@ -1826,6 +1847,178 @@ function capitalize(s: string): string {
 // ─────────────────────────────────────────────────────────────────────
 // Tiny shared UI bits
 // ─────────────────────────────────────────────────────────────────────
+
+// Tab strip rendered between the page header and the per-tab
+// content. Active tab keyed by the `tab` URL param so refresh +
+// browser back work. Visual: text buttons with a 2px bottom-border
+// underline for the active tab — minimal chrome, fits the inline-
+// styles aesthetic of the rest of the app.
+function TabStrip({
+  active,
+  onChange,
+}: {
+  active: TabKey;
+  onChange: (t: TabKey) => void;
+}) {
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: "settings", label: "Settings" },
+    { key: "teams", label: "Teams" },
+    { key: "games", label: "Games" },
+    { key: "standings", label: "Standings" },
+  ];
+  return (
+    <div
+      style={{
+        borderBottom: "1px solid #e2e2e2",
+        display: "flex",
+        gap: 4,
+      }}
+    >
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => onChange(t.key)}
+          style={{
+            padding: "8px 16px",
+            background: "transparent",
+            color: active === t.key ? "#2563eb" : "#666",
+            border: "none",
+            borderBottom:
+              active === t.key
+                ? "2px solid #2563eb"
+                : "2px solid transparent",
+            // Pull the bottom border down to overlap the strip's own
+            // border, otherwise the active underline sits above it
+            // and looks doubled.
+            marginBottom: -1,
+            fontSize: 14,
+            fontWeight: active === t.key ? 600 : 500,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Settings tab — read-only view of every event-config column with an
+// "Edit settings" link to the existing form page. We don't inline-
+// edit yet because that'd require lifting EventFormPage's form into
+// a shared component; deferred until there's a clear need.
+function SettingsTab({
+  event,
+  editUrl,
+}: {
+  event: Event;
+  editUrl: string;
+}) {
+  const playoffSummary =
+    event.teams_advancing_to_playoff > 0
+      ? `${event.teams_advancing_to_playoff} (${event.playoff_rounds} round${event.playoff_rounds === 1 ? "" : "s"})`
+      : "None";
+  return (
+    <section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+          Event settings
+        </h2>
+        <Link
+          to={editUrl}
+          style={{
+            padding: "8px 16px",
+            background: "#2563eb",
+            color: "#fff",
+            textDecoration: "none",
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Edit settings →
+        </Link>
+      </div>
+      <dl
+        style={{
+          display: "grid",
+          gridTemplateColumns: "max-content 1fr",
+          rowGap: 8,
+          columnGap: 24,
+          fontSize: 13,
+          margin: 0,
+          maxWidth: 700,
+        }}
+      >
+        <DtDd label="Name" value={event.name} />
+        <DtDd label="Format" value={capitalize(event.format)} />
+        <DtDd label="Gender" value={capitalize(event.gender)} />
+        <DtDd
+          label="Bracket type"
+          value={event.bracket_type.replace(/_/g, " ")}
+        />
+        <DtDd label="Pools" value={String(event.pool_count)} />
+        <DtDd
+          label="Play each team"
+          value={`${event.play_each_team_times}×`}
+        />
+        <DtDd
+          label="Game"
+          value={`${event.points_to_win} win by ${event.win_by}`}
+        />
+        <DtDd
+          label="Timeouts per game"
+          value={String(event.timeouts_per_game)}
+        />
+        <DtDd label="Playoff" value={playoffSummary} />
+        <DtDd
+          label="Min age"
+          value={event.min_age != null ? String(event.min_age) : "—"}
+        />
+        <DtDd
+          label="Max age"
+          value={event.max_age != null ? String(event.max_age) : "—"}
+        />
+        <DtDd
+          label="Min rating"
+          value={event.min_rating != null ? String(event.min_rating) : "—"}
+        />
+        <DtDd
+          label="Max rating"
+          value={event.max_rating != null ? String(event.max_rating) : "—"}
+        />
+        <DtDd label="Rating source" value={event.rating_source ?? "—"} />
+        <DtDd
+          label="Event fee"
+          value={`$${(event.event_fee_cents / 100).toFixed(2)}`}
+        />
+        <DtDd
+          label="Max teams"
+          value={event.max_teams != null ? String(event.max_teams) : "Unlimited"}
+        />
+      </dl>
+    </section>
+  );
+}
+
+function DtDd({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt style={{ color: "#888" }}>{label}</dt>
+      <dd style={{ margin: 0, color: "#222" }}>{value}</dd>
+    </>
+  );
+}
 
 function SectionHeader({
   title,
