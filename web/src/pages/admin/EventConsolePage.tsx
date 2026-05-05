@@ -536,6 +536,14 @@ function TeamsSection({
   const [savingOrder, setSavingOrder] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Edit-team state. Identified by captainRegId since that's stable
+  // and unique. Selections are pre-populated with the team's current
+  // players in startEdit; alwaysShowContactFields lets organizers
+  // correct stored contact info too.
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editSelA, setEditSelA] = useState<PlayerSelection>(emptySelection);
+  const [editSelB, setEditSelB] = useState<PlayerSelection>(emptySelection);
+
   // Local mirror of the parent's `teams` so a drag-and-drop can update
   // the displayed order *immediately* (optimistic) instead of snapping
   // back while the seed UPDATEs round-trip and the parent reload runs.
@@ -551,6 +559,10 @@ function TeamsSection({
     selectionB.mode === "existing" ? [selectionB.player.id] : [];
   const excludeForB =
     selectionA.mode === "existing" ? [selectionA.player.id] : [];
+  const editExcludeForA =
+    editSelB.mode === "existing" ? [editSelB.player.id] : [];
+  const editExcludeForB =
+    editSelA.mode === "existing" ? [editSelA.player.id] : [];
 
   const onAdd = async (e: FormEvent) => {
     e.preventDefault();
@@ -705,6 +717,97 @@ function TeamsSection({
       return;
     }
     setPendingDelete(null);
+    await onChange();
+  };
+
+  const startEdit = (team: Team) => {
+    setError(null);
+    setEditingTeamId(team.captainRegId);
+    setEditSelA({
+      mode: "existing",
+      player: team.captain,
+      emailDraft: team.captain.email ?? "",
+      phoneDraft: team.captain.phone ?? "",
+    });
+    if (team.partner) {
+      setEditSelB({
+        mode: "existing",
+        player: team.partner,
+        emailDraft: team.partner.email ?? "",
+        phoneDraft: team.partner.phone ?? "",
+      });
+    } else {
+      setEditSelB(emptySelection);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingTeamId(null);
+    setEditSelA(emptySelection);
+    setEditSelB(emptySelection);
+    setError(null);
+  };
+
+  // Saves the edit form: persists each player (insert if new / update
+  // if drafts differ from stored values) then re-points the team's
+  // event_registration rows at whatever player ids resulted. The
+  // captain reg keeps its id; only its player_id can change.
+  const saveEdit = async () => {
+    setError(null);
+    const team = teams.find((t) => t.captainRegId === editingTeamId);
+    if (!team) return;
+    if (editSelA.mode === "empty") {
+      setError("Player A is required.");
+      return;
+    }
+    if (isDoubles && editSelB.mode === "empty") {
+      setError("Player B is required.");
+      return;
+    }
+    setBusy(true);
+
+    const aRes = await persistPlayerSelection(editSelA);
+    if (!aRes.player) {
+      setError(aRes.error ?? "Failed to save Player A.");
+      setBusy(false);
+      return;
+    }
+    if (aRes.player.id !== team.captain.id) {
+      const { error: regErr } = await supabase
+        .from("event_registrations")
+        .update({ player_id: aRes.player.id })
+        .eq("id", team.captainRegId);
+      if (regErr) {
+        setError(regErr.message);
+        setBusy(false);
+        return;
+      }
+    }
+
+    if (isDoubles && team.partnerRegId && team.partner) {
+      const bRes = await persistPlayerSelection(editSelB);
+      if (!bRes.player) {
+        setError(bRes.error ?? "Failed to save Player B.");
+        setBusy(false);
+        return;
+      }
+      if (bRes.player.id !== team.partner.id) {
+        const { error: regErr } = await supabase
+          .from("event_registrations")
+          .update({ player_id: bRes.player.id })
+          .eq("id", team.partnerRegId);
+        if (regErr) {
+          setError(regErr.message);
+          setBusy(false);
+          return;
+        }
+      }
+    }
+
+    setEditingTeamId(null);
+    setEditSelA(emptySelection);
+    setEditSelB(emptySelection);
+    setBusy(false);
     await onChange();
   };
 
@@ -934,133 +1037,225 @@ function TeamsSection({
               power "Distribute to pools".
             </p>
           )}
-          <table style={tableStyle}>
-            <thead>
-              <tr style={tableHeadRow}>
-                {showSeedColumn && (
-                  <th style={{ ...thStyle, width: 36 }} aria-label="Drag" />
-                )}
-                <th style={{ ...thStyle, width: 40 }}>#</th>
-                <th style={thStyle}>Team</th>
-                {showPoolColumn && (
-                  <th style={{ ...thStyle, width: 110 }}>Pool</th>
-                )}
-                <th style={{ ...thStyle, width: 80 }} />
-              </tr>
-            </thead>
-            <tbody>
-              {teams.map((team, i) => {
-                const isDragged = dragIdx === i;
-                const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
-                const dropAbove = isOver && (dragIdx ?? -1) > i;
-                const dropBelow = isOver && (dragIdx ?? -1) < i;
-                return (
-                  <tr
-                    key={team.captainRegId}
-                    draggable={showSeedColumn}
-                    onDragStart={(e) => {
-                      if (!showSeedColumn) return;
-                      setDragIdx(i);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onDragOver={(e) => {
-                      if (!showSeedColumn || dragIdx === null) return;
-                      e.preventDefault();
-                      e.dataTransfer.dropEffect = "move";
-                      if (overIdx !== i) setOverIdx(i);
-                    }}
-                    onDragLeave={() => {
-                      if (overIdx === i) setOverIdx(null);
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      void onDrop(i);
-                    }}
-                    onDragEnd={() => {
-                      setDragIdx(null);
-                      setOverIdx(null);
-                    }}
-                    style={{
-                      ...tableRow,
-                      opacity: isDragged ? 0.4 : 1,
-                      borderTop: dropAbove
-                        ? "2px solid #2563eb"
-                        : tableRow.borderTop,
-                      borderBottom: dropBelow
-                        ? "2px solid #2563eb"
-                        : tableRow.borderBottom,
-                      cursor: showSeedColumn ? "grab" : undefined,
-                    }}
-                  >
+          {(() => {
+            const colSpan =
+              1 /* # */ +
+              1 /* Team */ +
+              (showSeedColumn ? 1 : 0) +
+              (showPoolColumn ? 1 : 0) +
+              1; /* Actions */
+            return (
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={tableHeadRow}>
                     {showSeedColumn && (
-                      <td
-                        style={{
-                          ...tdStyle,
-                          color: "#9ca3af",
-                          textAlign: "center",
-                          userSelect: "none",
-                          fontSize: 16,
-                          letterSpacing: -2,
-                        }}
-                        title="Drag to rank"
-                        aria-hidden="true"
-                      >
-                        ⋮⋮
-                      </td>
+                      <th
+                        style={{ ...thStyle, width: 36 }}
+                        aria-label="Drag"
+                      />
                     )}
-                    <td style={{ ...tdStyle, color: "#888" }}>{i + 1}</td>
-                    <td style={{ ...tdStyle, fontWeight: 500 }}>{team.label}</td>
+                    <th style={{ ...thStyle, width: 40 }}>#</th>
+                    <th style={thStyle}>Team</th>
                     {showPoolColumn && (
-                      <td style={tdStyle}>
-                        <select
-                          value={team.poolIndex ?? ""}
-                          onChange={(e) =>
-                            onSetPool(
-                              team,
-                              e.target.value === ""
-                                ? null
-                                : parseInt(e.target.value, 10),
-                            )
-                          }
-                          // Native drag on a parent <tr> would otherwise
-                          // start a row-drag the moment the user starts
-                          // adjusting this control on touch.
-                          onMouseDown={(e) => e.stopPropagation()}
-                          style={{
-                            padding: "4px 6px",
-                            border: "1px solid #e2e2e2",
-                            borderRadius: 4,
-                            fontSize: 12,
-                            fontFamily: "inherit",
-                            background: "#fff",
-                          }}
-                        >
-                          <option value="">—</option>
-                          {Array.from(
-                            { length: event.pool_count },
-                            (_, idx) => idx + 1,
-                          ).map((p) => (
-                            <option key={p} value={p}>
-                              Pool {poolLetter(p)}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
+                      <th style={{ ...thStyle, width: 110 }}>Pool</th>
                     )}
-                    <td style={{ ...tdStyle, textAlign: "right" }}>
-                      <button
-                        onClick={() => onDelete(team)}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        style={tinyDangerBtn}
-                      >
-                        Remove
-                      </button>
-                    </td>
+                    <th style={{ ...thStyle, width: 140 }}>Actions</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {teams.map((team, i) => {
+                    if (editingTeamId === team.captainRegId) {
+                      return (
+                        <tr
+                          key={team.captainRegId}
+                          style={{ ...tableRow, background: "#fafafa" }}
+                        >
+                          <td colSpan={colSpan} style={{ padding: 12 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 12,
+                                alignItems: "flex-start",
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <PlayerPicker
+                                label="Player A"
+                                selection={editSelA}
+                                onChange={setEditSelA}
+                                excludePlayerIds={editExcludeForA}
+                                alwaysShowContactFields
+                              />
+                              {isDoubles && (
+                                <PlayerPicker
+                                  label="Player B"
+                                  selection={editSelB}
+                                  onChange={setEditSelB}
+                                  excludePlayerIds={editExcludeForB}
+                                  alwaysShowContactFields
+                                />
+                              )}
+                              <div
+                                style={{
+                                  paddingTop: 18,
+                                  display: "flex",
+                                  gap: 8,
+                                }}
+                              >
+                                <button
+                                  onClick={() => void saveEdit()}
+                                  disabled={busy}
+                                  style={tinyPrimaryBtn}
+                                >
+                                  {busy ? "Saving…" : "Save"}
+                                </button>
+                                <button
+                                  onClick={cancelEdit}
+                                  disabled={busy}
+                                  style={tinySecondaryBtn}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const isDragged = dragIdx === i;
+                    const isOver =
+                      overIdx === i && dragIdx !== null && dragIdx !== i;
+                    const dropAbove = isOver && (dragIdx ?? -1) > i;
+                    const dropBelow = isOver && (dragIdx ?? -1) < i;
+                    return (
+                      <tr
+                        key={team.captainRegId}
+                        draggable={showSeedColumn && editingTeamId === null}
+                        onDragStart={(e) => {
+                          if (!showSeedColumn || editingTeamId !== null) return;
+                          setDragIdx(i);
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragOver={(e) => {
+                          if (!showSeedColumn || dragIdx === null) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (overIdx !== i) setOverIdx(i);
+                        }}
+                        onDragLeave={() => {
+                          if (overIdx === i) setOverIdx(null);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          void onDrop(i);
+                        }}
+                        onDragEnd={() => {
+                          setDragIdx(null);
+                          setOverIdx(null);
+                        }}
+                        style={{
+                          ...tableRow,
+                          opacity: isDragged ? 0.4 : 1,
+                          borderTop: dropAbove
+                            ? "2px solid #2563eb"
+                            : tableRow.borderTop,
+                          borderBottom: dropBelow
+                            ? "2px solid #2563eb"
+                            : tableRow.borderBottom,
+                          cursor:
+                            showSeedColumn && editingTeamId === null
+                              ? "grab"
+                              : undefined,
+                        }}
+                      >
+                        {showSeedColumn && (
+                          <td
+                            style={{
+                              ...tdStyle,
+                              color: "#9ca3af",
+                              textAlign: "center",
+                              userSelect: "none",
+                              fontSize: 16,
+                              letterSpacing: -2,
+                            }}
+                            title="Drag to rank"
+                            aria-hidden="true"
+                          >
+                            ⋮⋮
+                          </td>
+                        )}
+                        <td style={{ ...tdStyle, color: "#888" }}>{i + 1}</td>
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>
+                          {team.label}
+                        </td>
+                        {showPoolColumn && (
+                          <td style={tdStyle}>
+                            <select
+                              value={team.poolIndex ?? ""}
+                              onChange={(e) =>
+                                onSetPool(
+                                  team,
+                                  e.target.value === ""
+                                    ? null
+                                    : parseInt(e.target.value, 10),
+                                )
+                              }
+                              onMouseDown={(e) => e.stopPropagation()}
+                              style={{
+                                padding: "4px 6px",
+                                border: "1px solid #e2e2e2",
+                                borderRadius: 4,
+                                fontSize: 12,
+                                fontFamily: "inherit",
+                                background: "#fff",
+                              }}
+                            >
+                              <option value="">—</option>
+                              {Array.from(
+                                { length: event.pool_count },
+                                (_, idx) => idx + 1,
+                              ).map((p) => (
+                                <option key={p} value={p}>
+                                  Pool {poolLetter(p)}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        )}
+                        <td style={tdStyle}>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              justifyContent: "flex-end",
+                            }}
+                          >
+                            <button
+                              onClick={() => startEdit(team)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              disabled={editingTeamId !== null}
+                              style={tinySecondaryBtn}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => onDelete(team)}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              disabled={editingTeamId !== null}
+                              style={tinyDangerBtn}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            );
+          })()}
         </>
       )}
 

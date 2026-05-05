@@ -43,16 +43,23 @@ export const emptySelection: PlayerSelection = { mode: "empty" };
 //
 // Excludes any player whose id appears in `excludePlayerIds` (used to
 // stop a doubles partner from being picked twice).
+//
+// `alwaysShowContactFields` forces the email/phone inputs to render
+// even when the existing player already has values — useful for
+// "edit team" flows where the organizer may want to correct stored
+// contact info.
 export function PlayerPicker({
   label,
   selection,
   onChange,
   excludePlayerIds = [],
+  alwaysShowContactFields = false,
 }: {
   label: string;
   selection: PlayerSelection;
   onChange: (s: PlayerSelection) => void;
   excludePlayerIds?: string[];
+  alwaysShowContactFields?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Player[]>([]);
@@ -120,8 +127,8 @@ export function PlayerPicker({
   // ─── EXISTING / NEW modes: collapsed chip + contact fields ─────────
   if (selection.mode === "existing") {
     const p = selection.player;
-    const needsEmail = !p.email;
-    const needsPhone = !p.phone;
+    const showEmail = alwaysShowContactFields || !p.email;
+    const showPhone = alwaysShowContactFields || !p.phone;
     return (
       <div style={slotStyle}>
         <SlotLabel label={label} />
@@ -130,7 +137,7 @@ export function PlayerPicker({
             <div style={{ fontWeight: 500, fontSize: 13 }}>
               {p.first_name} {p.last_name}
             </div>
-            {(p.email || p.phone) && (
+            {!alwaysShowContactFields && (p.email || p.phone) && (
               <div style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
                 {[p.email, p.phone].filter(Boolean).join(" · ")}
               </div>
@@ -148,9 +155,9 @@ export function PlayerPicker({
             ×
           </button>
         </div>
-        {(needsEmail || needsPhone) && (
+        {(showEmail || showPhone) && (
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-            {needsEmail && (
+            {showEmail && (
               <input
                 type="email"
                 placeholder="Email (optional)"
@@ -161,7 +168,7 @@ export function PlayerPicker({
                 style={miniInput}
               />
             )}
-            {needsPhone && (
+            {showPhone && (
               <input
                 type="tel"
                 placeholder="Phone (optional)"
@@ -340,13 +347,14 @@ export async function persistPlayerSelection(
     return { player: null, error: "No player selected." };
   }
   if (s.mode === "existing") {
-    const updates: Partial<{ email: string; phone: string }> = {};
-    if (s.emailDraft.trim() && s.emailDraft.trim() !== (s.player.email ?? "")) {
-      updates.email = s.emailDraft.trim();
-    }
-    if (s.phoneDraft.trim() && s.phoneDraft.trim() !== (s.player.phone ?? "")) {
-      updates.phone = s.phoneDraft.trim();
-    }
+    // Compare drafts (trimmed; empty string means "clear it") against
+    // the stored values so editors can both add missing contact info
+    // and overwrite/clear stale info.
+    const newEmail = s.emailDraft.trim() || null;
+    const newPhone = s.phoneDraft.trim() || null;
+    const updates: { email?: string | null; phone?: string | null } = {};
+    if (newEmail !== (s.player.email ?? null)) updates.email = newEmail;
+    if (newPhone !== (s.player.phone ?? null)) updates.phone = newPhone;
     if (Object.keys(updates).length === 0) {
       return { player: s.player, error: null };
     }
