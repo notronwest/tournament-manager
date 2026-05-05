@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
-import { matchLabel } from "../../lib/matchLabel";
+import { matchLabel, playoffStageLabel } from "../../lib/matchLabel";
 import type { Database } from "../../types/supabase";
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
@@ -231,7 +231,16 @@ export default function ScorecardsPage() {
             <Scorecard
               key={m.id}
               match={m}
-              matchLabel={matchLabel(m, matches)}
+              // Prefer the verbose playoff label ("Gold Medal Match",
+              // "Bronze Medal Game") which knows about the event's
+              // playoff_rounds + teams_advancing_to_playoff config.
+              // Falls back to the compact label for round-robin
+              // matches and any playoff config the verbose helper
+              // doesn't have a name for.
+              matchLabel={
+                playoffStageLabel(m, matches, event) ??
+                matchLabel(m, matches)
+              }
               teamA={
                 m.team_a_reg_id ? teamByAnyRegId.get(m.team_a_reg_id) : null
               }

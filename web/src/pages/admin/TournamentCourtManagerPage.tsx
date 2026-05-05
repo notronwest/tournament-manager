@@ -700,10 +700,14 @@ export default function TournamentCourtManagerPage() {
                     const teamB = match.team_b_reg_id
                       ? teamByAnyRegId.get(match.team_b_reg_id)
                       : null;
-                    const label = matchLabel(
-                      match,
-                      matchesByEvent.get(match.event_id) ?? [],
-                    );
+                    const eventMatches =
+                      matchesByEvent.get(match.event_id) ?? [];
+                    // Prefer verbose playoff label so the queue says
+                    // "Gold Medal Match" — same vocabulary as the
+                    // printed scorecard and the in-card stage badge.
+                    const label =
+                      (ev && playoffStageLabel(match, eventMatches, ev)) ||
+                      matchLabel(match, eventMatches);
                     return (
                       <tr
                         key={match.id}
