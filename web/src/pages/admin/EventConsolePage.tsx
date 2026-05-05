@@ -554,10 +554,16 @@ function TeamsSection({
     await persistOrder(reordered);
   };
 
-  // Snake-draft pool assignment from current seeds: seed 1 → A, 2 → B,
-  // 3 → B, 4 → A, 5 → A, 6 → B, … Unseeded teams sort last and slot
-  // into whichever side of the snake they fall on. Run sequentially
-  // since each request mutates two rows on the same row-set.
+  // Round-robin pool assignment by seeded order: seed 1 → pool 1,
+  // seed 2 → pool 2, … wrapping back to pool 1 on the (pool_count+1)th
+  // team. Unseeded teams sort last and continue the alternation.
+  // Manual override is always available via the per-row Pool dropdown.
+  //
+  // We previously did a snake-draft (1,2,2,1,1,2,2,1) for competitive
+  // balance, but for casual club play the simpler alternating pattern
+  // is what organizers actually expect — and snake is unintuitive when
+  // seeds are approximate. Add a snake button later if a competitive
+  // event needs it.
   const onDistributeToPools = async () => {
     setError(null);
     if (event.pool_count < 2) return;
@@ -565,23 +571,26 @@ function TeamsSection({
     const sorted = teams
       .slice()
       .sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
-    for (let i = 0; i < sorted.length; i++) {
-      const round = Math.floor(i / event.pool_count);
-      const within = i % event.pool_count;
-      const idx = round % 2 === 0 ? within : event.pool_count - 1 - within;
-      const team = sorted[i];
+
+    // Parallel UPDATEs — same pattern as persistOrder. Partial-failure
+    // semantics still TODO via a transactional RPC.
+    const writes = sorted.map((team, i) => {
       const ids = [team.captainRegId];
       if (team.partnerRegId) ids.push(team.partnerRegId);
-      const { error: updErr } = await supabase
+      const poolIndex = (i % event.pool_count) + 1;
+      return supabase
         .from("event_registrations")
-        .update({ pool_index: idx + 1 })
+        .update({ pool_index: poolIndex })
         .in("id", ids);
-      if (updErr) {
-        setError(updErr.message);
-        setBusy(false);
-        return;
-      }
+    });
+    const results = await Promise.all(writes);
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      setError(firstErr.message);
+      setBusy(false);
+      return;
     }
+
     setBusy(false);
     await onChange();
   };
@@ -618,7 +627,7 @@ function TeamsSection({
                 onClick={onDistributeToPools}
                 disabled={busy || savingOrder || teams.length === 0}
                 style={tinyPrimaryBtn}
-                title="Snake-draft teams into pools using the current seeded order."
+                title="Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, etc. Use the per-row Pool dropdown for manual overrides."
               >
                 Distribute to pools
               </button>
