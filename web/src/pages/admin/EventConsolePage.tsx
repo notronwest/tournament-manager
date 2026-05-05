@@ -345,7 +345,7 @@ export default function EventConsolePage() {
 
 function TeamsSection({
   event,
-  teams,
+  teams: serverTeams,
   canDelete,
   onChange,
 }: {
@@ -358,7 +358,18 @@ function TeamsSection({
   const [selectionA, setSelectionA] = useState<PlayerSelection>(emptySelection);
   const [selectionB, setSelectionB] = useState<PlayerSelection>(emptySelection);
   const [busy, setBusy] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Local mirror of the parent's `teams` so a drag-and-drop can update
+  // the displayed order *immediately* (optimistic) instead of snapping
+  // back while the seed UPDATEs round-trip and the parent reload runs.
+  // Synced from the prop whenever the parent refetches — by the time a
+  // legitimate refetch lands the optimistic order will already match.
+  const [teams, setTeams] = useState<Team[]>(serverTeams);
+  useEffect(() => {
+    setTeams(serverTeams);
+  }, [serverTeams]);
 
   // Don't allow the same existing player on both sides of a doubles team.
   const excludeForA =
@@ -495,24 +506,37 @@ function TeamsSection({
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
   const persistOrder = async (ordered: Team[]) => {
-    setBusy(true);
+    setSavingOrder(true);
     setError(null);
-    for (let i = 0; i < ordered.length; i++) {
-      const t = ordered[i];
+
+    // Parallel UPDATEs — N round-trips become one wall-clock unit, and
+    // the optimistic UI doesn't have to wait on a sequential chain
+    // before the parent reload settles. Partial-failure semantics are
+    // the same as the previous sequential loop (some seeds may persist
+    // while others don't); a single transactional RPC would fix that
+    // and is worth doing later if reorder errors become a real
+    // problem.
+    const writes = ordered.map((t, i) => {
       const ids = [t.captainRegId];
       if (t.partnerRegId) ids.push(t.partnerRegId);
-      const { error: updErr } = await supabase
+      return supabase
         .from("event_registrations")
         .update({ seed: i + 1 })
         .in("id", ids);
-      if (updErr) {
-        setError(updErr.message);
-        setBusy(false);
-        return;
-      }
+    });
+    const results = await Promise.all(writes);
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      setError(firstErr.message);
+      // Revert to server truth so the user sees what actually got
+      // saved, not the unsaved optimistic order.
+      setTeams(serverTeams);
+      setSavingOrder(false);
+      return;
     }
-    setBusy(false);
+
     await onChange();
+    setSavingOrder(false);
   };
 
   const onDrop = async (toIdx: number) => {
@@ -523,6 +547,10 @@ function TeamsSection({
     const reordered = teams.slice();
     const [moved] = reordered.splice(fromIdx, 1);
     reordered.splice(toIdx, 0, moved);
+    // Optimistic: paint the new order *now*. The persist runs in the
+    // background and the parent reload will sync us back to server
+    // truth (which should match) when it lands.
+    setTeams(reordered);
     await persistOrder(reordered);
   };
 
@@ -566,16 +594,36 @@ function TeamsSection({
       <SectionHeader
         title={`Teams (${teams.length}${event.max_teams ? ` / ${event.max_teams}` : ""})`}
         right={
-          showPoolColumn ? (
-            <button
-              onClick={onDistributeToPools}
-              disabled={busy || teams.length === 0}
-              style={tinyPrimaryBtn}
-              title="Snake-draft teams into pools using the current seeded order."
-            >
-              Distribute to pools
-            </button>
-          ) : null
+          <div
+            style={{ display: "flex", alignItems: "center", gap: 12 }}
+          >
+            {savingOrder && (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "#7a5d00",
+                  background: "#fffbeb",
+                  border: "1px solid #fde68a",
+                  borderRadius: 4,
+                  padding: "2px 8px",
+                  fontWeight: 500,
+                }}
+                aria-live="polite"
+              >
+                Saving order…
+              </span>
+            )}
+            {showPoolColumn && (
+              <button
+                onClick={onDistributeToPools}
+                disabled={busy || savingOrder || teams.length === 0}
+                style={tinyPrimaryBtn}
+                title="Snake-draft teams into pools using the current seeded order."
+              >
+                Distribute to pools
+              </button>
+            )}
+          </div>
         }
       />
 
