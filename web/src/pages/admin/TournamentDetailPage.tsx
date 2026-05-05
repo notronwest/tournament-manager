@@ -8,12 +8,14 @@ import {
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { eligibilityChips } from "../../lib/eligibility";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type EventStatus = Database["public"]["Enums"]["event_status"];
+type TournamentStatus = Database["public"]["Enums"]["tournament_status"];
 type EventCourt = Database["public"]["Tables"]["event_courts"]["Row"];
 
 type EventSummary = {
@@ -36,6 +38,8 @@ export default function TournamentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [pendingDeleteEvent, setPendingDeleteEvent] = useState<EventSummary | null>(null);
+  const [deletingEvent, setDeletingEvent] = useState(false);
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug) return;
@@ -61,7 +65,6 @@ export default function TournamentDetailPage() {
       setLoading(false);
       return;
     }
-    setT(tData);
 
     // Events + their registrations + court allocations, in parallel.
     const [evRes, regsRes, courtsRes] = await Promise.all([
@@ -102,6 +105,28 @@ export default function TournamentDetailPage() {
     const regs = regsRes.data ?? [];
     const courts = (courtsRes.data ?? []) as unknown as EventCourt[];
     setEventCourts(courts);
+
+    // Auto-transition tournament status. Two rules, both
+    // page-load-evaluated (no cron required):
+    //   * `published` → `closed` once registration_closes_at is in
+    //     the past. Stops new sign-ups without an organizer click.
+    //   * `published`/`closed` → `completed` once every non-cancelled
+    //     event has reached `complete` or `verified`. The whole
+    //     tournament has wrapped at that point.
+    // If we transition we keep the local copy in sync so the rest
+    // of this reload renders the new state without a second fetch.
+    let liveTournament = tData;
+    {
+      const next = inferTournamentStatus(tData, evs);
+      if (next && next !== tData.status) {
+        const { error: trErr } = await supabase
+          .from("tournaments")
+          .update({ status: next })
+          .eq("id", tData.id);
+        if (!trErr) liveTournament = { ...tData, status: next };
+      }
+    }
+    setT(liveTournament);
 
     // Player count: distinct player_id across all event_registrations
     // for this tournament.
@@ -181,6 +206,46 @@ export default function TournamentDetailPage() {
     await reload();
   };
 
+  // Soft-delete an event by setting deleted_at. Same pattern the rest
+  // of the app uses (events are filtered by `is("deleted_at", null)`
+  // everywhere). Match history, registrations, and event_courts stay
+  // in the DB so the event can be recovered by clearing deleted_at —
+  // only the dashboard hides it.
+  const confirmDeleteEvent = async () => {
+    if (!pendingDeleteEvent) return;
+    setDeletingEvent(true);
+    setError(null);
+    const { error: updErr } = await supabase
+      .from("events")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", pendingDeleteEvent.event.id);
+    setDeletingEvent(false);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setPendingDeleteEvent(null);
+    await reload();
+  };
+
+  // Manual tournament-status transition. Auto-transitions to closed/
+  // completed already happen inside reload(); this is for the buttons
+  // in the header (Publish, Close registration, Cancel, Reopen, etc.).
+  const setTournamentStatus = async (status: TournamentStatus) => {
+    if (!t) return;
+    setBusyAction("tstatus");
+    const { error: updErr } = await supabase
+      .from("tournaments")
+      .update({ status })
+      .eq("id", t.id);
+    setBusyAction(null);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    await reload();
+  };
+
   const toggleCourt = async (eventId: string, courtNumber: number) => {
     setBusyAction(`court:${eventId}:${courtNumber}`);
     const existing = eventCourts.find(
@@ -242,20 +307,40 @@ export default function TournamentDetailPage() {
         }}
       >
         <div>
-          <h1 style={{ margin: "0 0 4px", fontSize: 22 }}>{t.name}</h1>
-          <p style={{ color: "#666", margin: 0, fontSize: 14 }}>
+          <div
+            style={{ display: "flex", alignItems: "center", gap: 10 }}
+          >
+            <h1 style={{ margin: 0, fontSize: 22 }}>{t.name}</h1>
+            <TournamentStatusBadge status={t.status} />
+          </div>
+          <p style={{ color: "#666", margin: "4px 0 0", fontSize: 14 }}>
             {t.description || "No description."}
           </p>
         </div>
-        {/* Court manager is always reachable from the tournament home —
-            users want it to peek at the queue / setup courts even before
-            an event is active. The page itself handles the empty state. */}
-        <Link
-          to={`/admin/${org.slug}/tournaments/${t.slug}/courts`}
-          style={primaryLinkBtn}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
         >
-          Court manager →
-        </Link>
+          <TournamentStatusActions
+            status={t.status}
+            busy={busyAction === "tstatus"}
+            onSetStatus={setTournamentStatus}
+          />
+          {/* Court manager is always reachable from the tournament home —
+              users want it to peek at the queue / setup courts even
+              before an event is active. The page itself handles the
+              empty state. */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/courts`}
+            style={primaryLinkBtn}
+          >
+            Court manager →
+          </Link>
+        </div>
       </div>
 
       {/* Stats strip */}
@@ -277,7 +362,8 @@ export default function TournamentDetailPage() {
           }
         />
         <Stat label="Events" value={events.length} />
-        <Stat label="Status" value={t.status} />
+        {/* Status moved out of the stats grid into the header
+            badge, next to the action buttons that mutate it. */}
         <Stat
           label="Dates"
           value={`${fmtDate(t.starts_at)} – ${fmtDate(t.ends_at)}`}
@@ -363,11 +449,36 @@ export default function TournamentDetailPage() {
                 busyAction={busyAction}
                 onSetStatus={setEventStatus}
                 onToggleCourt={toggleCourt}
+                onDelete={() => setPendingDeleteEvent(s)}
               />
             ))}
           </div>
         )}
       </section>
+
+      {pendingDeleteEvent && (
+        <ConfirmModal
+          title={`Delete "${pendingDeleteEvent.event.name}"?`}
+          body={
+            <div>
+              The event will disappear from the dashboard. Match history,
+              standings, and team registrations stay in the database — if
+              this turns out to be a mistake, an admin can restore the
+              event by clearing its <code>deleted_at</code> column.
+              {pendingDeleteEvent.teamCount > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <strong>{pendingDeleteEvent.teamCount}</strong>{" "}
+                  {pendingDeleteEvent.teamCount === 1 ? "team is" : "teams are"}{" "}
+                  registered for this event.
+                </div>
+              )}
+            </div>
+          }
+          confirmLabel={deletingEvent ? "Deleting…" : "Delete event"}
+          onCancel={() => setPendingDeleteEvent(null)}
+          onConfirm={confirmDeleteEvent}
+        />
+      )}
     </div>
   );
 }
@@ -385,6 +496,7 @@ function EventCard({
   busyAction,
   onSetStatus,
   onToggleCourt,
+  onDelete,
 }: {
   summary: EventSummary;
   courts: number[];
@@ -394,6 +506,7 @@ function EventCard({
   busyAction: string | null;
   onSetStatus: (eventId: string, status: EventStatus) => Promise<void>;
   onToggleCourt: (eventId: string, courtNumber: number) => Promise<void>;
+  onDelete: () => void;
 }) {
   const { event, teamCount, courtNumbers } = summary;
   const claimed = new Set(courtNumbers);
@@ -557,6 +670,13 @@ function EventCard({
           >
             Open →
           </Link>
+          <button
+            onClick={onDelete}
+            style={dangerStatusBtn(false)}
+            title="Hide this event from the dashboard. Match history and registrations stay in the database for recovery."
+          >
+            Delete
+          </button>
         </div>
       </div>
 
@@ -607,6 +727,185 @@ function EventCard({
         </div>
       </div>
     </div>
+  );
+}
+
+// Tournament-status auto-transition rules. Returns the status the
+// tournament SHOULD have given current data, or null if no change.
+// Mirrors autoTransitionEventStatus's pattern (single function,
+// page-load-evaluated). Only forward transitions; manual buttons
+// own the rest.
+//
+//   published → closed     once registration_closes_at is in the past
+//   published|closed
+//             → completed  once every non-cancelled event has reached
+//                          'complete' or 'verified' AND there's at
+//                          least one such event (an empty tournament
+//                          shouldn't auto-complete).
+//
+// Doesn't touch draft/cancelled — those are organizer-controlled
+// states that shouldn't auto-flip.
+function inferTournamentStatus(
+  t: Tournament,
+  events: Event[],
+): TournamentStatus | null {
+  // Auto-close when reg window passes.
+  if (
+    t.status === "published" &&
+    t.registration_closes_at &&
+    new Date(t.registration_closes_at).getTime() <= Date.now()
+  ) {
+    return "closed";
+  }
+
+  // Auto-complete when all events are wrapped.
+  if (t.status === "published" || t.status === "closed") {
+    const live = events.filter((e) => e.status !== "verified" && e.status !== "complete");
+    if (events.length > 0 && live.length === 0) {
+      return "completed";
+    }
+  }
+
+  return null;
+}
+
+// Buttons that mutate tournament_status. The set shown depends on
+// current state — same pattern as the per-event status actions.
+//
+//   draft     → Publish, Cancel
+//   published → Close registration, Cancel
+//   closed    → Reopen registration, Mark complete, Cancel
+//   completed → Reopen          (back to closed)
+//   cancelled → Reactivate      (back to draft)
+//
+// Auto-transitions (closed/completed) live in inferTournamentStatus
+// and run on every reload(). These buttons cover everything that
+// requires deliberate organizer intent — open to public, reopen
+// after auto-close, or pull the plug.
+function TournamentStatusActions({
+  status,
+  busy,
+  onSetStatus,
+}: {
+  status: TournamentStatus;
+  busy: boolean;
+  onSetStatus: (s: TournamentStatus) => Promise<void>;
+}) {
+  const cancel = (
+    <button
+      key="cancel"
+      onClick={() => void onSetStatus("cancelled")}
+      disabled={busy}
+      style={dangerStatusBtn(busy)}
+      title="Cancel the tournament. Stays in the org's history but won't run."
+    >
+      Cancel
+    </button>
+  );
+  switch (status) {
+    case "draft":
+      return (
+        <>
+          <button
+            onClick={() => void onSetStatus("published")}
+            disabled={busy}
+            style={primaryStatusBtn(busy)}
+            title="Open the tournament for registration. Public tournament page becomes visible."
+          >
+            Publish
+          </button>
+          {cancel}
+        </>
+      );
+    case "published":
+      return (
+        <>
+          <button
+            onClick={() => void onSetStatus("closed")}
+            disabled={busy}
+            style={secondaryStatusBtn}
+            title="Close registration. Tournament keeps running; new sign-ups blocked."
+          >
+            Close registration
+          </button>
+          {cancel}
+        </>
+      );
+    case "closed":
+      return (
+        <>
+          <button
+            onClick={() => void onSetStatus("published")}
+            disabled={busy}
+            style={secondaryStatusBtn}
+            title="Reopen registration."
+          >
+            Reopen registration
+          </button>
+          <button
+            onClick={() => void onSetStatus("completed")}
+            disabled={busy}
+            style={primaryStatusBtn(busy)}
+            title="Mark the tournament complete. Auto-fires when every event is complete/verified."
+          >
+            Mark complete
+          </button>
+          {cancel}
+        </>
+      );
+    case "completed":
+      return (
+        <button
+          onClick={() => void onSetStatus("closed")}
+          disabled={busy}
+          style={secondaryStatusBtn}
+          title="Reopen the tournament — drops back to closed so events can be unverified or replayed."
+        >
+          Reopen
+        </button>
+      );
+    case "cancelled":
+      return (
+        <button
+          onClick={() => void onSetStatus("draft")}
+          disabled={busy}
+          style={secondaryStatusBtn}
+          title="Restore the tournament to draft so it can be reconfigured + republished."
+        >
+          Reactivate
+        </button>
+      );
+  }
+}
+
+function TournamentStatusBadge({ status }: { status: TournamentStatus }) {
+  const palette: Record<
+    TournamentStatus,
+    { bg: string; fg: string; label: string }
+  > = {
+    draft:     { bg: "#f3f4f6", fg: "#666",    label: "Draft" },
+    published: { bg: "#dcfce7", fg: "#166534", label: "Published" },
+    closed:    { bg: "#fef3c7", fg: "#92400e", label: "Closed" },
+    completed: { bg: "#dbeafe", fg: "#1e40af", label: "Completed" },
+    cancelled: { bg: "#fee2e2", fg: "#991b1b", label: "Cancelled" },
+  };
+  const c = palette[status];
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        padding: "2px 8px",
+        background: c.bg,
+        color: c.fg,
+        borderRadius: 4,
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: 0.5,
+      }}
+    >
+      {c.label}
+    </span>
   );
 }
 
@@ -817,6 +1116,52 @@ const secondaryBtn: CSSProperties = {
   cursor: "pointer",
   fontFamily: "inherit",
 };
+
+// Tournament-status header buttons share a slightly larger size
+// than the per-event row buttons so they read as page-level
+// actions next to the page heading.
+function primaryStatusBtn(busy: boolean): CSSProperties {
+  return {
+    padding: "8px 14px",
+    background: busy ? "#9ca3af" : "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: busy ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  };
+}
+
+const secondaryStatusBtn: CSSProperties = {
+  padding: "8px 14px",
+  background: "#fff",
+  color: "#555",
+  border: "1px solid #e2e2e2",
+  borderRadius: 6,
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  whiteSpace: "nowrap",
+};
+
+function dangerStatusBtn(busy: boolean): CSSProperties {
+  return {
+    padding: "8px 14px",
+    background: "#fff",
+    color: "#991b1b",
+    border: "1px solid #fecaca",
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: busy ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  };
+}
 
 function courtChip(
   mine: boolean,
