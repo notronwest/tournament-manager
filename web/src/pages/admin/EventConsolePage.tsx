@@ -554,17 +554,23 @@ function TeamsSection({
     await persistOrder(reordered);
   };
 
-  // Round-robin pool assignment by seeded order: seed 1 → pool 1,
-  // seed 2 → pool 2, … wrapping back to pool 1 on the (pool_count+1)th
-  // team. Unseeded teams sort last and continue the alternation.
-  // Manual override is always available via the per-row Pool dropdown.
+  // Pool assignment by seeded order. Two patterns supported; per-row
+  // manual overrides are always available via the Pool dropdown.
   //
-  // We previously did a snake-draft (1,2,2,1,1,2,2,1) for competitive
-  // balance, but for casual club play the simpler alternating pattern
-  // is what organizers actually expect — and snake is unintuitive when
-  // seeds are approximate. Add a snake button later if a competitive
-  // event needs it.
-  const onDistributeToPools = async () => {
+  //   "alternate" — straight round-robin: 1,2,1,2,1,2 (or 1,2,3,1,2,3
+  //                 for 3 pools). Easiest to explain to organizers,
+  //                 matches the "first team → pool 1" mental model.
+  //
+  //   "snake"     — competitive-balance draft: 1,2,2,1,1,2,2,1. Keeps
+  //                 the average seed equal across pools, which matters
+  //                 when seeds are reliable and you want pool-play
+  //                 results that translate fairly to bracket seeding.
+  //
+  // Unseeded teams sort last (1e9 sentinel) and continue whichever
+  // pattern was chosen.
+  type PoolPattern = "alternate" | "snake";
+
+  const distributePools = async (pattern: PoolPattern) => {
     setError(null);
     if (event.pool_count < 2) return;
     setBusy(true);
@@ -577,7 +583,10 @@ function TeamsSection({
     const writes = sorted.map((team, i) => {
       const ids = [team.captainRegId];
       if (team.partnerRegId) ids.push(team.partnerRegId);
-      const poolIndex = (i % event.pool_count) + 1;
+      const poolIndex =
+        pattern === "alternate"
+          ? (i % event.pool_count) + 1
+          : snakePoolIndex(i, event.pool_count);
       return supabase
         .from("event_registrations")
         .update({ pool_index: poolIndex })
@@ -623,14 +632,24 @@ function TeamsSection({
               </span>
             )}
             {showPoolColumn && (
-              <button
-                onClick={onDistributeToPools}
-                disabled={busy || savingOrder || teams.length === 0}
-                style={tinyPrimaryBtn}
-                title="Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, etc. Use the per-row Pool dropdown for manual overrides."
-              >
-                Distribute to pools
-              </button>
+              <>
+                <button
+                  onClick={() => distributePools("alternate")}
+                  disabled={busy || savingOrder || teams.length === 0}
+                  style={tinyPrimaryBtn}
+                  title="Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, seed 3 → pool 1, etc."
+                >
+                  Distribute: alternate
+                </button>
+                <button
+                  onClick={() => distributePools("snake")}
+                  disabled={busy || savingOrder || teams.length === 0}
+                  style={tinySecondaryBtn}
+                  title="Snake-draft teams for competitive balance: 1,2,2,1,1,2,2,1. Keeps the average seed equal across pools."
+                >
+                  Snake draft
+                </button>
+              </>
             )}
           </div>
         }
@@ -1641,6 +1660,16 @@ function buildTeams(regs: EventRegistration[], players: Player[]): Team[] {
   return teams;
 }
 
+// Snake-draft pool index for the i-th team across `poolCount` pools.
+// Pattern for 2 pools: 1,2,2,1,1,2,2,1; for 3 pools: 1,2,3,3,2,1,1,2,3.
+// Returns a 1-based pool index.
+function snakePoolIndex(i: number, poolCount: number): number {
+  const round = Math.floor(i / poolCount);
+  const within = i % poolCount;
+  const idx = round % 2 === 0 ? within : poolCount - 1 - within;
+  return idx + 1;
+}
+
 function computeStandings(teams: Team[], rrMatches: Match[]): Standing[] {
   const byCap = new Map<string, Standing>();
   for (const t of teams) {
@@ -1817,6 +1846,18 @@ const tinyPrimaryBtn: CSSProperties = {
   background: "#2563eb",
   color: "#fff",
   border: "none",
+  borderRadius: 4,
+  fontSize: 12,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const tinySecondaryBtn: CSSProperties = {
+  padding: "4px 10px",
+  background: "#fff",
+  color: "#555",
+  border: "1px solid #e2e2e2",
   borderRadius: 4,
   fontSize: 12,
   fontWeight: 500,
