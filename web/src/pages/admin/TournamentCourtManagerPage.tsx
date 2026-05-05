@@ -34,7 +34,14 @@ type Team = {
 
 type RankedSuggestion = {
   match: Match;
+  // max(lastPlayed_A, lastPlayed_B) — used for the "Last played"
+  // column in the Available matches table. Lower means longer rest.
   score: number;
+  // min/max games played by the pair. Primary fairness signal: we
+  // sort matches with under-played teams to the front so no team
+  // races ahead of the rest of the field.
+  minPlayed: number;
+  maxPlayed: number;
 };
 
 // Tournament-level court manager.
@@ -247,6 +254,25 @@ export default function TournamentCourtManagerPage() {
     return out;
   }, [matches]);
 
+  // Per-event games-played count per team. Counts in_progress and
+  // completed matches — both represent "this team has been off the
+  // sidelines." Pending matches don't count. Drives the primary
+  // fairness signal so a team that's already played 8 games doesn't
+  // get suggested over a team that's only played 4.
+  const gamesPlayedByEvent = useMemo(() => {
+    const out = new Map<string, Map<string, number>>();
+    for (const m of matches) {
+      if (m.status === "pending") continue;
+      const map = out.get(m.event_id) ?? new Map<string, number>();
+      for (const reg of [m.team_a_reg_id, m.team_b_reg_id]) {
+        if (!reg) continue;
+        map.set(reg, (map.get(reg) ?? 0) + 1);
+      }
+      out.set(m.event_id, map);
+    }
+    return out;
+  }, [matches]);
+
   // Per-event busy teams (currently on a court anywhere).
   const busyTeamsByEvent = useMemo(() => {
     const out = new Map<string, Set<string>>();
@@ -261,11 +287,25 @@ export default function TournamentCourtManagerPage() {
   }, [matches]);
 
   // Suggestion list per event (ranked, eligible only).
+  //
+  // Sort priorities (ascending — lower comes first):
+  //   1. min(gamesPlayed_A, gamesPlayed_B)
+  //        — surface matches with the most-behind team. If team B
+  //          has only played 3 games and the rest have played 5+,
+  //          B's pending matches all sort to the front.
+  //   2. max(gamesPlayed_A, gamesPlayed_B)
+  //        — among ties, prefer pairings where both teams are
+  //          behind, not just one.
+  //   3. max(lastPlayed_A, lastPlayed_B)
+  //        — existing fairness: longest-rested pair wins.
+  //   4. match.position — stable order tiebreaker.
   const rankedByEvent = useMemo(() => {
     const out = new Map<string, RankedSuggestion[]>();
     for (const ev of activeEvents) {
       const lastPlayed =
         lastPlayedByEvent.get(ev.id) ?? new Map<string, number>();
+      const gamesPlayed =
+        gamesPlayedByEvent.get(ev.id) ?? new Map<string, number>();
       const busy = busyTeamsByEvent.get(ev.id) ?? new Set<string>();
       const eligible = matches
         .filter(
@@ -280,16 +320,32 @@ export default function TournamentCourtManagerPage() {
         .map((m) => {
           const lastA = lastPlayed.get(m.team_a_reg_id!) ?? 0;
           const lastB = lastPlayed.get(m.team_b_reg_id!) ?? 0;
-          return { match: m, score: Math.max(lastA, lastB) };
+          const playedA = gamesPlayed.get(m.team_a_reg_id!) ?? 0;
+          const playedB = gamesPlayed.get(m.team_b_reg_id!) ?? 0;
+          return {
+            match: m,
+            score: Math.max(lastA, lastB),
+            minPlayed: Math.min(playedA, playedB),
+            maxPlayed: Math.max(playedA, playedB),
+          };
         })
         .sort(
           (x, y) =>
-            x.score - y.score || x.match.position - y.match.position,
+            x.minPlayed - y.minPlayed ||
+            x.maxPlayed - y.maxPlayed ||
+            x.score - y.score ||
+            x.match.position - y.match.position,
         );
       out.set(ev.id, eligible);
     }
     return out;
-  }, [activeEvents, matches, lastPlayedByEvent, busyTeamsByEvent]);
+  }, [
+    activeEvents,
+    matches,
+    lastPlayedByEvent,
+    busyTeamsByEvent,
+    gamesPlayedByEvent,
+  ]);
 
   // For each court, work out the suggestion. We coordinate per event: a
   // single event's empty courts get disjoint suggestions (no shared
@@ -324,9 +380,9 @@ export default function TournamentCourtManagerPage() {
 
   // Flattened pending queue across all active events. Excludes whatever
   // is currently suggested onto a court (those are shown in the grid
-  // above). Ordered by oldest "last played" first — same fairness
-  // signal we use for per-court suggestions. This is the "what's next
-  // when a court frees up" view.
+  // above). Sorted on the same multi-criteria signal as
+  // rankedByEvent so the queue reflects "who's most behind" as the
+  // primary driver, not just "who's been resting longest."
   const availableMatches = useMemo(() => {
     const suggIds = new Set(
       Array.from(suggestionByCourt.values()).map((m) => m.id),
@@ -339,7 +395,10 @@ export default function TournamentCourtManagerPage() {
     }
     return items.sort(
       (a, b) =>
-        a.score - b.score || a.match.position - b.match.position,
+        a.minPlayed - b.minPlayed ||
+        a.maxPlayed - b.maxPlayed ||
+        a.score - b.score ||
+        a.match.position - b.match.position,
     );
   }, [activeEvents, rankedByEvent, suggestionByCourt]);
 

@@ -201,14 +201,37 @@ export default function CourtManagerPage() {
     return m;
   }, [matches]);
 
-  // Pending matches (RR or playoff) scored by "longest-rested team",
-  // filtered to exclude busy teams. The score is max(lastPlayed_A,
-  // lastPlayed_B): lower means the team that played most recently in
-  // this pair did so longer ago — i.e. the pair as a whole has been
-  // waiting. Playoff matches are eligible as soon as both teams are
-  // populated (feedForwardPlayoffWinners fills these in after each
-  // upstream match completes), so they appear in the queue exactly
-  // when they're ready to play.
+  // For each team, count of non-pending matches — primary fairness
+  // signal. Sorting matches with the most-behind team to the front
+  // keeps the field even rather than letting one team race ahead.
+  const gamesPlayedAt = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const x of matches) {
+      if (x.status === "pending") continue;
+      for (const reg of [x.team_a_reg_id, x.team_b_reg_id]) {
+        if (!reg) continue;
+        m.set(reg, (m.get(reg) ?? 0) + 1);
+      }
+    }
+    return m;
+  }, [matches]);
+
+  // Pending matches (RR or playoff) ranked for dispatch.
+  //
+  // Sort priorities (ascending — lower comes first):
+  //   1. min(gamesPlayed_A, gamesPlayed_B) — surface matches with
+  //      the most-behind team so no team races ahead of the field.
+  //   2. max(gamesPlayed_A, gamesPlayed_B) — among ties, prefer
+  //      pairings where both teams are catching up.
+  //   3. stage (RR before playoff) — finish pool play before
+  //      starting medals.
+  //   4. max(lastPlayed_A, lastPlayed_B) — longest-rested pair
+  //      wins among ties.
+  //   5. round / position — stable ordering tiebreaker.
+  //
+  // Excludes busy teams (currently on a court) and matches without
+  // both teams populated. Playoff matches enter the queue as soon
+  // as feedForwardPlayoffWinners fills their team slots.
   const rankedPending = useMemo(() => {
     return matches
       .filter(
@@ -220,23 +243,26 @@ export default function CourtManagerPage() {
       .map((m) => {
         const lastA = lastPlayedAt.get(m.team_a_reg_id!) ?? 0;
         const lastB = lastPlayedAt.get(m.team_b_reg_id!) ?? 0;
-        // Stage tiebreak: when wait-time is equal, finish the RR
-        // round before serving up playoff. Comparators below sort
-        // by score, then stage (RR before playoff), then position.
+        const playedA = gamesPlayedAt.get(m.team_a_reg_id!) ?? 0;
+        const playedB = gamesPlayedAt.get(m.team_b_reg_id!) ?? 0;
         return {
           match: m,
           score: Math.max(lastA, lastB),
+          minPlayed: Math.min(playedA, playedB),
+          maxPlayed: Math.max(playedA, playedB),
           stageRank: m.stage === "round_robin" ? 0 : 1,
         };
       })
       .sort(
         (x, y) =>
-          x.score - y.score ||
+          x.minPlayed - y.minPlayed ||
+          x.maxPlayed - y.maxPlayed ||
           x.stageRank - y.stageRank ||
+          x.score - y.score ||
           x.match.round - y.match.round ||
           x.match.position - y.match.position,
       );
-  }, [matches, lastPlayedAt]);
+  }, [matches, lastPlayedAt, gamesPlayedAt]);
 
   const eligibleRanked = useMemo(
     () =>
