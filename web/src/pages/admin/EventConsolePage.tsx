@@ -630,15 +630,26 @@ function TeamsSection({
       }
     }
 
-    // Step 3: delete the registration rows.
-    const { error: delErr } = await supabase
+    // Step 3: delete the registration rows. We chain `.select("id")`
+    // so we can compare the returned rowset to what we expected to
+    // delete — without it, RLS-filtered deletes return
+    // {error: null, data: []} and look like success. (Bit us once
+    // already with a missing DELETE policy; this is the seatbelt.)
+    const { data: deleted, error: delErr } = await supabase
       .from("event_registrations")
       .delete()
-      .in("id", ids);
+      .in("id", ids)
+      .select("id");
 
     setDeleting(false);
     if (delErr) {
       setError(delErr.message);
+      return;
+    }
+    if (!deleted || deleted.length < ids.length) {
+      setError(
+        `Removed ${deleted?.length ?? 0} of ${ids.length} rows. The rest were blocked — usually a row-level-security policy or a foreign-key constraint. Pull the latest migrations and try again.`,
+      );
       return;
     }
     setPendingDelete(null);
