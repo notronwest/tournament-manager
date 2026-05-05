@@ -464,7 +464,12 @@ const printCss = `
     padding: 0.25in 0.25in 0.5in;
     box-sizing: border-box;
     page-break-inside: avoid;
-    border-bottom: 2px solid #000;
+    /* No bottom border by default — the next card's .scorecard-cut
+       (2px dashed top) is the cut line between adjacent cards. Used
+       to also draw a 2px solid bottom here, which stacked next to
+       the dashed top of the following card and produced a fat
+       double line in print. Only the last card on the page closes
+       with a solid bottom (rule below). */
     height: 3.25in;
     display: flex;
     flex-direction: column;
@@ -582,9 +587,9 @@ const printCss = `
     .scorecards-page {
       background: #fff;
     }
-    .scorecard {
-      border-bottom: 2px solid #000;
-    }
+    /* :last-child rule above already provides the closing solid
+       bottom; no need to redraw it here (was the source of the
+       double-line stacking with .scorecard-cut). */
   }
 
   /* Lighten the visual weight on screen so the page doesn't look like
@@ -594,8 +599,10 @@ const printCss = `
       margin: 16px auto;
       max-width: 7.5in;
       border: 1px solid #ddd;
-      border-bottom: 2px solid #000;
       background: #fff;
+    }
+    .scorecard:last-child {
+      border-bottom: 2px solid #000;
     }
     .scorecard-cut {
       border-top-color: #999;
