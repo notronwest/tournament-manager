@@ -64,7 +64,9 @@ export default function CourtManagerPage() {
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug || !eventId) return;
-    setLoading(true);
+    // Don't flip loading=true on subsequent reloads — flickers the
+    // skeleton over live courts every time. Initial useState(true)
+    // covers first paint.
     setError(null);
 
     const { data: ev, error: evErr } = await supabase

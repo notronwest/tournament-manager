@@ -39,7 +39,9 @@ export default function TournamentDetailPage() {
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug) return;
-    setLoading(true);
+    // Don't flip loading=true on subsequent reloads — that flashes the
+    // "Loading…" skeleton on every mutation. The initial useState(true)
+    // covers the first paint; after that we update in place.
     setError(null);
 
     const { data: tData, error: tErr } = await supabase
@@ -215,9 +217,6 @@ export default function TournamentDetailPage() {
   if (!t) return null;
 
   const courts = Array.from({ length: t.court_count }, (_, i) => i + 1);
-  const hasActive = events.some(
-    (e) => e.event.status === "active" || e.event.status === "medal_round",
-  );
 
   return (
     <div>
@@ -248,14 +247,15 @@ export default function TournamentDetailPage() {
             {t.description || "No description."}
           </p>
         </div>
-        {hasActive && (
-          <Link
-            to={`/admin/${org.slug}/tournaments/${t.slug}/courts`}
-            style={primaryLinkBtn}
-          >
-            Court manager →
-          </Link>
-        )}
+        {/* Court manager is always reachable from the tournament home —
+            users want it to peek at the queue / setup courts even before
+            an event is active. The page itself handles the empty state. */}
+        <Link
+          to={`/admin/${org.slug}/tournaments/${t.slug}/courts`}
+          style={primaryLinkBtn}
+        >
+          Court manager →
+        </Link>
       </div>
 
       {/* Stats strip */}

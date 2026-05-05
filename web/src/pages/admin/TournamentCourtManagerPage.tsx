@@ -59,7 +59,9 @@ export default function TournamentCourtManagerPage() {
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug) return;
-    setLoading(true);
+    // Don't flip loading=true on subsequent reloads — that flashes the
+    // skeleton over the live courts grid every time you load a match or
+    // submit a score. Initial useState(true) covers the first paint.
     setError(null);
 
     const { data: tData, error: tErr } = await supabase
@@ -285,6 +287,27 @@ export default function TournamentCourtManagerPage() {
     }
     return map;
   }, [tournament, ownerByCourt, inProgressByCourt, rankedByEvent]);
+
+  // Flattened pending queue across all active events. Excludes whatever
+  // is currently suggested onto a court (those are shown in the grid
+  // above). Ordered by oldest "last played" first — same fairness
+  // signal we use for per-court suggestions. This is the "what's next
+  // when a court frees up" view.
+  const availableMatches = useMemo(() => {
+    const suggIds = new Set(
+      Array.from(suggestionByCourt.values()).map((m) => m.id),
+    );
+    const items: RankedSuggestion[] = [];
+    for (const ev of activeEvents) {
+      for (const r of rankedByEvent.get(ev.id) ?? []) {
+        if (!suggIds.has(r.match.id)) items.push(r);
+      }
+    }
+    return items.sort(
+      (a, b) =>
+        a.score - b.score || a.match.position - b.match.position,
+    );
+  }, [activeEvents, rankedByEvent, suggestionByCourt]);
 
   const onLoad = async (matchId: string, court: string) => {
     setError(null);
@@ -536,6 +559,69 @@ export default function TournamentCourtManagerPage() {
           );
         })}
       </div>
+
+      {activeEvents.length > 0 && (
+        <section>
+          <h2 style={{ margin: "0 0 12px", fontSize: 14, color: "#555" }}>
+            Available matches{" "}
+            <span style={{ color: "#888", fontWeight: 400 }}>
+              ({availableMatches.length})
+            </span>
+          </h2>
+          {availableMatches.length === 0 ? (
+            <Empty>
+              {pendingCount === 0
+                ? "All matches are scheduled."
+                : "No more matches can start until current courts free up."}
+            </Empty>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 13,
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#fafafa" }}>
+                    <th style={thStyle}>#</th>
+                    <th style={thStyle}>Event</th>
+                    <th style={thStyle}>Team A</th>
+                    <th style={thStyle}>Team B</th>
+                    <th style={thStyle}>Last played</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {availableMatches.map(({ match, score }, i) => {
+                    const ev = eventById.get(match.event_id);
+                    const teamA = match.team_a_reg_id
+                      ? teamByAnyRegId.get(match.team_a_reg_id)
+                      : null;
+                    const teamB = match.team_b_reg_id
+                      ? teamByAnyRegId.get(match.team_b_reg_id)
+                      : null;
+                    return (
+                      <tr
+                        key={match.id}
+                        style={{ borderBottom: "1px solid #f3f4f6" }}
+                      >
+                        <td style={{ ...tdStyle, color: "#888" }}>{i + 1}</td>
+                        <td style={tdStyle}>{ev?.name ?? "—"}</td>
+                        <td style={tdStyle}>{teamA?.label ?? "—"}</td>
+                        <td style={tdStyle}>{teamB?.label ?? "—"}</td>
+                        <td style={{ ...tdStyle, color: "#888" }}>
+                          {score === 0 ? "Never" : relativeMinutes(score)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 }
@@ -986,6 +1072,28 @@ const teamRow: CSSProperties = {
   padding: "4px 0",
 };
 const teamNameStyle: CSSProperties = { fontWeight: 500 };
+
+const thStyle: CSSProperties = {
+  textAlign: "left",
+  padding: "8px 12px",
+  fontSize: 11,
+  color: "#888",
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  fontWeight: 500,
+};
+
+const tdStyle: CSSProperties = {
+  padding: "8px 12px",
+};
+
+function relativeMinutes(ts: number): string {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${mins % 60}m ago`;
+}
 
 const bigScoreInput: CSSProperties = {
   width: 64,

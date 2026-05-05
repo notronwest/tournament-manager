@@ -50,7 +50,9 @@ export default function ScorecardsPage() {
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug || !eventId) return;
-    setLoading(true);
+    // Don't flip loading=true on subsequent reloads — that flashes the
+    // skeleton over the scorecards every time you save a score. Initial
+    // useState(true) covers the first paint.
     setError(null);
 
     const { data: ev, error: evErr } = await supabase
