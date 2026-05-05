@@ -412,7 +412,7 @@ export default function EventConsolePage() {
         <TeamsSection
           event={event}
           teams={teams}
-          canDelete={matches.length === 0}
+          hasMatches={matches.length > 0}
           onChange={reload}
         />
       )}
@@ -469,12 +469,12 @@ export default function EventConsolePage() {
 function TeamsSection({
   event,
   teams: serverTeams,
-  canDelete,
+  hasMatches,
   onChange,
 }: {
   event: Event;
   teams: Team[];
-  canDelete: boolean;
+  hasMatches: boolean;
   onChange: () => Promise<void>;
 }) {
   const isDoubles = event.format === "doubles";
@@ -584,23 +584,64 @@ function TeamsSection({
     await onChange();
   };
 
-  const onDelete = async (team: Team) => {
-    if (!canDelete) return;
-    const ids = [team.captainRegId];
-    if (team.partnerRegId) ids.push(team.partnerRegId);
-    // First null out the partner FK to avoid FK ordering issues, then delete.
+  // Two-step delete: clicking Remove opens a confirm modal, the
+  // modal's onConfirm runs the actual writes. Always available now —
+  // mid-event removal (no-shows, dropouts) is a real organizer
+  // workflow. The trade-off: deleting a team mid-event means
+  // matches that involved them are deleted too. The confirm copy
+  // calls that out so it's an informed click.
+  const [pendingDelete, setPendingDelete] = useState<Team | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const onDelete = (team: Team) => {
+    setPendingDelete(team);
+  };
+
+  const onConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setError(null);
+    const ids = [pendingDelete.captainRegId];
+    if (pendingDelete.partnerRegId) ids.push(pendingDelete.partnerRegId);
+
+    // Step 1: clear the self-FK on partner_registration_id so the
+    // delete doesn't trip on the constraint when both rows of a
+    // doubles team go in the same batch.
     await supabase
       .from("event_registrations")
       .update({ partner_registration_id: null })
       .in("id", ids);
+
+    // Step 2: delete every match this team was part of. Without this,
+    // the matches FK (`on delete set null`) would leave rows with null
+    // team slots — unplayable orphans that pollute standings and the
+    // court manager queue. The user explicitly opted in via the
+    // confirm modal, so a hard delete of those matches is correct.
+    if (hasMatches) {
+      const matchDeletes = await Promise.all([
+        supabase.from("matches").delete().in("team_a_reg_id", ids),
+        supabase.from("matches").delete().in("team_b_reg_id", ids),
+      ]);
+      const matchErr = matchDeletes.find((r) => r.error)?.error;
+      if (matchErr) {
+        setError(matchErr.message);
+        setDeleting(false);
+        return;
+      }
+    }
+
+    // Step 3: delete the registration rows.
     const { error: delErr } = await supabase
       .from("event_registrations")
       .delete()
       .in("id", ids);
+
+    setDeleting(false);
     if (delErr) {
       setError(delErr.message);
       return;
     }
+    setPendingDelete(null);
     await onChange();
   };
 
@@ -841,7 +882,7 @@ function TeamsSection({
                 {showPoolColumn && (
                   <th style={{ ...thStyle, width: 110 }}>Pool</th>
                 )}
-                {canDelete && <th style={{ ...thStyle, width: 80 }} />}
+                <th style={{ ...thStyle, width: 80 }} />
               </tr>
             </thead>
             <tbody>
@@ -943,23 +984,46 @@ function TeamsSection({
                         </select>
                       </td>
                     )}
-                    {canDelete && (
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        <button
-                          onClick={() => onDelete(team)}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          style={tinyDangerBtn}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    )}
+                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                      <button
+                        onClick={() => onDelete(team)}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={tinyDangerBtn}
+                      >
+                        Remove
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </>
+      )}
+
+      {pendingDelete && (
+        <ConfirmModal
+          title={`Remove ${pendingDelete.label}?`}
+          body={
+            hasMatches ? (
+              <div>
+                This team has matches in the schedule. Removing them will
+                also <strong>delete every match they're part of</strong> —
+                pending and completed. Standings and the playoff bracket
+                may need to be regenerated. The player records themselves
+                stay; only this event's registration is removed.
+              </div>
+            ) : (
+              <div>
+                Removes this team's registration from the event. Player
+                records stay — they can be re-added later.
+              </div>
+            )
+          }
+          confirmLabel={deleting ? "Removing…" : "Remove team"}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={onConfirmDelete}
+        />
       )}
     </section>
   );
