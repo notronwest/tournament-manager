@@ -25,6 +25,11 @@ import type { Database } from "../../types/supabase";
 type Event = Database["public"]["Tables"]["events"]["Row"];
 
 type TabKey = "settings" | "teams" | "games" | "standings";
+
+type Medal = {
+  team: { label: string; captainRegId: string };
+  place: "gold" | "silver" | "bronze";
+};
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type EventRegistration =
@@ -212,6 +217,49 @@ export default function EventConsolePage() {
 
   const rrComplete =
     rrMatches.length > 0 && rrMatches.every((m) => m.status === "completed");
+
+  // Medal podium for the standings tab. Computed from the playoff
+  // matches at round=playoff_rounds:
+  //   * position 0 = the gold-medal match  → winner=gold, loser=silver
+  //   * position 1 = the bronze-medal game → winner=bronze
+  // Works for both pairwise (R=1, N=4) and bracket-with-bronze
+  // (R=2, N=4) since both store the medal matches at the final
+  // round. Returns an empty array until the gold match is
+  // completed; bronze is added later when its match finishes.
+  const medals = useMemo<Medal[]>(() => {
+    if (event && event.teams_advancing_to_playoff <= 0) return [];
+    if (!event) return [];
+    const R = event.playoff_rounds;
+    const goldMatch = playoffMatches.find(
+      (m) => m.round === R && m.position === 0,
+    );
+    if (!goldMatch || goldMatch.status !== "completed") return [];
+
+    const result: Medal[] = [];
+    if (goldMatch.winner_reg_id) {
+      const goldTeam = teamByAnyRegId.get(goldMatch.winner_reg_id);
+      if (goldTeam) result.push({ team: goldTeam, place: "gold" });
+    }
+    const silverRegId =
+      goldMatch.team_a_reg_id === goldMatch.winner_reg_id
+        ? goldMatch.team_b_reg_id
+        : goldMatch.team_a_reg_id;
+    if (silverRegId) {
+      const silverTeam = teamByAnyRegId.get(silverRegId);
+      if (silverTeam) result.push({ team: silverTeam, place: "silver" });
+    }
+    const bronzeMatch = playoffMatches.find(
+      (m) => m.round === R && m.position === 1,
+    );
+    if (
+      bronzeMatch?.status === "completed" &&
+      bronzeMatch.winner_reg_id
+    ) {
+      const bronzeTeam = teamByAnyRegId.get(bronzeMatch.winner_reg_id);
+      if (bronzeTeam) result.push({ team: bronzeTeam, place: "bronze" });
+    }
+    return result;
+  }, [event, playoffMatches, teamByAnyRegId]);
 
   // Reset all match scores in this event back to 'pending' — clear
   // scores, winner, and court, but keep the schedule intact (don't
@@ -439,7 +487,11 @@ export default function EventConsolePage() {
       )}
 
       {activeTab === "standings" && (
-        <StandingsSection event={event} standings={standings} />
+        <StandingsSection
+          event={event}
+          standings={standings}
+          medals={medals}
+        />
       )}
 
       {resetConfirmOpen && (
@@ -1388,9 +1440,11 @@ function MatchStatusBadge({
 function StandingsSection({
   event,
   standings,
+  medals,
 }: {
   event: Event;
   standings: Standing[];
+  medals: Medal[];
 }) {
   const multiPool = event.pool_count > 1;
   const grouped = useMemo(() => {
@@ -1419,6 +1473,51 @@ function StandingsSection({
   return (
     <section>
       <SectionHeader title="Standings" />
+
+      {medals.length > 0 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+            marginBottom: 24,
+          }}
+        >
+          {medals.map(({ team, place }) => {
+            const p = medalPalette(place);
+            return (
+              <div
+                key={place}
+                style={{
+                  padding: "16px 20px",
+                  background: p.bg,
+                  border: `1px solid ${p.border}`,
+                  borderRadius: 8,
+                  textAlign: "center",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: p.color,
+                    textTransform: "uppercase",
+                    letterSpacing: 1.2,
+                    fontWeight: 700,
+                    marginBottom: 6,
+                  }}
+                >
+                  {p.label}
+                </div>
+                <div
+                  style={{ fontSize: 16, fontWeight: 600, color: "#222" }}
+                >
+                  {team.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {standings.length === 0 ? (
         <Empty>Standings will appear once matches are scored.</Empty>
       ) : (
@@ -1919,6 +2018,27 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// Color palette for the medal podium panels at the top of the
+// Standings tab. Gold reuses the amber family from design-prefs
+// (note-to-self / system-emphasis); silver uses slate; bronze uses
+// copper. Same pairings used by playoffStageStyle for the in-card
+// stage badges so the visual language is consistent across views.
+function medalPalette(place: "gold" | "silver" | "bronze"): {
+  bg: string;
+  color: string;
+  border: string;
+  label: string;
+} {
+  switch (place) {
+    case "gold":
+      return { bg: "#fef3c7", color: "#92400e", border: "#fde68a", label: "Gold" };
+    case "silver":
+      return { bg: "#f1f5f9", color: "#475569", border: "#cbd5e1", label: "Silver" };
+    case "bronze":
+      return { bg: "#fff7ed", color: "#7c2d12", border: "#fed7aa", label: "Bronze" };
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Tiny shared UI bits
 // ─────────────────────────────────────────────────────────────────────
@@ -1936,10 +2056,10 @@ function TabStrip({
   onChange: (t: TabKey) => void;
 }) {
   const tabs: { key: TabKey; label: string }[] = [
-    { key: "settings", label: "Settings" },
+    { key: "standings", label: "Standings" },
     { key: "teams", label: "Teams" },
     { key: "games", label: "Games" },
-    { key: "standings", label: "Standings" },
+    { key: "settings", label: "Settings" },
   ];
   return (
     <div
