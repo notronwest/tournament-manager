@@ -1,5 +1,8 @@
 # Tournament Manager — Claude context
 
+> **Strategic context** — For the *why* (manifesto) and *what's next* (strategy) across all four repos in this stack, see `../wmpc-meta/strategy.md`. That sibling directory is auto-synced on every `git pull` via `scripts/claude-bootstrap.sh` — run it once after first cloning to install the hooks. Update `wmpc-meta/strategy.md` after meaningful strategic decisions; engineering specs stay in this repo's docs.
+
+
 Long-term, this is a clone of [PickleballBrackets.com](https://PickleballBrackets.com): tournament organizers create tournaments, players register and pay, brackets get generated and run. Currently we're at the foundation: schema + auth + organizer-side tournament create/list/view.
 
 This file is the source of truth for the **decisions** made and the **path** ahead. Read it first whenever you pick the project back up.
