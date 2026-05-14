@@ -62,6 +62,10 @@ export default function SchedulePage() {
   // clicking "Auto-schedule". Stored as a datetime-local-style string
   // (YYYY-MM-DDTHH:MM) so the input renders without timezone goop.
   const [anchorLocal, setAnchorLocal] = useState<string>("");
+  // Buffer in minutes inserted between consecutive events sharing a
+  // court (announcements, court turnover, etc.). Lives on the
+  // tournament row; saved on change.
+  const [bufferLocal, setBufferLocal] = useState<string>("");
 
   useEffect(() => {
     if (!org || !tournamentSlug) return;
@@ -93,6 +97,7 @@ export default function SchedulePage() {
       // first load. Re-seeds on subsequent reloads only if the
       // organizer hasn't typed a different value yet.
       setAnchorLocal((prev) => prev || toLocalInput(t.starts_at));
+      setBufferLocal((prev) => prev || String(t.inter_event_buffer_minutes));
 
       const [evRes, courtsRes, regsRes] = await Promise.all([
         supabase
@@ -320,11 +325,17 @@ export default function SchedulePage() {
         return a.event.created_at.localeCompare(b.event.created_at);
       });
       let cursorMs = anchorMs;
-      for (const r of cluster) {
+      const bufferMs =
+        Math.max(0, parseInt(bufferLocal || "0", 10)) * 60_000;
+      cluster.forEach((r, i) => {
+        // First event in the cluster starts at the anchor; each
+        // subsequent event is preceded by the buffer (court
+        // turnover, announcements, etc.).
+        if (i > 0) cursorMs += bufferMs;
         const iso = new Date(cursorMs).toISOString();
         updates.push({ id: r.event.id, scheduled_start_at: iso });
         cursorMs += r.totalMinutes * 60_000;
-      }
+      });
     }
 
     // Run updates in parallel — they're on disjoint rows.
@@ -369,6 +380,26 @@ export default function SchedulePage() {
     }
     setEvents((prev) => prev.map((e) => ({ ...e, scheduled_start_at: null })));
     setBusy(false);
+  };
+
+  // Persist the buffer onto the tournament row. Called on input blur
+  // (rather than every keystroke) so we don't hammer the DB while
+  // typing.
+  const onSaveBuffer = async () => {
+    if (!tournament) return;
+    const value = Math.max(0, Math.min(240, parseInt(bufferLocal || "0", 10) || 0));
+    if (value === tournament.inter_event_buffer_minutes) return;
+    setError(null);
+    const { error: updErr } = await supabase
+      .from("tournaments")
+      .update({ inter_event_buffer_minutes: value })
+      .eq("id", tournament.id);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setTournament({ ...tournament, inter_event_buffer_minutes: value });
+    setBufferLocal(String(value));
   };
 
   const onSetEventStart = async (eventId: string, localValue: string) => {
@@ -463,6 +494,34 @@ export default function SchedulePage() {
                 borderRadius: 6,
                 fontSize: 13,
                 fontFamily: "inherit",
+              }}
+            />
+          </label>
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              fontSize: 12,
+              color: "#555",
+            }}
+            title="Inserted between consecutive events on the same court (turnover, announcements, etc.). Not added within a single event's pool play."
+          >
+            <span>Buffer between events (min)</span>
+            <input
+              type="number"
+              min={0}
+              max={240}
+              value={bufferLocal}
+              onChange={(e) => setBufferLocal(e.target.value)}
+              onBlur={() => void onSaveBuffer()}
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #e2e2e2",
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: "inherit",
+                width: 90,
               }}
             />
           </label>

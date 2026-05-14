@@ -756,6 +756,7 @@ export type Database = {
           ends_at: string
           entry_fee_cents: number
           id: string
+          inter_event_buffer_minutes: number
           location_address: string | null
           location_name: string | null
           name: string
@@ -775,6 +776,7 @@ export type Database = {
           ends_at: string
           entry_fee_cents?: number
           id?: string
+          inter_event_buffer_minutes?: number
           location_address?: string | null
           location_name?: string | null
           name: string
@@ -794,6 +796,7 @@ export type Database = {
           ends_at?: string
           entry_fee_cents?: number
           id?: string
+          inter_event_buffer_minutes?: number
           location_address?: string | null
           location_name?: string | null
           name?: string
