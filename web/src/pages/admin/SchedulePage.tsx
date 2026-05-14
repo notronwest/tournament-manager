@@ -29,6 +29,10 @@ type EventRow = {
   medalMinutes: number;
   totalMinutes: number;
   poolBindingConstraint: "court" | "team";
+  // Persisted start time on the event, if any. End is computed from
+  // start + totalMinutes.
+  scheduledStart: Date | null;
+  scheduledEnd: Date | null;
 };
 
 // Per-tournament schedule view. Pulls each event's settings plus
@@ -51,6 +55,13 @@ export default function SchedulePage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Anchor for auto-schedule. Defaults from tournament.starts_at the
+  // first time the tournament loads; the user can override before
+  // clicking "Auto-schedule". Stored as a datetime-local-style string
+  // (YYYY-MM-DDTHH:MM) so the input renders without timezone goop.
+  const [anchorLocal, setAnchorLocal] = useState<string>("");
 
   useEffect(() => {
     if (!org || !tournamentSlug) return;
@@ -78,6 +89,10 @@ export default function SchedulePage() {
         return;
       }
       setTournament(t);
+      // Seed the anchor input from the tournament's start once on
+      // first load. Re-seeds on subsequent reloads only if the
+      // organizer hasn't typed a different value yet.
+      setAnchorLocal((prev) => prev || toLocalInput(t.starts_at));
 
       const [evRes, courtsRes, regsRes] = await Promise.all([
         supabase
@@ -169,6 +184,13 @@ export default function SchedulePage() {
               minutesPerGame: event.medal_minutes_per_game,
             })
           : null;
+      const totalMinutes = pool.totalMinutes + (medal?.totalMinutes ?? 0);
+      const scheduledStart = event.scheduled_start_at
+        ? new Date(event.scheduled_start_at)
+        : null;
+      const scheduledEnd = scheduledStart
+        ? new Date(scheduledStart.getTime() + totalMinutes * 60_000)
+        : null;
       return {
         event,
         teamCount,
@@ -177,8 +199,10 @@ export default function SchedulePage() {
         courtNumbers,
         poolMinutes: pool.totalMinutes,
         medalMinutes: medal?.totalMinutes ?? 0,
-        totalMinutes: pool.totalMinutes + (medal?.totalMinutes ?? 0),
+        totalMinutes,
         poolBindingConstraint: pool.bindingConstraint,
+        scheduledStart,
+        scheduledEnd,
       };
     });
   }, [events, eventCourts, teamsByEvent]);
@@ -223,6 +247,144 @@ export default function SchedulePage() {
     return Math.max(...clusterMinutes.values());
   }, [rows]);
 
+  // ─── Schedule mutations ────────────────────────────────────────────
+  // Optimistic local-state updates keep the UI snappy without a full
+  // reload of all the joined data each click.
+
+  const updateLocalEventScheduled = (
+    eventId: string,
+    iso: string | null,
+  ) => {
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === eventId ? { ...e, scheduled_start_at: iso } : e,
+      ),
+    );
+  };
+
+  // Auto-schedule walks each court-cluster in court-number order and
+  // packs events back-to-back starting at the anchor. Different
+  // clusters all start at the same anchor (parallel tracks).
+  const onAutoSchedule = async () => {
+    setError(null);
+    const anchorIso = fromLocalInput(anchorLocal);
+    if (!anchorIso) {
+      setError("Pick a start date/time first.");
+      return;
+    }
+    if (rows.length === 0) return;
+    setBusy(true);
+
+    // Cluster events by shared courts (same union-find as the totals).
+    const parent = new Map<string, string>();
+    for (const r of rows) parent.set(r.event.id, r.event.id);
+    const find = (x: string): string => {
+      const p = parent.get(x) ?? x;
+      if (p === x) return x;
+      const root = find(p);
+      parent.set(x, root);
+      return root;
+    };
+    const union = (a: string, b: string) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent.set(ra, rb);
+    };
+    for (let i = 0; i < rows.length; i++) {
+      for (let j = i + 1; j < rows.length; j++) {
+        const ci = new Set(rows[i].courtNumbers);
+        if (rows[j].courtNumbers.some((c) => ci.has(c))) {
+          union(rows[i].event.id, rows[j].event.id);
+        }
+      }
+    }
+
+    // Group rows by cluster root, ordered within a cluster by the
+    // minimum court number (so the schedule is stable + matches the
+    // organizer's mental model of "Court 1 → Court 2 → …").
+    const clusters = new Map<string, EventRow[]>();
+    for (const r of rows) {
+      const root = find(r.event.id);
+      const arr = clusters.get(root) ?? [];
+      arr.push(r);
+      clusters.set(root, arr);
+    }
+    const updates: { id: string; scheduled_start_at: string }[] = [];
+    const anchorMs = new Date(anchorIso).getTime();
+    for (const cluster of clusters.values()) {
+      cluster.sort((a, b) => {
+        const ca = a.courtNumbers[0] ?? 1e9;
+        const cb = b.courtNumbers[0] ?? 1e9;
+        if (ca !== cb) return ca - cb;
+        // Tie-break by creation order so reruns are deterministic.
+        return a.event.created_at.localeCompare(b.event.created_at);
+      });
+      let cursorMs = anchorMs;
+      for (const r of cluster) {
+        const iso = new Date(cursorMs).toISOString();
+        updates.push({ id: r.event.id, scheduled_start_at: iso });
+        cursorMs += r.totalMinutes * 60_000;
+      }
+    }
+
+    // Run updates in parallel — they're on disjoint rows.
+    const results = await Promise.all(
+      updates.map((u) =>
+        supabase
+          .from("events")
+          .update({ scheduled_start_at: u.scheduled_start_at })
+          .eq("id", u.id),
+      ),
+    );
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      setError(firstErr.message);
+      setBusy(false);
+      return;
+    }
+    setEvents((prev) =>
+      prev.map((e) => {
+        const u = updates.find((x) => x.id === e.id);
+        return u ? { ...e, scheduled_start_at: u.scheduled_start_at } : e;
+      }),
+    );
+    setBusy(false);
+  };
+
+  const onClearSchedule = async () => {
+    setError(null);
+    if (rows.length === 0) return;
+    setBusy(true);
+    const { error: updErr } = await supabase
+      .from("events")
+      .update({ scheduled_start_at: null })
+      .in(
+        "id",
+        rows.map((r) => r.event.id),
+      );
+    if (updErr) {
+      setError(updErr.message);
+      setBusy(false);
+      return;
+    }
+    setEvents((prev) => prev.map((e) => ({ ...e, scheduled_start_at: null })));
+    setBusy(false);
+  };
+
+  const onSetEventStart = async (eventId: string, localValue: string) => {
+    setError(null);
+    const iso = localValue ? fromLocalInput(localValue) : null;
+    const { error: updErr } = await supabase
+      .from("events")
+      .update({ scheduled_start_at: iso })
+      .eq("id", eventId);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    updateLocalEventScheduled(eventId, iso);
+  };
+
   if (!org) return null;
   if (loading)
     return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
@@ -263,6 +425,93 @@ export default function SchedulePage() {
         and the format / scoring settings on each event. Numbers update as
         teams register and as you edit event settings.
       </p>
+
+      {/* Auto-schedule controls — visible whenever there are events
+          to schedule, so the user can lay out a daily plan from a
+          start anchor in one click. */}
+      {rows.length > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: 12,
+            background: "#fafafa",
+            border: "1px solid #e5e7eb",
+            borderRadius: 6,
+            display: "flex",
+            gap: 12,
+            alignItems: "end",
+            flexWrap: "wrap",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              fontSize: 12,
+              color: "#555",
+            }}
+          >
+            <span>Tournament start</span>
+            <input
+              type="datetime-local"
+              value={anchorLocal}
+              onChange={(e) => setAnchorLocal(e.target.value)}
+              style={{
+                padding: "6px 10px",
+                border: "1px solid #e2e2e2",
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: "inherit",
+              }}
+            />
+          </label>
+          <button
+            onClick={onAutoSchedule}
+            disabled={busy || !anchorLocal}
+            style={{
+              padding: "8px 16px",
+              background: busy || !anchorLocal ? "#9ca3af" : "#2563eb",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: busy || !anchorLocal ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+            }}
+            title="Pack each court-cluster back-to-back starting at the chosen time. Parallel clusters all start at the anchor."
+          >
+            {busy ? "Scheduling…" : "Auto-schedule"}
+          </button>
+          <button
+            onClick={onClearSchedule}
+            disabled={busy || !rows.some((r) => r.scheduledStart)}
+            style={{
+              padding: "8px 16px",
+              background: "#fff",
+              color: "#555",
+              border: "1px solid #e2e2e2",
+              borderRadius: 6,
+              fontSize: 13,
+              cursor:
+                busy || !rows.some((r) => r.scheduledStart)
+                  ? "not-allowed"
+                  : "pointer",
+              fontFamily: "inherit",
+              opacity:
+                busy || !rows.some((r) => r.scheduledStart) ? 0.6 : 1,
+            }}
+          >
+            Clear schedule
+          </button>
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 11, color: "#888" }}>
+            You can also edit any event's start time directly in the
+            table below.
+          </span>
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <Empty>No events yet. Add one to start scheduling.</Empty>
@@ -317,6 +566,8 @@ export default function SchedulePage() {
                 <th style={{ ...thStyle, textAlign: "right" }}>Pool play</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Medal round</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Total</th>
+                <th style={thStyle}>Start</th>
+                <th style={thStyle}>End</th>
               </tr>
             </thead>
             <tbody>
@@ -428,6 +679,32 @@ export default function SchedulePage() {
                     }}
                   >
                     {r.teamCount < 2 ? "—" : fmtDuration(r.totalMinutes)}
+                  </td>
+                  <td style={tdStyle}>
+                    <input
+                      type="datetime-local"
+                      value={toLocalInput(r.event.scheduled_start_at)}
+                      onChange={(e) =>
+                        void onSetEventStart(r.event.id, e.target.value)
+                      }
+                      disabled={busy}
+                      style={{
+                        padding: "4px 6px",
+                        border: "1px solid #e2e2e2",
+                        borderRadius: 4,
+                        fontSize: 12,
+                        fontFamily: "inherit",
+                        background: "#fff",
+                      }}
+                    />
+                  </td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      color: r.scheduledEnd ? "#444" : "#bbb",
+                    }}
+                  >
+                    {r.scheduledEnd ? fmtTime(r.scheduledEnd) : "—"}
                   </td>
                 </tr>
               ))}
@@ -553,3 +830,32 @@ const tdStyle: CSSProperties = {
   padding: "10px 12px",
   verticalAlign: "top",
 };
+
+// `<input type="datetime-local">` expects "YYYY-MM-DDTHH:MM" in
+// **local** time with no timezone suffix. Going either direction:
+//   - toLocalInput: ISO/timestamptz → local-time slug for the input
+//   - fromLocalInput: local-time slug → ISO with the browser's offset
+// Both round-trip the same wall-clock moment the organizer sees.
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInput(local: string): string | null {
+  if (!local) return null;
+  // new Date("YYYY-MM-DDTHH:MM") parses as local time in browsers,
+  // then .toISOString() gives us the UTC-equivalent storage form.
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function fmtTime(d: Date): string {
+  return d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+

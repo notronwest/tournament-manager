@@ -10,6 +10,7 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { eligibilityChips } from "../../lib/eligibility";
+import { estimateMedalRound, estimatePoolPlay } from "../../lib/estimator";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -525,6 +526,39 @@ function EventCard({
   const { event, teamCount, courtNumbers } = summary;
   const claimed = new Set(courtNumbers);
 
+  // If the event has a scheduled start, derive the end from the same
+  // estimator math the schedule page uses, so the two views agree.
+  const scheduledStart = event.scheduled_start_at
+    ? new Date(event.scheduled_start_at)
+    : null;
+  const scheduledEnd = (() => {
+    if (!scheduledStart || teamCount < 2) return null;
+    const courtsForEvent = Math.max(1, courtNumbers.length);
+    const teamsPerPool =
+      event.pool_count > 0
+        ? Math.max(2, Math.ceil(teamCount / event.pool_count))
+        : Math.max(2, teamCount);
+    const pool = estimatePoolPlay({
+      courts: courtsForEvent,
+      pools: event.pool_count,
+      teamsPerPool,
+      minutesPerGame: event.pool_minutes_per_game,
+      playEachOpponentTimes: event.play_each_team_times,
+    });
+    const medal =
+      event.teams_advancing_to_playoff > 0
+        ? estimateMedalRound({
+            courts: courtsForEvent,
+            teamsAdvancing: event.teams_advancing_to_playoff,
+            rounds: (event.playoff_rounds as 1 | 2) ?? 1,
+            format: event.medal_match_format,
+            minutesPerGame: event.medal_minutes_per_game,
+          })
+        : null;
+    const totalMinutes = pool.totalMinutes + (medal?.totalMinutes ?? 0);
+    return new Date(scheduledStart.getTime() + totalMinutes * 60_000);
+  })();
+
   return (
     <div
       style={{
@@ -556,6 +590,18 @@ function EventCard({
             {teamCount === 1 ? "team" : "teams"}
             {event.max_teams ? ` / ${event.max_teams}` : ""}
           </div>
+          {scheduledStart && (
+            <div
+              style={{
+                color: "#444",
+                fontSize: 12,
+                marginTop: 4,
+                fontWeight: 500,
+              }}
+            >
+              {fmtScheduledRange(scheduledStart, scheduledEnd)}
+            </div>
+          )}
           {eligibilityChips(event).length > 0 && (
             <div
               style={{
@@ -1068,6 +1114,28 @@ function fmtDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+// Render the scheduled window on an event card. When start and end
+// fall on the same calendar day, show "Sat May 16 · 9:00 AM – 1:30 PM"
+// — readable at a glance. Cross-day windows include the date on both
+// sides so the second day isn't ambiguous.
+function fmtScheduledRange(start: Date, end: Date | null): string {
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  };
+  const time = (d: Date) =>
+    d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  if (!end) {
+    return `${start.toLocaleDateString(undefined, opts)} · ${time(start)}`;
+  }
+  const sameDay = start.toDateString() === end.toDateString();
+  if (sameDay) {
+    return `${start.toLocaleDateString(undefined, opts)} · ${time(start)} – ${time(end)}`;
+  }
+  return `${start.toLocaleDateString(undefined, opts)} ${time(start)} → ${end.toLocaleDateString(undefined, opts)} ${time(end)}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────
