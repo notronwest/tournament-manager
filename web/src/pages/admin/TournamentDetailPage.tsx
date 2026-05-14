@@ -330,6 +330,20 @@ export default function TournamentDetailPage() {
             busy={busyAction === "tstatus"}
             onSetStatus={setTournamentStatus}
           />
+          {/* Schedule view — time estimates for every event based on
+              registered teams + format. Useful during planning AND
+              live (e.g. "are we tracking ahead of plan?"). */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/schedule`}
+            style={{
+              ...primaryLinkBtn,
+              background: "#fff",
+              color: "#2563eb",
+              border: "1px solid #2563eb",
+            }}
+          >
+            Schedule
+          </Link>
           {/* Court manager is always reachable from the tournament home —
               users want it to peek at the queue / setup courts even
               before an event is active. The page itself handles the

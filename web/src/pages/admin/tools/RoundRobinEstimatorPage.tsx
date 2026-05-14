@@ -1,4 +1,9 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  estimateMedalRound,
+  estimatePoolPlay,
+  fmtDuration,
+} from "../../../lib/estimator";
 
 // Round-robin time estimator. Stand-alone planning tool for tournament
 // directors — no schema involvement, no persisted state, just live
@@ -49,7 +54,7 @@ export default function RoundRobinEstimatorPage() {
 
   const estimate = useMemo(
     () =>
-      computeEstimate({
+      estimatePoolPlay({
         courts,
         pools,
         teamsPerPool,
@@ -61,7 +66,7 @@ export default function RoundRobinEstimatorPage() {
 
   const medal = useMemo(() => {
     if (!includeMedal) return null;
-    return computeMedalEstimate({
+    return estimateMedalRound({
       courts,
       teamsAdvancing,
       rounds: medalRounds,
@@ -293,143 +298,6 @@ export default function RoundRobinEstimatorPage() {
       </div>
     </div>
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Math
-// ─────────────────────────────────────────────────────────────────────
-
-type EstimateInputs = {
-  courts: number;
-  pools: number;
-  teamsPerPool: number;
-  minutesPerGame: number;
-  playEachOpponentTimes: number;
-};
-
-type EstimateResult = {
-  matchesPerPool: number;
-  totalMatches: number;
-  gamesPerTeam: number;
-  courtBoundMinutes: number;
-  teamBoundMinutes: number;
-  totalMinutes: number;
-  courtRounds: number;
-  bindingConstraint: "court" | "team";
-  utilization: number;
-};
-
-function computeEstimate(i: EstimateInputs): EstimateResult {
-  const courts = Math.max(1, i.courts);
-  const pools = Math.max(1, i.pools);
-  const teams = Math.max(2, i.teamsPerPool);
-  const minutes = Math.max(1, i.minutesPerGame);
-  const reps = Math.max(1, i.playEachOpponentTimes);
-
-  const matchesPerPool = (teams * (teams - 1) / 2) * reps;
-  const totalMatches = pools * matchesPerPool;
-  const gamesPerTeam = (teams - 1) * reps;
-
-  const courtRounds = Math.ceil(totalMatches / courts);
-  const courtBoundMinutes = courtRounds * minutes;
-  const teamBoundMinutes = gamesPerTeam * minutes;
-  const totalMinutes = Math.max(courtBoundMinutes, teamBoundMinutes);
-  const bindingConstraint: "court" | "team" =
-    teamBoundMinutes > courtBoundMinutes ? "team" : "court";
-
-  // Utilization = how full are the courts on average. The cap is
-  // total_matches × minutes (every game uses a court once); the actual
-  // wall time is totalMinutes × courts. Ratio is the % of court-time
-  // actually spent playing matches.
-  const utilization = Math.min(
-    1,
-    (totalMatches * minutes) / (totalMinutes * courts),
-  );
-
-  return {
-    matchesPerPool,
-    totalMatches,
-    gamesPerTeam,
-    courtBoundMinutes,
-    teamBoundMinutes,
-    totalMinutes,
-    courtRounds,
-    bindingConstraint,
-    utilization,
-  };
-}
-
-// Medal-round math. Two structures supported (matching the playoff
-// generator in the event console):
-//
-//   * 1 round: pairwise medal matches (1v2, 3v4, …). N/2 matches play
-//     in parallel up to the court count, then the round is over.
-//
-//   * 2 rounds (top-4 only): semis (1v4, 2v3) → gold final + bronze.
-//     Two sequential rounds, each with up to 2 parallel matches.
-//
-// Time per match scales with format: single_game = 1× minutes,
-// best_of_3 = up to 3× minutes (planning is for the worst case so
-// the estimate doesn't overrun).
-type MedalInputs = {
-  courts: number;
-  teamsAdvancing: number;
-  rounds: 1 | 2;
-  format: "single_game" | "best_of_3";
-  minutesPerGame: number;
-};
-type MedalResult = {
-  totalMinutes: number;
-  totalMatches: number;
-  summary: string;
-};
-
-function computeMedalEstimate(i: MedalInputs): MedalResult {
-  const courts = Math.max(1, i.courts);
-  const advancing = Math.max(2, i.teamsAdvancing);
-  const minutes = Math.max(1, i.minutesPerGame);
-  const gamesPerMatch = i.format === "best_of_3" ? 3 : 1;
-  const matchMinutes = gamesPerMatch * minutes;
-
-  let totalMatches: number;
-  let totalMinutes: number;
-  let structure: string;
-
-  if (i.rounds === 1) {
-    // N/2 simultaneous medal matches in a single round.
-    const matches = Math.floor(advancing / 2);
-    totalMatches = matches;
-    totalMinutes = Math.ceil(matches / courts) * matchMinutes;
-    structure = `${matches} medal match${matches === 1 ? "" : "es"} in 1 round`;
-  } else {
-    // 2-round bracket: round 1 = N/2 semis, round 2 = 2 matches
-    // (gold + bronze). Round 2 can't start until round 1 winners are
-    // known, so they're sequential — court count only affects within
-    // a round.
-    const semis = Math.floor(advancing / 2);
-    const round2 = 2;
-    totalMatches = semis + round2;
-    totalMinutes =
-      Math.ceil(semis / courts) * matchMinutes +
-      Math.ceil(round2 / courts) * matchMinutes;
-    structure = `${semis} semis → gold + bronze (${semis + round2} medal matches total)`;
-  }
-
-  const fmt = i.format === "best_of_3" ? "best of 3" : "1 game";
-  return {
-    totalMatches,
-    totalMinutes,
-    summary: `${structure}; ${fmt}, ${minutes} min/game.`,
-  };
-}
-
-function fmtDuration(mins: number): string {
-  if (mins < 1) return "—";
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h === 0) return `${m} min`;
-  if (m === 0) return `${h} hr`;
-  return `${h} hr ${m} min`;
 }
 
 // ─────────────────────────────────────────────────────────────────────

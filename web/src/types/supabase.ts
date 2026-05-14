@@ -199,6 +199,7 @@ export type Database = {
           playoff_rounds: number
           points_to_win: number
           pool_count: number
+          pool_minutes_per_game: number
           rating_source: Database["public"]["Enums"]["rating_source"] | null
           status: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff: number
@@ -229,6 +230,7 @@ export type Database = {
           playoff_rounds?: number
           points_to_win?: number
           pool_count?: number
+          pool_minutes_per_game?: number
           rating_source?: Database["public"]["Enums"]["rating_source"] | null
           status?: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff?: number
@@ -259,6 +261,7 @@ export type Database = {
           playoff_rounds?: number
           points_to_win?: number
           pool_count?: number
+          pool_minutes_per_game?: number
           rating_source?: Database["public"]["Enums"]["rating_source"] | null
           status?: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff?: number

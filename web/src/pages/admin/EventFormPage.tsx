@@ -41,6 +41,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [pointsToWin, setPointsToWin] = useState("11");
   const [winBy, setWinBy] = useState("2");
   const [timeoutsPerGame, setTimeoutsPerGame] = useState("1");
+  const [poolMinutesPerGame, setPoolMinutesPerGame] = useState("15");
   const [teamsAdvancing, setTeamsAdvancing] = useState("4");
   const [playoffRounds, setPlayoffRounds] = useState("1");
   // Medal-round overrides (separate from pool play because medal
@@ -127,6 +128,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setPointsToWin(String(ev.points_to_win));
         setWinBy(String(ev.win_by));
         setTimeoutsPerGame(String(ev.timeouts_per_game));
+        setPoolMinutesPerGame(String(ev.pool_minutes_per_game));
         setTeamsAdvancing(String(ev.teams_advancing_to_playoff));
         setPlayoffRounds(String(ev.playoff_rounds));
         setMedalMatchFormat(ev.medal_match_format);
@@ -201,6 +203,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       points_to_win: clampInt(pointsToWin, 11, 1, 99),
       win_by: clampInt(winBy, 2, 1, 9),
       timeouts_per_game: clampInt(timeoutsPerGame, 1, 0, 5),
+      pool_minutes_per_game: clampInt(poolMinutesPerGame, 15, 1, 120),
       teams_advancing_to_playoff: clampInt(teamsAdvancing, 0, 0, 64),
       playoff_rounds: clampInt(playoffRounds, 1, 1, 4),
       medal_match_format: medalMatchFormat,
@@ -536,6 +539,19 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                 required
                 value={timeoutsPerGame}
                 onChange={(e) => setTimeoutsPerGame(e.target.value)}
+                style={inputStyle}
+              />
+            </Field>
+            <Field
+              label="Pool minutes per game"
+              hint="Used by the schedule estimator. Include changeover, not just gameplay."
+            >
+              <input
+                type="number"
+                min="1"
+                max="120"
+                value={poolMinutesPerGame}
+                onChange={(e) => setPoolMinutesPerGame(e.target.value)}
                 style={inputStyle}
               />
             </Field>
