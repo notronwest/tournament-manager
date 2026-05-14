@@ -43,6 +43,14 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [timeoutsPerGame, setTimeoutsPerGame] = useState("1");
   const [teamsAdvancing, setTeamsAdvancing] = useState("4");
   const [playoffRounds, setPlayoffRounds] = useState("1");
+  // Medal-round overrides (separate from pool play because medal
+  // matches often play longer — to 15 win-by-2, best of 3, etc.)
+  const [medalMatchFormat, setMedalMatchFormat] = useState<
+    "single_game" | "best_of_3"
+  >("single_game");
+  const [medalPointsToWin, setMedalPointsToWin] = useState("15");
+  const [medalWinBy, setMedalWinBy] = useState("2");
+  const [medalMinutesPerGame, setMedalMinutesPerGame] = useState("20");
   // Eligibility (all optional; blank = no bound)
   const [minRating, setMinRating] = useState("");
   const [maxRating, setMaxRating] = useState("");
@@ -121,6 +129,10 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setTimeoutsPerGame(String(ev.timeouts_per_game));
         setTeamsAdvancing(String(ev.teams_advancing_to_playoff));
         setPlayoffRounds(String(ev.playoff_rounds));
+        setMedalMatchFormat(ev.medal_match_format);
+        setMedalPointsToWin(String(ev.medal_points_to_win));
+        setMedalWinBy(String(ev.medal_win_by));
+        setMedalMinutesPerGame(String(ev.medal_minutes_per_game));
         setMinRating(ev.min_rating != null ? String(ev.min_rating) : "");
         setMaxRating(ev.max_rating != null ? String(ev.max_rating) : "");
         setRatingSource(ev.rating_source ?? "");
@@ -191,6 +203,10 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       timeouts_per_game: clampInt(timeoutsPerGame, 1, 0, 5),
       teams_advancing_to_playoff: clampInt(teamsAdvancing, 0, 0, 64),
       playoff_rounds: clampInt(playoffRounds, 1, 1, 4),
+      medal_match_format: medalMatchFormat,
+      medal_points_to_win: clampInt(medalPointsToWin, 15, 1, 99),
+      medal_win_by: clampInt(medalWinBy, 2, 1, 9),
+      medal_minutes_per_game: clampInt(medalMinutesPerGame, 20, 1, 120),
       min_rating: minRatingNum,
       max_rating: maxRatingNum,
       rating_source: ratingSource || null,
@@ -608,6 +624,83 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                   {playoffWarning}
                 </div>
               )}
+
+              {/* Medal match format — separated from pool scoring
+                  because medal games often play longer (15 win-by-2,
+                  best-of-3) than pool games. */}
+              <div
+                style={{
+                  marginTop: 4,
+                  paddingTop: 12,
+                  borderTop: "1px dashed #e5e7eb",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#444",
+                    marginBottom: 8,
+                  }}
+                >
+                  Medal match format
+                </div>
+                <FieldRow>
+                  <Field
+                    label="Match format"
+                    hint="Best-of-3 means a match is decided over up to three games (first to win 2)."
+                  >
+                    <select
+                      value={medalMatchFormat}
+                      onChange={(e) =>
+                        setMedalMatchFormat(
+                          e.target.value as "single_game" | "best_of_3",
+                        )
+                      }
+                      style={inputStyle}
+                    >
+                      <option value="single_game">1 game</option>
+                      <option value="best_of_3">Best of 3</option>
+                    </select>
+                  </Field>
+                  <Field
+                    label="Points to win"
+                    hint="Per game (printed on the medal-round scorecard)."
+                  >
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={medalPointsToWin}
+                      onChange={(e) => setMedalPointsToWin(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field label="Win by">
+                    <input
+                      type="number"
+                      min="1"
+                      max="9"
+                      value={medalWinBy}
+                      onChange={(e) => setMedalWinBy(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </Field>
+                  <Field
+                    label="Minutes per game"
+                    hint="Used by the time estimator. Medal games usually run longer than pool games."
+                  >
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={medalMinutesPerGame}
+                      onChange={(e) => setMedalMinutesPerGame(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </Field>
+                </FieldRow>
+              </div>
             </div>
           )}
         </FieldGroup>

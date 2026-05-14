@@ -37,6 +37,16 @@ export default function RoundRobinEstimatorPage() {
   const [minutesPerGame, setMinutesPerGame] = useState(15);
   const [playEachOpponentTimes, setPlayEachOpponentTimes] = useState(1);
 
+  // Medal-round add-on. Defaults off; flipping the toggle on uses
+  // sensible single-game defaults (15-minute games, top 4 in 1 round).
+  const [includeMedal, setIncludeMedal] = useState(false);
+  const [teamsAdvancing, setTeamsAdvancing] = useState(4);
+  const [medalRounds, setMedalRounds] = useState<1 | 2>(1);
+  const [medalFormat, setMedalFormat] = useState<"single_game" | "best_of_3">(
+    "single_game",
+  );
+  const [medalMinutesPerGame, setMedalMinutesPerGame] = useState(20);
+
   const estimate = useMemo(
     () =>
       computeEstimate({
@@ -48,6 +58,19 @@ export default function RoundRobinEstimatorPage() {
       }),
     [courts, pools, teamsPerPool, minutesPerGame, playEachOpponentTimes],
   );
+
+  const medal = useMemo(() => {
+    if (!includeMedal) return null;
+    return computeMedalEstimate({
+      courts,
+      teamsAdvancing,
+      rounds: medalRounds,
+      format: medalFormat,
+      minutesPerGame: medalMinutesPerGame,
+    });
+  }, [includeMedal, courts, teamsAdvancing, medalRounds, medalFormat, medalMinutesPerGame]);
+
+  const totalMinutes = estimate.totalMinutes + (medal?.totalMinutes ?? 0);
 
   return (
     <div style={{ maxWidth: 760 }}>
@@ -106,6 +129,90 @@ export default function RoundRobinEstimatorPage() {
             max={5}
             hint="Most pool play is once; some formats double-round."
           />
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginTop: 8,
+              paddingTop: 8,
+              borderTop: "1px dashed #e5e7eb",
+              fontSize: 13,
+              color: "#444",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={includeMedal}
+              onChange={(e) => setIncludeMedal(e.target.checked)}
+            />
+            Include medal round
+          </label>
+
+          {includeMedal && (
+            <>
+              <NumberField
+                label="Teams advancing"
+                value={teamsAdvancing}
+                onChange={setTeamsAdvancing}
+                min={2}
+                max={16}
+                hint="Must be even for 1-round playoffs. Top-4 only for 2-round bracket."
+              />
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  fontSize: 12,
+                  color: "#555",
+                }}
+              >
+                <span>Number of rounds</span>
+                <select
+                  value={medalRounds}
+                  onChange={(e) =>
+                    setMedalRounds(parseInt(e.target.value, 10) as 1 | 2)
+                  }
+                  style={inputStyle}
+                >
+                  <option value={1}>1 round (pairwise medal matches)</option>
+                  <option value={2}>2 rounds (semis + final + bronze)</option>
+                </select>
+              </label>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 4,
+                  fontSize: 12,
+                  color: "#555",
+                }}
+              >
+                <span>Match format</span>
+                <select
+                  value={medalFormat}
+                  onChange={(e) =>
+                    setMedalFormat(e.target.value as typeof medalFormat)
+                  }
+                  style={inputStyle}
+                >
+                  <option value="single_game">1 game per match</option>
+                  <option value="best_of_3">Best of 3 (up to 3 games)</option>
+                </select>
+              </label>
+              <NumberField
+                label="Minutes per medal game"
+                value={medalMinutesPerGame}
+                onChange={setMedalMinutesPerGame}
+                min={1}
+                max={120}
+                hint="Medal games usually run longer than pool games (e.g. 15 win-by-2)."
+              />
+            </>
+          )}
         </FieldGroup>
 
         <FieldGroup title="Estimate">
@@ -122,14 +229,36 @@ export default function RoundRobinEstimatorPage() {
                 ? `Court-bound: ${estimate.courtRounds} rounds of play with all courts in use.`
                 : `Team-bound: each team plays ${estimate.gamesPerTeam} games sequentially. You have more courts than teams can fill at once.`
             }
-            emphasize
           />
+          {medal && (
+            <Stat
+              label="Medal round duration"
+              value={fmtDuration(medal.totalMinutes)}
+              sub={medal.summary}
+            />
+          )}
+          {medal && (
+            <Stat
+              label="Total event duration"
+              value={fmtDuration(totalMinutes)}
+              sub="Pool play + medal round, run back-to-back."
+              emphasize
+            />
+          )}
+          {!medal && (
+            <Stat
+              label="Total event duration"
+              value={fmtDuration(totalMinutes)}
+              sub="Toggle “Include medal round” to add bracket time."
+              emphasize
+            />
+          )}
           <Stat
-            label="Games per team"
+            label="Games per team (pool play)"
             value={String(estimate.gamesPerTeam)}
           />
           <Stat
-            label="Court utilization"
+            label="Court utilization (pool play)"
             value={`${Math.round(estimate.utilization * 100)}%`}
             sub={
               estimate.utilization > 0.95
@@ -227,6 +356,70 @@ function computeEstimate(i: EstimateInputs): EstimateResult {
     courtRounds,
     bindingConstraint,
     utilization,
+  };
+}
+
+// Medal-round math. Two structures supported (matching the playoff
+// generator in the event console):
+//
+//   * 1 round: pairwise medal matches (1v2, 3v4, …). N/2 matches play
+//     in parallel up to the court count, then the round is over.
+//
+//   * 2 rounds (top-4 only): semis (1v4, 2v3) → gold final + bronze.
+//     Two sequential rounds, each with up to 2 parallel matches.
+//
+// Time per match scales with format: single_game = 1× minutes,
+// best_of_3 = up to 3× minutes (planning is for the worst case so
+// the estimate doesn't overrun).
+type MedalInputs = {
+  courts: number;
+  teamsAdvancing: number;
+  rounds: 1 | 2;
+  format: "single_game" | "best_of_3";
+  minutesPerGame: number;
+};
+type MedalResult = {
+  totalMinutes: number;
+  totalMatches: number;
+  summary: string;
+};
+
+function computeMedalEstimate(i: MedalInputs): MedalResult {
+  const courts = Math.max(1, i.courts);
+  const advancing = Math.max(2, i.teamsAdvancing);
+  const minutes = Math.max(1, i.minutesPerGame);
+  const gamesPerMatch = i.format === "best_of_3" ? 3 : 1;
+  const matchMinutes = gamesPerMatch * minutes;
+
+  let totalMatches: number;
+  let totalMinutes: number;
+  let structure: string;
+
+  if (i.rounds === 1) {
+    // N/2 simultaneous medal matches in a single round.
+    const matches = Math.floor(advancing / 2);
+    totalMatches = matches;
+    totalMinutes = Math.ceil(matches / courts) * matchMinutes;
+    structure = `${matches} medal match${matches === 1 ? "" : "es"} in 1 round`;
+  } else {
+    // 2-round bracket: round 1 = N/2 semis, round 2 = 2 matches
+    // (gold + bronze). Round 2 can't start until round 1 winners are
+    // known, so they're sequential — court count only affects within
+    // a round.
+    const semis = Math.floor(advancing / 2);
+    const round2 = 2;
+    totalMatches = semis + round2;
+    totalMinutes =
+      Math.ceil(semis / courts) * matchMinutes +
+      Math.ceil(round2 / courts) * matchMinutes;
+    structure = `${semis} semis → gold + bronze (${semis + round2} medal matches total)`;
+  }
+
+  const fmt = i.format === "best_of_3" ? "best of 3" : "1 game";
+  return {
+    totalMatches,
+    totalMinutes,
+    summary: `${structure}; ${fmt}, ${minutes} min/game.`,
   };
 }
 

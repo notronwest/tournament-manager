@@ -188,6 +188,10 @@ export type Database = {
           max_age: number | null
           max_rating: number | null
           max_teams: number | null
+          medal_match_format: Database["public"]["Enums"]["medal_match_format"]
+          medal_minutes_per_game: number
+          medal_points_to_win: number
+          medal_win_by: number
           min_age: number | null
           min_rating: number | null
           name: string
@@ -214,6 +218,10 @@ export type Database = {
           max_age?: number | null
           max_rating?: number | null
           max_teams?: number | null
+          medal_match_format?: Database["public"]["Enums"]["medal_match_format"]
+          medal_minutes_per_game?: number
+          medal_points_to_win?: number
+          medal_win_by?: number
           min_age?: number | null
           min_rating?: number | null
           name: string
@@ -240,6 +248,10 @@ export type Database = {
           max_age?: number | null
           max_rating?: number | null
           max_teams?: number | null
+          medal_match_format?: Database["public"]["Enums"]["medal_match_format"]
+          medal_minutes_per_game?: number
+          medal_points_to_win?: number
+          medal_win_by?: number
           min_age?: number | null
           min_rating?: number | null
           name?: string
@@ -827,6 +839,7 @@ export type Database = {
         | "verified"
       match_stage: "round_robin" | "playoff"
       match_status: "pending" | "in_progress" | "completed"
+      medal_match_format: "single_game" | "best_of_3"
       org_role: "owner" | "admin" | "staff"
       org_stripe_status: "not_connected" | "pending" | "active" | "restricted"
       partner_invite_status:
@@ -1006,6 +1019,7 @@ export const Constants = {
       ],
       match_stage: ["round_robin", "playoff"],
       match_status: ["pending", "in_progress", "completed"],
+      medal_match_format: ["single_game", "best_of_3"],
       org_role: ["owner", "admin", "staff"],
       org_stripe_status: ["not_connected", "pending", "active", "restricted"],
       partner_invite_status: [
