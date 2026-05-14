@@ -374,6 +374,18 @@ export default function EventConsolePage() {
                 : " · no playoff"}
               {event.max_teams ? ` · max ${event.max_teams} teams` : ""}
             </p>
+            {event.scheduled_start_at && (
+              <p
+                style={{
+                  color: "#444",
+                  fontSize: 13,
+                  margin: "4px 0 0",
+                  fontWeight: 500,
+                }}
+              >
+                Scheduled: {fmtScheduledRange(event)}
+              </p>
+            )}
             {eligibilityChips(event).length > 0 && (
               <div
                 style={{
@@ -2211,6 +2223,28 @@ function computeStandings(teams: Team[], rrMatches: Match[]): Standing[] {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Render the scheduled window for the event-console header. Uses
+// only event-level fields so it works without loading the full
+// schedule context (registrations + court allocations).
+//
+// Caveat: this falls back to "start time only" when the event hasn't
+// run pool play yet (we don't know team count yet from this scope).
+// The fuller "start–end" version on the homepage event card uses the
+// estimator with real team + court counts. Keeping this lighter view
+// here so the header doesn't need to re-fetch everything.
+function fmtScheduledRange(event: Event): string {
+  if (!event.scheduled_start_at) return "";
+  const start = new Date(event.scheduled_start_at);
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  };
+  return start.toLocaleString(undefined, opts);
 }
 
 // Color palette for the medal podium panels at the top of the
