@@ -247,8 +247,15 @@ export default function ScorecardsPage() {
               teamB={
                 m.team_b_reg_id ? teamByAnyRegId.get(m.team_b_reg_id) : null
               }
-              pointsToWin={event.points_to_win}
-              winBy={event.win_by}
+              // Per-match config wins when set (playoff matches get
+              // their format/points/win-by copied from event.medal_*
+              // at generation time, then can be edited per-match in
+              // the playoff section). Event-level values are used as
+              // the fallback for round-robin matches and for any
+              // playoff match that hasn't been customised.
+              pointsToWin={m.match_points_to_win ?? event.points_to_win}
+              winBy={m.match_win_by ?? event.win_by}
+              format={m.match_format ?? "single_game"}
               timeoutsPerGame={event.timeouts_per_game}
             />
           ))
@@ -268,6 +275,7 @@ function Scorecard({
   teamB,
   pointsToWin,
   winBy,
+  format,
   timeoutsPerGame,
 }: {
   match: Match;
@@ -276,6 +284,12 @@ function Scorecard({
   teamB: Team | null | undefined;
   pointsToWin: number;
   winBy: number;
+  // "single_game" prints one score column; "best_of_3" prints the
+  // rule line as "Best of 3 …" but the score grid is still a single
+  // column. Multi-column game-by-game capture is a follow-up;
+  // organizers running best-of-3 today can scribble G2 / G3 scores
+  // alongside G1 in the same box.
+  format: "single_game" | "best_of_3";
   timeoutsPerGame: number;
 }) {
   return (
@@ -294,7 +308,8 @@ function Scorecard({
 
       <div className="scorecard-rule-label">
         <strong>
-          1 game to {pointsToWin} win by {winBy}
+          {format === "best_of_3" ? "Best of 3" : "1 game"} to{" "}
+          {pointsToWin} win by {winBy}
         </strong>
         <div className="scorecard-rule-headers">
           {/* "G:1" column header removed — the bold rule above

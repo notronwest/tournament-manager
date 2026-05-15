@@ -289,6 +289,10 @@ export type Database = {
           created_at: string
           event_id: string
           id: string
+          match_format: Database["public"]["Enums"]["medal_match_format"] | null
+          match_minutes_per_game: number | null
+          match_points_to_win: number | null
+          match_win_by: number | null
           notes: string | null
           position: number
           round: number
@@ -307,6 +311,10 @@ export type Database = {
           created_at?: string
           event_id: string
           id?: string
+          match_format?: Database["public"]["Enums"]["medal_match_format"] | null
+          match_minutes_per_game?: number | null
+          match_points_to_win?: number | null
+          match_win_by?: number | null
           notes?: string | null
           position?: number
           round: number
@@ -325,6 +333,10 @@ export type Database = {
           created_at?: string
           event_id?: string
           id?: string
+          match_format?: Database["public"]["Enums"]["medal_match_format"] | null
+          match_minutes_per_game?: number | null
+          match_points_to_win?: number | null
+          match_win_by?: number | null
           notes?: string | null
           position?: number
           round?: number
