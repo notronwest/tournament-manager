@@ -31,14 +31,33 @@ export type PoolPlayResult = {
   utilization: number;
 };
 
-// Two binding constraints:
-//   * Court-bound: ceil(total / courts) * minutes
-//   * Team-bound: (N - 1) * R * minutes — a team can play only one
-//     game at a time, so each team's sequential game count is a hard
-//     floor regardless of court count.
-// The team-bound branch catches the "10 courts but only 5 teams can
-// play simultaneously" case so the estimate doesn't overstate
-// throughput.
+// Real-world pool-play scheduling has two parallelism caps that
+// compete:
+//
+//   * Courts available (per pool).
+//   * floor(teams / 2) — a pool of N teams can play at most N/2
+//     simultaneous matches; the rest of the teams sit out that
+//     round. With 5 teams you get 2 parallel matches at most, even
+//     if there are 100 courts.
+//
+// The OLD math took max(courtBound, teamBound) where teamBound was
+// `gamesPerTeam × minutes` — that's a per-team lower bound, not the
+// schedule total. It silently underestimates whenever
+// floor(teams/2) < courts, because it ignores bye rounds: with 5
+// teams playing each other twice you have 20 matches and only 2 can
+// run at a time, so the schedule needs 10 rounds (not 8) — each
+// team has byes.
+//
+// New math:
+//   effectiveCourts = min(courts/pools, floor(teamsPerPool / 2))
+//   rounds          = ceil(matchesPerPool / effectiveCourts)
+//   totalMinutes    = rounds × minutesPerGame
+//
+// bindingConstraint tells the caller which lever would actually
+// shorten the schedule:
+//   "court" — court count is the bottleneck; adding courts helps.
+//   "team"  — team concurrency is the bottleneck; adding courts is
+//             pointless until you add teams.
 export function estimatePoolPlay(i: PoolPlayInputs): PoolPlayResult {
   const courts = Math.max(1, i.courts);
   const pools = Math.max(1, i.pools);
@@ -50,12 +69,26 @@ export function estimatePoolPlay(i: PoolPlayInputs): PoolPlayResult {
   const totalMatches = pools * matchesPerPool;
   const gamesPerTeam = (teams - 1) * reps;
 
-  const courtRounds = Math.ceil(totalMatches / courts);
-  const courtBoundMinutes = courtRounds * minutes;
+  // Courts are split evenly across pools that run in parallel.
+  const courtsPerPool = Math.max(1, Math.floor(courts / pools));
+  const teamCapPerPool = Math.floor(teams / 2);
+  const parallelismPerPool = Math.max(
+    1,
+    Math.min(courtsPerPool, teamCapPerPool),
+  );
+
+  // All pools run in parallel and have equal size, so the total
+  // pool-play duration is just one pool's schedule.
+  const rounds = Math.ceil(matchesPerPool / parallelismPerPool);
+  const totalMinutes = rounds * minutes;
+
+  // Diagnostic numbers kept on the result for the UI's "why is it
+  // taking this long?" copy.
+  const courtBoundMinutes =
+    Math.ceil(matchesPerPool / courtsPerPool) * minutes;
   const teamBoundMinutes = gamesPerTeam * minutes;
-  const totalMinutes = Math.max(courtBoundMinutes, teamBoundMinutes);
   const bindingConstraint: "court" | "team" =
-    teamBoundMinutes > courtBoundMinutes ? "team" : "court";
+    teamCapPerPool < courtsPerPool ? "team" : "court";
 
   const utilization = Math.min(
     1,
@@ -69,7 +102,7 @@ export function estimatePoolPlay(i: PoolPlayInputs): PoolPlayResult {
     courtBoundMinutes,
     teamBoundMinutes,
     totalMinutes,
-    courtRounds,
+    courtRounds: rounds,
     bindingConstraint,
     utilization,
   };

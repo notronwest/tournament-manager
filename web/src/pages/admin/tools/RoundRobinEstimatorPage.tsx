@@ -231,8 +231,8 @@ export default function RoundRobinEstimatorPage() {
             value={fmtDuration(estimate.totalMinutes)}
             sub={
               estimate.bindingConstraint === "court"
-                ? `Court-bound: ${estimate.courtRounds} rounds of play with all courts in use.`
-                : `Team-bound: each team plays ${estimate.gamesPerTeam} games sequentially. You have more courts than teams can fill at once.`
+                ? `${estimate.courtRounds} rounds × ${minutesPerGame} min — courts at full utilization.`
+                : `${estimate.courtRounds} rounds × ${minutesPerGame} min. Team concurrency is the bottleneck: ${teamsPerPool} teams in a pool can run at most ${Math.floor(teamsPerPool / 2)} simultaneous matches, so only ${Math.floor(teamsPerPool / 2)} of your ${Math.floor(courts / pools)} per-pool court${Math.floor(courts / pools) === 1 ? "" : "s"} are in use. Adding more courts will not shorten this — add teams (or play each opponent fewer times).`
             }
           />
           {medal && (
