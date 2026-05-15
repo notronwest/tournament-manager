@@ -5,7 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
@@ -65,6 +65,17 @@ type Overlap =
 export default function SchedulePage() {
   const { org } = useCurrentOrg();
   const { tournamentSlug } = useParams<{ tournamentSlug: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // View tab driven by ?view= so refresh + back keep the user where
+  // they were. Table is the default since it's the editable view.
+  const view: "table" | "calendar" =
+    searchParams.get("view") === "calendar" ? "calendar" : "table";
+  const setView = (v: "table" | "calendar") => {
+    const next = new URLSearchParams(searchParams);
+    if (v === "table") next.delete("view");
+    else next.set("view", v);
+    setSearchParams(next, { replace: true });
+  };
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [eventCourts, setEventCourts] = useState<EventCourt[]>([]);
@@ -722,13 +733,20 @@ export default function SchedulePage() {
             <ConflictsPanel overlaps={overlaps} />
           )}
 
-          {/* Court timeline — visual view of who's on what court when. */}
-          <CourtTimeline
-            courtCount={tournament.court_count}
-            rows={rows}
-          />
+          {/* View tabs — Table is editable, Calendar is read-only
+              visual. URL-driven so refresh + back behave. */}
+          <ViewTabs view={view} onChange={setView} />
 
-          {/* Per-event table */}
+          {view === "calendar" && (
+            <CourtTimeline
+              courtCount={tournament.court_count}
+              rows={rows}
+            />
+          )}
+
+          {view === "table" && (
+            <>
+              {/* Per-event table */}
           <table
             style={{
               width: "100%",
@@ -829,10 +847,12 @@ export default function SchedulePage() {
                     title={
                       r.courtNumbers.length === 0
                         ? "No courts assigned — estimate uses 1 court (pessimistic). Allocate courts on the tournament page."
-                        : `Courts ${r.courtNumbers.join(", ")}`
+                        : undefined
                     }
                   >
-                    {r.courtNumbers.length === 0 ? "—" : r.courts}
+                    {r.courtNumbers.length === 0
+                      ? "—"
+                      : r.courtNumbers.join(", ")}
                   </td>
                   <td
                     style={{
@@ -928,6 +948,8 @@ export default function SchedulePage() {
             to compress further, give each event its own slice of courts
             on the tournament page.
           </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -937,6 +959,56 @@ export default function SchedulePage() {
 // ─────────────────────────────────────────────────────────────────────
 // UI bits
 // ─────────────────────────────────────────────────────────────────────
+
+function ViewTabs({
+  view,
+  onChange,
+}: {
+  view: "table" | "calendar";
+  onChange: (v: "table" | "calendar") => void;
+}) {
+  const tabs: { key: "table" | "calendar"; label: string }[] = [
+    { key: "table", label: "Table" },
+    { key: "calendar", label: "Calendar" },
+  ];
+  return (
+    <div
+      role="tablist"
+      style={{
+        display: "flex",
+        gap: 4,
+        marginTop: 16,
+        borderBottom: "1px solid #e5e7eb",
+      }}
+    >
+      {tabs.map((t) => {
+        const active = t.key === view;
+        return (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(t.key)}
+            style={{
+              padding: "8px 14px",
+              background: "transparent",
+              border: "none",
+              borderBottom: `2px solid ${active ? "#2563eb" : "transparent"}`,
+              color: active ? "#2563eb" : "#555",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              marginBottom: -1,
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 // Pixels per minute for the timeline. 1.4 ≈ 84px per hour — readable
 // at typical viewport widths without burning vertical space.
@@ -964,6 +1036,10 @@ const EVENT_PALETTE = [
 // by duration. Events using multiple courts appear in each of their
 // court columns so multi-court events are obvious at a glance.
 //
+// Multi-day tournaments render one timeline section per calendar
+// day (events grouped by their start date) so a 4-day tournament
+// doesn't collapse into one unreadable 96-hour column.
+//
 // Skips rendering when no event has a scheduled_start_at — there's
 // nothing to draw yet, and a blank timeline is worse than no
 // timeline.
@@ -979,18 +1055,10 @@ function CourtTimeline({
   );
   if (scheduled.length === 0) return null;
 
-  // Window: clamp to the hour on both sides so the grid lands cleanly
-  // on hourly tick marks.
-  let minMs = Math.min(...scheduled.map((r) => r.scheduledStart!.getTime()));
-  let maxMs = Math.max(...scheduled.map((r) => r.scheduledEnd!.getTime()));
-  minMs = floorToHour(minMs);
-  maxMs = ceilToHour(maxMs);
-  const totalMinutes = (maxMs - minMs) / 60_000;
-  const totalHeight = Math.max(120, totalMinutes * PIXELS_PER_MIN);
-
   // Color assignment by stable event index — sorting by scheduled
   // start so colors map to chronological order, which makes the
-  // visual flow easier to track.
+  // visual flow easier to track. The map is shared across days so
+  // an event appears in the same color on every day it touches.
   const colorByEvent = new Map<string, (typeof EVENT_PALETTE)[number]>();
   const sortedByStart = scheduled
     .slice()
@@ -1003,31 +1071,102 @@ function CourtTimeline({
     colorByEvent.set(r.event.id, EVENT_PALETTE[i % EVENT_PALETTE.length]);
   });
 
-  // Hourly grid ticks for the time axis.
-  const hourTicks: number[] = [];
-  for (let t = minMs; t <= maxMs; t += 3600_000) hourTicks.push(t);
-
-  // Courts 1..N. Each court resolves to whichever events claim it.
-  const courts = Array.from({ length: courtCount }, (_, i) => i + 1);
-  const eventsOnCourt = (court: number) =>
-    scheduled.filter((r) => r.courtNumbers.includes(court));
+  // Group events by start day. Events that cross midnight stay
+  // attached to their start day; in practice pickleball events
+  // rarely span midnight, and the alternative (clipping at midnight
+  // and continuing the next day) adds a lot of UI complexity for
+  // very little win.
+  const byDay = new Map<string, EventRow[]>();
+  for (const r of scheduled) {
+    const key = dayKey(r.scheduledStart!);
+    const arr = byDay.get(key) ?? [];
+    arr.push(r);
+    byDay.set(key, arr);
+  }
+  const days = Array.from(byDay.entries()).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
 
   return (
-    <section style={{ marginTop: 24 }}>
-      <h2
-        style={{
-          margin: "0 0 4px",
-          fontSize: 14,
-          fontWeight: 600,
-        }}
-      >
-        Court timeline
-      </h2>
+    <section style={{ marginTop: 16 }}>
       <p style={{ margin: "0 0 12px", fontSize: 12, color: "#666" }}>
         Each column is one court. Events using multiple courts appear in
         every column they claim, so multi-court events are obvious at a
         glance. Hover a block for details.
       </p>
+      {days.map(([key, dayRows]) => (
+        <DayTimeline
+          key={key}
+          dayLabel={fmtDayHeading(new Date(key))}
+          rows={dayRows}
+          courtCount={courtCount}
+          colorByEvent={colorByEvent}
+          showHeading={days.length > 1}
+        />
+      ))}
+    </section>
+  );
+}
+
+// Stable per-day key (YYYY-MM-DD in local time) so two events on the
+// same calendar day group together even when they were entered
+// minutes apart.
+function dayKey(d: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function fmtDayHeading(d: Date): string {
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function DayTimeline({
+  dayLabel,
+  rows,
+  courtCount,
+  colorByEvent,
+  showHeading,
+}: {
+  dayLabel: string;
+  rows: EventRow[];
+  courtCount: number;
+  colorByEvent: Map<string, (typeof EVENT_PALETTE)[number]>;
+  showHeading: boolean;
+}) {
+  // Window for this day's timeline: clamp to the hour on both sides
+  // so the gridlines land cleanly.
+  let minMs = Math.min(...rows.map((r) => r.scheduledStart!.getTime()));
+  let maxMs = Math.max(...rows.map((r) => r.scheduledEnd!.getTime()));
+  minMs = floorToHour(minMs);
+  maxMs = ceilToHour(maxMs);
+  const totalMinutes = (maxMs - minMs) / 60_000;
+  const totalHeight = Math.max(120, totalMinutes * PIXELS_PER_MIN);
+
+  const hourTicks: number[] = [];
+  for (let t = minMs; t <= maxMs; t += 3600_000) hourTicks.push(t);
+
+  const courts = Array.from({ length: courtCount }, (_, i) => i + 1);
+  const eventsOnCourt = (court: number) =>
+    rows.filter((r) => r.courtNumbers.includes(court));
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {showHeading && (
+        <h3
+          style={{
+            margin: "0 0 8px",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#444",
+          }}
+        >
+          {dayLabel}
+        </h3>
+      )}
       <div
         style={{
           display: "flex",
@@ -1211,7 +1350,7 @@ function CourtTimeline({
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }
 
