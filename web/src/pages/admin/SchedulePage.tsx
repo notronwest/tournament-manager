@@ -764,7 +764,7 @@ export default function SchedulePage() {
               >
                 <th style={thStyle}>Event</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Teams</th>
-                <th style={{ ...thStyle, textAlign: "right" }}>Courts</th>
+                <th style={thStyle}>Courts</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Pool play</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Medal round</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Total</th>
@@ -839,20 +839,17 @@ export default function SchedulePage() {
                     {r.teamCount}
                   </td>
                   <td
-                    style={{
-                      ...tdStyle,
-                      textAlign: "right",
-                      color: r.courtNumbers.length === 0 ? "#bbb" : "#444",
-                    }}
+                    style={tdStyle}
                     title={
                       r.courtNumbers.length === 0
                         ? "No courts assigned — estimate uses 1 court (pessimistic). Allocate courts on the tournament page."
                         : undefined
                     }
                   >
-                    {r.courtNumbers.length === 0
-                      ? "—"
-                      : r.courtNumbers.join(", ")}
+                    <CourtPills
+                      total={tournament.court_count}
+                      assigned={r.courtNumbers}
+                    />
                   </td>
                   <td
                     style={{
@@ -959,6 +956,52 @@ export default function SchedulePage() {
 // ─────────────────────────────────────────────────────────────────────
 // UI bits
 // ─────────────────────────────────────────────────────────────────────
+
+// Compact court chips mirroring the tournament-homepage event-card
+// look: one pill per court (1..total). Assigned courts render
+// solid-blue; unassigned render outlined-gray. Numbers-only so the
+// row stays compact even at 16 courts.
+function CourtPills({
+  total,
+  assigned,
+}: {
+  total: number;
+  assigned: number[];
+}) {
+  const claimed = new Set(assigned);
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 4,
+      }}
+    >
+      {Array.from({ length: total }, (_, i) => i + 1).map((n) => {
+        const mine = claimed.has(n);
+        return (
+          <span
+            key={n}
+            style={{
+              minWidth: 22,
+              padding: "2px 6px",
+              background: mine ? "#2563eb" : "#fff",
+              color: mine ? "#fff" : "#9ca3af",
+              border: `1px solid ${mine ? "#2563eb" : "#d1d5db"}`,
+              borderRadius: 4,
+              fontSize: 11,
+              fontWeight: 500,
+              textAlign: "center",
+              lineHeight: 1.4,
+            }}
+          >
+            {n}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 function ViewTabs({
   view,
