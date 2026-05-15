@@ -35,6 +35,24 @@ type EventRow = {
   scheduledEnd: Date | null;
 };
 
+type Overlap =
+  | {
+      type: "court";
+      a: EventRow;
+      b: EventRow;
+      courts: number[];
+      windowStart: Date;
+      windowEnd: Date;
+    }
+  | {
+      type: "player";
+      a: EventRow;
+      b: EventRow;
+      sharedPlayerCount: number;
+      windowStart: Date;
+      windowEnd: Date;
+    };
+
 // Per-tournament schedule view. Pulls each event's settings plus
 // registration counts and court allocation, runs them through the
 // shared estimator math, and reports per-event durations. Estimates
@@ -53,6 +71,12 @@ export default function SchedulePage() {
   const [teamsByEvent, setTeamsByEvent] = useState<Map<string, number>>(
     new Map(),
   );
+  // Player-id set per event, used for cross-event player-conflict
+  // detection. Counts come from teamsByEvent; this is the membership
+  // map.
+  const [playersByEvent, setPlayersByEvent] = useState<
+    Map<string, Set<string>>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -112,7 +136,7 @@ export default function SchedulePage() {
           .eq("events.tournament_id", t.id),
         supabase
           .from("event_registrations")
-          .select("event_id, events!inner(tournament_id)")
+          .select("event_id, player_id, events!inner(tournament_id)")
           .eq("events.tournament_id", t.id)
           .is("deleted_at", null),
       ]);
@@ -138,11 +162,19 @@ export default function SchedulePage() {
 
       // Count registrations per event so the schedule reflects the
       // *actual* registered team count, not just the max-teams config.
+      // Also track which players are in which events so we can flag
+      // a player registered in two events scheduled at the same time.
       const counts = new Map<string, number>();
-      for (const r of regsRes.data ?? []) {
+      const players = new Map<string, Set<string>>();
+      type RegRow = { event_id: string; player_id: string };
+      for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
         counts.set(r.event_id, (counts.get(r.event_id) ?? 0) + 1);
+        const set = players.get(r.event_id) ?? new Set<string>();
+        set.add(r.player_id);
+        players.set(r.event_id, set);
       }
       setTeamsByEvent(counts);
+      setPlayersByEvent(players);
       setLoading(false);
     })();
     return () => {
@@ -217,6 +249,89 @@ export default function SchedulePage() {
   // parallel, so we group events into "court clusters" (transitive
   // closure of court overlap) and sum durations within a cluster.
   // Tournament total is the max over clusters.
+  // ─── Overlap detection ─────────────────────────────────────────────
+  // Two flavors of conflict, both surfaced to the organizer:
+  //
+  //   1. Court overlap — two events share at least one court AND
+  //      their time windows touch. Hard conflict; one of them won't
+  //      actually be able to play.
+  //
+  //   2. Player overlap — a player registered in two events whose
+  //      time windows touch. Soft conflict (they can't be on two
+  //      courts at once, but in practice some no-shows / late
+  //      starts make it survivable). Surfaced as a warning, not an
+  //      error.
+  //
+  // Both are pair-wise comparisons. Only events with a
+  // scheduled_start_at participate.
+  const overlaps = useMemo<Overlap[]>(() => {
+    const list: Overlap[] = [];
+    const scheduled = rows.filter(
+      (r) => r.scheduledStart !== null && r.scheduledEnd !== null,
+    );
+    for (let i = 0; i < scheduled.length; i++) {
+      for (let j = i + 1; j < scheduled.length; j++) {
+        const a = scheduled[i];
+        const b = scheduled[j];
+        const aStart = a.scheduledStart!.getTime();
+        const aEnd = a.scheduledEnd!.getTime();
+        const bStart = b.scheduledStart!.getTime();
+        const bEnd = b.scheduledEnd!.getTime();
+        // Half-open intervals — events that touch end-to-start aren't
+        // a conflict (one ends exactly when the other begins).
+        const overlapStart = Math.max(aStart, bStart);
+        const overlapEnd = Math.min(aEnd, bEnd);
+        if (overlapStart >= overlapEnd) continue;
+
+        // Court overlap
+        const aCourts = new Set(a.courtNumbers);
+        const sharedCourts = b.courtNumbers.filter((c) => aCourts.has(c));
+        if (sharedCourts.length > 0) {
+          list.push({
+            type: "court",
+            a,
+            b,
+            courts: sharedCourts,
+            windowStart: new Date(overlapStart),
+            windowEnd: new Date(overlapEnd),
+          });
+        }
+
+        // Player overlap — count players appearing in both events.
+        const aPlayers = playersByEvent.get(a.event.id);
+        const bPlayers = playersByEvent.get(b.event.id);
+        if (aPlayers && bPlayers) {
+          let shared = 0;
+          for (const id of aPlayers) if (bPlayers.has(id)) shared++;
+          if (shared > 0) {
+            list.push({
+              type: "player",
+              a,
+              b,
+              sharedPlayerCount: shared,
+              windowStart: new Date(overlapStart),
+              windowEnd: new Date(overlapEnd),
+            });
+          }
+        }
+      }
+    }
+    return list;
+  }, [rows, playersByEvent]);
+
+  // Per-event lookup so the table can render badges on affected rows.
+  const overlapsByEventId = useMemo(() => {
+    const m = new Map<string, Overlap[]>();
+    for (const o of overlaps) {
+      for (const id of [o.a.event.id, o.b.event.id]) {
+        const arr = m.get(id) ?? [];
+        arr.push(o);
+        m.set(id, arr);
+      }
+    }
+    return m;
+  }, [overlaps]);
+
   const tournamentTotalMinutes = useMemo(() => {
     if (rows.length === 0) return 0;
     // Union-find over events. Two events merged if they share a court.
@@ -603,6 +718,10 @@ export default function SchedulePage() {
             />
           </div>
 
+          {overlaps.length > 0 && (
+            <ConflictsPanel overlaps={overlaps} />
+          )}
+
           {/* Per-event table */}
           <table
             style={{
@@ -636,16 +755,29 @@ export default function SchedulePage() {
                   style={{ borderBottom: "1px solid #f3f4f6" }}
                 >
                   <td style={tdStyle}>
-                    <Link
-                      to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${r.event.id}`}
+                    <div
                       style={{
-                        color: "#111",
-                        textDecoration: "none",
-                        fontWeight: 500,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        flexWrap: "wrap",
                       }}
                     >
-                      {r.event.name}
-                    </Link>
+                      <Link
+                        to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${r.event.id}`}
+                        style={{
+                          color: "#111",
+                          textDecoration: "none",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {r.event.name}
+                      </Link>
+                      <RowConflictBadges
+                        conflicts={overlapsByEventId.get(r.event.id) ?? []}
+                        thisEventId={r.event.id}
+                      />
+                    </div>
                     <div
                       style={{ fontSize: 11, color: "#888", marginTop: 2 }}
                     >
@@ -799,6 +931,145 @@ export default function SchedulePage() {
 // ─────────────────────────────────────────────────────────────────────
 // UI bits
 // ─────────────────────────────────────────────────────────────────────
+
+// Summary panel rendered above the table when any conflict exists.
+// Court conflicts are hard errors (red); player conflicts are
+// warnings (amber, per docs/DESIGN_PREFERENCES.md "amber = note").
+function ConflictsPanel({ overlaps }: { overlaps: Overlap[] }) {
+  const courtCount = overlaps.filter((o) => o.type === "court").length;
+  const playerCount = overlaps.filter((o) => o.type === "player").length;
+  return (
+    <div
+      style={{
+        marginTop: 16,
+        padding: 12,
+        background: courtCount > 0 ? "#fef2f2" : "#fffbeb",
+        border: `1px solid ${courtCount > 0 ? "#fecaca" : "#fde68a"}`,
+        borderRadius: 6,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: courtCount > 0 ? "#991b1b" : "#92400e",
+          marginBottom: 8,
+        }}
+      >
+        {courtCount > 0
+          ? `${courtCount} court conflict${courtCount === 1 ? "" : "s"}`
+          : ""}
+        {courtCount > 0 && playerCount > 0 ? " · " : ""}
+        {playerCount > 0
+          ? `${playerCount} player conflict${playerCount === 1 ? "" : "s"}`
+          : ""}
+      </div>
+      <ul
+        style={{
+          margin: 0,
+          paddingLeft: 18,
+          fontSize: 12,
+          color: "#444",
+          lineHeight: 1.6,
+        }}
+      >
+        {overlaps.map((o, i) => (
+          <li key={i}>
+            {o.type === "court" ? (
+              <>
+                <strong>Court {o.courts.join(", ")}</strong> double-booked:{" "}
+                <em>{o.a.event.name}</em> and <em>{o.b.event.name}</em> both
+                use{" "}
+                {o.courts.length === 1
+                  ? `court ${o.courts[0]}`
+                  : `courts ${o.courts.join(", ")}`}{" "}
+                during {fmtRange(o.windowStart, o.windowEnd)}.
+              </>
+            ) : (
+              <>
+                <strong>{o.sharedPlayerCount} player(s)</strong> registered
+                in both <em>{o.a.event.name}</em> and{" "}
+                <em>{o.b.event.name}</em>, which overlap during{" "}
+                {fmtRange(o.windowStart, o.windowEnd)}.
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// Per-row badges, shown next to the event name in the table. Compact
+// — just dot-count of court (red) and player (amber) conflicts that
+// involve this row.
+function RowConflictBadges({
+  conflicts,
+  thisEventId,
+}: {
+  conflicts: Overlap[];
+  thisEventId: string;
+}) {
+  const courtConflicts = conflicts.filter((o) => o.type === "court");
+  const playerConflicts = conflicts.filter((o) => o.type === "player");
+  if (courtConflicts.length === 0 && playerConflicts.length === 0) return null;
+
+  const partnerNames = (list: Overlap[]) =>
+    list
+      .map((o) => (o.a.event.id === thisEventId ? o.b.event.name : o.a.event.name))
+      .join(", ");
+
+  return (
+    <span style={{ display: "inline-flex", gap: 4 }}>
+      {courtConflicts.length > 0 && (
+        <span
+          title={`Court conflict with: ${partnerNames(courtConflicts)}`}
+          style={{
+            padding: "1px 6px",
+            background: "#fef2f2",
+            color: "#991b1b",
+            border: "1px solid #fecaca",
+            borderRadius: 3,
+            fontSize: 10,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: 0.3,
+          }}
+        >
+          ⚠ Court
+        </span>
+      )}
+      {playerConflicts.length > 0 && (
+        <span
+          title={`Player conflict with: ${partnerNames(playerConflicts)}`}
+          style={{
+            padding: "1px 6px",
+            background: "#fffbeb",
+            color: "#92400e",
+            border: "1px solid #fde68a",
+            borderRadius: 3,
+            fontSize: 10,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: 0.3,
+          }}
+        >
+          ⚠ Player
+        </span>
+      )}
+    </span>
+  );
+}
+
+function fmtRange(start: Date, end: Date): string {
+  const time = (d: Date) =>
+    d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const sameDay = start.toDateString() === end.toDateString();
+  if (sameDay) {
+    return `${time(start)} – ${time(end)}`;
+  }
+  return `${start.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} – ${end.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+}
 
 function Stat({
   label,
