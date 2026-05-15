@@ -53,10 +53,18 @@ export default function SeedEventPage() {
     searchParams.get("event") ?? "",
   );
   const [count, setCount] = useState("8");
+  // "add"   → insert N new teams alongside whatever's already there.
+  // "reset" → delete every existing team (and their matches) in the
+  //           event, then insert N new teams. Lets you re-seed an
+  //           event between test runs without manually removing
+  //           teams one by one.
+  const [mode, setMode] = useState<"add" | "reset">("add");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
+    mode: "add" | "reset";
     teamsAdded: number;
+    teamsRemoved: number;
     playersAdded: number;
   } | null>(null);
 
@@ -189,6 +197,72 @@ export default function SeedEventPage() {
     const playersPerTeam = isDoubles ? 2 : 1;
     const totalPlayers = n * playersPerTeam;
 
+    // Reset mode: nuke every existing event_registration for this
+    // event (plus any matches they're part of) before generating the
+    // new batch. Same sequence as the per-team Remove flow on the
+    // event console, scaled up to "all teams in this event."
+    let teamsRemoved = 0;
+    if (mode === "reset") {
+      const { data: existingRegs, error: regErr } = await supabase
+        .from("event_registrations")
+        .select("id, partner_registration_id")
+        .eq("event_id", selectedEvent.id);
+      if (regErr) {
+        setError(`Reset failed (listing existing teams): ${regErr.message}`);
+        setBusy(false);
+        return;
+      }
+      const existingIds = (existingRegs ?? []).map((r) => r.id);
+      // teamsRemoved counts teams, not registrations — doubles have
+      // 2 regs per team, singles have 1.
+      teamsRemoved = isDoubles
+        ? Math.floor(existingIds.length / 2)
+        : existingIds.length;
+      if (existingIds.length > 0) {
+        // Clear the partner self-FK so the subsequent delete doesn't
+        // trip on the constraint when both halves of a doubles team
+        // land in the same batch.
+        await supabase
+          .from("event_registrations")
+          .update({ partner_registration_id: null })
+          .in("id", existingIds);
+        // Delete matches that reference any of these regs. Without
+        // this, the `on delete set null` FK would leave orphan rows
+        // with null team slots — unplayable, and they'd pollute the
+        // freshly-seeded event.
+        const matchDeletes = await Promise.all([
+          supabase.from("matches").delete().in("team_a_reg_id", existingIds),
+          supabase.from("matches").delete().in("team_b_reg_id", existingIds),
+        ]);
+        const matchErr = matchDeletes.find((r) => r.error)?.error;
+        if (matchErr) {
+          setError(`Reset failed (deleting matches): ${matchErr.message}`);
+          setBusy(false);
+          return;
+        }
+        // Delete the registrations themselves. Use .select to detect
+        // RLS-filtered no-op deletes — same seatbelt as the manual
+        // team remove flow.
+        const { data: deleted, error: delErr } = await supabase
+          .from("event_registrations")
+          .delete()
+          .in("id", existingIds)
+          .select("id");
+        if (delErr) {
+          setError(`Reset failed (deleting teams): ${delErr.message}`);
+          setBusy(false);
+          return;
+        }
+        if (!deleted || deleted.length < existingIds.length) {
+          setError(
+            `Reset blocked: only ${deleted?.length ?? 0} of ${existingIds.length} registrations deleted. Usually means an RLS policy is missing.`,
+          );
+          setBusy(false);
+          return;
+        }
+      }
+    }
+
     // Generate player rows.
     const playersToInsert = buildPlayers(
       totalPlayers,
@@ -256,11 +330,22 @@ export default function SeedEventPage() {
     }
 
     setBusy(false);
-    setResult({ teamsAdded: n, playersAdded: totalPlayers });
-    // Reflect the new total in the dropdown without a full refetch.
+    setResult({
+      mode,
+      teamsAdded: n,
+      teamsRemoved,
+      playersAdded: totalPlayers,
+    });
+    // Reflect the new total in the dropdown without a refetch. For
+    // "add" the new count = existing + n. For "reset" the new count
+    // is exactly n (everything before was deleted).
     setTeamCountByEvent((prev) => {
       const next = new Map(prev);
-      next.set(selectedEvent.id, (prev.get(selectedEvent.id) ?? 0) + n);
+      if (mode === "reset") {
+        next.set(selectedEvent.id, n);
+      } else {
+        next.set(selectedEvent.id, (prev.get(selectedEvent.id) ?? 0) + n);
+      }
       return next;
     });
   };
@@ -368,8 +453,38 @@ export default function SeedEventPage() {
           </div>
         )}
 
+        <div style={fieldStyle}>
+          <span style={labelStyle}>Mode</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("add");
+                setResult(null);
+                setError(null);
+              }}
+              style={modeBtn(mode === "add")}
+            >
+              Add to existing
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("reset");
+                setResult(null);
+                setError(null);
+              }}
+              style={modeBtn(mode === "reset")}
+            >
+              Set total (reset)
+            </button>
+          </div>
+        </div>
+
         <label style={fieldStyle}>
-          <span style={labelStyle}>Teams to generate</span>
+          <span style={labelStyle}>
+            {mode === "add" ? "Teams to add" : "Target team total"}
+          </span>
           <input
             type="number"
             min="1"
@@ -379,6 +494,25 @@ export default function SeedEventPage() {
             style={{ ...inputStyle, maxWidth: 120 }}
           />
         </label>
+
+        {mode === "reset" && selectedEvent && (
+          <div
+            style={{
+              padding: 12,
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: 6,
+              color: "#7a5d00",
+              fontSize: 13,
+            }}
+          >
+            <strong>Reset mode.</strong> Every existing team in this event
+            ({teamCountByEvent.get(selectedEvent.id) ?? 0}) and any of
+            their matches will be <strong>deleted</strong> before the new{" "}
+            {count || 0} test teams are inserted. Player records in the
+            global players table stay.
+          </div>
+        )}
 
         {error && (
           <div
@@ -406,7 +540,15 @@ export default function SeedEventPage() {
               fontSize: 13,
             }}
           >
-            Generated <strong>{result.teamsAdded}</strong>{" "}
+            {result.mode === "reset" && result.teamsRemoved > 0 && (
+              <>
+                Removed <strong>{result.teamsRemoved}</strong>{" "}
+                {result.teamsRemoved === 1 ? "team" : "teams"} (and any
+                matches).{" "}
+              </>
+            )}
+            {result.mode === "reset" ? "Reset event to " : "Generated "}
+            <strong>{result.teamsAdded}</strong>{" "}
             {result.teamsAdded === 1 ? "team" : "teams"} (
             {result.playersAdded} players).{" "}
             <Link
@@ -424,7 +566,13 @@ export default function SeedEventPage() {
             disabled={busy || !selectedEvent}
             style={primaryBtn(busy || !selectedEvent)}
           >
-            {busy ? "Generating…" : "Generate teams"}
+            {busy
+              ? mode === "reset"
+                ? "Resetting…"
+                : "Generating…"
+              : mode === "reset"
+                ? `Reset to ${count || 0} teams`
+                : `Add ${count || 0} teams`}
           </button>
           {selectedTournament && selectedEvent && (
             <Link
@@ -552,6 +700,24 @@ function primaryBtn(disabled: boolean): CSSProperties {
     fontFamily: "inherit",
   };
 }
+// Segmented toggle: the active half gets the primary palette, the
+// inactive half is a neutral outline. Used for the add-vs-reset
+// mode selector.
+function modeBtn(active: boolean): CSSProperties {
+  return {
+    flex: 1,
+    padding: "8px 12px",
+    background: active ? "#2563eb" : "#fff",
+    color: active ? "#fff" : "#555",
+    border: `1px solid ${active ? "#2563eb" : "#e2e2e2"}`,
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
+}
+
 const secondaryLinkBtn: CSSProperties = {
   padding: "10px 20px",
   background: "#fff",
