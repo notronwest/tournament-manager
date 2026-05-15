@@ -13,9 +13,11 @@ import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
+type Match = Database["public"]["Tables"]["matches"]["Row"];
 type EventFormat = Database["public"]["Enums"]["event_format"];
 type EventGender = Database["public"]["Enums"]["event_gender"];
 type RatingSource = Database["public"]["Enums"]["rating_source"];
+type MedalMatchFormat = Database["public"]["Enums"]["medal_match_format"];
 
 // Single form used to both create and edit an event. Mode is passed
 // in from the route. The format fields drive RR + playoff generation
@@ -72,6 +74,11 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
     completed: number;
   } | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  // Playoff matches in edit mode — surface per-match format
+  // overrides at the bottom of the Playoff group so organizers
+  // can configure "semis 11/win-by-2 single-game, final 15/win-by-2
+  // best-of-3" without leaving this page.
+  const [playoffMatches, setPlayoffMatches] = useState<Match[]>([]);
 
   useEffect(() => {
     if (!org || !tournamentSlug) return;
@@ -142,17 +149,28 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setMaxAge(ev.max_age != null ? String(ev.max_age) : "");
 
         // Pull match counts so we know whether to warn on save.
-        const { data: ms } = await supabase
-          .from("matches")
-          .select("status")
-          .eq("event_id", ev.id);
+        // Also pull every playoff match — we surface per-match
+        // format overrides further down so the organizer can edit
+        // semis-vs-finals (etc.) independently of the event-level
+        // medal defaults.
+        const [statusRes, playoffRes] = await Promise.all([
+          supabase.from("matches").select("status").eq("event_id", ev.id),
+          supabase
+            .from("matches")
+            .select("*")
+            .eq("event_id", ev.id)
+            .eq("stage", "playoff")
+            .order("round", { ascending: true })
+            .order("position", { ascending: true }),
+        ]);
         if (cancelled) return;
-        const list = ms ?? [];
+        const list = statusRes.data ?? [];
         setMatchStats({
           total: list.length,
           inProgress: list.filter((m) => m.status === "in_progress").length,
           completed: list.filter((m) => m.status === "completed").length,
         });
+        setPlayoffMatches(playoffRes.data ?? []);
       }
       setLoading(false);
     })();
@@ -717,6 +735,25 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                   </Field>
                 </FieldRow>
               </div>
+
+              {/* Per-match overrides. Only meaningful in edit mode
+                  after the bracket has been generated — each match
+                  carries its own copy of the medal format so the
+                  semis can play single-game-to-11 while the gold
+                  final plays best-of-3-to-15 (or any other split).
+                  Saves write match-level columns; the event-level
+                  defaults above stay as fallbacks for matches that
+                  haven't been touched. */}
+              {mode === "edit" && playoffMatches.length > 0 && (
+                <PerMatchFormatList
+                  matches={playoffMatches}
+                  onMatchSaved={(updated) =>
+                    setPlayoffMatches((prev) =>
+                      prev.map((m) => (m.id === updated.id ? updated : m)),
+                    )
+                  }
+                />
+              )}
             </div>
           )}
         </FieldGroup>
@@ -957,6 +994,267 @@ function FieldRow({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+// Per-match override list shown at the bottom of the Playoff
+// FieldGroup. One row per playoff match, each with its own Save
+// button — saves are inline (not bundled with the parent form's
+// "Save changes" submit) so changing the gold-final format doesn't
+// require the user to also resubmit every event-level field.
+//
+// The row label uses round + position to disambiguate (Round 1
+// Match 1, etc.) — we don't know whether a 2-match round is semis
+// or pairwise medal matches from this context alone, so we keep
+// the labels generic. The PlayoffSection in the event console
+// already shows the friendly names ("Semifinals", "Gold Medal
+// Final", etc.) for in-flight bracket viewing.
+function PerMatchFormatList({
+  matches,
+  onMatchSaved,
+}: {
+  matches: Match[];
+  onMatchSaved: (updated: Match) => void;
+}) {
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        paddingTop: 12,
+        borderTop: "1px dashed #e5e7eb",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: "#444",
+          marginBottom: 8,
+        }}
+      >
+        Per-match overrides
+      </div>
+      <p
+        style={{
+          fontSize: 12,
+          color: "#888",
+          margin: "0 0 12px",
+        }}
+      >
+        Each medal match was copied from the event defaults above when
+        the bracket was generated. Override here to give individual
+        matches a different game-rule set — e.g. semis single-game,
+        final best-of-3.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {matches.map((m) => (
+          <MatchFormatRow
+            key={m.id}
+            match={m}
+            onSaved={onMatchSaved}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MatchFormatRow({
+  match,
+  onSaved,
+}: {
+  match: Match;
+  onSaved: (updated: Match) => void;
+}) {
+  const [format, setFormat] = useState<MedalMatchFormat>(
+    match.match_format ?? "single_game",
+  );
+  const [pts, setPts] = useState(
+    match.match_points_to_win != null ? String(match.match_points_to_win) : "15",
+  );
+  const [winBy, setWinBy] = useState(
+    match.match_win_by != null ? String(match.match_win_by) : "2",
+  );
+  const [mins, setMins] = useState(
+    match.match_minutes_per_game != null
+      ? String(match.match_minutes_per_game)
+      : "20",
+  );
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  const dirty =
+    format !== (match.match_format ?? "single_game") ||
+    pts !== String(match.match_points_to_win ?? 15) ||
+    winBy !== String(match.match_win_by ?? 2) ||
+    mins !== String(match.match_minutes_per_game ?? 20);
+
+  const save = async () => {
+    setBusy(true);
+    setErr(null);
+    const ptsN = parseInt(pts, 10);
+    const winByN = parseInt(winBy, 10);
+    const minsN = parseInt(mins, 10);
+    if (Number.isNaN(ptsN) || ptsN < 1 || ptsN > 99) {
+      setErr("Points to win must be between 1 and 99.");
+      setBusy(false);
+      return;
+    }
+    if (Number.isNaN(winByN) || winByN < 1 || winByN > 9) {
+      setErr("Win-by must be between 1 and 9.");
+      setBusy(false);
+      return;
+    }
+    if (Number.isNaN(minsN) || minsN < 1 || minsN > 120) {
+      setErr("Minutes-per-game must be between 1 and 120.");
+      setBusy(false);
+      return;
+    }
+    const { data, error: updErr } = await supabase
+      .from("matches")
+      .update({
+        match_format: format,
+        match_points_to_win: ptsN,
+        match_win_by: winByN,
+        match_minutes_per_game: minsN,
+      })
+      .eq("id", match.id)
+      .select("*")
+      .single();
+    setBusy(false);
+    if (updErr) {
+      setErr(updErr.message);
+      return;
+    }
+    if (data) onSaved(data as Match);
+    setSavedAt(Date.now());
+  };
+
+  // Two-match rounds in either pairwise or semis form: we don't
+  // know from raw match data which is which, so label generically
+  // by round + position. The Games-tab PlayoffSection still
+  // shows the friendly names while playing.
+  const label = `Round ${match.round} · Match ${match.position + 1}`;
+
+  return (
+    <div
+      style={{
+        padding: 10,
+        background: "#fff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 6,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#444" }}>
+        {label}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          alignItems: "flex-end",
+        }}
+      >
+        <label style={smallField}>
+          <span style={smallLabel}>Format</span>
+          <select
+            value={format}
+            onChange={(e) => setFormat(e.target.value as MedalMatchFormat)}
+            style={smallInput}
+          >
+            <option value="single_game">1 game</option>
+            <option value="best_of_3">Best of 3</option>
+          </select>
+        </label>
+        <label style={smallField}>
+          <span style={smallLabel}>Points to win</span>
+          <input
+            type="number"
+            min="1"
+            max="99"
+            value={pts}
+            onChange={(e) => setPts(e.target.value)}
+            style={smallInput}
+          />
+        </label>
+        <label style={smallField}>
+          <span style={smallLabel}>Win by</span>
+          <input
+            type="number"
+            min="1"
+            max="9"
+            value={winBy}
+            onChange={(e) => setWinBy(e.target.value)}
+            style={smallInput}
+          />
+        </label>
+        <label style={smallField}>
+          <span style={smallLabel}>Minutes / game</span>
+          <input
+            type="number"
+            min="1"
+            max="120"
+            value={mins}
+            onChange={(e) => setMins(e.target.value)}
+            style={smallInput}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy || !dirty}
+          style={tinyPrimaryBtn(busy || !dirty)}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+        {savedAt && !dirty && (
+          <span style={{ fontSize: 12, color: "#166534" }}>Saved</span>
+        )}
+      </div>
+      {err && (
+        <div style={{ color: "#991b1b", fontSize: 12 }}>{err}</div>
+      )}
+    </div>
+  );
+}
+
+const smallField: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+  fontSize: 12,
+  color: "#555",
+};
+const smallLabel: CSSProperties = {
+  fontSize: 11,
+  color: "#666",
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+};
+const smallInput: CSSProperties = {
+  padding: "6px 10px",
+  border: "1px solid #e2e2e2",
+  borderRadius: 4,
+  fontSize: 13,
+  fontFamily: "inherit",
+  width: 120,
+};
+function tinyPrimaryBtn(disabled: boolean): CSSProperties {
+  return {
+    padding: "6px 14px",
+    background: disabled ? "#9ca3af" : "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: 4,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+  };
 }
 
 function ErrorBox({ message }: { message: string }) {

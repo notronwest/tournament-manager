@@ -1477,17 +1477,11 @@ function MatchRow({
   index,
   teamByAnyRegId,
   onSaved,
-  showFormat = false,
 }: {
   match: Match;
   index: number;
   teamByAnyRegId: Map<string, Team>;
   onSaved: () => Promise<void>;
-  // Playoff section passes true so each medal match shows its
-  // format/points/win-by config inline with an "edit" affordance.
-  // Round-robin tables stay tighter — pool play uses event-level
-  // game rules and there's no per-match override there.
-  showFormat?: boolean;
 }) {
   const teamA = match.team_a_reg_id
     ? teamByAnyRegId.get(match.team_a_reg_id) ?? null
@@ -1506,7 +1500,6 @@ function MatchRow({
   const [err, setErr] = useState<string | null>(null);
 
   const canPlay = teamA !== null && teamB !== null;
-  const [editingFormat, setEditingFormat] = useState(false);
 
   const onSave = async () => {
     if (!canPlay) return;
@@ -1555,311 +1548,69 @@ function MatchRow({
   };
 
   return (
-    <>
-      <tr style={tableRow}>
-        <td style={{ ...tdStyle, color: "#888" }}>{index}</td>
-        <td
-          style={{
-            ...tdStyle,
-            fontWeight: match.winner_reg_id === match.team_a_reg_id ? 600 : 400,
-            color: teamA ? "#111" : "#999",
-          }}
-        >
-          {teamA?.label ?? "TBD"}
-        </td>
-        <td
-          style={{
-            ...tdStyle,
-            textAlign: "center",
-            whiteSpace: "nowrap",
-          }}
-        >
-          <input
-            type="number"
-            min="0"
-            value={scoreA}
-            onChange={(e) => setScoreA(e.target.value)}
-            disabled={!canPlay || busy}
-            style={scoreInputStyle}
-          />
-          <span style={{ margin: "0 4px", color: "#999" }}>–</span>
-          <input
-            type="number"
-            min="0"
-            value={scoreB}
-            onChange={(e) => setScoreB(e.target.value)}
-            disabled={!canPlay || busy}
-            style={scoreInputStyle}
-          />
-          <button
-            onClick={onSave}
-            disabled={!canPlay || busy}
-            style={{ ...tinyPrimaryBtn, marginLeft: 8 }}
-          >
-            {busy ? "…" : "Save"}
-          </button>
-          {err && (
-            <div style={{ color: "#991b1b", fontSize: 11, marginTop: 4 }}>
-              {err}
-            </div>
-          )}
-        </td>
-        <td
-          style={{
-            ...tdStyle,
-            fontWeight: match.winner_reg_id === match.team_b_reg_id ? 600 : 400,
-            color: teamB ? "#111" : "#999",
-          }}
-        >
-          {teamB?.label ?? "TBD"}
-        </td>
-        <td style={tdStyle}>
-          <MatchStatusBadge status={match.status} />
-        </td>
-        {showFormat && (
-          <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-            <button
-              type="button"
-              onClick={() => setEditingFormat((v) => !v)}
-              style={formatPillBtn(editingFormat)}
-              title="Click to edit this match's format and game rules independently of the other medal matches."
-            >
-              {summarizeMatchFormat(match)}
-            </button>
-          </td>
-        )}
-      </tr>
-      {showFormat && editingFormat && (
-        <tr>
-          <td
-            colSpan={6}
-            style={{
-              padding: "12px 16px",
-              background: "#fafafa",
-              borderBottom: "1px solid #e5e7eb",
-            }}
-          >
-            <MatchFormatEditor
-              match={match}
-              onCancel={() => setEditingFormat(false)}
-              onSaved={async () => {
-                setEditingFormat(false);
-                await onSaved();
-              }}
-            />
-          </td>
-        </tr>
-      )}
-    </>
-  );
-}
-
-// Compact one-line summary of a match's format / game rules. Used
-// as the label on the per-match Format pill in PlayoffSection.
-function summarizeMatchFormat(match: Match): string {
-  const isBest3 = match.match_format === "best_of_3";
-  const pts = match.match_points_to_win;
-  const winBy = match.match_win_by;
-  // Defensive: if a match has no explicit format (e.g. generated
-  // before this feature shipped), show a hint instead of the rules.
-  if (!match.match_format || pts == null || winBy == null) {
-    return "Set format…";
-  }
-  return isBest3
-    ? `Best of 3 · ${pts} win by ${winBy}`
-    : `1 game · ${pts} win by ${winBy}`;
-}
-
-function MatchFormatEditor({
-  match,
-  onCancel,
-  onSaved,
-}: {
-  match: Match;
-  onCancel: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [format, setFormat] = useState<"single_game" | "best_of_3">(
-    match.match_format ?? "single_game",
-  );
-  const [pts, setPts] = useState(
-    match.match_points_to_win != null ? String(match.match_points_to_win) : "15",
-  );
-  const [winBy, setWinBy] = useState(
-    match.match_win_by != null ? String(match.match_win_by) : "2",
-  );
-  const [mins, setMins] = useState(
-    match.match_minutes_per_game != null
-      ? String(match.match_minutes_per_game)
-      : "20",
-  );
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const save = async () => {
-    setBusy(true);
-    setErr(null);
-    const ptsN = parseInt(pts, 10);
-    const winByN = parseInt(winBy, 10);
-    const minsN = parseInt(mins, 10);
-    if (Number.isNaN(ptsN) || ptsN < 1 || ptsN > 99) {
-      setErr("Points to win must be between 1 and 99.");
-      setBusy(false);
-      return;
-    }
-    if (Number.isNaN(winByN) || winByN < 1 || winByN > 9) {
-      setErr("Win-by must be between 1 and 9.");
-      setBusy(false);
-      return;
-    }
-    if (Number.isNaN(minsN) || minsN < 1 || minsN > 120) {
-      setErr("Minutes-per-game must be between 1 and 120.");
-      setBusy(false);
-      return;
-    }
-    const { error: updErr } = await supabase
-      .from("matches")
-      .update({
-        match_format: format,
-        match_points_to_win: ptsN,
-        match_win_by: winByN,
-        match_minutes_per_game: minsN,
-      })
-      .eq("id", match.id);
-    if (updErr) {
-      setErr(updErr.message);
-      setBusy(false);
-      return;
-    }
-    setBusy(false);
-    await onSaved();
-  };
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-        fontSize: 13,
-        color: "#333",
-      }}
-    >
-      <div
+    <tr style={tableRow}>
+      <td style={{ ...tdStyle, color: "#888" }}>{index}</td>
+      <td
         style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 16,
-          alignItems: "flex-end",
+          ...tdStyle,
+          fontWeight: match.winner_reg_id === match.team_a_reg_id ? 600 : 400,
+          color: teamA ? "#111" : "#999",
         }}
       >
-        <label style={editorField}>
-          <span style={editorLabel}>Format</span>
-          <select
-            value={format}
-            onChange={(e) =>
-              setFormat(e.target.value as "single_game" | "best_of_3")
-            }
-            style={editorInput}
-          >
-            <option value="single_game">Single game</option>
-            <option value="best_of_3">Best of 3</option>
-          </select>
-        </label>
-        <label style={editorField}>
-          <span style={editorLabel}>Points to win</span>
-          <input
-            type="number"
-            min="1"
-            max="99"
-            value={pts}
-            onChange={(e) => setPts(e.target.value)}
-            style={editorInput}
-          />
-        </label>
-        <label style={editorField}>
-          <span style={editorLabel}>Win by</span>
-          <input
-            type="number"
-            min="1"
-            max="9"
-            value={winBy}
-            onChange={(e) => setWinBy(e.target.value)}
-            style={editorInput}
-          />
-        </label>
-        <label style={editorField}>
-          <span style={editorLabel}>Minutes / game</span>
-          <input
-            type="number"
-            min="1"
-            max="120"
-            value={mins}
-            onChange={(e) => setMins(e.target.value)}
-            style={editorInput}
-          />
-        </label>
-        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
-          <button type="button" onClick={onCancel} style={tinySecondaryBtn}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={save}
-            disabled={busy}
-            style={tinyPrimaryBtn}
-          >
-            {busy ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
-      {err && (
-        <div
-          style={{
-            color: "#991b1b",
-            fontSize: 12,
-          }}
+        {teamA?.label ?? "TBD"}
+      </td>
+      <td
+        style={{
+          ...tdStyle,
+          textAlign: "center",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <input
+          type="number"
+          min="0"
+          value={scoreA}
+          onChange={(e) => setScoreA(e.target.value)}
+          disabled={!canPlay || busy}
+          style={scoreInputStyle}
+        />
+        <span style={{ margin: "0 4px", color: "#999" }}>–</span>
+        <input
+          type="number"
+          min="0"
+          value={scoreB}
+          onChange={(e) => setScoreB(e.target.value)}
+          disabled={!canPlay || busy}
+          style={scoreInputStyle}
+        />
+        <button
+          onClick={onSave}
+          disabled={!canPlay || busy}
+          style={{ ...tinyPrimaryBtn, marginLeft: 8 }}
         >
-          {err}
-        </div>
-      )}
-    </div>
+          {busy ? "…" : "Save"}
+        </button>
+        {err && (
+          <div style={{ color: "#991b1b", fontSize: 11, marginTop: 4 }}>
+            {err}
+          </div>
+        )}
+      </td>
+      <td
+        style={{
+          ...tdStyle,
+          fontWeight: match.winner_reg_id === match.team_b_reg_id ? 600 : 400,
+          color: teamB ? "#111" : "#999",
+        }}
+      >
+        {teamB?.label ?? "TBD"}
+      </td>
+      <td style={tdStyle}>
+        <MatchStatusBadge status={match.status} />
+      </td>
+    </tr>
   );
 }
-
-function formatPillBtn(active: boolean): CSSProperties {
-  return {
-    padding: "4px 10px",
-    background: active ? "#eff6ff" : "#fff",
-    color: active ? "#1e40af" : "#555",
-    border: `1px solid ${active ? "#bfdbfe" : "#e2e2e2"}`,
-    borderRadius: 4,
-    fontSize: 12,
-    fontWeight: 500,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  };
-}
-
-const editorField: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-};
-const editorLabel: CSSProperties = {
-  fontSize: 11,
-  color: "#666",
-  textTransform: "uppercase",
-  letterSpacing: 0.5,
-};
-const editorInput: CSSProperties = {
-  padding: "6px 10px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 4,
-  fontSize: 13,
-  fontFamily: "inherit",
-  width: 130,
-};
 
 function MatchStatusBadge({
   status,
@@ -2310,7 +2061,6 @@ function PlayoffSection({
                       </th>
                       <th style={thStyle}>Team B</th>
                       <th style={{ ...thStyle, width: 100 }}>Status</th>
-                      <th style={{ ...thStyle, width: 180 }}>Format</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2321,7 +2071,6 @@ function PlayoffSection({
                         index={i + 1}
                         teamByAnyRegId={teamByAnyRegId}
                         onSaved={onChange}
-                        showFormat
                       />
                     ))}
                   </tbody>
