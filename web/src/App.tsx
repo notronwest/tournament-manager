@@ -13,6 +13,7 @@ import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
+import SeedEventPage from "./pages/admin/tools/SeedEventPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
 
@@ -60,6 +61,10 @@ export default function App() {
         <Route
           path="tools/round-robin"
           element={<RoundRobinEstimatorPage />}
+        />
+        <Route
+          path="tools/seed-event"
+          element={<SeedEventPage />}
         />
         <Route path="tournaments" element={<TournamentsListPage />} />
         <Route path="tournaments/new" element={<CreateTournamentPage />} />

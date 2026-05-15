@@ -88,6 +88,9 @@ export default function AdminLayout() {
           <SideLink to={`/admin/${org.slug}/tools/round-robin`}>
             RR estimator
           </SideLink>
+          <SideLink to={`/admin/${org.slug}/tools/seed-event`}>
+            Seed test data
+          </SideLink>
         </nav>
 
         <div
