@@ -722,6 +722,12 @@ export default function SchedulePage() {
             <ConflictsPanel overlaps={overlaps} />
           )}
 
+          {/* Court timeline — visual view of who's on what court when. */}
+          <CourtTimeline
+            courtCount={tournament.court_count}
+            rows={rows}
+          />
+
           {/* Per-event table */}
           <table
             style={{
@@ -931,6 +937,302 @@ export default function SchedulePage() {
 // ─────────────────────────────────────────────────────────────────────
 // UI bits
 // ─────────────────────────────────────────────────────────────────────
+
+// Pixels per minute for the timeline. 1.4 ≈ 84px per hour — readable
+// at typical viewport widths without burning vertical space.
+const PIXELS_PER_MIN = 1.4;
+// Minimum block height for very short events so the label still fits.
+const MIN_BLOCK_PX = 28;
+
+// Color palette for event blocks. Cycled by event index so the same
+// event keeps the same color across renders. Hand-picked for decent
+// contrast against the white timeline background and white block
+// text.
+const EVENT_PALETTE = [
+  { bg: "#2563eb", border: "#1e40af" }, // blue
+  { bg: "#16a34a", border: "#15803d" }, // green
+  { bg: "#9333ea", border: "#6b21a8" }, // purple
+  { bg: "#ea580c", border: "#9a3412" }, // orange
+  { bg: "#0891b2", border: "#155e75" }, // teal
+  { bg: "#db2777", border: "#9d174d" }, // pink
+  { bg: "#65a30d", border: "#3f6212" }, // lime
+  { bg: "#7c3aed", border: "#5b21b6" }, // violet
+];
+
+// Visual schedule: one column per court, time runs top-to-bottom,
+// events render as colored blocks positioned by start time and sized
+// by duration. Events using multiple courts appear in each of their
+// court columns so multi-court events are obvious at a glance.
+//
+// Skips rendering when no event has a scheduled_start_at — there's
+// nothing to draw yet, and a blank timeline is worse than no
+// timeline.
+function CourtTimeline({
+  courtCount,
+  rows,
+}: {
+  courtCount: number;
+  rows: EventRow[];
+}) {
+  const scheduled = rows.filter(
+    (r) => r.scheduledStart !== null && r.scheduledEnd !== null,
+  );
+  if (scheduled.length === 0) return null;
+
+  // Window: clamp to the hour on both sides so the grid lands cleanly
+  // on hourly tick marks.
+  let minMs = Math.min(...scheduled.map((r) => r.scheduledStart!.getTime()));
+  let maxMs = Math.max(...scheduled.map((r) => r.scheduledEnd!.getTime()));
+  minMs = floorToHour(minMs);
+  maxMs = ceilToHour(maxMs);
+  const totalMinutes = (maxMs - minMs) / 60_000;
+  const totalHeight = Math.max(120, totalMinutes * PIXELS_PER_MIN);
+
+  // Color assignment by stable event index — sorting by scheduled
+  // start so colors map to chronological order, which makes the
+  // visual flow easier to track.
+  const colorByEvent = new Map<string, (typeof EVENT_PALETTE)[number]>();
+  const sortedByStart = scheduled
+    .slice()
+    .sort(
+      (a, b) =>
+        a.scheduledStart!.getTime() - b.scheduledStart!.getTime() ||
+        a.event.name.localeCompare(b.event.name),
+    );
+  sortedByStart.forEach((r, i) => {
+    colorByEvent.set(r.event.id, EVENT_PALETTE[i % EVENT_PALETTE.length]);
+  });
+
+  // Hourly grid ticks for the time axis.
+  const hourTicks: number[] = [];
+  for (let t = minMs; t <= maxMs; t += 3600_000) hourTicks.push(t);
+
+  // Courts 1..N. Each court resolves to whichever events claim it.
+  const courts = Array.from({ length: courtCount }, (_, i) => i + 1);
+  const eventsOnCourt = (court: number) =>
+    scheduled.filter((r) => r.courtNumbers.includes(court));
+
+  return (
+    <section style={{ marginTop: 24 }}>
+      <h2
+        style={{
+          margin: "0 0 4px",
+          fontSize: 14,
+          fontWeight: 600,
+        }}
+      >
+        Court timeline
+      </h2>
+      <p style={{ margin: "0 0 12px", fontSize: 12, color: "#666" }}>
+        Each column is one court. Events using multiple courts appear in
+        every column they claim, so multi-court events are obvious at a
+        glance. Hover a block for details.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          overflowX: "auto",
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 6,
+          padding: 12,
+        }}
+      >
+        {/* Time axis column */}
+        <div
+          style={{
+            width: 56,
+            position: "relative",
+            flexShrink: 0,
+            paddingTop: 24, // align with court column headers
+          }}
+        >
+          <div style={{ position: "relative", height: totalHeight }}>
+            {hourTicks.map((t) => {
+              const top = ((t - minMs) / 60_000) * PIXELS_PER_MIN;
+              return (
+                <div
+                  key={t}
+                  style={{
+                    position: "absolute",
+                    top,
+                    left: 0,
+                    right: 0,
+                    fontSize: 10,
+                    color: "#888",
+                    textAlign: "right",
+                    paddingRight: 6,
+                    transform: "translateY(-50%)",
+                  }}
+                >
+                  {fmtHourTick(t)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* One column per court */}
+        {courts.map((court) => {
+          const events = eventsOnCourt(court);
+          return (
+            <div
+              key={court}
+              style={{
+                flex: "1 1 140px",
+                minWidth: 140,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#444",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                  textAlign: "center",
+                  paddingBottom: 4,
+                  marginBottom: 4,
+                  borderBottom: "1px solid #e5e7eb",
+                }}
+              >
+                Court {court}
+              </div>
+              <div
+                style={{
+                  position: "relative",
+                  height: totalHeight,
+                  background: "#fafafa",
+                  borderRadius: 4,
+                  border: "1px solid #e5e7eb",
+                }}
+              >
+                {/* Hour gridlines inside the column */}
+                {hourTicks.map((t, i) => {
+                  if (i === 0) return null; // top edge already shown by border
+                  const top = ((t - minMs) / 60_000) * PIXELS_PER_MIN;
+                  return (
+                    <div
+                      key={t}
+                      style={{
+                        position: "absolute",
+                        top,
+                        left: 0,
+                        right: 0,
+                        height: 1,
+                        background: "#e5e7eb",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  );
+                })}
+
+                {events.length === 0 ? (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#bbb",
+                      fontSize: 11,
+                      fontStyle: "italic",
+                    }}
+                  >
+                    No events
+                  </div>
+                ) : (
+                  events.map((r) => {
+                    const start = r.scheduledStart!.getTime();
+                    const end = r.scheduledEnd!.getTime();
+                    const top = ((start - minMs) / 60_000) * PIXELS_PER_MIN;
+                    const height = Math.max(
+                      MIN_BLOCK_PX,
+                      ((end - start) / 60_000) * PIXELS_PER_MIN,
+                    );
+                    const color =
+                      colorByEvent.get(r.event.id) ?? EVENT_PALETTE[0];
+                    return (
+                      <div
+                        key={r.event.id}
+                        title={`${r.event.name} — ${fmtRange(
+                          r.scheduledStart!,
+                          r.scheduledEnd!,
+                        )}`}
+                        style={{
+                          position: "absolute",
+                          top: top + 2,
+                          left: 2,
+                          right: 2,
+                          height: Math.max(MIN_BLOCK_PX - 4, height - 4),
+                          background: color.bg,
+                          border: `1px solid ${color.border}`,
+                          borderRadius: 4,
+                          color: "#fff",
+                          padding: "4px 6px",
+                          fontSize: 11,
+                          fontWeight: 500,
+                          lineHeight: 1.2,
+                          overflow: "hidden",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "flex-start",
+                        }}
+                      >
+                        <div
+                          style={{
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {r.event.name}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            opacity: 0.85,
+                            marginTop: 1,
+                          }}
+                        >
+                          {fmtTime(r.scheduledStart!)}–
+                          {fmtTime(r.scheduledEnd!)}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function fmtHourTick(ms: number): string {
+  const d = new Date(ms);
+  // Compact label: drop the ":00" so the axis isn't visually noisy.
+  return d
+    .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    .replace(":00", "");
+}
+
+function floorToHour(ms: number): number {
+  const d = new Date(ms);
+  d.setMinutes(0, 0, 0);
+  return d.getTime();
+}
+
+function ceilToHour(ms: number): number {
+  const floored = floorToHour(ms);
+  return floored === ms ? floored : floored + 3600_000;
+}
 
 // Summary panel rendered above the table when any conflict exists.
 // Court conflicts are hard errors (red); player conflicts are
