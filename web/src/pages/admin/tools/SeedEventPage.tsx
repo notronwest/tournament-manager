@@ -38,6 +38,13 @@ export default function SeedEventPage() {
 
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  // Per-event current team count. Computed from event_registrations
+  // (doubles teams have 2 regs each, singles have 1). Surfaced in
+  // the event dropdown so we can pick "the event with fewest teams"
+  // when seeding for a comparison test.
+  const [teamCountByEvent, setTeamCountByEvent] = useState<
+    Map<string, number>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [tournamentId, setTournamentId] = useState<string>(
     searchParams.get("tournament") ?? "",
@@ -78,26 +85,59 @@ export default function SeedEventPage() {
     };
   }, [org]);
 
-  // Load events for the selected tournament.
+  // Load events for the selected tournament + their current team
+  // counts in one round-trip. Team count = regs/2 for doubles,
+  // regs/1 for singles — we compute locally rather than running an
+  // aggregate query, since the event list is short and this saves a
+  // second request.
   useEffect(() => {
     if (!tournamentId) {
       setEvents([]);
+      setTeamCountByEvent(new Map());
       return;
     }
     let cancelled = false;
     (async () => {
-      const { data, error: eErr } = await supabase
-        .from("events")
-        .select("*")
-        .eq("tournament_id", tournamentId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true });
+      const [evRes, regsRes] = await Promise.all([
+        supabase
+          .from("events")
+          .select("*")
+          .eq("tournament_id", tournamentId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("event_registrations")
+          .select("event_id, events!inner(tournament_id)")
+          .eq("events.tournament_id", tournamentId)
+          .is("deleted_at", null),
+      ]);
       if (cancelled) return;
-      if (eErr) {
-        setError(eErr.message);
+      if (evRes.error) {
+        setError(evRes.error.message);
         return;
       }
-      setEvents(data ?? []);
+      if (regsRes.error) {
+        setError(regsRes.error.message);
+        return;
+      }
+      const evs = evRes.data ?? [];
+      setEvents(evs);
+
+      // Group regs by event, then convert to team counts using the
+      // event's own format.
+      const regsByEvent = new Map<string, number>();
+      for (const r of regsRes.data ?? []) {
+        regsByEvent.set(r.event_id, (regsByEvent.get(r.event_id) ?? 0) + 1);
+      }
+      const counts = new Map<string, number>();
+      for (const ev of evs) {
+        const regCount = regsByEvent.get(ev.id) ?? 0;
+        counts.set(
+          ev.id,
+          ev.format === "doubles" ? Math.floor(regCount / 2) : regCount,
+        );
+      }
+      setTeamCountByEvent(counts);
     })();
     return () => {
       cancelled = true;
@@ -217,6 +257,12 @@ export default function SeedEventPage() {
 
     setBusy(false);
     setResult({ teamsAdded: n, playersAdded: totalPlayers });
+    // Reflect the new total in the dropdown without a full refetch.
+    setTeamCountByEvent((prev) => {
+      const next = new Map(prev);
+      next.set(selectedEvent.id, (prev.get(selectedEvent.id) ?? 0) + n);
+      return next;
+    });
   };
 
   if (!org) return null;
@@ -280,11 +326,17 @@ export default function SeedEventPage() {
                   : "Pick an event…"
                 : "Pick a tournament first"}
             </option>
-            {events.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name} · {e.format} · {e.gender}
-              </option>
-            ))}
+            {events.map((e) => {
+              const teamCount = teamCountByEvent.get(e.id) ?? 0;
+              const capSuffix = e.max_teams ? ` / ${e.max_teams}` : "";
+              return (
+                <option key={e.id} value={e.id}>
+                  {e.name} · {e.format} · {e.gender} · {teamCount}
+                  {capSuffix}{" "}
+                  {teamCount === 1 ? "team" : "teams"}
+                </option>
+              );
+            })}
           </select>
         </label>
 
