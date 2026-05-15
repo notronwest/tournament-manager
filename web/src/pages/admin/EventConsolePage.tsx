@@ -1851,16 +1851,23 @@ function PlayoffSection({
     setBusy(true);
     const rows: Database["public"]["Tables"]["matches"]["Insert"][] = [];
 
-    // Copy the event's medal-round defaults into every playoff match
-    // we create. Each match gets a concrete format/points/win-by/
-    // minutes that can be edited per-match without ambiguity. If the
-    // organizer later changes the event-level defaults, in-flight
-    // playoff matches keep the values they were generated with.
+    // Two config bundles. For R=1 every match is a medal match and
+    // uses medalConfig. For R=2 the semis (round 1) use semiConfig
+    // and the final + bronze (round 2) use medalConfig. Values are
+    // copied onto each match row at generation so per-match edits
+    // diverge cleanly and event-default changes don't retro-rewrite
+    // an in-flight bracket.
     const medalConfig = {
       match_format: event.medal_match_format,
       match_points_to_win: event.medal_points_to_win,
       match_win_by: event.medal_win_by,
       match_minutes_per_game: event.medal_minutes_per_game,
+    } as const;
+    const semiConfig = {
+      match_format: event.semifinal_match_format,
+      match_points_to_win: event.semifinal_points_to_win,
+      match_win_by: event.semifinal_win_by,
+      match_minutes_per_game: event.semifinal_minutes_per_game,
     } as const;
 
     if (R === 1) {
@@ -1880,6 +1887,7 @@ function PlayoffSection({
       }
     } else {
       // R=2, N=4: two semis (1v4, 2v3) → gold final + bronze game.
+      // Semis carry semiConfig; round 2 carries medalConfig.
       rows.push({
         event_id: event.id,
         stage: "playoff",
@@ -1888,7 +1896,7 @@ function PlayoffSection({
         team_a_reg_id: top[0].captainRegId,
         team_b_reg_id: top[3].captainRegId,
         status: "pending",
-        ...medalConfig,
+        ...semiConfig,
       });
       rows.push({
         event_id: event.id,
@@ -1898,7 +1906,7 @@ function PlayoffSection({
         team_a_reg_id: top[1].captainRegId,
         team_b_reg_id: top[2].captainRegId,
         status: "pending",
-        ...medalConfig,
+        ...semiConfig,
       });
       // Round 2 gold + bronze placeholders. team slots are populated
       // via feedForwardPlayoffWinners as the semis complete.

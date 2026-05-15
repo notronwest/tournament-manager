@@ -202,6 +202,10 @@ export type Database = {
           pool_minutes_per_game: number
           rating_source: Database["public"]["Enums"]["rating_source"] | null
           scheduled_start_at: string | null
+          semifinal_match_format: Database["public"]["Enums"]["medal_match_format"]
+          semifinal_minutes_per_game: number
+          semifinal_points_to_win: number
+          semifinal_win_by: number
           status: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff: number
           timeouts_per_game: number
@@ -234,6 +238,10 @@ export type Database = {
           pool_minutes_per_game?: number
           rating_source?: Database["public"]["Enums"]["rating_source"] | null
           scheduled_start_at?: string | null
+          semifinal_match_format?: Database["public"]["Enums"]["medal_match_format"]
+          semifinal_minutes_per_game?: number
+          semifinal_points_to_win?: number
+          semifinal_win_by?: number
           status?: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff?: number
           timeouts_per_game?: number
@@ -266,6 +274,10 @@ export type Database = {
           pool_minutes_per_game?: number
           rating_source?: Database["public"]["Enums"]["rating_source"] | null
           scheduled_start_at?: string | null
+          semifinal_match_format?: Database["public"]["Enums"]["medal_match_format"]
+          semifinal_minutes_per_game?: number
+          semifinal_points_to_win?: number
+          semifinal_win_by?: number
           status?: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff?: number
           timeouts_per_game?: number

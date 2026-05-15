@@ -54,6 +54,18 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [medalPointsToWin, setMedalPointsToWin] = useState("15");
   const [medalWinBy, setMedalWinBy] = useState("2");
   const [medalMinutesPerGame, setMedalMinutesPerGame] = useState("20");
+  // Semifinal format — only meaningful when playoff_rounds = 2.
+  // For R=1 (pairwise medals) the semifinal fields are saved but
+  // ignored at generation time. Defaults intentionally match pool
+  // play (11 win-by-2, single game, 15 min) so the common pattern
+  // "semis play pool rules, final + bronze play longer medal rules"
+  // works without the organizer touching this section.
+  const [semifinalMatchFormat, setSemifinalMatchFormat] = useState<
+    "single_game" | "best_of_3"
+  >("single_game");
+  const [semifinalPointsToWin, setSemifinalPointsToWin] = useState("11");
+  const [semifinalWinBy, setSemifinalWinBy] = useState("2");
+  const [semifinalMinutesPerGame, setSemifinalMinutesPerGame] = useState("15");
   // Eligibility (all optional; blank = no bound)
   const [minRating, setMinRating] = useState("");
   const [maxRating, setMaxRating] = useState("");
@@ -142,6 +154,10 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setMedalPointsToWin(String(ev.medal_points_to_win));
         setMedalWinBy(String(ev.medal_win_by));
         setMedalMinutesPerGame(String(ev.medal_minutes_per_game));
+        setSemifinalMatchFormat(ev.semifinal_match_format);
+        setSemifinalPointsToWin(String(ev.semifinal_points_to_win));
+        setSemifinalWinBy(String(ev.semifinal_win_by));
+        setSemifinalMinutesPerGame(String(ev.semifinal_minutes_per_game));
         setMinRating(ev.min_rating != null ? String(ev.min_rating) : "");
         setMaxRating(ev.max_rating != null ? String(ev.max_rating) : "");
         setRatingSource(ev.rating_source ?? "");
@@ -228,6 +244,10 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       medal_points_to_win: clampInt(medalPointsToWin, 15, 1, 99),
       medal_win_by: clampInt(medalWinBy, 2, 1, 9),
       medal_minutes_per_game: clampInt(medalMinutesPerGame, 20, 1, 120),
+      semifinal_match_format: semifinalMatchFormat,
+      semifinal_points_to_win: clampInt(semifinalPointsToWin, 11, 1, 99),
+      semifinal_win_by: clampInt(semifinalWinBy, 2, 1, 9),
+      semifinal_minutes_per_game: clampInt(semifinalMinutesPerGame, 15, 1, 120),
       min_rating: minRatingNum,
       max_rating: maxRatingNum,
       rating_source: ratingSource || null,
@@ -659,9 +679,89 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                 </div>
               )}
 
+              {/* For R=2 brackets, surface the semifinal format
+                  block above the medal-match block. Semis often
+                  play to pool-play rules while the medal matches
+                  themselves run longer — splitting them lets the
+                  organizer configure both before generation rather
+                  than after via per-match overrides. The semifinal
+                  fields are still saved on R=1 events (so toggling
+                  rounds back and forth doesn't lose data) but
+                  ignored at generation time. */}
+              {roundsNum === 2 && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    paddingTop: 12,
+                    borderTop: "1px dashed #e5e7eb",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#444",
+                      marginBottom: 8,
+                    }}
+                  >
+                    Semifinal format
+                  </div>
+                  <FieldRow>
+                    <Field label="Match format">
+                      <select
+                        value={semifinalMatchFormat}
+                        onChange={(e) =>
+                          setSemifinalMatchFormat(
+                            e.target.value as "single_game" | "best_of_3",
+                          )
+                        }
+                        style={inputStyle}
+                      >
+                        <option value="single_game">1 game</option>
+                        <option value="best_of_3">Best of 3</option>
+                      </select>
+                    </Field>
+                    <Field label="Points to win">
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={semifinalPointsToWin}
+                        onChange={(e) => setSemifinalPointsToWin(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </Field>
+                    <Field label="Win by">
+                      <input
+                        type="number"
+                        min="1"
+                        max="9"
+                        value={semifinalWinBy}
+                        onChange={(e) => setSemifinalWinBy(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </Field>
+                    <Field label="Minutes per game">
+                      <input
+                        type="number"
+                        min="1"
+                        max="120"
+                        value={semifinalMinutesPerGame}
+                        onChange={(e) =>
+                          setSemifinalMinutesPerGame(e.target.value)
+                        }
+                        style={inputStyle}
+                      />
+                    </Field>
+                  </FieldRow>
+                </div>
+              )}
+
               {/* Medal match format — separated from pool scoring
                   because medal games often play longer (15 win-by-2,
-                  best-of-3) than pool games. */}
+                  best-of-3) than pool games. Label depends on
+                  whether this is "the medal matches" (R=1 pairwise)
+                  or "the final + bronze game" (R=2 bracket). */}
               <div
                 style={{
                   marginTop: 4,
@@ -677,7 +777,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                     marginBottom: 8,
                   }}
                 >
-                  Medal match format
+                  {roundsNum === 2
+                    ? "Final + bronze format"
+                    : "Medal match format"}
                 </div>
                 <FieldRow>
                   <Field
