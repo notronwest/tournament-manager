@@ -7,7 +7,7 @@ import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
-import CreateTournamentPage from "./pages/admin/CreateTournamentPage";
+import TournamentFormPage from "./pages/admin/TournamentFormPage";
 import EventConsolePage from "./pages/admin/EventConsolePage";
 import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
@@ -106,10 +106,17 @@ export default function App() {
           element={<SeedEventPage />}
         />
         <Route path="tournaments" element={<TournamentsListPage />} />
-        <Route path="tournaments/new" element={<CreateTournamentPage />} />
+        <Route
+          path="tournaments/new"
+          element={<TournamentFormPage mode="create" />}
+        />
         <Route
           path="tournaments/:tournamentSlug"
           element={<TournamentDetailPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/edit"
+          element={<TournamentFormPage mode="edit" />}
         />
         <Route
           path="tournaments/:tournamentSlug/courts"

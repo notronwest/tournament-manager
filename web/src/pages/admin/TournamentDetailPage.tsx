@@ -331,6 +331,22 @@ export default function TournamentDetailPage() {
             busy={busyAction === "tstatus"}
             onSetStatus={setTournamentStatus}
           />
+          {/* Edit tournament details — name, dates, description,
+              location, registration window, entry fee, court count.
+              Status transitions stay on this page (the buttons just
+              to the left of this) because they have public-visibility
+              side effects worth surfacing in context. */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/edit`}
+            style={{
+              ...primaryLinkBtn,
+              background: "#fff",
+              color: "#555",
+              border: "1px solid #e2e2e2",
+            }}
+          >
+            Edit
+          </Link>
           {/* Public-facing tournament page. Available once the
               tournament is in a publicly-readable status (published,
               closed, or completed) — drafts have nothing to show on
