@@ -466,12 +466,30 @@ export default function TournamentDetailPage() {
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
             Events ({events.length})
           </h2>
-          <Link
-            to={`/admin/${org.slug}/tournaments/${t.slug}/events/new`}
-            style={primaryLinkBtnSmall}
-          >
-            + New event
-          </Link>
+          <div style={{ display: "flex", gap: 8 }}>
+            {/* Bulk edit — name, status, scheduled start, max teams,
+                event fee for every event at once. Per-event detail
+                edits still live on the per-event edit page. */}
+            {events.length > 0 && (
+              <Link
+                to={`/admin/${org.slug}/tournaments/${t.slug}/events/edit`}
+                style={{
+                  ...primaryLinkBtnSmall,
+                  background: "#fff",
+                  color: "#555",
+                  border: "1px solid #e2e2e2",
+                }}
+              >
+                Edit all
+              </Link>
+            )}
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/events/new`}
+              style={primaryLinkBtnSmall}
+            >
+              + New event
+            </Link>
+          </div>
         </header>
 
         {events.length === 0 ? (
