@@ -14,6 +14,7 @@ import type { Database } from "../../types/supabase";
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
+type PlayerGender = Database["public"]["Enums"]["player_gender"];
 
 // Per-event entry on the form. Tracks whether the user has selected
 // this event and, for doubles, the partner details the user typed in
@@ -70,6 +71,12 @@ export default function RegisterPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
+  const [gender, setGender] = useState<PlayerGender | "">("");
+  // Self-reported ratings — strings so the inputs stay controlled
+  // even while empty/being typed; parsed at save time.
+  const [ratingDoubles, setRatingDoubles] = useState("");
+  const [ratingMixed, setRatingMixed] = useState("");
+  const [ratingSingles, setRatingSingles] = useState("");
 
   // Per-event selection state, keyed by event_id.
   const [selections, setSelections] = useState<Map<string, EventSelection>>(
@@ -185,6 +192,22 @@ export default function RegisterPage() {
         setFirstName(myPlayer.first_name ?? "");
         setLastName(myPlayer.last_name ?? "");
         setPhone(myPlayer.phone ?? "");
+        setGender(myPlayer.gender ?? "");
+        setRatingDoubles(
+          myPlayer.self_rating_doubles != null
+            ? String(myPlayer.self_rating_doubles)
+            : "",
+        );
+        setRatingMixed(
+          myPlayer.self_rating_mixed != null
+            ? String(myPlayer.self_rating_mixed)
+            : "",
+        );
+        setRatingSingles(
+          myPlayer.self_rating_singles != null
+            ? String(myPlayer.self_rating_singles)
+            : "",
+        );
       }
 
       // 4. Existing registrations for this user in this tournament,
@@ -275,6 +298,10 @@ export default function RegisterPage() {
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: phone.trim(),
+      gender: gender || null,
+      ratingDoubles: parseRating(ratingDoubles),
+      ratingMixed: parseRating(ratingMixed),
+      ratingSingles: parseRating(ratingSingles),
     });
     if (!me) {
       setError("Failed to save your player record.");
@@ -547,7 +574,76 @@ export default function RegisterPage() {
                 disabled={submitting}
               />
             </Field>
+            <Field label="Gender">
+              <select
+                value={gender}
+                onChange={(e) =>
+                  setGender(e.target.value as PlayerGender | "")
+                }
+                style={inputStyle}
+                disabled={submitting}
+              >
+                <option value="">—</option>
+                <option value="M">Male</option>
+                <option value="F">Female</option>
+                <option value="X">Other / prefer not to say</option>
+              </select>
+            </Field>
           </FieldRow>
+
+          <div style={{ marginTop: 12 }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: "#666",
+                marginBottom: 6,
+              }}
+            >
+              Self-reported rating (optional — helps organizers seed
+              brackets). Same-gender doubles, mixed doubles, singles.
+            </div>
+            <FieldRow>
+              <Field label="Doubles">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="9.99"
+                  value={ratingDoubles}
+                  onChange={(e) => setRatingDoubles(e.target.value)}
+                  style={inputStyle}
+                  disabled={submitting}
+                  placeholder="e.g. 3.5"
+                />
+              </Field>
+              <Field label="Mixed doubles">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="9.99"
+                  value={ratingMixed}
+                  onChange={(e) => setRatingMixed(e.target.value)}
+                  style={inputStyle}
+                  disabled={submitting}
+                  placeholder="e.g. 3.5"
+                />
+              </Field>
+              <Field label="Singles">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="9.99"
+                  value={ratingSingles}
+                  onChange={(e) => setRatingSingles(e.target.value)}
+                  style={inputStyle}
+                  disabled={submitting}
+                  placeholder="e.g. 3.0"
+                />
+              </Field>
+            </FieldRow>
+          </div>
         </Section>
 
         <Section title="Pick your events">
@@ -910,11 +1006,19 @@ async function ensureSelfPlayer(args: {
   firstName: string;
   lastName: string;
   phone: string;
+  gender: PlayerGender | null;
+  ratingDoubles: number | null;
+  ratingMixed: number | null;
+  ratingSingles: number | null;
 }): Promise<Player | null> {
   const payload = {
     first_name: args.firstName,
     last_name: args.lastName,
     phone: args.phone || null,
+    gender: args.gender,
+    self_rating_doubles: args.ratingDoubles,
+    self_rating_mixed: args.ratingMixed,
+    self_rating_singles: args.ratingSingles,
   };
   // If the existing record is already linked to this auth user,
   // update it in place.
@@ -1064,6 +1168,20 @@ function Empty({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+// Strict-ish rating parser. Empty string → null (no rating).
+// Anything else gets parseFloat'd and clamped to the column's
+// allowable [0, 9.99] range. Junk input (NaN) also becomes null
+// so we don't trip the DB check constraint.
+function parseRating(s: string): number | null {
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  const n = parseFloat(trimmed);
+  if (Number.isNaN(n)) return null;
+  if (n < 0) return 0;
+  if (n > 9.99) return 9.99;
+  return n;
 }
 
 function capitalize(s: string): string {
