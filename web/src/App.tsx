@@ -11,6 +11,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
+import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
@@ -37,6 +38,13 @@ export default function App() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Public tournament pages — anonymous-readable. RLS already
+          restricts to status in (published, closed, completed). */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug"
+        element={<PublicTournamentPage />}
+      />
 
       {/* /admin → org picker (or auto-redirect if user has only one org) */}
       <Route
