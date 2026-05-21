@@ -569,7 +569,13 @@ export default function RegisterPage() {
         Register for {tournament.name}
       </h1>
       <p style={{ color: "#666", margin: "0 0 24px", fontSize: 14 }}>
-        Welcome back, <strong>{me?.first_name ?? user?.email}</strong>.{" "}
+        {me?.first_name ? (
+          <>
+            Welcome back, <strong>{me.first_name}</strong>.{" "}
+          </>
+        ) : (
+          <>Welcome back.{" "}</>
+        )}
         <Link
           to={`/profile?return=${encodeURIComponent(`/t/${orgSlug}/${tournamentSlug}/register`)}`}
           style={{

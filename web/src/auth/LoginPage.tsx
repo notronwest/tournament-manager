@@ -2,7 +2,17 @@ import { useState, type CSSProperties, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
 
-type Mode = "signin" | "signup" | "magic";
+// Three modes:
+//   magic  — email-only "get a link" flow. Default for public-flow
+//            users (anyone bounced here from /t/...) because it's the
+//            simplest path for non-savvy users: one field, click a
+//            link in their inbox, done. The actual password gets set
+//            later on the profile page if they want one.
+//   signin — returning user with a password.
+//   signup — explicit "create an account with a password right now."
+//            Kept for users who'd rather pick their own password
+//            upfront; not the default.
+type Mode = "magic" | "signin" | "signup";
 
 export default function LoginPage() {
   const {
@@ -17,12 +27,32 @@ export default function LoginPage() {
     (location.state as { from?: { pathname?: string } } | null)?.from
       ?.pathname || "/admin";
 
-  const [mode, setMode] = useState<Mode>("signin");
+  // Public flow vs. admin flow defaults. Anyone who hit this page
+  // from /t/... (the public registration funnel) defaults to magic
+  // link because the typical user is signing up for the first time
+  // and shouldn't have to invent a password before they understand
+  // what they're being asked to do. Anyone who came in via /admin or
+  // typed /login directly defaults to the password form because they
+  // probably already have one.
+  const isPublicFlow = from.startsWith("/t/");
+  const [mode, setMode] = useState<Mode>(isPublicFlow ? "magic" : "signin");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Two post-submit confirmation states that both render the same
+  // "check your email" panel. Tracked separately so the copy can
+  // differ slightly per flow if we want.
   const [magicSent, setMagicSent] = useState(false);
+  const [signupPending, setSignupPending] = useState(false);
+
+  // Absolute URL Supabase should redirect to from the confirmation /
+  // magic-link email. We hand it the URL the user was *trying* to
+  // reach so they land back at the same tournament register page
+  // after clicking the link, instead of getting dumped at /admin.
+  // RequireAuth + RequireProfile handle the rest of the bounce.
+  const emailRedirectTo = `${window.location.origin}${from}`;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -34,13 +64,18 @@ export default function LoginPage() {
         if (error) throw new Error(error.message);
         navigate(from, { replace: true });
       } else if (mode === "signup") {
-        const { error } = await signUpWithPassword(email, password);
+        const { error } = await signUpWithPassword(
+          email,
+          password,
+          emailRedirectTo,
+        );
         if (error) throw new Error(error.message);
-        // If the project requires email confirmation, the user won't be
-        // signed in yet — they get a confirmation email. Surface that.
-        navigate(from, { replace: true });
+        // Supabase requires email confirmation by default, so the
+        // user isn't actually signed in yet — show them the "check
+        // your email" panel instead of navigating away.
+        setSignupPending(true);
       } else {
-        const { error } = await signInWithMagicLink(email);
+        const { error } = await signInWithMagicLink(email, emailRedirectTo);
         if (error) throw new Error(error.message);
         setMagicSent(true);
       }
@@ -53,10 +88,33 @@ export default function LoginPage() {
 
   const onGoogle = async () => {
     setError(null);
-    const { error } = await signInWithGoogle();
+    const { error } = await signInWithGoogle(emailRedirectTo);
     // OAuth navigates away on success; we only see this branch on error.
     if (error) setError(error.message);
   };
+
+  // Friendlier copy when we know the user is mid-registration — they
+  // get to see what they're being asked to do this for.
+  const sentToEmailPanel = (heading: string, body: string) => (
+    <div
+      style={{
+        padding: 16,
+        background: "#fffbeb",
+        border: "1px solid #fde68a",
+        borderRadius: 6,
+        color: "#7a5d00",
+        fontSize: 13,
+        lineHeight: 1.55,
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>{heading}</div>
+      <div>{body}</div>
+      <div style={{ marginTop: 10, color: "#9a7d00", fontSize: 12 }}>
+        Sent to <strong>{email}</strong>. The link will bring you back
+        here to finish.
+      </div>
+    </div>
+  );
 
   return (
     <main
@@ -81,11 +139,13 @@ export default function LoginPage() {
       >
         <h1 style={{ margin: "0 0 4px", fontSize: 22 }}>Tournament Manager</h1>
         <p style={{ margin: "0 0 24px", color: "#666", fontSize: 13 }}>
-          Sign in to manage tournaments.
+          {isPublicFlow
+            ? "Sign in or get started below — we just need to know who you are before you register."
+            : "Sign in to manage tournaments."}
         </p>
 
         <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
-          {(["signin", "signup", "magic"] as const).map((m) => (
+          {(["magic", "signin", "signup"] as const).map((m) => (
             <button
               key={m}
               type="button"
@@ -93,36 +153,48 @@ export default function LoginPage() {
                 setMode(m);
                 setError(null);
                 setMagicSent(false);
+                setSignupPending(false);
               }}
               style={tabStyle(mode === m)}
             >
-              {m === "signin"
-                ? "Sign in"
-                : m === "signup"
-                  ? "Sign up"
-                  : "Magic link"}
+              {m === "magic"
+                ? "Get started"
+                : m === "signin"
+                  ? "Sign in"
+                  : "New password"}
             </button>
           ))}
         </div>
 
-        {magicSent ? (
-          <div
-            style={{
-              padding: 14,
-              background: "#fffbeb",
-              border: "1px solid #fde68a",
-              borderRadius: 6,
-              color: "#7a5d00",
-              fontSize: 13,
-            }}
-          >
-            Magic link sent to <strong>{email}</strong>. Check your inbox.
-          </div>
-        ) : (
+        {magicSent
+          ? sentToEmailPanel(
+              "Check your email",
+              "We just sent you a link. Click it to sign in — you'll finish your profile and register on the next screen.",
+            )
+          : signupPending
+            ? sentToEmailPanel(
+                "Confirm your email",
+                "We sent a confirmation link to verify your address. Click it to finish creating your account.",
+              )
+            : (
           <form
             onSubmit={onSubmit}
             style={{ display: "flex", flexDirection: "column", gap: 12 }}
           >
+            {mode === "magic" && (
+              <p
+                style={{
+                  margin: "0 0 4px",
+                  color: "#666",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                }}
+              >
+                Enter your email and we'll send you a link. New here? No
+                password needed — you'll set one (if you want) along with
+                your profile after you click the link.
+              </p>
+            )}
             <Field label="Email">
               <input
                 type="email"
@@ -153,11 +225,11 @@ export default function LoginPage() {
             <button type="submit" disabled={busy} style={primaryBtnStyle(busy)}>
               {busy
                 ? "Working…"
-                : mode === "signin"
-                  ? "Sign in"
-                  : mode === "signup"
-                    ? "Create account"
-                    : "Send magic link"}
+                : mode === "magic"
+                  ? "Email me a link"
+                  : mode === "signin"
+                    ? "Sign in"
+                    : "Create account"}
             </button>
           </form>
         )}

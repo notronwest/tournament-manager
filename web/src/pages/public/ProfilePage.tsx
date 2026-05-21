@@ -27,7 +27,7 @@ type PlayerGender = Database["public"]["Enums"]["player_gender"];
 // Defaults to /admin so an "Edit profile" link from anywhere lands
 // safely if no return is provided.
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, updatePassword } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("return") || "/admin";
@@ -44,6 +44,13 @@ export default function ProfilePage() {
   const [ratingDoubles, setRatingDoubles] = useState("");
   const [ratingMixed, setRatingMixed] = useState("");
   const [ratingSingles, setRatingSingles] = useState("");
+  // Optional password setup shown only on first-fill — lets a
+  // magic-link signup opt into a password while they're already
+  // filling in their profile, so they don't have to come back later
+  // to do it. Both fields stay optional; leaving them blank just
+  // means "I'll keep using magic links."
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -114,7 +121,33 @@ export default function ProfilePage() {
       setError("First and last name are required.");
       return;
     }
+    // Password fields are entirely optional but, if one is filled,
+    // both must be filled and they must match. Validate before
+    // touching the database so we don't half-save.
+    const wantsPassword = !!(newPassword || confirmPassword);
+    if (wantsPassword) {
+      if (newPassword.length < 6) {
+        setError("Password must be at least 6 characters.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setError("Passwords don't match.");
+        return;
+      }
+    }
     setBusy(true);
+
+    // Update password first — if it fails we want to bail out before
+    // we've started touching player rows. Supabase's updateUser is
+    // idempotent so a retry after a profile error is safe.
+    if (wantsPassword) {
+      const { error: pwErr } = await updatePassword(newPassword);
+      if (pwErr) {
+        setError(pwErr.message);
+        setBusy(false);
+        return;
+      }
+    }
 
     const payload = {
       first_name: firstName.trim(),
@@ -190,11 +223,12 @@ export default function ProfilePage() {
   }
 
   // First-fill heading vs. edit heading — small touch but tells the
-  // returning user "you've been here before."
+  // returning user "you've been here before." We deliberately don't
+  // try to greet by name here: on first fill we don't have one yet,
+  // and falling back to the email local-part (e.g. "Welcome,
+  // ronaldwest123 👋") reads worse than just "Welcome 👋".
   const isFirstFill = !existingPlayer || !existingPlayer.first_name;
-  const heading = isFirstFill
-    ? `Welcome${user?.email ? `, ${user.email.split("@")[0]}` : ""} 👋`
-    : "Your profile";
+  const heading = isFirstFill ? "Welcome 👋" : "Your profile";
   const subhead = isFirstFill
     ? "Before you register, we need a few things about you. You only have to do this once — every future tournament uses the same profile."
     : "Anything you update here flows into every event you've registered for.";
@@ -317,6 +351,43 @@ export default function ProfilePage() {
             </Field>
           </FieldRow>
         </div>
+
+        {isFirstFill && (
+          <div>
+            <div style={{ fontSize: 13, color: "#444", marginBottom: 4 }}>
+              <strong>Set a password</strong>{" "}
+              <span style={{ color: "#888" }}>
+                (optional — you can keep signing in with email links if
+                you prefer)
+              </span>
+            </div>
+            <FieldRow>
+              <Field label="Password">
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={6}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  style={inputStyle}
+                  disabled={busy}
+                  placeholder="At least 6 characters"
+                />
+              </Field>
+              <Field label="Confirm password">
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={6}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={inputStyle}
+                  disabled={busy}
+                />
+              </Field>
+            </FieldRow>
+          </div>
+        )}
 
         {error && (
           <div
