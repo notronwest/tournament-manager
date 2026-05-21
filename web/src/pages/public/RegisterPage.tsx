@@ -82,7 +82,13 @@ export default function RegisterPage() {
   const [phase, setPhase] = useState<"form" | "submitting" | "done">("form");
   const [doneResult, setDoneResult] = useState<{
     registeredEventNames: string[];
-    partnerInvites: { eventName: string; partnerEmail: string; url: string }[];
+    partnerInvites: {
+      eventName: string;
+      partnerEmail: string;
+      url: string;
+      emailSent: boolean;
+      emailError?: string;
+    }[];
   } | null>(null);
 
   useEffect(() => {
@@ -281,6 +287,8 @@ export default function RegisterPage() {
       eventName: string;
       partnerEmail: string;
       url: string;
+      emailSent: boolean;
+      emailError?: string;
     }[] = [];
 
     for (const ev of chosen) {
@@ -345,10 +353,38 @@ export default function RegisterPage() {
           return;
         }
         const url = `${window.location.origin}/t/${orgSlug}/${tournamentSlug}/invites/${invite.token}`;
+
+        // Fire-and-await the send. Failures are non-fatal — we
+        // still show the copyable URL so the inviter can share
+        // manually even when email delivery is misconfigured or
+        // temporarily down.
+        let emailSent = false;
+        let emailError: string | undefined;
+        try {
+          const { error: sendErr } = await supabase.functions.invoke(
+            "send-partner-invite",
+            {
+              body: {
+                inviteId: invite.id,
+                baseUrl: window.location.origin,
+              },
+            },
+          );
+          if (sendErr) {
+            emailError = sendErr.message;
+          } else {
+            emailSent = true;
+          }
+        } catch (e) {
+          emailError = e instanceof Error ? e.message : String(e);
+        }
+
         partnerInvites.push({
           eventName: ev.name,
           partnerEmail: sel.partnerEmail.trim(),
           url,
+          emailSent,
+          emailError,
         });
       }
     }
@@ -403,8 +439,9 @@ export default function RegisterPage() {
               Partner invite{doneResult.partnerInvites.length === 1 ? "" : "s"}
             </h2>
             <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
-              Email delivery is coming in the next deploy. For now, copy
-              each link below and send it to your partner.
+              {doneResult.partnerInvites.every((i) => i.emailSent)
+                ? "We emailed your partner(s) a confirmation link. You can also share the link directly:"
+                : "Heads up — some invite emails didn't go out (details below). The links still work if you copy them yourself."}
             </p>
             <div
               style={{
@@ -734,10 +771,14 @@ function PartnerInviteCard({
   eventName,
   partnerEmail,
   url,
+  emailSent,
+  emailError,
 }: {
   eventName: string;
   partnerEmail: string;
   url: string;
+  emailSent: boolean;
+  emailError?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
@@ -758,10 +799,63 @@ function PartnerInviteCard({
         borderRadius: 6,
       }}
     >
-      <div style={{ fontSize: 13, fontWeight: 500 }}>{eventName}</div>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 500 }}>{eventName}</div>
+        {emailSent ? (
+          <span
+            style={{
+              padding: "1px 8px",
+              background: "#dcfce7",
+              color: "#166534",
+              borderRadius: 3,
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.3,
+            }}
+          >
+            Emailed
+          </span>
+        ) : (
+          <span
+            title={emailError ?? undefined}
+            style={{
+              padding: "1px 8px",
+              background: "#fffbeb",
+              color: "#92400e",
+              borderRadius: 3,
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.3,
+            }}
+          >
+            Email failed
+          </span>
+        )}
+      </div>
       <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
         Invite for <strong>{partnerEmail}</strong>
       </div>
+      {emailError && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "#92400e",
+            marginTop: 4,
+            fontFamily: "ui-monospace, monospace",
+          }}
+        >
+          {emailError}
+        </div>
+      )}
       <div
         style={{
           display: "flex",
