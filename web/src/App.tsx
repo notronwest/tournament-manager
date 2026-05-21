@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
@@ -25,8 +26,13 @@ import TournamentsListPage from "./pages/admin/TournamentsListPage";
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<HomePage />} />
+    <>
+      {/* Global top banner — rendered once for the whole app.
+          SiteHeader hides itself on /login so the only "Sign in"
+          surface there is the page itself. */}
+      <SiteHeader />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
 
       {/* Public tournament pages — anonymous-readable. RLS already
@@ -139,7 +145,8 @@ export default function App() {
         />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }

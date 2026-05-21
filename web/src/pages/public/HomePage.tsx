@@ -166,22 +166,6 @@ export default function HomePage() {
         </div>
       )}
 
-      <footer
-        style={{
-          marginTop: 48,
-          paddingTop: 24,
-          borderTop: "1px solid #f0f0f0",
-          color: "#999",
-          fontSize: 12,
-          textAlign: "center",
-        }}
-      >
-        Organizer?{" "}
-        <Link to="/admin" style={{ color: "#2563eb" }}>
-          Sign in
-        </Link>{" "}
-        to manage your tournaments.
-      </footer>
     </Shell>
   );
 }

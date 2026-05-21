@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useAuth } from "../../auth/AuthProvider";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 
 // Two-column layout: org-scoped sidebar nav on the left, route content on
 // the right. The class names (`admin-layout`, `admin-sidebar`,
 // `admin-main`) are kept stable so index.css mobile overrides can target
 // them when we add responsive rules later.
+//
+// Identity (who am I, sign-out) is owned by the global SiteHeader
+// rendered at the App level — this sidebar only owns *in-org*
+// navigation (Overview, Tournaments, Tools).
 export default function AdminLayout() {
-  const { user, signOut } = useAuth();
   const { org, role, loading, error } = useCurrentOrg();
   const navigate = useNavigate();
 
@@ -92,36 +94,6 @@ export default function AdminLayout() {
             Seed test data
           </SideLink>
         </nav>
-
-        <div
-          style={{
-            padding: 16,
-            borderTop: "1px solid #e2e2e2",
-            fontSize: 12,
-            color: "#666",
-          }}
-        >
-          <div style={{ wordBreak: "break-all" }}>{user?.email}</div>
-          <button
-            onClick={async () => {
-              await signOut();
-              navigate("/login");
-            }}
-            style={{
-              marginTop: 8,
-              padding: "4px 10px",
-              fontSize: 12,
-              background: "transparent",
-              border: "1px solid #e2e2e2",
-              borderRadius: 4,
-              cursor: "pointer",
-              color: "#555",
-              fontFamily: "inherit",
-            }}
-          >
-            Sign out
-          </button>
-        </div>
       </aside>
 
       <main
