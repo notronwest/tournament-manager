@@ -217,10 +217,13 @@ will reject the redirect.
 These aren't in code — Supabase CLI doesn't manage them yet:
 
 1. **Auth → URL Configuration → Redirect URLs**: add
-   - `http://localhost:5173/admin`
-   - `http://localhost:5173/**` (broader, easier for dev)
-   - your eventual production URL (e.g. `https://tournament-manager.<your>.workers.dev/admin`)
-   Without this, magic links + Google OAuth reject the redirect.
+   - `http://localhost:5173/**` (default Vite port)
+   - `http://localhost:5174/**` (Vite falls through to 5174 when 5173 is taken — common in dev)
+   - your production URL (e.g. `https://tournaments.wmpc.app/**`)
+   If a redirect URL isn't on this list, Supabase silently falls back
+   to the **Site URL** — which is why magic links generated on
+   localhost can end up pointing at production. Whatever port your
+   `npm run dev` starts on must be allow-listed.
 
 2. **Auth → Providers → Google**: paste OAuth credentials from Google Cloud Console. Until this is configured, the "Continue with Google" button on `/login` will fail. Email/password and magic link work without this step.
 
