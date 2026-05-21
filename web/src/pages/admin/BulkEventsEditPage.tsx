@@ -364,11 +364,18 @@ export default function BulkEventsEditPage() {
                         <input
                           type="datetime-local"
                           value={d.scheduledStartLocal}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             updateDraft(d.id, {
                               scheduledStartLocal: e.target.value,
-                            })
-                          }
+                            });
+                            // Close the native picker after a value
+                            // change. Without this the calendar/clock
+                            // popup just sits there until you click
+                            // somewhere else, which is annoying in a
+                            // bulk-edit context where you're zipping
+                            // between rows.
+                            e.currentTarget.blur();
+                          }}
                           style={cellInputStyle}
                           disabled={savingAll}
                         />
