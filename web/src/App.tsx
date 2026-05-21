@@ -12,6 +12,7 @@ import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
+import RegisterPage from "./pages/public/RegisterPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
@@ -44,6 +45,16 @@ export default function App() {
       <Route
         path="/t/:orgSlug/:tournamentSlug"
         element={<PublicTournamentPage />}
+      />
+      {/* Registration — auth required. RequireAuth bounces to /login
+          and brings the user back here after sign-in via state.from. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/register"
+        element={
+          <RequireAuth>
+            <RegisterPage />
+          </RequireAuth>
+        }
       />
 
       {/* /admin → org picker (or auto-redirect if user has only one org) */}
