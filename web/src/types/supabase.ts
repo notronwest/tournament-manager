@@ -860,6 +860,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_partner_invite: {
+        Args: { p_invite_id: string }
+        Returns: undefined
+      }
       current_player_id: { Args: never; Returns: string }
       has_org_role: {
         Args: { min_role: Database["public"]["Enums"]["org_role"]; org: string }
