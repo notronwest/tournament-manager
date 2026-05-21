@@ -1,7 +1,6 @@
 import {
   useEffect,
   useState,
-  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -20,7 +19,6 @@ import type { Database } from "../../types/supabase";
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
-type PlayerGender = Database["public"]["Enums"]["player_gender"];
 
 // Per-event entry on the form. Tracks whether the user has selected
 // this event and, for doubles, the partner. The partner is a
@@ -31,27 +29,22 @@ type EventSelection = {
   partner: PlayerSelection;
 };
 
-// Auth-gated registration page. Reached via /t/:orgSlug/:tournamentSlug/register
-// — RequireAuth bounces unauthenticated visitors to /login and they
-// return here on signin.
+// Auth-gated registration page. Reached via /t/:orgSlug/:tournamentSlug/register.
+// RequireAuth bounces unauthenticated visitors to /login; RequireProfile
+// bounces anyone without a complete player profile to /profile?return=…
+// Both run before this component renders, so by the time we get here we
+// can assume `me` has a name.
 //
-// Single form covers:
-//   * "Your info" — pre-filled from the auth user's player row if
-//     there is one; otherwise empty. Saves on submit, optionally
-//     auto-linking an existing players row that has the matching
-//     email and no auth_user_id yet.
-//   * Event checklist — one row per event. Doubles events expand
-//     to capture partner name + email when checked.
-//
-// On submit:
-//   * The user's player record is created/updated.
-//   * For each selected event, an event_registrations row is inserted
-//     for the user.
-//   * For each doubles event with partner info, a player row is
-//     created (or matched by email) and a partner_invites row is
-//     created with a token. Emails ship in the next commit; for now
-//     we surface the invite URLs so the inviter can copy/share them
-//     manually.
+// The form is just two sections — pick events + pick partner — because
+// profile lives elsewhere now. On submit, for each selected event we
+// insert an event_registration. For doubles events we additionally
+// resolve the partner via PlayerPicker (existing player or "Add new")
+// and either:
+//   * auto-accept an existing pending invite from that partner to
+//     this user (the user picked the inviter; no new outbound invite),
+//     OR
+//   * create a new partner_invites row + call send-partner-invite to
+//     email them an accept link.
 export default function RegisterPage() {
   const { user } = useAuth();
   const { orgSlug, tournamentSlug } = useParams<{
@@ -62,7 +55,11 @@ export default function RegisterPage() {
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
-  const [existingPlayer, setExistingPlayer] = useState<Player | null>(null);
+  // Profile is guaranteed to exist (RequireProfile wraps this route).
+  // We load it for two reasons: we need the player id to insert
+  // registrations and to populate excludePlayerIds on the partner
+  // picker so the user can't pick themselves.
+  const [me, setMe] = useState<Player | null>(null);
   // Track which events the user is *already* registered for so we
   // don't double-register them. (Stored as a set of event_ids.)
   const [existingRegEventIds, setExistingRegEventIds] = useState<Set<string>>(
@@ -70,17 +67,6 @@ export default function RegisterPage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Self info
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [gender, setGender] = useState<PlayerGender | "">("");
-  // Self-reported ratings — strings so the inputs stay controlled
-  // even while empty/being typed; parsed at save time.
-  const [ratingDoubles, setRatingDoubles] = useState("");
-  const [ratingMixed, setRatingMixed] = useState("");
-  const [ratingSingles, setRatingSingles] = useState("");
 
   // Per-event selection state, keyed by event_id.
   const [selections, setSelections] = useState<Map<string, EventSelection>>(
@@ -162,58 +148,31 @@ export default function RegisterPage() {
       }
       setSelections(sel);
 
-      // 3. The user's player row, if any. Prefer auth_user_id match;
-      //    fall back to a single unlinked player with the same email
-      //    so admins can pre-create records that get reclaimed on
-      //    first registration.
-      let myPlayer: Player | null = null;
-      {
-        const { data } = await supabase
-          .from("players")
-          .select("*")
-          .eq("auth_user_id", user.id)
-          .is("deleted_at", null)
-          .maybeSingle();
-        if (cancelled) return;
-        myPlayer = data ?? null;
-      }
-      if (!myPlayer && user.email) {
-        const { data } = await supabase
-          .from("players")
-          .select("*")
-          .eq("email", user.email)
-          .is("auth_user_id", null)
-          .is("deleted_at", null);
-        if (cancelled) return;
-        if (data && data.length === 1) myPlayer = data[0];
-      }
-      setExistingPlayer(myPlayer);
-      if (myPlayer) {
-        setFirstName(myPlayer.first_name ?? "");
-        setLastName(myPlayer.last_name ?? "");
-        setPhone(myPlayer.phone ?? "");
-        setGender(myPlayer.gender ?? "");
-        setRatingDoubles(
-          myPlayer.self_rating_doubles != null
-            ? String(myPlayer.self_rating_doubles)
-            : "",
+      // 3. The user's player row. Guaranteed to exist + have a name
+      //    by the time we render — RequireProfile redirects to
+      //    /profile when it isn't there yet.
+      const { data: myPlayer } = await supabase
+        .from("players")
+        .select("*")
+        .eq("auth_user_id", user.id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (cancelled) return;
+      if (!myPlayer) {
+        // Defensive: shouldn't happen given RequireProfile, but bail
+        // out cleanly instead of crashing if some race lands us here.
+        setError(
+          "Profile not found. Try refreshing — you may need to finish your profile first.",
         );
-        setRatingMixed(
-          myPlayer.self_rating_mixed != null
-            ? String(myPlayer.self_rating_mixed)
-            : "",
-        );
-        setRatingSingles(
-          myPlayer.self_rating_singles != null
-            ? String(myPlayer.self_rating_singles)
-            : "",
-        );
+        setLoading(false);
+        return;
       }
+      setMe(myPlayer);
 
       // 4. Existing registrations for this user in this tournament,
       //    so we can show "Already registered" instead of letting them
       //    double-register.
-      if (myPlayer && evs && evs.length > 0) {
+      if (evs && evs.length > 0) {
         const { data } = await supabase
           .from("event_registrations")
           .select("event_id")
@@ -250,13 +209,8 @@ export default function RegisterPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !me) return;
     setError(null);
-
-    if (!firstName.trim() || !lastName.trim()) {
-      setError("First and last name are required.");
-      return;
-    }
 
     const chosen = events.filter((ev) => selections.get(ev.id)?.selected);
     if (chosen.length === 0) {
@@ -294,7 +248,7 @@ export default function RegisterPage() {
       }
       if (s.partner.mode === "existing") {
         // Can't partner with yourself.
-        if (existingPlayer && s.partner.player.id === existingPlayer.id) {
+        if (s.partner.player.id === me.id) {
           setError(`You picked yourself as your partner for "${ev.name}".`);
           return;
         }
@@ -308,25 +262,6 @@ export default function RegisterPage() {
     }
 
     setPhase("submitting");
-
-    // Save self player record (create / update / link existing).
-    const me = await ensureSelfPlayer({
-      authUserId: user.id,
-      authEmail: user.email ?? null,
-      existing: existingPlayer,
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      phone: phone.trim(),
-      gender: gender || null,
-      ratingDoubles: parseRating(ratingDoubles),
-      ratingMixed: parseRating(ratingMixed),
-      ratingSingles: parseRating(ratingSingles),
-    });
-    if (!me) {
-      setError("Failed to save your player record.");
-      setPhase("form");
-      return;
-    }
 
     const registeredEventNames: string[] = [];
     const partnerInvites: {
@@ -634,113 +569,20 @@ export default function RegisterPage() {
         Register for {tournament.name}
       </h1>
       <p style={{ color: "#666", margin: "0 0 24px", fontSize: 14 }}>
-        Signed in as <strong>{user?.email}</strong>.
+        Welcome back, <strong>{me?.first_name ?? user?.email}</strong>.{" "}
+        <Link
+          to={`/profile?return=${encodeURIComponent(`/t/${orgSlug}/${tournamentSlug}/register`)}`}
+          style={{
+            color: "#2563eb",
+            textDecoration: "none",
+            fontSize: 12,
+          }}
+        >
+          Edit profile
+        </Link>
       </p>
 
       <form onSubmit={onSubmit}>
-        <Section title="Your info">
-          <FieldRow>
-            <Field label="First name" required>
-              <input
-                type="text"
-                required
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                style={inputStyle}
-                disabled={submitting}
-              />
-            </Field>
-            <Field label="Last name" required>
-              <input
-                type="text"
-                required
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                style={inputStyle}
-                disabled={submitting}
-              />
-            </Field>
-            <Field label="Phone">
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                style={inputStyle}
-                disabled={submitting}
-              />
-            </Field>
-            <Field label="Gender">
-              <select
-                value={gender}
-                onChange={(e) =>
-                  setGender(e.target.value as PlayerGender | "")
-                }
-                style={inputStyle}
-                disabled={submitting}
-              >
-                <option value="">—</option>
-                <option value="M">Male</option>
-                <option value="F">Female</option>
-                <option value="X">Other / prefer not to say</option>
-              </select>
-            </Field>
-          </FieldRow>
-
-          <div style={{ marginTop: 12 }}>
-            <div
-              style={{
-                fontSize: 12,
-                color: "#666",
-                marginBottom: 6,
-              }}
-            >
-              Self-reported rating (optional — helps organizers seed
-              brackets). Same-gender doubles, mixed doubles, singles.
-            </div>
-            <FieldRow>
-              <Field label="Doubles">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="9.99"
-                  value={ratingDoubles}
-                  onChange={(e) => setRatingDoubles(e.target.value)}
-                  style={inputStyle}
-                  disabled={submitting}
-                  placeholder="e.g. 3.5"
-                />
-              </Field>
-              <Field label="Mixed doubles">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="9.99"
-                  value={ratingMixed}
-                  onChange={(e) => setRatingMixed(e.target.value)}
-                  style={inputStyle}
-                  disabled={submitting}
-                  placeholder="e.g. 3.5"
-                />
-              </Field>
-              <Field label="Singles">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="9.99"
-                  value={ratingSingles}
-                  onChange={(e) => setRatingSingles(e.target.value)}
-                  style={inputStyle}
-                  disabled={submitting}
-                  placeholder="e.g. 3.0"
-                />
-              </Field>
-            </FieldRow>
-          </div>
-        </Section>
-
         <Section title="Pick your events">
           {events.length === 0 ? (
             <Empty>No events available for registration.</Empty>
@@ -760,9 +602,7 @@ export default function RegisterPage() {
                     // Stop the user from picking themselves as their
                     // own partner. The picker excludes these ids
                     // from its search results.
-                    excludePlayerIds={
-                      existingPlayer ? [existingPlayer.id] : []
-                    }
+                    excludePlayerIds={me ? [me.id] : []}
                   />
                 );
               })}
@@ -1072,69 +912,6 @@ function PartnerInviteCard({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Persistence helpers
-// ─────────────────────────────────────────────────────────────────────
-
-async function ensureSelfPlayer(args: {
-  authUserId: string;
-  authEmail: string | null;
-  existing: Player | null;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  gender: PlayerGender | null;
-  ratingDoubles: number | null;
-  ratingMixed: number | null;
-  ratingSingles: number | null;
-}): Promise<Player | null> {
-  const payload = {
-    first_name: args.firstName,
-    last_name: args.lastName,
-    phone: args.phone || null,
-    gender: args.gender,
-    self_rating_doubles: args.ratingDoubles,
-    self_rating_mixed: args.ratingMixed,
-    self_rating_singles: args.ratingSingles,
-  };
-  // If the existing record is already linked to this auth user,
-  // update it in place.
-  if (args.existing && args.existing.auth_user_id === args.authUserId) {
-    const { data, error } = await supabase
-      .from("players")
-      .update(payload)
-      .eq("id", args.existing.id)
-      .select()
-      .single();
-    if (error || !data) return null;
-    return data;
-  }
-  // If we found an unlinked player by email, claim it for this user.
-  if (args.existing && args.existing.auth_user_id === null) {
-    const { data, error } = await supabase
-      .from("players")
-      .update({ ...payload, auth_user_id: args.authUserId })
-      .eq("id", args.existing.id)
-      .select()
-      .single();
-    if (error || !data) return null;
-    return data;
-  }
-  // Otherwise create a fresh player linked to this auth user.
-  const { data, error } = await supabase
-    .from("players")
-    .insert({
-      ...payload,
-      auth_user_id: args.authUserId,
-      email: args.authEmail,
-    })
-    .select()
-    .single();
-  if (error || !data) return null;
-  return data;
-}
-
-
-// ─────────────────────────────────────────────────────────────────────
 // Bits + styles
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1163,44 +940,6 @@ function Section({
   );
 }
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        fontSize: 12,
-        color: "#555",
-        flex: "1 1 160px",
-        minWidth: 0,
-      }}
-    >
-      <span>
-        {label}
-        {required && (
-          <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>
-        )}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function FieldRow({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{children}</div>
-  );
-}
-
 function Empty({ children }: { children: ReactNode }) {
   return (
     <div
@@ -1219,20 +958,6 @@ function Empty({ children }: { children: ReactNode }) {
   );
 }
 
-// Strict-ish rating parser. Empty string → null (no rating).
-// Anything else gets parseFloat'd and clamped to the column's
-// allowable [0, 9.99] range. Junk input (NaN) also becomes null
-// so we don't trip the DB check constraint.
-function parseRating(s: string): number | null {
-  const trimmed = s.trim();
-  if (!trimmed) return null;
-  const n = parseFloat(trimmed);
-  if (Number.isNaN(n)) return null;
-  if (n < 0) return 0;
-  if (n > 9.99) return 9.99;
-  return n;
-}
-
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -1244,11 +969,3 @@ function fmtList(items: string[]): string {
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
 }
 
-const inputStyle: CSSProperties = {
-  padding: "8px 12px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 14,
-  fontFamily: "inherit",
-  width: "100%",
-};
