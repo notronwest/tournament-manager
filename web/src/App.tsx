@@ -12,6 +12,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
+import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import RegisterPage from "./pages/public/RegisterPage";
@@ -74,6 +75,14 @@ export default function App() {
             </RequireProfile>
           </RequireAuth>
         }
+      />
+      {/* Partner invite accept page. NOT wrapped in RequireAuth /
+          RequireProfile — the page handles those states internally so
+          unauthenticated visitors still see the "you've been invited"
+          context banner before being asked to sign in. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/invites/:token"
+        element={<PartnerAcceptPage />}
       />
 
       {/* /admin → org picker (or auto-redirect if user has only one org) */}

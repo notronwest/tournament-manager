@@ -865,6 +865,28 @@ export type Database = {
         Returns: undefined
       }
       current_player_id: { Args: never; Returns: string }
+      decline_partner_invite: {
+        Args: { p_invite_id: string }
+        Returns: undefined
+      }
+      get_invite_context: {
+        Args: { p_token: string }
+        Returns: {
+          event_fee_cents: number
+          event_format: Database["public"]["Enums"]["event_format"]
+          event_id: string
+          event_name: string
+          invite_id: string
+          invite_status: Database["public"]["Enums"]["partner_invite_status"]
+          invitee_email: string
+          inviter_first_name: string
+          inviter_last_name: string
+          org_slug: string
+          tournament_id: string
+          tournament_name: string
+          tournament_slug: string
+        }[]
+      }
       has_org_role: {
         Args: { min_role: Database["public"]["Enums"]["org_role"]; org: string }
         Returns: boolean
