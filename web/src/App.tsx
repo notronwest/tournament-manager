@@ -12,6 +12,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
+import HomePage from "./pages/public/HomePage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
@@ -21,21 +22,6 @@ import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
-
-function HomePage() {
-  return (
-    <main style={{ padding: 24, maxWidth: 720, margin: "0 auto" }}>
-      <h1 style={{ margin: "0 0 8px" }}>Tournament Manager</h1>
-      <p style={{ color: "#555" }}>
-        Public tournament browsing site coming soon. Organizers can{" "}
-        <a href="/admin" style={{ color: "#2563eb" }}>
-          sign in
-        </a>
-        .
-      </p>
-    </main>
-  );
-}
 
 export default function App() {
   return (
