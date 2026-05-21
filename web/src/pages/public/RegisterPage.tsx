@@ -8,11 +8,11 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import {
-  PlayerPicker,
   emptySelection,
   persistPlayerSelection,
   type PlayerSelection,
 } from "../../components/PlayerPicker";
+import { PartnerSearch } from "../../components/PartnerSearch";
 import { eligibilityChips } from "../../lib/eligibility";
 import type { Database } from "../../types/supabase";
 
@@ -763,8 +763,7 @@ function EventRow({
               if they're not in the list yet, "Add new" to invite them.
               They'll get an invite link to confirm.
             </div>
-            <PlayerPicker
-              label="Partner"
+            <PartnerSearch
               selection={selection.partner}
               onChange={(p) => onChange({ partner: p })}
               excludePlayerIds={excludePlayerIds}
