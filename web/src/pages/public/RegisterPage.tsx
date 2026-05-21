@@ -8,6 +8,12 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import {
+  PlayerPicker,
+  emptySelection,
+  persistPlayerSelection,
+  type PlayerSelection,
+} from "../../components/PlayerPicker";
 import { eligibilityChips } from "../../lib/eligibility";
 import type { Database } from "../../types/supabase";
 
@@ -17,14 +23,12 @@ type Player = Database["public"]["Tables"]["players"]["Row"];
 type PlayerGender = Database["public"]["Enums"]["player_gender"];
 
 // Per-event entry on the form. Tracks whether the user has selected
-// this event and, for doubles, the partner details the user typed in
-// (we need name+email so we can create a partner player row + an
-// invite row referencing it — schema makes those NOT NULL).
+// this event and, for doubles, the partner. The partner is a
+// PlayerSelection from the shared PlayerPicker component — empty,
+// an existing player picked via typeahead, or a brand-new draft.
 type EventSelection = {
   selected: boolean;
-  partnerFirst: string;
-  partnerLast: string;
-  partnerEmail: string;
+  partner: PlayerSelection;
 };
 
 // Auth-gated registration page. Reached via /t/:orgSlug/:tournamentSlug/register
@@ -153,12 +157,7 @@ export default function RegisterPage() {
       // Initialize per-event selection state.
       const sel = new Map<string, EventSelection>();
       for (const e of evs ?? []) {
-        sel.set(e.id, {
-          selected: false,
-          partnerFirst: "",
-          partnerLast: "",
-          partnerEmail: "",
-        });
+        sel.set(e.id, { selected: false, partner: emptySelection });
       }
       setSelections(sel);
 
@@ -241,9 +240,7 @@ export default function RegisterPage() {
       const next = new Map(prev);
       const cur = next.get(eventId) ?? {
         selected: false,
-        partnerFirst: "",
-        partnerLast: "",
-        partnerEmail: "",
+        partner: emptySelection,
       };
       next.set(eventId, { ...cur, ...patch });
       return next;
@@ -265,26 +262,47 @@ export default function RegisterPage() {
       setError("Pick at least one event.");
       return;
     }
-    // Validate partner info for doubles events
+    // Validate partner selection for doubles events
     for (const ev of chosen) {
       if (ev.format !== "doubles") continue;
       const s = selections.get(ev.id)!;
-      if (
-        !s.partnerFirst.trim() ||
-        !s.partnerLast.trim() ||
-        !s.partnerEmail.trim()
-      ) {
+      if (s.partner.mode === "empty") {
         setError(
-          `Partner first name, last name, and email are required for "${ev.name}".`,
+          `Pick a partner for "${ev.name}" — search by name, email, or phone, or add a new player.`,
         );
         return;
       }
-      if (
-        user.email &&
-        s.partnerEmail.trim().toLowerCase() === user.email.toLowerCase()
-      ) {
-        setError(`Partner email can't be your own ("${ev.name}").`);
-        return;
+      if (s.partner.mode === "new") {
+        if (
+          !s.partner.firstName.trim() ||
+          !s.partner.lastName.trim() ||
+          !s.partner.email.trim()
+        ) {
+          setError(
+            `Partner first name, last name, and email are required for "${ev.name}".`,
+          );
+          return;
+        }
+        if (
+          user.email &&
+          s.partner.email.trim().toLowerCase() === user.email.toLowerCase()
+        ) {
+          setError(`Partner email can't be your own ("${ev.name}").`);
+          return;
+        }
+      }
+      if (s.partner.mode === "existing") {
+        // Can't partner with yourself.
+        if (existingPlayer && s.partner.player.id === existingPlayer.id) {
+          setError(`You picked yourself as your partner for "${ev.name}".`);
+          return;
+        }
+        if (!s.partner.player.email) {
+          setError(
+            `${s.partner.player.first_name} ${s.partner.player.last_name} doesn't have an email on file — we need one to send the partner invite. Pick a different partner or add a new player with their email.`,
+          );
+          return;
+        }
       }
     }
 
@@ -344,16 +362,30 @@ export default function RegisterPage() {
       }
       registeredEventNames.push(ev.name);
 
-      // Partner invite for doubles.
+      // Partner invite for doubles. Resolve the partner from the
+      // PlayerSelection: existing → reuse, new → insert (or match
+      // an existing player by email — persistPlayerSelection does
+      // both).
       if (ev.format === "doubles") {
-        const partner = await findOrCreatePlayerByEmail({
-          email: sel.partnerEmail.trim(),
-          firstName: sel.partnerFirst.trim(),
-          lastName: sel.partnerLast.trim(),
-        });
-        if (!partner) {
+        const partnerRes = await persistPlayerSelection(sel.partner);
+        if (!partnerRes.player) {
           setError(
-            `Failed to set up partner record for "${ev.name}".`,
+            partnerRes.error ??
+              `Failed to set up partner record for "${ev.name}".`,
+          );
+          setPhase("form");
+          return;
+        }
+        const partner = partnerRes.player;
+        // Determine the email to send the invite to. For an
+        // existing player we use their stored email; for a new
+        // player it's the email the inviter just entered.
+        const partnerEmail =
+          partner.email ??
+          (sel.partner.mode === "new" ? sel.partner.email.trim() : null);
+        if (!partnerEmail) {
+          setError(
+            `No email on file for partner in "${ev.name}".`,
           );
           setPhase("form");
           return;
@@ -366,7 +398,7 @@ export default function RegisterPage() {
             event_id: ev.id,
             inviter_player_id: me.id,
             invitee_player_id: partner.id,
-            invitee_email: sel.partnerEmail.trim(),
+            invitee_email: partnerEmail,
             status: "pending",
           })
           .select()
@@ -408,7 +440,7 @@ export default function RegisterPage() {
 
         partnerInvites.push({
           eventName: ev.name,
-          partnerEmail: sel.partnerEmail.trim(),
+          partnerEmail,
           url,
           emailSent,
           emailError,
@@ -662,6 +694,12 @@ export default function RegisterPage() {
                     alreadyRegistered={already}
                     disabled={submitting}
                     onChange={(patch) => setSel(ev.id, patch)}
+                    // Stop the user from picking themselves as their
+                    // own partner. The picker excludes these ids
+                    // from its search results.
+                    excludePlayerIds={
+                      existingPlayer ? [existingPlayer.id] : []
+                    }
                   />
                 );
               })}
@@ -717,12 +755,14 @@ function EventRow({
   alreadyRegistered,
   disabled,
   onChange,
+  excludePlayerIds,
 }: {
   event: Event;
   selection: EventSelection;
   alreadyRegistered: boolean;
   disabled: boolean;
   onChange: (patch: Partial<EventSelection>) => void;
+  excludePlayerIds: string[];
 }) {
   const chips = eligibilityChips(event);
   return (
@@ -811,48 +851,21 @@ function EventRow({
               flexDirection: "column",
               gap: 8,
             }}
+            // Picker dropdown opens on focus; clicking it shouldn't
+            // toggle the wrapping label's checkbox.
+            onClick={(e) => e.preventDefault()}
           >
             <div style={{ fontSize: 12, color: "#666" }}>
-              Your doubles partner. They'll get an invite link to confirm.
+              Your doubles partner. Search by name, email, or phone —
+              if they're not in the list yet, "Add new" to invite them.
+              They'll get an invite link to confirm.
             </div>
-            <FieldRow>
-              <Field label="Partner first name" required>
-                <input
-                  type="text"
-                  required
-                  value={selection.partnerFirst}
-                  onChange={(e) =>
-                    onChange({ partnerFirst: e.target.value })
-                  }
-                  style={inputStyle}
-                  disabled={disabled}
-                />
-              </Field>
-              <Field label="Partner last name" required>
-                <input
-                  type="text"
-                  required
-                  value={selection.partnerLast}
-                  onChange={(e) =>
-                    onChange({ partnerLast: e.target.value })
-                  }
-                  style={inputStyle}
-                  disabled={disabled}
-                />
-              </Field>
-              <Field label="Partner email" required>
-                <input
-                  type="email"
-                  required
-                  value={selection.partnerEmail}
-                  onChange={(e) =>
-                    onChange({ partnerEmail: e.target.value })
-                  }
-                  style={inputStyle}
-                  disabled={disabled}
-                />
-              </Field>
-            </FieldRow>
+            <PlayerPicker
+              label="Partner"
+              selection={selection.partner}
+              onChange={(p) => onChange({ partner: p })}
+              excludePlayerIds={excludePlayerIds}
+            />
           </div>
         )}
     </label>
@@ -1057,33 +1070,6 @@ async function ensureSelfPlayer(args: {
   return data;
 }
 
-async function findOrCreatePlayerByEmail(args: {
-  email: string;
-  firstName: string;
-  lastName: string;
-}): Promise<Player | null> {
-  // Soft-unique email — fetch ALL matches; if exactly one, reuse it.
-  // Multiple matches (rare: parent + child sharing an email) → create
-  // a new record rather than guess.
-  const { data: matches } = await supabase
-    .from("players")
-    .select("*")
-    .eq("email", args.email)
-    .is("deleted_at", null);
-  if (matches && matches.length === 1) return matches[0];
-
-  const { data, error } = await supabase
-    .from("players")
-    .insert({
-      first_name: args.firstName,
-      last_name: args.lastName,
-      email: args.email,
-    })
-    .select()
-    .single();
-  if (error || !data) return null;
-  return data;
-}
 
 // ─────────────────────────────────────────────────────────────────────
 // Bits + styles
