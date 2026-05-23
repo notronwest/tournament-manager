@@ -276,8 +276,12 @@ export function PlayerPicker({
                   onChange({
                     mode: "existing",
                     player: p,
-                    emailDraft: "",
-                    phoneDraft: "",
+                    // Seed drafts from the picked player's stored
+                    // contact info — see PartnerSearch for the
+                    // detailed why. Defaulting to "" forces an UPDATE
+                    // on submit that RLS blocks for cross-user writes.
+                    emailDraft: p.email ?? "",
+                    phoneDraft: p.phone ?? "",
                   });
                   setOpen(false);
                   setQuery("");

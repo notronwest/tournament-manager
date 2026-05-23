@@ -250,8 +250,15 @@ export function PartnerSearch({
                       onChange({
                         mode: "existing",
                         player: p,
-                        emailDraft: "",
-                        phoneDraft: "",
+                        // Seed drafts from the picked player's stored
+                        // contact info so persistPlayerSelection's
+                        // diff stays empty when nothing's been edited.
+                        // Defaulting to "" would always produce a
+                        // diff and fire an UPDATE — which RLS blocks
+                        // for cross-user writes and breaks the whole
+                        // registration submit ("Cannot coerce...").
+                        emailDraft: p.email ?? "",
+                        phoneDraft: p.phone ?? "",
                       })
                     }
                     style={pickBtn}
