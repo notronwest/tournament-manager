@@ -252,19 +252,9 @@ These aren't in code — Supabase CLI doesn't manage them yet:
 
 ---
 
-## Next milestones (in priority order)
+## Next milestones
 
-The product roadmap is "smallest end-to-end loop first," then layer on. Don't get drawn into bracket generation until registration + Stripe work.
-
-1. **Edit tournament + change status** (draft → published → closed → completed). Small; completes the create-tournament loop.
-2. **Events**: add/list/edit events under a tournament. Form fields: name, format (singles/doubles), gender, age + rating bounds, bracket type, fee, max teams.
-3. **Stripe Connect onboarding**: `/admin/:orgSlug/settings/stripe` with "Connect Stripe" button → Stripe-hosted onboarding → webhook updates `organizations.stripe_account_status`. Edge function: `supabase/functions/stripe-webhook/`.
-4. **Public tournament page**: `/t/:orgSlug/:tournamentSlug` shows published tournament + events list + "Register" button. Anonymous-readable thanks to existing RLS.
-5. **Registration flow**: player picks events, optionally invites a partner for doubles, Stripe PaymentIntent created (with `application_fee_amount` for our cut, `transfer_data.destination` = organizer's connected account).
-6. **Roster view** for organizers: see who registered for each event.
-7. **Bracket generation**: round-robin first (simplest, most forgiving), single-elim second.
-8. **Live scoring** (organizer or referee enters scores during play).
-9. **Waitlists, refunds, organizer payouts, comms.**
+See **[`docs/BACKLOG.md`](docs/BACKLOG.md)** for the living list of what's next, what's coming, and what just shipped. The backlog is the source of truth; update it as priorities shift. The roadmap spirit hasn't changed — "smallest end-to-end loop first" — but the original numbered list lived in this file got out of date as work landed, so it now lives in one place that's easier to keep accurate.
 
 ---
 
