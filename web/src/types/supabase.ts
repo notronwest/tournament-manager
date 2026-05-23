@@ -323,7 +323,9 @@ export type Database = {
           created_at?: string
           event_id: string
           id?: string
-          match_format?: Database["public"]["Enums"]["medal_match_format"] | null
+          match_format?:
+            | Database["public"]["Enums"]["medal_match_format"]
+            | null
           match_minutes_per_game?: number | null
           match_points_to_win?: number | null
           match_win_by?: number | null
@@ -345,7 +347,9 @@ export type Database = {
           created_at?: string
           event_id?: string
           id?: string
-          match_format?: Database["public"]["Enums"]["medal_match_format"] | null
+          match_format?:
+            | Database["public"]["Enums"]["medal_match_format"]
+            | null
           match_minutes_per_game?: number | null
           match_points_to_win?: number | null
           match_win_by?: number | null
@@ -685,6 +689,9 @@ export type Database = {
           id: string
           last_name: string
           phone: string | null
+          self_rating_doubles: number | null
+          self_rating_mixed: number | null
+          self_rating_singles: number | null
           state: string | null
           updated_at: string
         }
@@ -700,6 +707,9 @@ export type Database = {
           id?: string
           last_name: string
           phone?: string | null
+          self_rating_doubles?: number | null
+          self_rating_mixed?: number | null
+          self_rating_singles?: number | null
           state?: string | null
           updated_at?: string
         }
@@ -715,6 +725,9 @@ export type Database = {
           id?: string
           last_name?: string
           phone?: string | null
+          self_rating_doubles?: number | null
+          self_rating_mixed?: number | null
+          self_rating_singles?: number | null
           state?: string | null
           updated_at?: string
         }
@@ -847,7 +860,35 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_partner_invite: {
+        Args: { p_invite_id: string }
+        Returns: undefined
+      }
       current_player_id: { Args: never; Returns: string }
+      decline_partner_invite: {
+        Args: { p_invite_id: string }
+        Returns: undefined
+      }
+      get_invite_context: {
+        Args: { p_token: string }
+        Returns: {
+          event_fee_cents: number
+          event_format: Database["public"]["Enums"]["event_format"]
+          event_id: string
+          event_name: string
+          invite_id: string
+          invite_status: Database["public"]["Enums"]["partner_invite_status"]
+          invitee_email: string
+          inviter_email: string
+          inviter_first_name: string
+          inviter_last_name: string
+          inviter_phone: string
+          org_slug: string
+          tournament_id: string
+          tournament_name: string
+          tournament_slug: string
+        }[]
+      }
       has_org_role: {
         Args: { min_role: Database["public"]["Enums"]["org_role"]; org: string }
         Returns: boolean

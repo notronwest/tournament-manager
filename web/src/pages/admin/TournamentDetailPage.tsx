@@ -331,6 +331,31 @@ export default function TournamentDetailPage() {
             busy={busyAction === "tstatus"}
             onSetStatus={setTournamentStatus}
           />
+          {/* Edit tournament details — name, dates, description,
+              location, registration window, entry fee, court count.
+              Status transitions stay on this page (the buttons just
+              to the left of this) because they have public-visibility
+              side effects worth surfacing in context. */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/edit`}
+            style={{
+              ...primaryLinkBtn,
+              background: "#fff",
+              color: "#555",
+              border: "1px solid #e2e2e2",
+            }}
+          >
+            Edit
+          </Link>
+          {/* Public-facing tournament page. Available once the
+              tournament is in a publicly-readable status (published,
+              closed, or completed) — drafts have nothing to show on
+              the public route. */}
+          {(t.status === "published" ||
+            t.status === "closed" ||
+            t.status === "completed") && (
+            <PublicPageLink orgSlug={org.slug} tournamentSlug={t.slug} />
+          )}
           {/* Schedule view — time estimates for every event based on
               registered teams + format. Useful during planning AND
               live (e.g. "are we tracking ahead of plan?"). */}
@@ -441,12 +466,30 @@ export default function TournamentDetailPage() {
           <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
             Events ({events.length})
           </h2>
-          <Link
-            to={`/admin/${org.slug}/tournaments/${t.slug}/events/new`}
-            style={primaryLinkBtnSmall}
-          >
-            + New event
-          </Link>
+          <div style={{ display: "flex", gap: 8 }}>
+            {/* Bulk edit — name, status, scheduled start, max teams,
+                event fee for every event at once. Per-event detail
+                edits still live on the per-event edit page. */}
+            {events.length > 0 && (
+              <Link
+                to={`/admin/${org.slug}/tournaments/${t.slug}/events/edit`}
+                style={{
+                  ...primaryLinkBtnSmall,
+                  background: "#fff",
+                  color: "#555",
+                  border: "1px solid #e2e2e2",
+                }}
+              >
+                Edit all
+              </Link>
+            )}
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/events/new`}
+              style={primaryLinkBtnSmall}
+            >
+              + New event
+            </Link>
+          </div>
         </header>
 
         {events.length === 0 ? (
@@ -1105,6 +1148,80 @@ function ErrorBox({ message }: { message: string }) {
       }}
     >
       {message}
+    </div>
+  );
+}
+
+// Two-button group for the public tournament page: an "Open" link
+// (opens in a new tab so the admin keeps their workspace) and a
+// "Copy link" button that puts the full URL on the clipboard for
+// pasting into emails / texts / social.
+function PublicPageLink({
+  orgSlug,
+  tournamentSlug,
+}: {
+  orgSlug: string;
+  tournamentSlug: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const relativePath = `/t/${orgSlug}/${tournamentSlug}`;
+  const fullUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}${relativePath}`
+      : relativePath;
+
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopied(true);
+      // Brief flash, then revert so the button label doesn't lie.
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard API can fail in non-secure contexts / iframes;
+      // fall back to a select-and-copy hint via the title attr.
+      window.prompt("Copy this URL:", fullUrl);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      <a
+        href={relativePath}
+        target="_blank"
+        rel="noreferrer"
+        title={`Open ${fullUrl}`}
+        style={{
+          padding: "8px 16px",
+          background: "#fff",
+          color: "#2563eb",
+          textDecoration: "none",
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 500,
+          border: "1px solid #2563eb",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Public page ↗
+      </a>
+      <button
+        onClick={onCopy}
+        title={`Copy ${fullUrl}`}
+        style={{
+          padding: "8px 12px",
+          background: copied ? "#dcfce7" : "#fff",
+          color: copied ? "#166534" : "#555",
+          border: `1px solid ${copied ? "#86efac" : "#e2e2e2"}`,
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {copied ? "Copied!" : "Copy link"}
+      </button>
     </div>
   );
 }

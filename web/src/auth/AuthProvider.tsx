@@ -19,19 +19,28 @@ type AuthContextValue = {
   signUpWithPassword: (
     email: string,
     password: string,
+    redirectTo?: string,
   ) => Promise<{ error: AuthError | null }>;
   signInWithMagicLink: (
     email: string,
+    redirectTo?: string,
   ) => Promise<{ error: AuthError | null }>;
-  signInWithGoogle: () => Promise<{ error: AuthError | null }>;
+  signInWithGoogle: (
+    redirectTo?: string,
+  ) => Promise<{ error: AuthError | null }>;
+  updatePassword: (
+    password: string,
+  ) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Where to land after a successful magic-link or OAuth round-trip.
-// We hand the user to /admin which then resolves their org.
-function authRedirectTo(): string {
+// Default landing page after a successful magic-link or OAuth round-trip.
+// Callers can override per call — e.g. the public registration flow passes
+// the tournament URL so the user lands back where they started instead of
+// being dumped at /admin.
+function defaultRedirectTo(): string {
   return `${window.location.origin}/admin`;
 }
 
@@ -62,28 +71,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
-  const signUpWithPassword = async (email: string, password: string) => {
+  const signUpWithPassword = async (
+    email: string,
+    password: string,
+    redirectTo?: string,
+  ) => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: authRedirectTo() },
+      options: { emailRedirectTo: redirectTo ?? defaultRedirectTo() },
     });
     return { error };
   };
 
-  const signInWithMagicLink = async (email: string) => {
+  const signInWithMagicLink = async (email: string, redirectTo?: string) => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: authRedirectTo() },
+      options: { emailRedirectTo: redirectTo ?? defaultRedirectTo() },
     });
     return { error };
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (redirectTo?: string) => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: authRedirectTo() },
+      options: { redirectTo: redirectTo ?? defaultRedirectTo() },
     });
+    return { error };
+  };
+
+  // Lets the user set (or change) their password from inside the app —
+  // primarily used from the first-fill ProfilePage so a magic-link
+  // signup can opt into a password while they're already filling out
+  // their profile. They have to be signed in for this to succeed; the
+  // Supabase SDK uses the active session under the hood.
+  const updatePassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
     return { error };
   };
 
@@ -101,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUpWithPassword,
         signInWithMagicLink,
         signInWithGoogle,
+        updatePassword,
         signOut,
       }}
     >
