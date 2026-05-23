@@ -3,6 +3,29 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import { useAuth } from "../auth/AuthProvider";
 
+// sessionStorage key the test-players tool writes to before signing
+// in as a test user. Same constant used here for the "Switch back"
+// detection — keep in sync with TestPlayersPage.
+const IMPERSONATION_KEY = "tm:admin-session";
+
+type StashedSession = {
+  access_token: string;
+  refresh_token: string;
+  email: string | null | undefined;
+};
+
+function readStashedSession(): StashedSession | null {
+  try {
+    const raw = sessionStorage.getItem(IMPERSONATION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StashedSession;
+    if (!parsed?.access_token || !parsed?.refresh_token) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 // Global top banner. Rendered once at the App level so every page
 // gets the same identity controls — Sign in / Profile / Admin /
 // Sign out — without each page having to remember to opt in.
@@ -67,13 +90,45 @@ export default function SiteHeader() {
   const firstName = matches ? cache!.firstName : null;
   const isOrgMember = matches ? cache!.isOrgMember : false;
 
+  // Impersonation: if there's a stashed admin session in sessionStorage
+  // it means TestPlayersPage signed us in as a test user and the admin
+  // can switch back. Read sessionStorage directly each render — it's
+  // cheap, and the value can only change due to navigations that
+  // already trigger a re-render (stash + navigate from
+  // TestPlayersPage, clear + navigate from onSwitchBack / onSignOut).
+  // Keeping it out of React state avoids the set-state-in-effect
+  // lint flag without any behavioral compromise.
+  const stashed = readStashedSession();
+  const impersonating = !!stashed && !!user;
+
   // Hide on /login — the page itself is the sign-in surface, no need
   // for a duplicate Sign-in link in the chrome above it.
   if (location.pathname === "/login") return null;
 
   const onSignOut = async () => {
+    // Sign-out should also clear any impersonation state — otherwise
+    // a stale stashed session would haunt the next sign-in.
+    sessionStorage.removeItem(IMPERSONATION_KEY);
     await signOut();
     navigate("/");
+  };
+
+  const onSwitchBack = async () => {
+    if (!stashed) return;
+    const { error: setErr } = await supabase.auth.setSession({
+      access_token: stashed.access_token,
+      refresh_token: stashed.refresh_token,
+    });
+    sessionStorage.removeItem(IMPERSONATION_KEY);
+    if (setErr) {
+      // Refresh token expired (default is hours, but possible if the
+      // admin spent a long time testing). Fall back to a clean
+      // sign-out and let them re-authenticate.
+      await signOut();
+      navigate("/login");
+      return;
+    }
+    navigate("/admin");
   };
 
   // Use the current pathname as the post-login `from` so that
@@ -83,14 +138,65 @@ export default function SiteHeader() {
   const signInState = { from: location };
 
   return (
-    <header
+    <>
+      {impersonating && (
+        <div
+          style={{
+            background: "#fef3c7",
+            borderBottom: "1px solid #fde68a",
+            color: "#7a5d00",
+            fontSize: 13,
+            position: "sticky",
+            top: 0,
+            zIndex: 21,
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 1080,
+              margin: "0 auto",
+              padding: "8px 24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <span>
+              Testing as <strong>{firstName ?? user?.email}</strong>.
+              You'll switch back to{" "}
+              <strong>{stashed?.email ?? "your admin account"}</strong>.
+            </span>
+            <button
+              type="button"
+              onClick={() => void onSwitchBack()}
+              style={{
+                padding: "5px 12px",
+                background: "#fff",
+                border: "1px solid #d4a017",
+                color: "#7a5d00",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Switch back
+            </button>
+          </div>
+        </div>
+      )}
+      <header
       style={{
         background: "#fff",
         borderBottom: "1px solid #e5e7eb",
         // sticky keeps the bar visible as the user scrolls long
-        // tournament / register pages.
+        // tournament / register pages. When the impersonation banner
+        // is showing, both bars stack at the top.
         position: "sticky",
-        top: 0,
+        top: impersonating ? 36 : 0,
         zIndex: 20,
       }}
     >
@@ -166,6 +272,7 @@ export default function SiteHeader() {
         </nav>
       </div>
     </header>
+    </>
   );
 }
 

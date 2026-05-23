@@ -93,6 +93,9 @@ export default function AdminLayout() {
           <SideLink to={`/admin/${org.slug}/tools/seed-event`}>
             Seed test data
           </SideLink>
+          <SideLink to={`/admin/${org.slug}/tools/test-players`}>
+            Test players
+          </SideLink>
         </nav>
       </aside>
 

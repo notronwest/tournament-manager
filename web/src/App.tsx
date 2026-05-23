@@ -22,6 +22,7 @@ import RegisterPage from "./pages/public/RegisterPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
+import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
 
@@ -105,6 +106,10 @@ export default function App() {
         <Route
           path="tools/seed-event"
           element={<SeedEventPage />}
+        />
+        <Route
+          path="tools/test-players"
+          element={<TestPlayersPage />}
         />
         <Route path="tournaments" element={<TournamentsListPage />} />
         <Route
