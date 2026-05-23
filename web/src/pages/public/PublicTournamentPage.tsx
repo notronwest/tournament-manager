@@ -206,23 +206,10 @@ export default function PublicTournamentPage() {
             </div>
           )}
         </div>
-        {registrationOpen && (
-          <Link
-            to={`/t/${orgSlug}/${tournamentSlug}/register`}
-            style={{
-              padding: "10px 20px",
-              background: "#2563eb",
-              color: "#fff",
-              textDecoration: "none",
-              borderRadius: 6,
-              fontSize: 14,
-              fontWeight: 500,
-              whiteSpace: "nowrap",
-            }}
-          >
-            Register →
-          </Link>
-        )}
+        {/* No global Register button here on purpose — the per-event
+            Register buttons on each card below let the user pick what
+            they're registering for first, instead of registering and
+            then picking. */}
       </div>
 
       <section>
@@ -234,7 +221,13 @@ export default function PublicTournamentPage() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {events.map((ev) => (
-              <EventCard key={ev.id} event={ev} />
+              <EventCard
+                key={ev.id}
+                event={ev}
+                registrationOpen={registrationOpen}
+                orgSlug={orgSlug ?? ""}
+                tournamentSlug={tournamentSlug ?? ""}
+              />
             ))}
           </div>
         )}
@@ -243,7 +236,17 @@ export default function PublicTournamentPage() {
   );
 }
 
-function EventCard({ event }: { event: Event }) {
+function EventCard({
+  event,
+  registrationOpen,
+  orgSlug,
+  tournamentSlug,
+}: {
+  event: Event;
+  registrationOpen: boolean;
+  orgSlug: string;
+  tournamentSlug: string;
+}) {
   const chips = eligibilityChips(event);
   return (
     <div
@@ -252,54 +255,81 @@ function EventCard({ event }: { event: Event }) {
         background: "#fff",
         border: "1px solid #e5e7eb",
         borderRadius: 8,
+        display: "flex",
+        gap: 16,
+        alignItems: "flex-start",
       }}
     >
-      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{event.name}</h3>
-      <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
-        {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
-        {event.points_to_win} win by {event.win_by}
-        {event.teams_advancing_to_playoff > 0
-          ? ` · top ${event.teams_advancing_to_playoff} to playoffs`
-          : ""}
-        {event.max_teams ? ` · max ${event.max_teams} teams` : ""}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{event.name}</h3>
+        <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
+          {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
+          {event.points_to_win} win by {event.win_by}
+          {event.teams_advancing_to_playoff > 0
+            ? ` · top ${event.teams_advancing_to_playoff} to playoffs`
+            : ""}
+          {event.max_teams ? ` · max ${event.max_teams} teams` : ""}
+        </div>
+        {chips.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 4,
+              marginTop: 8,
+            }}
+          >
+            {chips.map((c) => (
+              <span
+                key={c}
+                style={{
+                  padding: "2px 8px",
+                  background: "#eff6ff",
+                  color: "#1e40af",
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 500,
+                }}
+              >
+                {c}
+              </span>
+            ))}
+          </div>
+        )}
+        {event.event_fee_cents > 0 && (
+          <div
+            style={{
+              color: "#444",
+              fontSize: 13,
+              marginTop: 8,
+            }}
+          >
+            Event fee:{" "}
+            <strong>${(event.event_fee_cents / 100).toFixed(2)}</strong>
+          </div>
+        )}
       </div>
-      {chips.length > 0 && (
-        <div
+      {registrationOpen && (
+        // Pre-selects this event on the register page via the ?event=
+        // query param so the user lands on a screen with their pick
+        // already checked. They can still add other events before
+        // confirming if they want.
+        <Link
+          to={`/t/${orgSlug}/${tournamentSlug}/register?event=${event.id}`}
           style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 4,
-            marginTop: 8,
-          }}
-        >
-          {chips.map((c) => (
-            <span
-              key={c}
-              style={{
-                padding: "2px 8px",
-                background: "#eff6ff",
-                color: "#1e40af",
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 500,
-              }}
-            >
-              {c}
-            </span>
-          ))}
-        </div>
-      )}
-      {event.event_fee_cents > 0 && (
-        <div
-          style={{
-            color: "#444",
+            padding: "8px 16px",
+            background: "#2563eb",
+            color: "#fff",
+            textDecoration: "none",
+            borderRadius: 6,
             fontSize: 13,
-            marginTop: 8,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            alignSelf: "center",
           }}
         >
-          Event fee:{" "}
-          <strong>${(event.event_fee_cents / 100).toFixed(2)}</strong>
-        </div>
+          Register →
+        </Link>
       )}
     </div>
   );

@@ -4,7 +4,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -52,6 +52,12 @@ export default function RegisterPage() {
     tournamentSlug: string;
   }>();
   const navigate = useNavigate();
+  // Optional ?event=<id> query param. Set when the user arrived here
+  // by clicking the per-event "Register" button on the public
+  // tournament page — we pre-check that event so they don't have to
+  // pick it a second time after picking it on the previous screen.
+  const [searchParams] = useSearchParams();
+  const preselectEventId = searchParams.get("event");
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
@@ -141,10 +147,16 @@ export default function RegisterPage() {
         return;
       }
       setEvents(evs ?? []);
-      // Initialize per-event selection state.
+      // Initialize per-event selection state. If the user arrived
+      // here from the public tournament page's per-event Register
+      // button, ?event=<id> tells us which event to pre-check. They
+      // can still add more events before confirming.
       const sel = new Map<string, EventSelection>();
       for (const e of evs ?? []) {
-        sel.set(e.id, { selected: false, partner: emptySelection });
+        sel.set(e.id, {
+          selected: preselectEventId === e.id,
+          partner: emptySelection,
+        });
       }
       setSelections(sel);
 
@@ -193,7 +205,10 @@ export default function RegisterPage() {
     return () => {
       cancelled = true;
     };
-  }, [orgSlug, tournamentSlug, user]);
+    // preselectEventId is in deps so a direct-link to a different
+    // ?event= value re-initializes the checkbox. The full refetch is
+    // wasteful but keeps the init logic in one place.
+  }, [orgSlug, tournamentSlug, user, preselectEventId]);
 
   const setSel = (eventId: string, patch: Partial<EventSelection>) => {
     setSelections((prev) => {
