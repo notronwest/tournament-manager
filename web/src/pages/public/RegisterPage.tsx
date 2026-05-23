@@ -23,20 +23,45 @@ type Player = Database["public"]["Tables"]["players"]["Row"];
 // Per-event snapshot of what the user is *currently* registered for —
 // loaded once on mount, then compared against the live selections
 // state on every render to compute the diff (added / withdrawn /
-// unchanged). regId is the user's own event_registrations.id so we
-// can soft-delete it on withdraw. partnerLabel renders as
-// "Partnered with X" or "Waiting for X" — pure display, not used
-// for partner editing (that lives in commit C).
+// partner_changed / unchanged). regId is the user's own
+// event_registrations.id so we can soft-delete it on withdraw. The
+// partner block holds enough info to pre-fill the PartnerSearch
+// widget, detect a swap by id, and email the dropped partner on
+// change (which is what commit C is about).
 type ExistingReg = {
   regId: string;
   partnerStatus: Database["public"]["Enums"]["partner_status"];
   partnerLabel: string | null;
+  // Full enough partner shape to construct a PlayerSelection in
+  // existing mode AND to email them if they get dropped. Null when
+  // singles, or when doubles and the user hasn't picked / been
+  // matched with a partner.
+  partner: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string | null;
+    phone: string | null;
+    // The other partner's event_registrations.id, if they accepted
+    // and got linked. Null while the invite is still pending.
+    regId: string | null;
+  } | null;
+  // Most recent pending OR accepted partner_invites row for this
+  // event where I'm the inviter. We need its id to cancel it on a
+  // partner change (status='cancelled'). Null when there's no
+  // outbound invite (singles, or partner accepted way back and the
+  // row aged out somehow — defensive).
+  inviteId: string | null;
 };
 
 // Change classification for an event, computed from existingRegs +
 // selections. "unchanged" means the user's pick matches what's in
-// the DB; the other two are the only things we actually write.
-type ChangeType = "unchanged" | "added" | "withdrawn";
+// the DB; the others drive the corresponding write paths.
+type ChangeType =
+  | "unchanged"
+  | "added"
+  | "withdrawn"
+  | "partner_changed";
 
 // Per-event entry on the form. Tracks whether the user has selected
 // this event and, for doubles, the partner. The partner is a
@@ -122,6 +147,19 @@ export default function RegisterPage() {
       emailError?: string;
     }[];
     autoPairs: { eventName: string; partnerName: string }[];
+    // Partner swaps on existing regs. The new-partner invite/auto-
+    // pair side lives in partnerInvites/autoPairs above so the UI
+    // can render them uniformly with fresh registrations. This
+    // array only carries the dropped-partner side: who got dropped
+    // and whether they were emailed.
+    partnerChanges: {
+      eventName: string;
+      oldPartnerName: string;
+      newPartnerName: string;
+      cancelEmailSent: boolean;
+      cancelEmailSkipped: boolean;
+      cancelEmailError?: string;
+    }[];
   } | null>(null);
 
   useEffect(() => {
@@ -199,9 +237,11 @@ export default function RegisterPage() {
       setMe(myPlayer);
 
       // 4. The user's existing registrations for events in this
-      //    tournament, plus their outbound pending invites (for the
-      //    "Waiting for X" partner label when no partner reg exists
-      //    yet). Two reads in parallel.
+      //    tournament, plus their outbound invites (pending OR
+      //    accepted — we need either to be able to cancel a partner
+      //    swap). Joins reach far enough to construct a full
+      //    PlayerSelection for the current partner so the user can
+      //    edit it inline on this page.
       const existingMap = new Map<string, ExistingReg>();
       if (evs && evs.length > 0) {
         const eventIds = evs.map((e) => e.id);
@@ -211,7 +251,8 @@ export default function RegisterPage() {
             .select(
               `id, event_id, partner_status,
                partner_registration:event_registrations!partner_registration_id (
-                 player:players!player_id (first_name, last_name)
+                 id,
+                 player:players!player_id (id, first_name, last_name, email, phone)
                )`,
             )
             .eq("player_id", myPlayer.id)
@@ -220,12 +261,13 @@ export default function RegisterPage() {
           supabase
             .from("partner_invites")
             .select(
-              `event_id, invitee_email,
-               invitee:players!invitee_player_id (first_name, last_name)`,
+              `id, event_id, status, invitee_email,
+               invitee:players!invitee_player_id (id, first_name, last_name, email, phone)`,
             )
             .eq("inviter_player_id", myPlayer.id)
-            .eq("status", "pending")
-            .in("event_id", eventIds),
+            .in("status", ["pending", "accepted"])
+            .in("event_id", eventIds)
+            .order("created_at", { ascending: false }),
         ]);
         if (cancelled) return;
 
@@ -233,36 +275,79 @@ export default function RegisterPage() {
           id: string;
           event_id: string;
           partner_status: Database["public"]["Enums"]["partner_status"];
-          partner_registration:
-            | { player: { first_name: string; last_name: string } | null }
-            | null;
+          partner_registration: {
+            id: string;
+            player: {
+              id: string;
+              first_name: string;
+              last_name: string;
+              email: string | null;
+              phone: string | null;
+            } | null;
+          } | null;
         };
         type OutboundRow = {
+          id: string;
           event_id: string;
+          status: Database["public"]["Enums"]["partner_invite_status"];
           invitee_email: string | null;
-          invitee: { first_name: string; last_name: string } | null;
+          invitee: {
+            id: string;
+            first_name: string;
+            last_name: string;
+            email: string | null;
+            phone: string | null;
+          } | null;
         };
 
         for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
-          const partner = r.partner_registration?.player;
+          const linked = r.partner_registration;
+          const partner = linked?.player ?? null;
           existingMap.set(r.event_id, {
             regId: r.id,
             partnerStatus: r.partner_status,
             partnerLabel: partner
               ? `${partner.first_name} ${partner.last_name}`
               : null,
+            partner: partner
+              ? {
+                  id: partner.id,
+                  first_name: partner.first_name,
+                  last_name: partner.last_name,
+                  email: partner.email,
+                  phone: partner.phone,
+                  regId: linked!.id,
+                }
+              : null,
+            inviteId: null,
           });
         }
-        // Fill in partner labels for pending outbound invites where
-        // no partner_registration is linked yet (the invitee hasn't
-        // accepted, so they don't have their own reg).
+        // Walk outbound invites — newest first thanks to the order
+        // clause — to fill in two things on the existingMap rows we
+        // already created:
+        //   * inviteId so we can cancel the right row on a partner
+        //     swap or withdraw
+        //   * partner (with regId=null) when the invitee hasn't
+        //     accepted yet, so the row shows "Waiting for X" and the
+        //     PartnerSearch widget can pre-fill with them
         for (const inv of (outboundRes.data ?? []) as unknown as OutboundRow[]) {
           const cur = existingMap.get(inv.event_id);
-          const label = inv.invitee
-            ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
-            : inv.invitee_email ?? null;
-          if (cur && !cur.partnerLabel) {
-            existingMap.set(inv.event_id, { ...cur, partnerLabel: label });
+          if (!cur) continue;
+          if (!cur.inviteId) {
+            cur.inviteId = inv.id;
+          }
+          if (!cur.partner && inv.invitee) {
+            cur.partner = {
+              id: inv.invitee.id,
+              first_name: inv.invitee.first_name,
+              last_name: inv.invitee.last_name,
+              email: inv.invitee.email,
+              phone: inv.invitee.phone,
+              regId: null,
+            };
+            cur.partnerLabel = `${inv.invitee.first_name} ${inv.invitee.last_name}`;
+          } else if (!cur.partnerLabel) {
+            cur.partnerLabel = inv.invitee_email ?? null;
           }
         }
         setExistingRegs(existingMap);
@@ -276,12 +361,32 @@ export default function RegisterPage() {
       //    per-event Register button on the public page, the
       //    ?event=<id> query param also pre-checks that one (or
       //    leaves it on if they were already registered).
+      //
+      //    For existing doubles regs with a known partner, pre-fill
+      //    selection.partner with that partner in "existing" mode
+      //    so the PartnerSearch widget renders them as the picked
+      //    partner. The diff fires only when the user actually
+      //    changes them.
       const sel = new Map<string, EventSelection>();
       for (const e of evs ?? []) {
+        const existing = existingMap.get(e.id);
+        let partner: PlayerSelection = emptySelection;
+        if (existing?.partner && e.format === "doubles") {
+          // Cast through the partial → Player; the consumers we care
+          // about (PartnerSearch display, persistPlayerSelection
+          // diff, validation) only touch id/first_name/last_name/
+          // email/phone, which we have.
+          partner = {
+            mode: "existing",
+            player: existing.partner as unknown as Player,
+            emailDraft: existing.partner.email ?? "",
+            phoneDraft: existing.partner.phone ?? "",
+          };
+        }
         sel.set(e.id, {
           selected:
             existingMap.has(e.id) || preselectEventId === e.id,
-          partner: emptySelection,
+          partner,
         });
       }
       setSelections(sel);
@@ -311,21 +416,56 @@ export default function RegisterPage() {
   // Per-event change classification. Computed each render from
   // existingRegs vs selections. Drives the diff summary, the Confirm
   // button's enabled state + count, and the submit handler's
-  // add/withdraw branches. We deliberately don't track partner
-  // changes here — that's commit C (with its email side effects);
-  // for now, the partner editor is hidden on existing regs.
+  // add / withdraw / partner_changed branches.
   const changeFor = (eventId: string): ChangeType => {
-    const wasRegistered = existingRegs.has(eventId);
+    const existing = existingRegs.get(eventId);
     const isSelected = selections.get(eventId)?.selected ?? false;
-    if (wasRegistered && !isSelected) return "withdrawn";
-    if (!wasRegistered && isSelected) return "added";
+    if (existing && !isSelected) return "withdrawn";
+    if (!existing && isSelected) return "added";
+    // Still registered. Check for partner swap on doubles events.
+    if (existing && isSelected) {
+      const ev = events.find((e) => e.id === eventId);
+      if (ev && ev.format === "doubles") {
+        const newPartner = selections.get(eventId)?.partner;
+        // mode "new" always counts as a change (they typed a new
+        // person). mode "empty" counts as a change too (they
+        // cleared the partner) — submit will flag this with a
+        // validation error rather than silently doing nothing.
+        if (newPartner?.mode === "new") return "partner_changed";
+        if (newPartner?.mode === "empty" && existing.partner) {
+          return "partner_changed";
+        }
+        if (
+          newPartner?.mode === "existing" &&
+          existing.partner &&
+          newPartner.player.id !== existing.partner.id
+        ) {
+          return "partner_changed";
+        }
+        // Existing reg had no partner, user is now picking one →
+        // treat the same as a partner_changed for write purposes
+        // (we'll insert a fresh invite).
+        if (
+          newPartner?.mode === "existing" &&
+          !existing.partner
+        ) {
+          return "partner_changed";
+        }
+      }
+    }
     return "unchanged";
   };
   const addedEvents = events.filter((ev) => changeFor(ev.id) === "added");
   const withdrawnEvents = events.filter(
     (ev) => changeFor(ev.id) === "withdrawn",
   );
-  const changeCount = addedEvents.length + withdrawnEvents.length;
+  const partnerChangedEvents = events.filter(
+    (ev) => changeFor(ev.id) === "partner_changed",
+  );
+  const changeCount =
+    addedEvents.length +
+    withdrawnEvents.length +
+    partnerChangedEvents.length;
   const hasChanges = changeCount > 0;
 
   const onSubmit = async (e: FormEvent) => {
@@ -338,10 +478,11 @@ export default function RegisterPage() {
       // hit Enter on a focused checkbox — bail out cleanly.
       return;
     }
-    // Validate partner selection for NEWLY-added doubles events.
-    // Existing doubles regs aren't validated here because their
-    // partner editor is hidden in B; partner changes are commit C.
-    for (const ev of addedEvents) {
+    // Validate partner selection for any doubles event that's going
+    // to write (new registration OR a partner swap on an existing
+    // one). Same rules either way: must pick a partner, partner
+    // can't be self, partner email must be present.
+    for (const ev of [...addedEvents, ...partnerChangedEvents]) {
       if (ev.format !== "doubles") continue;
       const s = selections.get(ev.id)!;
       if (s.partner.mode === "empty") {
@@ -588,11 +729,228 @@ export default function RegisterPage() {
       });
     }
 
+    // ─── Process partner changes. For each event where the user
+    //     swapped their doubles partner:
+    //       1. Cancel the outbound invite (if we own one).
+    //       2. Soft-delete the dropped partner's event_registration
+    //          if they had accepted (regId is set).
+    //       3. Email the dropped partner a polite cancellation note
+    //          (best-effort; skipped for fake addresses).
+    //       4. Reset my own reg back to partner_status='pending'
+    //          with the link cleared, so the new-partner flow below
+    //          starts from a clean state.
+    //       5. Resolve the new partner. Auto-pair if they happened
+    //          to have invited me already; otherwise create a new
+    //          outbound invite + send email — same shape as the
+    //          new-registration path above, so the done screen can
+    //          render the new-partner invite cards uniformly.
+    const partnerChanges: {
+      eventName: string;
+      oldPartnerName: string;
+      newPartnerName: string;
+      cancelEmailSent: boolean;
+      cancelEmailSkipped: boolean;
+      cancelEmailError?: string;
+    }[] = [];
+
+    for (const ev of partnerChangedEvents) {
+      const existing = existingRegs.get(ev.id);
+      if (!existing) continue; // defensive — partner_changed implies existing
+      const sel = selections.get(ev.id)!;
+      const oldPartner = existing.partner;
+
+      let cancelEmailSent = false;
+      let cancelEmailSkipped = false;
+      let cancelEmailError: string | undefined;
+
+      // 1. Cancel our outbound invite if we have one. We may not —
+      //    if the original pairing happened because the OLD partner
+      //    invited US (we auto-paired by registering and picking
+      //    them), the invite's inviter_player_id is them, not us,
+      //    and existing.inviteId would be null. In that case the
+      //    old invite stays alive but inert; the old partner's
+      //    reg gets soft-deleted in step 2 either way.
+      if (existing.inviteId) {
+        await supabase
+          .from("partner_invites")
+          .update({ status: "cancelled" })
+          .eq("id", existing.inviteId);
+      }
+
+      // 2. Soft-delete the dropped partner's reg if they actually
+      //    accepted (regId set). They're now off the event; if
+      //    they want back in, they re-register.
+      if (oldPartner?.regId) {
+        await supabase
+          .from("event_registrations")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", oldPartner.regId);
+      }
+
+      // 3. Cancellation email — only attempt when we have both a
+      //    cancellable invite (so the edge function has joins to
+      //    work with) AND a real email address.
+      if (existing.inviteId && oldPartner?.email) {
+        if (isObviouslyFakeEmail(oldPartner.email)) {
+          cancelEmailSkipped = true;
+        } else {
+          try {
+            const { error: sendErr } = await supabase.functions.invoke(
+              "send-partner-cancellation",
+              { body: { inviteId: existing.inviteId } },
+            );
+            if (sendErr) cancelEmailError = sendErr.message;
+            else cancelEmailSent = true;
+          } catch (e) {
+            cancelEmailError =
+              e instanceof Error ? e.message : String(e);
+          }
+        }
+      }
+
+      // 4. Reset my reg: clear partner link, mark pending.
+      const { error: resetErr } = await supabase
+        .from("event_registrations")
+        .update({
+          partner_status: "pending",
+          partner_registration_id: null,
+        })
+        .eq("id", existing.regId);
+      if (resetErr) {
+        setError(
+          `Failed to reset registration for "${ev.name}": ${resetErr.message}`,
+        );
+        setPhase("form");
+        return;
+      }
+
+      // 5. Resolve new partner + auto-pair OR new invite.
+      const partnerRes = await persistPlayerSelection(sel.partner);
+      if (!partnerRes.player) {
+        setError(
+          partnerRes.error ??
+            `Failed to set up new partner for "${ev.name}".`,
+        );
+        setPhase("form");
+        return;
+      }
+      const newPartner = partnerRes.player;
+      const newPartnerEmail =
+        newPartner.email ??
+        (sel.partner.mode === "new" ? sel.partner.email.trim() : null);
+
+      const oldPartnerName = oldPartner
+        ? `${oldPartner.first_name} ${oldPartner.last_name}`
+        : "your previous partner";
+      const newPartnerName = `${newPartner.first_name} ${newPartner.last_name}`;
+      partnerChanges.push({
+        eventName: ev.name,
+        oldPartnerName,
+        newPartnerName,
+        cancelEmailSent,
+        cancelEmailSkipped,
+        cancelEmailError,
+      });
+
+      // Check for an inbound invite from the new partner. If they
+      // had already invited me, registering here counts as
+      // accepting that invite — no new outbound invite needed.
+      let inboundInviteId: string | null = null;
+      if (user.email) {
+        const { data: inbound } = await supabase
+          .from("partner_invites")
+          .select("id")
+          .eq("event_id", ev.id)
+          .eq("inviter_player_id", newPartner.id)
+          .eq("invitee_email", user.email)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (inbound) inboundInviteId = inbound.id;
+      }
+
+      if (inboundInviteId) {
+        const { error: acceptErr } = await supabase.rpc(
+          "accept_partner_invite",
+          { p_invite_id: inboundInviteId },
+        );
+        if (!acceptErr) {
+          autoPairs.push({
+            eventName: ev.name,
+            partnerName: newPartnerName,
+          });
+          continue;
+        }
+        // Fall through to outbound invite on accept failure.
+      }
+
+      if (!newPartnerEmail) {
+        setError(
+          `No email on file for new partner in "${ev.name}".`,
+        );
+        setPhase("form");
+        return;
+      }
+      const { data: invite, error: invErr } = await supabase
+        .from("partner_invites")
+        .insert({
+          event_id: ev.id,
+          inviter_player_id: me.id,
+          invitee_player_id: newPartner.id,
+          invitee_email: newPartnerEmail,
+          status: "pending",
+        })
+        .select()
+        .single();
+      if (invErr || !invite) {
+        setError(
+          invErr?.message ??
+            `Failed to send invite to new partner for "${ev.name}".`,
+        );
+        setPhase("form");
+        return;
+      }
+      const url = `${window.location.origin}/t/${orgSlug}/${tournamentSlug}/invites/${invite.token}`;
+
+      let emailSent = false;
+      let emailSkipped = false;
+      let emailError: string | undefined;
+      if (isObviouslyFakeEmail(newPartnerEmail)) {
+        emailSkipped = true;
+      } else {
+        try {
+          const { error: sendErr } = await supabase.functions.invoke(
+            "send-partner-invite",
+            {
+              body: {
+                inviteId: invite.id,
+                baseUrl: window.location.origin,
+              },
+            },
+          );
+          if (sendErr) emailError = sendErr.message;
+          else emailSent = true;
+        } catch (e) {
+          emailError = e instanceof Error ? e.message : String(e);
+        }
+      }
+      partnerInvites.push({
+        eventName: ev.name,
+        partnerEmail: newPartnerEmail,
+        url,
+        emailSent,
+        emailSkipped,
+        emailError,
+      });
+    }
+
     setDoneResult({
       registeredEventNames,
       withdrawnEventNames,
       partnerInvites,
       autoPairs,
+      partnerChanges,
     });
     setPhase("done");
   };
@@ -617,6 +975,21 @@ export default function RegisterPage() {
   if (phase === "done" && doneResult) {
     const addedCount = doneResult.registeredEventNames.length;
     const withdrewCount = doneResult.withdrawnEventNames.length;
+    const partnerChangedCount = doneResult.partnerChanges.length;
+    // Heading hierarchy: if anything was added we lead with the
+    // "registered" framing; if it's pure withdrawals we say so; if
+    // it's only partner swaps we say so. Multi-flavor submits get
+    // the generic "updated" headline.
+    const heading =
+      addedCount > 0 && (withdrewCount > 0 || partnerChangedCount > 0)
+        ? "Your registration is updated"
+        : addedCount > 0
+          ? "You're registered!"
+          : withdrewCount > 0 && partnerChangedCount === 0
+            ? "Withdrawn"
+            : partnerChangedCount > 0 && withdrewCount === 0
+              ? "Partner updated"
+              : "Your registration is updated";
     return (
       <Shell>
         <div
@@ -631,11 +1004,7 @@ export default function RegisterPage() {
           <h1
             style={{ margin: "0 0 8px", fontSize: 20, color: "#166534" }}
           >
-            {addedCount > 0 && withdrewCount > 0
-              ? "Your registration is updated"
-              : withdrewCount > 0
-                ? "Withdrawn"
-                : "You're registered!"}
+            {heading}
           </h1>
           {addedCount > 0 && (
             <p style={{ margin: 0, color: "#166534", fontSize: 14 }}>
@@ -655,6 +1024,60 @@ export default function RegisterPage() {
             </p>
           )}
         </div>
+
+        {doneResult.partnerChanges.length > 0 && (
+          <section style={{ marginBottom: 24 }}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 16 }}>
+              Partner change{doneResult.partnerChanges.length === 1 ? "" : "s"}
+            </h2>
+            <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
+              {doneResult.partnerChanges.every(
+                (c) => c.cancelEmailSent || c.cancelEmailSkipped,
+              )
+                ? "Your previous partner has been notified (or, for test addresses, would have been). The new partner's invite is below."
+                : "Some cancellation notices to your previous partners didn't go out — details below. The new partner's invite is below."}
+            </p>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: 18,
+                fontSize: 13,
+                lineHeight: 1.7,
+              }}
+            >
+              {doneResult.partnerChanges.map((c, i) => (
+                <li key={i}>
+                  <strong>{c.eventName}</strong>:{" "}
+                  <span style={{ color: "#666" }}>{c.oldPartnerName}</span>
+                  {" → "}
+                  <strong>{c.newPartnerName}</strong>
+                  {c.cancelEmailError && (
+                    <span
+                      style={{
+                        color: "#92400e",
+                        fontSize: 11,
+                        marginLeft: 6,
+                      }}
+                    >
+                      (couldn't email previous partner: {c.cancelEmailError})
+                    </span>
+                  )}
+                  {c.cancelEmailSkipped && (
+                    <span
+                      style={{
+                        color: "#888",
+                        fontSize: 11,
+                        marginLeft: 6,
+                      }}
+                    >
+                      (test address — no email sent)
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {doneResult.autoPairs.length > 0 && (
           <section style={{ marginBottom: 24 }}>
@@ -799,6 +1222,9 @@ export default function RegisterPage() {
           <ChangeSummary
             added={addedEvents}
             withdrawn={withdrawnEvents}
+            partnerChanged={partnerChangedEvents}
+            existingRegs={existingRegs}
+            selections={selections}
           />
         )}
 
@@ -925,35 +1351,45 @@ function EventRow({
   const chips = eligibilityChips(event);
 
   // Visual treatment derived from existing-reg + diff state.
-  // "added"    → blue border, "Will register" pill
-  // "withdrawn"→ red border + tint, "Will withdraw" pill + warning
+  // "added"           → blue border, "Will register" pill
+  // "withdrawn"       → red border + tint, "Will withdraw" pill + warning
+  // "partner_changed" → amber border + tint, "Partner change" pill
   // "unchanged" + existing → green tint, "Registered" pill
   // "unchanged" + new      → plain (default)
   const isExistingChecked = !!existing && change === "unchanged";
   const isWillWithdraw = change === "withdrawn";
   const isWillAdd = change === "added";
+  const isPartnerChanged = change === "partner_changed";
 
   const borderColor = isWillWithdraw
     ? "#fca5a5"
     : isWillAdd
       ? "#2563eb"
-      : isExistingChecked
-        ? "#bbf7d0"
-        : selection.selected
-          ? "#2563eb"
-          : "#e5e7eb";
+      : isPartnerChanged
+        ? "#fbbf24"
+        : isExistingChecked
+          ? "#bbf7d0"
+          : selection.selected
+            ? "#2563eb"
+            : "#e5e7eb";
   const bg = isWillWithdraw
     ? "#fef2f2"
-    : isExistingChecked
-      ? "#f0fdf4"
-      : "#fff";
+    : isPartnerChanged
+      ? "#fffbeb"
+      : isExistingChecked
+        ? "#f0fdf4"
+        : "#fff";
 
-  // Doubles partner editor only renders for NEWLY-added events.
-  // Existing doubles regs show a read-only "Partnered with X" line
-  // instead — changing partners is commit C (with its email
-  // side-effects).
+  // PartnerSearch widget renders for any selected doubles event —
+  // new registration OR existing one. For existing regs, the
+  // selection.partner was pre-filled with the current partner in
+  // "existing" mode by the page-level init, so the widget shows
+  // them already-picked with a × clear button. The user can swap
+  // partners by clearing + picking someone else; the diff handles
+  // detection and onSubmit's partner_changed branch handles the
+  // cancel-old-invite + email side effects.
   const showPartnerEditor =
-    event.format === "doubles" && selection.selected && !existing;
+    event.format === "doubles" && selection.selected;
 
   return (
     <label
@@ -991,12 +1427,18 @@ function EventRow({
             {isWillWithdraw && (
               <Pill bg="#fee2e2" fg="#991b1b">Will withdraw</Pill>
             )}
+            {isPartnerChanged && (
+              <Pill bg="#fef3c7" fg="#7a5d00">Partner change</Pill>
+            )}
           </div>
-          {/* Partner display for existing doubles regs — read-only in
-              B. Goes editable in C. */}
+          {/* Current partner reminder. For an unchanged existing reg
+              we show "Partnered with X" / "Waiting for X" in green.
+              For a partner_changed reg we show "Was: X" in amber so
+              the user can see what they're moving away from. */}
           {existing &&
             event.format === "doubles" &&
-            existing.partnerLabel && (
+            existing.partnerLabel &&
+            !isPartnerChanged && (
               <div
                 style={{
                   fontSize: 12,
@@ -1010,6 +1452,18 @@ function EventRow({
                 <strong>{existing.partnerLabel}</strong>
               </div>
             )}
+          {isPartnerChanged && existing?.partnerLabel && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#7a5d00",
+                marginTop: 4,
+              }}
+            >
+              Was: <strong>{existing.partnerLabel}</strong>. They'll be
+              notified by email when you confirm.
+            </div>
+          )}
           {isWillWithdraw && (
             <div
               style={{
@@ -1128,10 +1582,37 @@ function Pill({
 function ChangeSummary({
   added,
   withdrawn,
+  partnerChanged,
+  existingRegs,
+  selections,
 }: {
   added: Event[];
   withdrawn: Event[];
+  partnerChanged: Event[];
+  existingRegs: Map<string, ExistingReg>;
+  selections: Map<string, EventSelection>;
 }) {
+  // Render a partner swap as "old → new" so the user can verify
+  // the diff before hitting Confirm. Falls back to "previous
+  // partner" when we don't have the old partner's name (e.g.
+  // they never accepted the original invite).
+  const describePartnerSwap = (ev: Event): string => {
+    const existing = existingRegs.get(ev.id);
+    const sel = selections.get(ev.id);
+    const oldLabel = existing?.partner
+      ? `${existing.partner.first_name} ${existing.partner.last_name}`
+      : "your previous partner";
+    let newLabel = "(no partner picked)";
+    if (sel?.partner.mode === "existing") {
+      newLabel = `${sel.partner.player.first_name} ${sel.partner.player.last_name}`;
+    } else if (sel?.partner.mode === "new") {
+      const first = sel.partner.firstName.trim();
+      const last = sel.partner.lastName.trim();
+      newLabel =
+        first || last ? `${first} ${last}`.trim() : "a new partner";
+    }
+    return `${oldLabel} → ${newLabel}`;
+  };
   return (
     <div
       style={{
@@ -1169,6 +1650,12 @@ function ChangeSummary({
         {withdrawn.map((ev) => (
           <li key={`w-${ev.id}`}>
             <strong>Withdraw</strong> from {ev.name}
+          </li>
+        ))}
+        {partnerChanged.map((ev) => (
+          <li key={`p-${ev.id}`}>
+            <strong>Change partner</strong> for {ev.name} (
+            {describePartnerSwap(ev)})
           </li>
         ))}
       </ul>
