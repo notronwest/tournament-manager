@@ -89,7 +89,14 @@ export default function RegisterPage() {
       eventName: string;
       partnerEmail: string;
       url: string;
+      // Three mutually-exclusive states. emailSent=true means
+      // Resend accepted the send. emailSkipped=true means we never
+      // tried because the address is obviously fake (test accounts
+      // etc.). Both false + emailError set means we tried and the
+      // edge function rejected. Only one of sent/skipped is true at
+      // a time.
       emailSent: boolean;
+      emailSkipped: boolean;
       emailError?: string;
     }[];
     autoPairs: { eventName: string; partnerName: string }[];
@@ -284,6 +291,7 @@ export default function RegisterPage() {
       partnerEmail: string;
       url: string;
       emailSent: boolean;
+      emailSkipped: boolean;
       emailError?: string;
     }[] = [];
     const autoPairs: { eventName: string; partnerName: string }[] = [];
@@ -414,21 +422,29 @@ export default function RegisterPage() {
       const url = `${window.location.origin}/t/${orgSlug}/${tournamentSlug}/invites/${invite.token}`;
 
       let emailSent = false;
+      let emailSkipped = false;
       let emailError: string | undefined;
-      try {
-        const { error: sendErr } = await supabase.functions.invoke(
-          "send-partner-invite",
-          {
-            body: {
-              inviteId: invite.id,
-              baseUrl: window.location.origin,
+      if (isObviouslyFakeEmail(partnerEmail)) {
+        // Test accounts (test.player.N@example.test, foo@example.com,
+        // etc.) — sending real email is doomed. Skip the invoke and
+        // surface the link prominently so the tester can copy it.
+        emailSkipped = true;
+      } else {
+        try {
+          const { error: sendErr } = await supabase.functions.invoke(
+            "send-partner-invite",
+            {
+              body: {
+                inviteId: invite.id,
+                baseUrl: window.location.origin,
+              },
             },
-          },
-        );
-        if (sendErr) emailError = sendErr.message;
-        else emailSent = true;
-      } catch (e) {
-        emailError = e instanceof Error ? e.message : String(e);
+          );
+          if (sendErr) emailError = sendErr.message;
+          else emailSent = true;
+        } catch (e) {
+          emailError = e instanceof Error ? e.message : String(e);
+        }
       }
 
       partnerInvites.push({
@@ -436,6 +452,7 @@ export default function RegisterPage() {
         partnerEmail,
         url,
         emailSent,
+        emailSkipped,
         emailError,
       });
     }
@@ -511,9 +528,25 @@ export default function RegisterPage() {
               Partner invite{doneResult.partnerInvites.length === 1 ? "" : "s"}
             </h2>
             <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
-              {doneResult.partnerInvites.every((i) => i.emailSent)
-                ? "We emailed your partner(s) a confirmation link. You can also share the link directly:"
-                : "Heads up — some invite emails didn't go out (details below). The links still work if you copy them yourself."}
+              {(() => {
+                const all = doneResult.partnerInvites;
+                const allSent = all.every((i) => i.emailSent);
+                const allSkipped = all.every((i) => i.emailSkipped);
+                const someFailed = all.some(
+                  (i) => !i.emailSent && !i.emailSkipped,
+                );
+                if (allSent) {
+                  return "We emailed your partner(s) a confirmation link. You can also share the link directly:";
+                }
+                if (allSkipped) {
+                  return "These invites went to test addresses — we didn't actually send the emails. Copy the links below to accept the invites yourself.";
+                }
+                if (someFailed) {
+                  return "Heads up — some invite emails didn't go out (details below). The links still work if you copy them yourself.";
+                }
+                // Mix of sent + skipped, no failures.
+                return "Some invites were emailed and some went to test addresses (links below).";
+              })()}
             </p>
             <div
               style={{
@@ -804,12 +837,14 @@ function PartnerInviteCard({
   partnerEmail,
   url,
   emailSent,
+  emailSkipped,
   emailError,
 }: {
   eventName: string;
   partnerEmail: string;
   url: string;
   emailSent: boolean;
+  emailSkipped: boolean;
   emailError?: string;
 }) {
   const [copied, setCopied] = useState(false);
@@ -841,41 +876,38 @@ function PartnerInviteCard({
       >
         <div style={{ fontSize: 13, fontWeight: 500 }}>{eventName}</div>
         {emailSent ? (
-          <span
-            style={{
-              padding: "1px 8px",
-              background: "#dcfce7",
-              color: "#166534",
-              borderRadius: 3,
-              fontSize: 10,
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-            }}
-          >
+          <Badge bg="#dcfce7" fg="#166534">
             Emailed
-          </span>
-        ) : (
-          <span
-            title={emailError ?? undefined}
-            style={{
-              padding: "1px 8px",
-              background: "#fffbeb",
-              color: "#92400e",
-              borderRadius: 3,
-              fontSize: 10,
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: 0.3,
-            }}
+          </Badge>
+        ) : emailSkipped ? (
+          <Badge
+            bg="#eff6ff"
+            fg="#1e40af"
+            title="Address looks like a test account — we didn't try to send."
           >
+            Test account
+          </Badge>
+        ) : (
+          <Badge bg="#fffbeb" fg="#92400e" title={emailError ?? undefined}>
             Email failed
-          </span>
+          </Badge>
         )}
       </div>
       <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
         Invite for <strong>{partnerEmail}</strong>
       </div>
+      {emailSkipped && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "#1e40af",
+            marginTop: 4,
+          }}
+        >
+          This looks like a test address — copy the link below to
+          accept it manually.
+        </div>
+      )}
       {emailError && (
         <div
           style={{
@@ -987,5 +1019,59 @@ function fmtList(items: string[]): string {
   if (items.length === 1) return items[0];
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+// Detect addresses that can't possibly receive real email. We skip
+// the send for these — Resend just rejects them with a 422 anyway,
+// which surfaces in the UI as a scary "Email failed" badge.
+// Covers:
+//   * the seeded test players (test.player.N@example.test)
+//   * any .test TLD (RFC 2606 — reserved for testing, no real DNS)
+//   * the example.{com,net,org} domains (RFC 2606 — reserved for
+//     documentation/examples)
+function isObviouslyFakeEmail(email: string | null): boolean {
+  if (!email) return false;
+  const e = email.trim().toLowerCase();
+  if (e.endsWith(".test")) return true;
+  if (
+    e.endsWith("@example.com") ||
+    e.endsWith("@example.net") ||
+    e.endsWith("@example.org")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+// Small status pill, shared across the three invite states
+// (Emailed / Test account / Email failed).
+function Badge({
+  bg,
+  fg,
+  title,
+  children,
+}: {
+  bg: string;
+  fg: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      title={title}
+      style={{
+        padding: "1px 8px",
+        background: bg,
+        color: fg,
+        borderRadius: 3,
+        fontSize: 10,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: 0.3,
+      }}
+    >
+      {children}
+    </span>
+  );
 }
 
