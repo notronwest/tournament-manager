@@ -22,6 +22,11 @@ type InviteContext = {
   invitee_email: string | null;
   inviter_first_name: string;
   inviter_last_name: string;
+  // Inviter contact info — exposed so the invitee can verify
+  // they actually know the person who picked them before
+  // accepting. Names alone collide in busy tournaments.
+  inviter_email: string | null;
+  inviter_phone: string | null;
   event_id: string;
   event_name: string;
   event_format: Database["public"]["Enums"]["event_format"];
@@ -382,11 +387,45 @@ export default function PartnerAcceptPage() {
             first={context.inviter_first_name}
             last={context.inviter_last_name}
           />
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontWeight: 500, fontSize: 14 }}>{inviterFull}</div>
             <div style={{ fontSize: 12, color: "#666" }}>
               invited you to be their partner
             </div>
+            {/* Contact info — surfaced so the invitee can verify it's
+                someone they actually know before committing. Hidden
+                gracefully when the inviter hasn't put any contact on
+                file (uncommon but possible for admin-pre-created
+                players). */}
+            {(context.inviter_email || context.inviter_phone) && (
+              <div
+                style={{
+                  marginTop: 6,
+                  display: "flex",
+                  gap: 12,
+                  fontSize: 12,
+                  color: "#444",
+                  flexWrap: "wrap",
+                }}
+              >
+                {context.inviter_email && (
+                  <a
+                    href={`mailto:${context.inviter_email}`}
+                    style={contactLinkStyle}
+                  >
+                    ✉ {context.inviter_email}
+                  </a>
+                )}
+                {context.inviter_phone && (
+                  <a
+                    href={`tel:${context.inviter_phone}`}
+                    style={contactLinkStyle}
+                  >
+                    ☎ {context.inviter_phone}
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -617,4 +656,9 @@ const metaGrid: CSSProperties = {
   display: "flex",
   gap: 16,
   flexWrap: "wrap",
+};
+
+const contactLinkStyle: CSSProperties = {
+  color: "#2563eb",
+  textDecoration: "none",
 };

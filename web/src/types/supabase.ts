@@ -879,8 +879,10 @@ export type Database = {
           invite_id: string
           invite_status: Database["public"]["Enums"]["partner_invite_status"]
           invitee_email: string
+          inviter_email: string
           inviter_first_name: string
           inviter_last_name: string
+          inviter_phone: string
           org_slug: string
           tournament_id: string
           tournament_name: string
