@@ -404,28 +404,51 @@ export default function ProfilePage() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={busy}
-          style={{
-            padding: "12px 24px",
-            background: busy ? "#9ca3af" : "#2563eb",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-            fontSize: 15,
-            fontWeight: 500,
-            cursor: busy ? "not-allowed" : "pointer",
-            fontFamily: "inherit",
-            marginTop: 4,
-          }}
-        >
-          {busy
-            ? "Saving…"
-            : isFirstFill
-              ? "Save & continue →"
-              : "Save profile"}
-        </button>
+        <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
+          <button
+            type="submit"
+            disabled={busy}
+            style={{
+              padding: "12px 24px",
+              background: busy ? "#9ca3af" : "#2563eb",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              fontSize: 15,
+              fontWeight: 500,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {busy
+              ? "Saving…"
+              : isFirstFill
+                ? "Save & continue →"
+                : "Save profile"}
+          </button>
+          {/* Cancel sends the user back where they came from on the
+              edit path (returnTo defaults to /admin). On first-fill
+              they can still cancel, but they'll have to come back to
+              the profile screen before they can register for
+              anything — RequireProfile bounces them right here. */}
+          <button
+            type="button"
+            onClick={() => navigate(isFirstFill ? "/" : returnTo)}
+            disabled={busy}
+            style={{
+              padding: "12px 20px",
+              background: "#fff",
+              color: "#555",
+              border: "1px solid #e2e2e2",
+              borderRadius: 6,
+              fontSize: 14,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
       </form>
     </Shell>
   );

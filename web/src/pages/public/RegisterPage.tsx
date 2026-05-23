@@ -846,32 +846,56 @@ export default function RegisterPage() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={submitting || !hasChanges}
-          style={{
-            padding: "12px 24px",
-            background: submitting || !hasChanges ? "#9ca3af" : "#2563eb",
-            color: "#fff",
-            border: "none",
-            borderRadius: 6,
-            fontSize: 15,
-            fontWeight: 500,
-            cursor:
-              submitting || !hasChanges ? "not-allowed" : "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          {submitting
-            ? "Saving…"
-            : !hasChanges
-              ? existingRegs.size > 0
-                ? "No changes to save"
-                : "Pick at least one event"
-              : changeCount === 1
-                ? "Confirm 1 change"
-                : `Confirm ${changeCount} changes`}
-        </button>
+        <div style={{ display: "flex", gap: 12 }}>
+          <button
+            type="submit"
+            disabled={submitting || !hasChanges}
+            style={{
+              padding: "12px 24px",
+              background:
+                submitting || !hasChanges ? "#9ca3af" : "#2563eb",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              fontSize: 15,
+              fontWeight: 500,
+              cursor:
+                submitting || !hasChanges ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {submitting
+              ? "Saving…"
+              : !hasChanges
+                ? existingRegs.size > 0
+                  ? "No changes to save"
+                  : "Pick at least one event"
+                : changeCount === 1
+                  ? "Confirm 1 change"
+                  : `Confirm ${changeCount} changes`}
+          </button>
+          {/* Cancel discards in-progress changes and drops the user
+              back at the tournament public page. The form is
+              re-derivable from the DB so leaving here doesn't lose
+              anything saved. */}
+          <button
+            type="button"
+            onClick={() => navigate(`/t/${orgSlug}/${tournamentSlug}`)}
+            disabled={submitting}
+            style={{
+              padding: "12px 20px",
+              background: "#fff",
+              color: "#555",
+              border: "1px solid #e2e2e2",
+              borderRadius: 6,
+              fontSize: 14,
+              cursor: submitting ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
       </form>
     </Shell>
   );

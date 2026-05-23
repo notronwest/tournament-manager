@@ -273,6 +273,34 @@ export default function LoginPage() {
             {error}
           </div>
         )}
+
+        {/* Cancel: a quiet escape hatch so a user who clicked
+            "Register" by accident isn't stuck on the sign-in screen
+            without a clear way back. Drops them at the homepage where
+            they can keep browsing. */}
+        <div
+          style={{
+            marginTop: 16,
+            textAlign: "center",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#666",
+              fontSize: 13,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textDecoration: "underline",
+              padding: 0,
+            }}
+          >
+            Cancel
+          </button>
+        </div>
       </div>
     </main>
   );

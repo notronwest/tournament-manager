@@ -453,7 +453,7 @@ export default function BulkEventsEditPage() {
                   : `Save ${dirtyIds.size} change${dirtyIds.size === 1 ? "" : "s"}`}
             </button>
             <Link to={backUrl} style={secondaryLinkBtn}>
-              Done
+              Cancel
             </Link>
             {savedAt && dirtyIds.size === 0 && (
               <span style={{ color: "#16a34a", fontSize: 13 }}>
