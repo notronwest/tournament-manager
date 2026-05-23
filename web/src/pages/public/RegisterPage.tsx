@@ -20,6 +20,24 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
 
+// Per-event snapshot of what the user is *currently* registered for —
+// loaded once on mount, then compared against the live selections
+// state on every render to compute the diff (added / withdrawn /
+// unchanged). regId is the user's own event_registrations.id so we
+// can soft-delete it on withdraw. partnerLabel renders as
+// "Partnered with X" or "Waiting for X" — pure display, not used
+// for partner editing (that lives in commit C).
+type ExistingReg = {
+  regId: string;
+  partnerStatus: Database["public"]["Enums"]["partner_status"];
+  partnerLabel: string | null;
+};
+
+// Change classification for an event, computed from existingRegs +
+// selections. "unchanged" means the user's pick matches what's in
+// the DB; the other two are the only things we actually write.
+type ChangeType = "unchanged" | "added" | "withdrawn";
+
 // Per-event entry on the form. Tracks whether the user has selected
 // this event and, for doubles, the partner. The partner is a
 // PlayerSelection from the shared PlayerPicker component — empty,
@@ -66,10 +84,13 @@ export default function RegisterPage() {
   // registrations and to populate excludePlayerIds on the partner
   // picker so the user can't pick themselves.
   const [me, setMe] = useState<Player | null>(null);
-  // Track which events the user is *already* registered for so we
-  // don't double-register them. (Stored as a set of event_ids.)
-  const [existingRegEventIds, setExistingRegEventIds] = useState<Set<string>>(
-    new Set(),
+  // Track which events the user is already registered for, keyed by
+  // event_id. Used to (a) pre-check those events in the selections
+  // map, (b) avoid double-registering them, (c) compute the diff
+  // against the live form state, and (d) soft-delete the right
+  // event_registration row on withdraw.
+  const [existingRegs, setExistingRegs] = useState<Map<string, ExistingReg>>(
+    new Map(),
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +106,7 @@ export default function RegisterPage() {
   const [phase, setPhase] = useState<"form" | "submitting" | "done">("form");
   const [doneResult, setDoneResult] = useState<{
     registeredEventNames: string[];
+    withdrawnEventNames: string[];
     partnerInvites: {
       eventName: string;
       partnerEmail: string;
@@ -154,18 +176,6 @@ export default function RegisterPage() {
         return;
       }
       setEvents(evs ?? []);
-      // Initialize per-event selection state. If the user arrived
-      // here from the public tournament page's per-event Register
-      // button, ?event=<id> tells us which event to pre-check. They
-      // can still add more events before confirming.
-      const sel = new Map<string, EventSelection>();
-      for (const e of evs ?? []) {
-        sel.set(e.id, {
-          selected: preselectEventId === e.id,
-          partner: emptySelection,
-        });
-      }
-      setSelections(sel);
 
       // 3. The user's player row. Guaranteed to exist + have a name
       //    by the time we render — RequireProfile redirects to
@@ -188,24 +198,93 @@ export default function RegisterPage() {
       }
       setMe(myPlayer);
 
-      // 4. Existing registrations for this user in this tournament,
-      //    so we can show "Already registered" instead of letting them
-      //    double-register.
+      // 4. The user's existing registrations for events in this
+      //    tournament, plus their outbound pending invites (for the
+      //    "Waiting for X" partner label when no partner reg exists
+      //    yet). Two reads in parallel.
+      const existingMap = new Map<string, ExistingReg>();
       if (evs && evs.length > 0) {
-        const { data } = await supabase
-          .from("event_registrations")
-          .select("event_id")
-          .eq("player_id", myPlayer.id)
-          .in(
-            "event_id",
-            evs.map((e) => e.id),
-          )
-          .is("deleted_at", null);
+        const eventIds = evs.map((e) => e.id);
+        const [regsRes, outboundRes] = await Promise.all([
+          supabase
+            .from("event_registrations")
+            .select(
+              `id, event_id, partner_status,
+               partner_registration:event_registrations!partner_registration_id (
+                 player:players!player_id (first_name, last_name)
+               )`,
+            )
+            .eq("player_id", myPlayer.id)
+            .in("event_id", eventIds)
+            .is("deleted_at", null),
+          supabase
+            .from("partner_invites")
+            .select(
+              `event_id, invitee_email,
+               invitee:players!invitee_player_id (first_name, last_name)`,
+            )
+            .eq("inviter_player_id", myPlayer.id)
+            .eq("status", "pending")
+            .in("event_id", eventIds),
+        ]);
         if (cancelled) return;
-        setExistingRegEventIds(
-          new Set((data ?? []).map((r) => r.event_id)),
-        );
+
+        type RegRow = {
+          id: string;
+          event_id: string;
+          partner_status: Database["public"]["Enums"]["partner_status"];
+          partner_registration:
+            | { player: { first_name: string; last_name: string } | null }
+            | null;
+        };
+        type OutboundRow = {
+          event_id: string;
+          invitee_email: string | null;
+          invitee: { first_name: string; last_name: string } | null;
+        };
+
+        for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
+          const partner = r.partner_registration?.player;
+          existingMap.set(r.event_id, {
+            regId: r.id,
+            partnerStatus: r.partner_status,
+            partnerLabel: partner
+              ? `${partner.first_name} ${partner.last_name}`
+              : null,
+          });
+        }
+        // Fill in partner labels for pending outbound invites where
+        // no partner_registration is linked yet (the invitee hasn't
+        // accepted, so they don't have their own reg).
+        for (const inv of (outboundRes.data ?? []) as unknown as OutboundRow[]) {
+          const cur = existingMap.get(inv.event_id);
+          const label = inv.invitee
+            ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
+            : inv.invitee_email ?? null;
+          if (cur && !cur.partnerLabel) {
+            existingMap.set(inv.event_id, { ...cur, partnerLabel: label });
+          }
+        }
+        setExistingRegs(existingMap);
+      } else {
+        setExistingRegs(new Map());
       }
+
+      // 5. Initialize selections. Pre-check any event the user is
+      //    already registered for so the diff against the form's
+      //    live state stays accurate. If the user arrived via the
+      //    per-event Register button on the public page, the
+      //    ?event=<id> query param also pre-checks that one (or
+      //    leaves it on if they were already registered).
+      const sel = new Map<string, EventSelection>();
+      for (const e of evs ?? []) {
+        sel.set(e.id, {
+          selected:
+            existingMap.has(e.id) || preselectEventId === e.id,
+          partner: emptySelection,
+        });
+      }
+      setSelections(sel);
 
       setLoading(false);
     })();
@@ -229,18 +308,40 @@ export default function RegisterPage() {
     });
   };
 
+  // Per-event change classification. Computed each render from
+  // existingRegs vs selections. Drives the diff summary, the Confirm
+  // button's enabled state + count, and the submit handler's
+  // add/withdraw branches. We deliberately don't track partner
+  // changes here — that's commit C (with its email side effects);
+  // for now, the partner editor is hidden on existing regs.
+  const changeFor = (eventId: string): ChangeType => {
+    const wasRegistered = existingRegs.has(eventId);
+    const isSelected = selections.get(eventId)?.selected ?? false;
+    if (wasRegistered && !isSelected) return "withdrawn";
+    if (!wasRegistered && isSelected) return "added";
+    return "unchanged";
+  };
+  const addedEvents = events.filter((ev) => changeFor(ev.id) === "added");
+  const withdrawnEvents = events.filter(
+    (ev) => changeFor(ev.id) === "withdrawn",
+  );
+  const changeCount = addedEvents.length + withdrawnEvents.length;
+  const hasChanges = changeCount > 0;
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!user || !me) return;
     setError(null);
 
-    const chosen = events.filter((ev) => selections.get(ev.id)?.selected);
-    if (chosen.length === 0) {
-      setError("Pick at least one event.");
+    if (!hasChanges) {
+      // Button is disabled in this state but the user could still
+      // hit Enter on a focused checkbox — bail out cleanly.
       return;
     }
-    // Validate partner selection for doubles events
-    for (const ev of chosen) {
+    // Validate partner selection for NEWLY-added doubles events.
+    // Existing doubles regs aren't validated here because their
+    // partner editor is hidden in B; partner changes are commit C.
+    for (const ev of addedEvents) {
       if (ev.format !== "doubles") continue;
       const s = selections.get(ev.id)!;
       if (s.partner.mode === "empty") {
@@ -286,6 +387,7 @@ export default function RegisterPage() {
     setPhase("submitting");
 
     const registeredEventNames: string[] = [];
+    const withdrawnEventNames: string[] = [];
     const partnerInvites: {
       eventName: string;
       partnerEmail: string;
@@ -296,7 +398,36 @@ export default function RegisterPage() {
     }[] = [];
     const autoPairs: { eventName: string; partnerName: string }[] = [];
 
-    for (const ev of chosen) {
+    // ─── Process withdrawals first. Soft-delete the user's reg and
+    //     cancel any pending outbound partner_invites for that event
+    //     so the would-be partner doesn't keep seeing an invite from
+    //     someone who's no longer registered. (Confirmed partners
+    //     get notified in commit C; for now they silently become
+    //     solo and can pick a new partner from the tournament page.)
+    for (const ev of withdrawnEvents) {
+      const existing = existingRegs.get(ev.id);
+      if (!existing) continue; // defensive
+      const { error: delErr } = await supabase
+        .from("event_registrations")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", existing.regId);
+      if (delErr) {
+        setError(
+          `Failed to withdraw from "${ev.name}": ${delErr.message}`,
+        );
+        setPhase("form");
+        return;
+      }
+      await supabase
+        .from("partner_invites")
+        .update({ status: "cancelled" })
+        .eq("event_id", ev.id)
+        .eq("inviter_player_id", me.id)
+        .eq("status", "pending");
+      withdrawnEventNames.push(ev.name);
+    }
+
+    for (const ev of addedEvents) {
       const sel = selections.get(ev.id)!;
 
       // ─── Doubles: resolve partner FIRST so we can check for an
@@ -457,7 +588,12 @@ export default function RegisterPage() {
       });
     }
 
-    setDoneResult({ registeredEventNames, partnerInvites, autoPairs });
+    setDoneResult({
+      registeredEventNames,
+      withdrawnEventNames,
+      partnerInvites,
+      autoPairs,
+    });
     setPhase("done");
   };
 
@@ -479,6 +615,8 @@ export default function RegisterPage() {
   if (!tournament) return null;
 
   if (phase === "done" && doneResult) {
+    const addedCount = doneResult.registeredEventNames.length;
+    const withdrewCount = doneResult.withdrawnEventNames.length;
     return (
       <Shell>
         <div
@@ -493,12 +631,29 @@ export default function RegisterPage() {
           <h1
             style={{ margin: "0 0 8px", fontSize: 20, color: "#166534" }}
           >
-            You're registered!
+            {addedCount > 0 && withdrewCount > 0
+              ? "Your registration is updated"
+              : withdrewCount > 0
+                ? "Withdrawn"
+                : "You're registered!"}
           </h1>
-          <p style={{ margin: 0, color: "#166534", fontSize: 14 }}>
-            Confirmed for {fmtList(doneResult.registeredEventNames)} in{" "}
-            <strong>{tournament.name}</strong>.
-          </p>
+          {addedCount > 0 && (
+            <p style={{ margin: 0, color: "#166534", fontSize: 14 }}>
+              Confirmed for {fmtList(doneResult.registeredEventNames)} in{" "}
+              <strong>{tournament.name}</strong>.
+            </p>
+          )}
+          {withdrewCount > 0 && (
+            <p
+              style={{
+                margin: addedCount > 0 ? "8px 0 0" : "0",
+                color: "#166534",
+                fontSize: 14,
+              }}
+            >
+              Withdrawn from {fmtList(doneResult.withdrawnEventNames)}.
+            </p>
+          )}
         </div>
 
         {doneResult.autoPairs.length > 0 && (
@@ -580,8 +735,8 @@ export default function RegisterPage() {
           </Link>
           <button
             onClick={() => {
-              // Re-fetch from scratch so existingRegEventIds reflects
-              // what we just inserted.
+              // Re-fetch from scratch so existingRegs reflects what
+              // we just inserted / withdrew.
               navigate(0);
             }}
             style={{
@@ -637,6 +792,16 @@ export default function RegisterPage() {
       </p>
 
       <form onSubmit={onSubmit}>
+        {/* Change summary — only renders when there's an actual diff
+            against what's stored. Gives the user a clear "you're
+            about to do this" preview before they hit Confirm. */}
+        {hasChanges && (
+          <ChangeSummary
+            added={addedEvents}
+            withdrawn={withdrawnEvents}
+          />
+        )}
+
         <Section title="Pick your events">
           {events.length === 0 ? (
             <Empty>No events available for registration.</Empty>
@@ -644,13 +809,14 @@ export default function RegisterPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {events.map((ev) => {
                 const sel = selections.get(ev.id)!;
-                const already = existingRegEventIds.has(ev.id);
+                const existing = existingRegs.get(ev.id);
                 return (
                   <EventRow
                     key={ev.id}
                     event={ev}
                     selection={sel}
-                    alreadyRegistered={already}
+                    existing={existing}
+                    change={changeFor(ev.id)}
                     disabled={submitting}
                     onChange={(patch) => setSel(ev.id, patch)}
                     // Stop the user from picking themselves as their
@@ -682,20 +848,29 @@ export default function RegisterPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || !hasChanges}
           style={{
             padding: "12px 24px",
-            background: submitting ? "#9ca3af" : "#2563eb",
+            background: submitting || !hasChanges ? "#9ca3af" : "#2563eb",
             color: "#fff",
             border: "none",
             borderRadius: 6,
             fontSize: 15,
             fontWeight: 500,
-            cursor: submitting ? "not-allowed" : "pointer",
+            cursor:
+              submitting || !hasChanges ? "not-allowed" : "pointer",
             fontFamily: "inherit",
           }}
         >
-          {submitting ? "Registering…" : "Confirm registration"}
+          {submitting
+            ? "Saving…"
+            : !hasChanges
+              ? existingRegs.size > 0
+                ? "No changes to save"
+                : "Pick at least one event"
+              : changeCount === 1
+                ? "Confirm 1 change"
+                : `Confirm ${changeCount} changes`}
         </button>
       </form>
     </Shell>
@@ -709,59 +884,125 @@ export default function RegisterPage() {
 function EventRow({
   event,
   selection,
-  alreadyRegistered,
+  existing,
+  change,
   disabled,
   onChange,
   excludePlayerIds,
 }: {
   event: Event;
   selection: EventSelection;
-  alreadyRegistered: boolean;
+  existing: ExistingReg | undefined;
+  change: ChangeType;
   disabled: boolean;
   onChange: (patch: Partial<EventSelection>) => void;
   excludePlayerIds: string[];
 }) {
   const chips = eligibilityChips(event);
+
+  // Visual treatment derived from existing-reg + diff state.
+  // "added"    → blue border, "Will register" pill
+  // "withdrawn"→ red border + tint, "Will withdraw" pill + warning
+  // "unchanged" + existing → green tint, "Registered" pill
+  // "unchanged" + new      → plain (default)
+  const isExistingChecked = !!existing && change === "unchanged";
+  const isWillWithdraw = change === "withdrawn";
+  const isWillAdd = change === "added";
+
+  const borderColor = isWillWithdraw
+    ? "#fca5a5"
+    : isWillAdd
+      ? "#2563eb"
+      : isExistingChecked
+        ? "#bbf7d0"
+        : selection.selected
+          ? "#2563eb"
+          : "#e5e7eb";
+  const bg = isWillWithdraw
+    ? "#fef2f2"
+    : isExistingChecked
+      ? "#f0fdf4"
+      : "#fff";
+
+  // Doubles partner editor only renders for NEWLY-added events.
+  // Existing doubles regs show a read-only "Partnered with X" line
+  // instead — changing partners is commit C (with its email
+  // side-effects).
+  const showPartnerEditor =
+    event.format === "doubles" && selection.selected && !existing;
+
   return (
     <label
       style={{
         display: "block",
         padding: 12,
-        background: alreadyRegistered ? "#f3f4f6" : "#fff",
-        border: `1px solid ${selection.selected ? "#2563eb" : "#e5e7eb"}`,
+        background: bg,
+        border: `1px solid ${borderColor}`,
         borderRadius: 6,
-        cursor: alreadyRegistered || disabled ? "not-allowed" : "pointer",
-        opacity: alreadyRegistered ? 0.7 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <input
           type="checkbox"
-          checked={alreadyRegistered ? true : selection.selected}
-          disabled={alreadyRegistered || disabled}
+          checked={selection.selected}
+          disabled={disabled}
           onChange={(e) => onChange({ selected: e.target.checked })}
           style={{ marginTop: 3 }}
         />
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 500, fontSize: 14 }}>
+          <div
+            style={{
+              fontWeight: 500,
+              fontSize: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
             {event.name}
-            {alreadyRegistered && (
-              <span
-                style={{
-                  marginLeft: 8,
-                  padding: "1px 8px",
-                  background: "#dcfce7",
-                  color: "#166534",
-                  borderRadius: 3,
-                  fontSize: 11,
-                  fontWeight: 500,
-                }}
-              >
-                Already registered
-              </span>
+            {isExistingChecked && <Pill bg="#dcfce7" fg="#166534">Registered</Pill>}
+            {isWillAdd && <Pill bg="#dbeafe" fg="#1e40af">Will register</Pill>}
+            {isWillWithdraw && (
+              <Pill bg="#fee2e2" fg="#991b1b">Will withdraw</Pill>
             )}
           </div>
-          <div style={{ color: "#666", fontSize: 12, marginTop: 2 }}>
+          {/* Partner display for existing doubles regs — read-only in
+              B. Goes editable in C. */}
+          {existing &&
+            event.format === "doubles" &&
+            existing.partnerLabel && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: isWillWithdraw ? "#991b1b" : "#166534",
+                  marginTop: 4,
+                }}
+              >
+                {existing.partnerStatus === "pending"
+                  ? "Waiting for "
+                  : "Partnered with "}
+                <strong>{existing.partnerLabel}</strong>
+              </div>
+            )}
+          {isWillWithdraw && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#991b1b",
+                marginTop: 4,
+                lineHeight: 1.5,
+              }}
+            >
+              You'll be removed from this event.{" "}
+              {existing?.partnerLabel
+                ? `${existing.partnerLabel} won't be your partner anymore. `
+                : ""}
+              Re-check the box to keep your registration.
+            </div>
+          )}
+          <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
             {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
             {event.points_to_win} win by {event.win_by}
             {event.event_fee_cents > 0
@@ -796,35 +1037,118 @@ function EventRow({
           )}
         </div>
       </div>
-      {event.format === "doubles" &&
-        selection.selected &&
-        !alreadyRegistered && (
-          <div
-            style={{
-              marginTop: 12,
-              paddingTop: 12,
-              borderTop: "1px dashed #e5e7eb",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-            // Picker dropdown opens on focus; clicking it shouldn't
-            // toggle the wrapping label's checkbox.
-            onClick={(e) => e.preventDefault()}
-          >
-            <div style={{ fontSize: 12, color: "#666" }}>
-              Your doubles partner. Search by name, email, or phone —
-              if they're not in the list yet, "Add new" to invite them.
-              They'll get an invite link to confirm.
-            </div>
-            <PartnerSearch
-              selection={selection.partner}
-              onChange={(p) => onChange({ partner: p })}
-              excludePlayerIds={excludePlayerIds}
-            />
+      {showPartnerEditor && (
+        <div
+          style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: "1px dashed #e5e7eb",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+          // Picker dropdown opens on focus; clicking it shouldn't
+          // toggle the wrapping label's checkbox.
+          onClick={(e) => e.preventDefault()}
+        >
+          <div style={{ fontSize: 12, color: "#666" }}>
+            Your doubles partner. Search by name, email, or phone —
+            if they're not in the list yet, "Add new" to invite them.
+            They'll get an invite link to confirm.
           </div>
-        )}
+          <PartnerSearch
+            selection={selection.partner}
+            onChange={(p) => onChange({ partner: p })}
+            excludePlayerIds={excludePlayerIds}
+          />
+        </div>
+      )}
     </label>
+  );
+}
+
+// Small pill used in event rows. Same shape as the Badge helper used
+// on the done-screen partner invite cards but with a different
+// signature (no title, fewer text overrides) so we don't accidentally
+// couple the two visual elements.
+function Pill({
+  bg,
+  fg,
+  children,
+}: {
+  bg: string;
+  fg: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      style={{
+        padding: "1px 8px",
+        background: bg,
+        color: fg,
+        borderRadius: 3,
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: 0.3,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+// Top-of-form summary that surfaces exactly what the Confirm button
+// will do. Only rendered when there's actually a diff against the
+// stored state — keeps the form clean for first-time registrants.
+function ChangeSummary({
+  added,
+  withdrawn,
+}: {
+  added: Event[];
+  withdrawn: Event[];
+}) {
+  return (
+    <div
+      style={{
+        padding: 14,
+        background: "#fef3c7",
+        border: "1px solid #fde68a",
+        borderRadius: 8,
+        marginBottom: 16,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "#7a5d00",
+          marginBottom: 8,
+        }}
+      >
+        Pending changes
+      </div>
+      <ul
+        style={{
+          margin: 0,
+          paddingLeft: 18,
+          fontSize: 13,
+          color: "#7a5d00",
+          lineHeight: 1.7,
+        }}
+      >
+        {added.map((ev) => (
+          <li key={`a-${ev.id}`}>
+            <strong>Register</strong> for {ev.name}
+          </li>
+        ))}
+        {withdrawn.map((ev) => (
+          <li key={`w-${ev.id}`}>
+            <strong>Withdraw</strong> from {ev.name}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
