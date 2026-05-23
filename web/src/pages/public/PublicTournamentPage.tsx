@@ -1,11 +1,25 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { useAuth } from "../../auth/AuthProvider";
 import { eligibilityChips } from "../../lib/eligibility";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
+
+// Per-event registration status for the currently signed-in user.
+// Only computed when the user is logged in; for anon visitors the
+// map is empty and event cards render the normal "Register" CTA.
+type MyRegStatus = {
+  // 'registered' means a confirmed event_registration row. For
+  // doubles, partnerLabel is the partner's display name once
+  // they've accepted, or null/the-invitee-email while pending.
+  // 'pending' means I created the reg but my partner hasn't
+  // accepted yet (the partner_status is still 'pending').
+  state: "registered" | "pending";
+  partnerLabel: string | null;
+};
 
 // Public tournament page at /t/:orgSlug/:tournamentSlug. Anonymous-
 // readable thanks to existing RLS: tournaments + events with status
@@ -21,10 +35,16 @@ export default function PublicTournamentPage() {
     orgSlug: string;
     tournamentSlug: string;
   }>();
+  const { user } = useAuth();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Per-event registration status for the signed-in user, keyed by
+  // event_id. Empty when nobody's signed in.
+  const [myStatus, setMyStatus] = useState<Map<string, MyRegStatus>>(
+    new Map(),
+  );
 
   useEffect(() => {
     if (!orgSlug || !tournamentSlug) return;
@@ -87,12 +107,104 @@ export default function PublicTournamentPage() {
         return;
       }
       setEvents(evs ?? []);
+
+      // When the user is signed in, pull their existing registrations
+      // for any of these events plus any outbound pending partner
+      // invites they sent — that's enough to label each card as
+      // "Registered" or "Waiting for partner" with a partner name
+      // where we have one.
+      if (user && evs && evs.length > 0) {
+        const eventIds = evs.map((e) => e.id);
+
+        // We need the user's player id to scope queries. The
+        // players row may not exist yet (fresh signup); that's fine,
+        // we'll just leave the status map empty.
+        const { data: me } = await supabase
+          .from("players")
+          .select("id")
+          .eq("auth_user_id", user.id)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (cancelled) return;
+
+        if (me) {
+          // Two reads in parallel. The reg query joins through
+          // partner_registration_id → players for the confirmed-
+          // partner case; the invite query covers the pending case
+          // where no partner reg exists yet.
+          const [regsRes, invitesRes] = await Promise.all([
+            supabase
+              .from("event_registrations")
+              .select(
+                `event_id, partner_status,
+                 partner_registration:event_registrations!partner_registration_id (
+                   player:players!player_id (first_name, last_name)
+                 )`,
+              )
+              .eq("player_id", me.id)
+              .in("event_id", eventIds)
+              .is("deleted_at", null),
+            supabase
+              .from("partner_invites")
+              .select(
+                `event_id, invitee_email,
+                 invitee:players!invitee_player_id (first_name, last_name)`,
+              )
+              .eq("inviter_player_id", me.id)
+              .eq("status", "pending")
+              .in("event_id", eventIds),
+          ]);
+          if (cancelled) return;
+
+          const map = new Map<string, MyRegStatus>();
+          type RegRow = {
+            event_id: string;
+            partner_status: Database["public"]["Enums"]["partner_status"];
+            partner_registration:
+              | { player: { first_name: string; last_name: string } | null }
+              | null;
+          };
+          type InviteRow = {
+            event_id: string;
+            invitee_email: string | null;
+            invitee: { first_name: string; last_name: string } | null;
+          };
+
+          for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
+            const partner = r.partner_registration?.player;
+            const partnerLabel = partner
+              ? `${partner.first_name} ${partner.last_name}`
+              : null;
+            map.set(r.event_id, {
+              state:
+                r.partner_status === "pending" ? "pending" : "registered",
+              partnerLabel,
+            });
+          }
+          // Fill in invitee names for pending invites where we
+          // didn't already have a partnerLabel from the reg join.
+          for (const inv of (invitesRes.data ?? []) as unknown as InviteRow[]) {
+            const cur = map.get(inv.event_id);
+            const label = inv.invitee
+              ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
+              : inv.invitee_email ?? null;
+            if (cur && !cur.partnerLabel) {
+              map.set(inv.event_id, { ...cur, partnerLabel: label });
+            }
+          }
+          setMyStatus(map);
+        }
+      } else {
+        // Signed out → clear any stale state from a previous session.
+        setMyStatus(new Map());
+      }
+
       setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [orgSlug, tournamentSlug]);
+  }, [orgSlug, tournamentSlug, user]);
 
   if (loading) {
     return (
@@ -227,6 +339,7 @@ export default function PublicTournamentPage() {
                 registrationOpen={registrationOpen}
                 orgSlug={orgSlug ?? ""}
                 tournamentSlug={tournamentSlug ?? ""}
+                myStatus={myStatus.get(ev.id)}
               />
             ))}
           </div>
@@ -241,11 +354,13 @@ function EventCard({
   registrationOpen,
   orgSlug,
   tournamentSlug,
+  myStatus,
 }: {
   event: Event;
   registrationOpen: boolean;
   orgSlug: string;
   tournamentSlug: string;
+  myStatus: MyRegStatus | undefined;
 }) {
   const chips = eligibilityChips(event);
   return (
@@ -253,7 +368,7 @@ function EventCard({
       style={{
         padding: 16,
         background: "#fff",
-        border: "1px solid #e5e7eb",
+        border: `1px solid ${myStatus ? "#bbf7d0" : "#e5e7eb"}`,
         borderRadius: 8,
         display: "flex",
         gap: 16,
@@ -261,7 +376,56 @@ function EventCard({
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{event.name}</h3>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+            {event.name}
+          </h3>
+          {myStatus?.state === "registered" && (
+            <span
+              style={{
+                padding: "2px 8px",
+                background: "#dcfce7",
+                color: "#166534",
+                borderRadius: 3,
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+              }}
+            >
+              Registered
+            </span>
+          )}
+          {myStatus?.state === "pending" && (
+            <span
+              style={{
+                padding: "2px 8px",
+                background: "#fffbeb",
+                color: "#92400e",
+                borderRadius: 3,
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+              }}
+            >
+              Awaiting partner
+            </span>
+          )}
+        </div>
+        {myStatus?.partnerLabel && (
+          <div style={{ color: "#166534", fontSize: 12, marginTop: 4 }}>
+            {myStatus.state === "registered" ? "Partnered with " : "Invited "}
+            <strong>{myStatus.partnerLabel}</strong>
+          </div>
+        )}
         <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
           {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
           {event.points_to_win} win by {event.win_by}
@@ -313,13 +477,16 @@ function EventCard({
         // Pre-selects this event on the register page via the ?event=
         // query param so the user lands on a screen with their pick
         // already checked. They can still add other events before
-        // confirming if they want.
+        // confirming if they want. Already-registered users see the
+        // same button as "Edit" so they understand it'll let them
+        // change partners / withdraw.
         <Link
           to={`/t/${orgSlug}/${tournamentSlug}/register?event=${event.id}`}
           style={{
             padding: "8px 16px",
-            background: "#2563eb",
-            color: "#fff",
+            background: myStatus ? "#fff" : "#2563eb",
+            color: myStatus ? "#2563eb" : "#fff",
+            border: myStatus ? "1px solid #2563eb" : "1px solid #2563eb",
             textDecoration: "none",
             borderRadius: 6,
             fontSize: 13,
@@ -328,7 +495,7 @@ function EventCard({
             alignSelf: "center",
           }}
         >
-          Register →
+          {myStatus ? "Edit" : "Register →"}
         </Link>
       )}
     </div>
