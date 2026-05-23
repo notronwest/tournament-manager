@@ -17,8 +17,21 @@ type MyRegStatus = {
   // they've accepted, or null/the-invitee-email while pending.
   // 'pending' means I created the reg but my partner hasn't
   // accepted yet (the partner_status is still 'pending').
-  state: "registered" | "pending";
+  // 'invited' means someone ELSE invited me to be their partner
+  // here and I haven't responded yet. inviteToken is set in this
+  // case and links to the partner-accept page.
+  state: "registered" | "pending" | "invited";
   partnerLabel: string | null;
+  inviteToken: string | null;
+  inviterName: string | null;
+};
+
+// Top-of-page banner content for a pending inbound invite.
+type InboundInvite = {
+  eventId: string;
+  eventName: string;
+  inviterName: string;
+  token: string;
 };
 
 // Public tournament page at /t/:orgSlug/:tournamentSlug. Anonymous-
@@ -45,6 +58,10 @@ export default function PublicTournamentPage() {
   const [myStatus, setMyStatus] = useState<Map<string, MyRegStatus>>(
     new Map(),
   );
+  // Pending invites where the signed-in user is the invitee. We
+  // render these as a banner at the top so a player who got picked
+  // sees the invite the moment they hit the tournament page.
+  const [inboundInvites, setInboundInvites] = useState<InboundInvite[]>([]);
 
   useEffect(() => {
     if (!orgSlug || !tournamentSlug) return;
@@ -128,11 +145,12 @@ export default function PublicTournamentPage() {
         if (cancelled) return;
 
         if (me) {
-          // Two reads in parallel. The reg query joins through
-          // partner_registration_id → players for the confirmed-
-          // partner case; the invite query covers the pending case
-          // where no partner reg exists yet.
-          const [regsRes, invitesRes] = await Promise.all([
+          // Three reads in parallel:
+          //  * my registrations (with partner-reg join for confirmed pairs)
+          //  * my OUTBOUND pending invites (I picked someone, awaiting them)
+          //  * my INBOUND pending invites (someone picked me, I haven't
+          //    responded) — surfaces as a top-of-page banner + per-card pill
+          const [regsRes, outboundRes, inboundRes] = await Promise.all([
             supabase
               .from("event_registrations")
               .select(
@@ -153,6 +171,15 @@ export default function PublicTournamentPage() {
               .eq("inviter_player_id", me.id)
               .eq("status", "pending")
               .in("event_id", eventIds),
+            supabase
+              .from("partner_invites")
+              .select(
+                `event_id, token,
+                 inviter:players!inviter_player_id (first_name, last_name)`,
+              )
+              .eq("invitee_player_id", me.id)
+              .eq("status", "pending")
+              .in("event_id", eventIds),
           ]);
           if (cancelled) return;
 
@@ -164,10 +191,15 @@ export default function PublicTournamentPage() {
               | { player: { first_name: string; last_name: string } | null }
               | null;
           };
-          type InviteRow = {
+          type OutboundRow = {
             event_id: string;
             invitee_email: string | null;
             invitee: { first_name: string; last_name: string } | null;
+          };
+          type InboundRow = {
+            event_id: string;
+            token: string;
+            inviter: { first_name: string; last_name: string } | null;
           };
 
           for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
@@ -179,11 +211,14 @@ export default function PublicTournamentPage() {
               state:
                 r.partner_status === "pending" ? "pending" : "registered",
               partnerLabel,
+              inviteToken: null,
+              inviterName: null,
             });
           }
-          // Fill in invitee names for pending invites where we
-          // didn't already have a partnerLabel from the reg join.
-          for (const inv of (invitesRes.data ?? []) as unknown as InviteRow[]) {
+          // Outbound invites: fill in invitee names for pending state
+          // where we didn't already have a partnerLabel from the reg
+          // join.
+          for (const inv of (outboundRes.data ?? []) as unknown as OutboundRow[]) {
             const cur = map.get(inv.event_id);
             const label = inv.invitee
               ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
@@ -192,11 +227,44 @@ export default function PublicTournamentPage() {
               map.set(inv.event_id, { ...cur, partnerLabel: label });
             }
           }
+          // Inbound invites: any event I was picked for and haven't
+          // accepted/declined yet. Overrides the "no status" default
+          // and sits alongside any existing reg (e.g. I registered
+          // solo, then someone picked me — both states matter, but
+          // the invite is the more actionable one).
+          const inbound: InboundInvite[] = [];
+          for (const inv of (inboundRes.data ?? []) as unknown as InboundRow[]) {
+            const inviterName = inv.inviter
+              ? `${inv.inviter.first_name} ${inv.inviter.last_name}`
+              : "Someone";
+            const ev = evs.find((e) => e.id === inv.event_id);
+            if (ev) {
+              inbound.push({
+                eventId: inv.event_id,
+                eventName: ev.name,
+                inviterName,
+                token: inv.token,
+              });
+            }
+            // Override the per-card status so the pill on that card
+            // makes the invite obvious. If I'm already registered
+            // for this event, the partnerLabel from above stays so
+            // both bits of info show.
+            const cur = map.get(inv.event_id);
+            map.set(inv.event_id, {
+              state: "invited",
+              partnerLabel: cur?.partnerLabel ?? null,
+              inviteToken: inv.token,
+              inviterName,
+            });
+          }
           setMyStatus(map);
+          setInboundInvites(inbound);
         }
       } else {
         // Signed out → clear any stale state from a previous session.
         setMyStatus(new Map());
+        setInboundInvites([]);
       }
 
       setLoading(false);
@@ -324,6 +392,78 @@ export default function PublicTournamentPage() {
             then picking. */}
       </div>
 
+      {/* Pending-invite banner — the most actionable thing on the
+          page for a player who just got picked, so it lives above
+          the events list. One row per inbound invite; each row has
+          its own Accept button that drops the user on the existing
+          partner-accept page. */}
+      {inboundInvites.length > 0 && (
+        <section
+          style={{
+            padding: 16,
+            background: "#fef3c7",
+            border: "1px solid #fde68a",
+            borderRadius: 8,
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#7a5d00",
+              marginBottom: 8,
+            }}
+          >
+            You've been invited to be someone's partner
+            {inboundInvites.length > 1 ? ` (${inboundInvites.length})` : ""}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            {inboundInvites.map((inv) => (
+              <div
+                key={inv.token}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  padding: 10,
+                  background: "#fff",
+                  borderRadius: 6,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ fontSize: 13, color: "#444" }}>
+                  <strong>{inv.inviterName}</strong> invited you for{" "}
+                  <strong>{inv.eventName}</strong>
+                </div>
+                <Link
+                  to={`/t/${orgSlug}/${tournamentSlug}/invites/${inv.token}`}
+                  style={{
+                    padding: "6px 14px",
+                    background: "#2563eb",
+                    color: "#fff",
+                    textDecoration: "none",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Review invite →
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section>
         <h2 style={{ margin: "0 0 12px", fontSize: 18 }}>
           Events ({events.length})
@@ -419,13 +559,34 @@ function EventCard({
               Awaiting partner
             </span>
           )}
+          {myStatus?.state === "invited" && (
+            <span
+              style={{
+                padding: "2px 8px",
+                background: "#fef3c7",
+                color: "#7a5d00",
+                borderRadius: 3,
+                fontSize: 11,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.3,
+              }}
+            >
+              You're invited
+            </span>
+          )}
         </div>
-        {myStatus?.partnerLabel && (
+        {myStatus?.state === "invited" && myStatus.inviterName ? (
+          <div style={{ color: "#7a5d00", fontSize: 12, marginTop: 4 }}>
+            <strong>{myStatus.inviterName}</strong> picked you as their
+            partner
+          </div>
+        ) : myStatus?.partnerLabel ? (
           <div style={{ color: "#166534", fontSize: 12, marginTop: 4 }}>
             {myStatus.state === "registered" ? "Partnered with " : "Invited "}
             <strong>{myStatus.partnerLabel}</strong>
           </div>
-        )}
+        ) : null}
         <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
           {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
           {event.points_to_win} win by {event.win_by}
@@ -473,31 +634,55 @@ function EventCard({
           </div>
         )}
       </div>
-      {registrationOpen && (
-        // Pre-selects this event on the register page via the ?event=
-        // query param so the user lands on a screen with their pick
-        // already checked. They can still add other events before
-        // confirming if they want. Already-registered users see the
-        // same button as "Edit" so they understand it'll let them
-        // change partners / withdraw.
-        <Link
-          to={`/t/${orgSlug}/${tournamentSlug}/register?event=${event.id}`}
-          style={{
-            padding: "8px 16px",
-            background: myStatus ? "#fff" : "#2563eb",
-            color: myStatus ? "#2563eb" : "#fff",
-            border: myStatus ? "1px solid #2563eb" : "1px solid #2563eb",
-            textDecoration: "none",
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 500,
-            whiteSpace: "nowrap",
-            alignSelf: "center",
-          }}
-        >
-          {myStatus ? "Edit" : "Register →"}
-        </Link>
-      )}
+      {registrationOpen &&
+        (myStatus?.state === "invited" && myStatus.inviteToken ? (
+          // Invited state's primary action is "Review invite" → drops
+          // the user on the existing partner-accept page where they
+          // can accept or decline. This takes priority over the
+          // normal Register / Edit flow because the inbound invite
+          // is the most actionable thing.
+          <Link
+            to={`/t/${orgSlug}/${tournamentSlug}/invites/${myStatus.inviteToken}`}
+            style={{
+              padding: "8px 16px",
+              background: "#2563eb",
+              color: "#fff",
+              textDecoration: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              alignSelf: "center",
+              border: "1px solid #2563eb",
+            }}
+          >
+            Review invite →
+          </Link>
+        ) : (
+          // Pre-selects this event on the register page via the ?event=
+          // query param so the user lands on a screen with their pick
+          // already checked. They can still add other events before
+          // confirming if they want. Already-registered users see the
+          // same button as "Edit" so they understand it'll let them
+          // change partners / withdraw.
+          <Link
+            to={`/t/${orgSlug}/${tournamentSlug}/register?event=${event.id}`}
+            style={{
+              padding: "8px 16px",
+              background: myStatus ? "#fff" : "#2563eb",
+              color: myStatus ? "#2563eb" : "#fff",
+              border: "1px solid #2563eb",
+              textDecoration: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              alignSelf: "center",
+            }}
+          >
+            {myStatus ? "Edit" : "Register →"}
+          </Link>
+        ))}
     </div>
   );
 }
