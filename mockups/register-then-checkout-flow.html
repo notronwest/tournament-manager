@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Mockup — Register-then-Checkout flow</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #222;
+    background: #f6f7f9;
+    margin: 0;
+    padding: 0;
+  }
+  .doc { max-width: 880px; margin: 0 auto; padding: 24px 24px 96px; }
+  h1.doc-title { margin: 0 0 8px; font-size: 28px; }
+  .doc-lede {
+    color: #555; margin: 0 0 24px; font-size: 15px; line-height: 1.55;
+  }
+  .compare-note {
+    padding: 14px 16px; background: #f0fdf4; border-left: 4px solid #16a34a;
+    margin: 12px 0 24px; font-size: 14px; color: #064e3b; line-height: 1.55;
+    border-radius: 0 8px 8px 0;
+  }
+  .compare-note a { color: #047857; }
+
+  .screen {
+    margin: 32px 0 8px; border-radius: 12px; background: #fff;
+    border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    overflow: hidden;
+  }
+  .screen-label {
+    padding: 10px 16px; background: #f0f4ff; color: #1e40af;
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; border-bottom: 1px solid #dbe5ff;
+  }
+  .note {
+    padding: 16px 18px; background: #fffbeb; border-left: 4px solid #fbbf24;
+    margin: 20px 0; font-size: 14px; line-height: 1.55; color: #5b4604;
+    border-radius: 0 8px 8px 0;
+  }
+  .note strong { color: #3b2c00; }
+  .open-q {
+    padding: 16px 18px; background: #eef2ff; border-left: 4px solid #6366f1;
+    margin: 20px 0; font-size: 14px; line-height: 1.55; color: #3730a3;
+    border-radius: 0 8px 8px 0;
+  }
+  .open-q ul { margin: 8px 0 0 0; padding-left: 20px; }
+  .open-q li { margin-bottom: 4px; }
+
+  /* App header */
+  .app-header {
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    padding: 10px 24px; display: flex;
+    align-items: center; justify-content: space-between;
+  }
+  .app-header .brand {
+    font-weight: 600; color: #111; font-size: 16px; text-decoration: none;
+  }
+  .app-header .nav { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .app-header .nav .greet { color: #666; margin-right: 8px; }
+  .ghost-btn {
+    padding: 6px 12px; color: #444; text-decoration: none;
+    border-radius: 6px; background: transparent; border: 1px solid transparent;
+  }
+  .ghost-btn-bordered {
+    padding: 6px 12px; color: #444; text-decoration: none;
+    border-radius: 6px; background: transparent; border: 1px solid #e2e2e2;
+    cursor: pointer; font-family: inherit; font-size: 13px;
+  }
+
+  /* Persistent "you have pending payments" bottom bar */
+  .pending-bar {
+    background: #fef3c7;
+    border-top: 2px solid #fbbf24;
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .pending-bar .info { font-size: 13px; color: #5b4604; }
+  .pending-bar .info strong { color: #3b2c00; }
+  .pending-bar .sub { font-size: 12px; color: #92400e; margin-top: 2px; }
+  .momentum-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; background: #ecfdf5; color: #047857;
+    border: 1px solid #a7f3d0; border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+  }
+  .momentum-chip .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #10b981;
+  }
+
+  /* Shells */
+  .page-shell { padding: 32px 24px; max-width: 760px; margin: 0 auto; }
+  .page-shell.wide { max-width: 900px; }
+
+  /* Tournament header / cards */
+  h1.tournament-name { margin: 0; font-size: 26px; }
+  .meta-row {
+    display: flex; gap: 16px; margin-top: 16px;
+    flex-wrap: wrap; font-size: 14px; color: #444;
+  }
+  .meta .label {
+    font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .meta .value { margin-top: 2px; }
+
+  .event-list { display: flex; flex-direction: column; gap: 12px; }
+  .event-card {
+    padding: 16px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .event-card.pending {
+    border-color: #fde68a;
+    background: #fffbeb;
+  }
+  .event-card h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .event-card .meta-line { color: #666; font-size: 13px; margin-top: 4px; }
+  .event-card .price-line { color: #444; font-size: 13px; margin-top: 8px; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.3px; margin-left: 8px;
+  }
+  .pill-pending { background: #fef3c7; color: #7a5d00; }
+  .pill-registered { background: #dcfce7; color: #166534; }
+
+  /* Buttons */
+  .btn-primary, .btn-secondary {
+    padding: 8px 16px; border-radius: 6px;
+    font-size: 13px; font-weight: 500; font-family: inherit;
+    text-decoration: none; cursor: pointer; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .btn-primary {
+    background: #2563eb; color: #fff; border-color: #2563eb;
+  }
+  .btn-secondary {
+    background: #fff; color: #2563eb; border-color: #2563eb;
+  }
+  .btn-big { padding: 12px 24px; font-size: 15px; font-weight: 500; }
+  .btn-disabled {
+    background: #9ca3af; color: #fff; border-color: #9ca3af; cursor: not-allowed;
+  }
+  .btn-ghost-text {
+    background: none; border: none; color: #2563eb; cursor: pointer;
+    font-family: inherit; font-size: 13px; text-decoration: underline; padding: 0;
+  }
+
+  /* Per-event Register form (modal or expanded card) */
+  .register-form {
+    margin-top: 14px; padding: 14px; border-top: 1px dashed #e5e7eb;
+    background: #fafafa; border-radius: 0 0 8px 8px;
+  }
+  .form-label { font-size: 12px; color: #666; display: block; margin-bottom: 4px; }
+  .form-input {
+    width: 100%; padding: 8px 10px; border: 1px solid #e2e2e2;
+    border-radius: 6px; font-size: 13px; box-sizing: border-box;
+  }
+  .partner-search-stub {
+    margin-top: 6px; padding: 10px;
+    background: #fff; border: 1px dashed #d1d5db; border-radius: 6px;
+    font-size: 12px; color: #888;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  /* Confirmation banner after a successful register */
+  .confirm-banner {
+    padding: 14px 16px;
+    background: #fffbeb; border: 1px solid #fde68a;
+    border-radius: 8px; margin: 16px 0;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+  }
+  .confirm-banner .info { font-size: 13px; color: #5b4604; }
+  .confirm-banner .info strong { color: #3b2c00; }
+
+  /* Checkout */
+  .checkout-grid {
+    display: grid; grid-template-columns: 1fr 320px; gap: 24px;
+  }
+  @media (max-width: 720px) { .checkout-grid { grid-template-columns: 1fr; } }
+  .checkout-main { display: flex; flex-direction: column; gap: 12px; }
+  .checkout-card {
+    padding: 16px; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 8px;
+  }
+  .checkout-card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+  .checkout-card .sub { font-size: 13px; color: #666; }
+  .checkout-card .partner-line { font-size: 12px; color: #166534; margin-top: 6px; }
+  .summary-card {
+    padding: 18px; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 8px;
+    position: sticky; top: 16px; align-self: flex-start;
+  }
+  .summary-row {
+    display: flex; justify-content: space-between;
+    font-size: 13px; color: #444; margin-bottom: 8px;
+  }
+  .summary-row.total {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 16px; font-weight: 600; color: #111;
+  }
+  .x-btn {
+    border: none; background: none; color: #888; cursor: pointer;
+    font-size: 18px; line-height: 1; padding: 2px 6px;
+  }
+  .x-btn:hover { color: #ef4444; }
+
+  /* Success */
+  .success-banner {
+    padding: 20px; background: #dcfce7;
+    border: 1px solid #86efac; border-radius: 8px; margin-bottom: 24px;
+  }
+  .success-banner h1 { margin: 0 0 8px; font-size: 22px; color: #166534; }
+  .success-banner p { margin: 0; color: #166534; font-size: 14px; line-height: 1.55; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+<h1 class="doc-title">Mockup — Register-then-Checkout flow</h1>
+<p class="doc-lede">
+  <strong>Variant of the cart mockup.</strong> Registration and checkout are
+  separate processes: clicking <em>Register</em> on an event creates a
+  real <code>event_registrations</code> row with <code>status='pending_payment'</code>
+  and holds the slot. Pending regs accumulate in a "cart" view; the
+  player checks out when they're done browsing. Payment flips them
+  from pending to paid (and fires partner invites).
+</p>
+
+<div class="compare-note">
+  <strong>Compare with</strong>
+  <code>mockups/registration-checkout-flow.html</code> — the cart-first
+  version where nothing was written to the DB until checkout. The two
+  diverge mostly on capacity / visibility / partner-invite timing
+  decisions; the player-visible screens look similar.
+</div>
+
+<div class="open-q">
+  <strong>Defaults baked into this mockup.</strong> Each is a real
+  decision worth pushing back on.
+  <ul>
+    <li><strong>Register creates a real DB row</strong> with <code>status='pending_payment'</code>. Visible to organizers in attendees view (with a "pending" pill).</li>
+    <li><strong>Capacity holds — silent.</strong> Pending-payment regs DO count against <code>max_teams</code>, but the user NEVER sees a countdown timer. A backstage cleanup job releases pending regs that have been idle for ~30 min. If something gets released while the user was away, the checkout page explains it calmly and offers re-register / waitlist.</li>
+    <li><strong>Partner invites fire at checkout</strong>, not at register. Safer — partner isn't notified about a half-baked registration. (Open question below covers the alternative.)</li>
+    <li><strong>Persistent bottom bar</strong> shows whenever you have pending regs anywhere on the site. Count + total + a fat <em>Check out</em> button. No countdown — anxiety belongs to the system, not the user.</li>
+    <li><strong>Social proof — momentum, not live counts.</strong> Tournament header shows "X players registered this week" / "Filling fast — 3 spots left." Based on real historical data, no Amazon-style "8 people viewing right now."</li>
+    <li><strong>Single-tournament checkout.</strong> Checking out covers all your pending regs for a single tournament. If you have pending regs across multiple tournaments, the bottom bar groups by tournament and you pay each separately. (Stripe Connect math is per-org anyway.)</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 1: Tournament page — Register button on events         -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">1 · Tournament page — Register buttons (no cart icon yet)</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <h1 class="tournament-name">2nd Annual Mud Season Invitational</h1>
+      <div class="meta-row">
+        <div class="meta">
+          <div class="label">When</div>
+          <div class="value">Fri, May 29 – Sun, May 31, 2026</div>
+        </div>
+        <div class="meta">
+          <div class="label">Entry fee</div>
+          <div class="value">$60.00 first event · $20.00 additional</div>
+        </div>
+      </div>
+
+      <div style="margin: 16px 0 0; display: flex; gap: 8px; flex-wrap: wrap;">
+        <span class="momentum-chip"><span class="dot"></span>14 players registered this week</span>
+        <span class="momentum-chip">Filling fast — 3 events under 50% capacity</span>
+      </div>
+
+      <h2 style="margin: 24px 0 12px; font-size: 18px;">Events (7)</h2>
+      <div class="event-list">
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Womens 3.5-3.99 <span style="font-size:12px;color:#92400e;font-weight:500;margin-left:6px;">⚡ 3 spots left</span></h3>
+            <div class="meta-line">Doubles · Women · 11 win by 2 · max 10 teams</div>
+            <div class="price-line"><strong>$60.00</strong> first event, <strong>$20.00</strong> additional</div>
+          </div>
+          <button class="btn-primary">Register →</button>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mens 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Men · 11 win by 2 · max 10 teams</div>
+            <div class="price-line"><strong>$60.00</strong> first event, <strong>$20.00</strong> additional</div>
+          </div>
+          <button class="btn-primary">Register →</button>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mixed 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Mixed · 11 win by 2 · max 10 teams</div>
+            <div class="price-line"><strong>$60.00</strong> first event, <strong>$20.00</strong> additional</div>
+          </div>
+          <button class="btn-primary">Register →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Two-layer social proof.</strong> Tournament-level chips at the
+  top ("14 players this week" / "filling fast") give the overall
+  pulse; per-event "spots left" only shows up when the count actually
+  matters (under ~30% capacity). Both pull from real data — no fake
+  presence counts.
+</div>
+
+<div class="note">
+  <strong>No cart icon yet.</strong> Until the user actually registers
+  for something, there's nothing to put in a cart. The header stays
+  clean for browsers who are still deciding.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 2: Register form (expanded card, in-place)              -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">2 · Click Register → expanded form (partner pick, then Register)</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <div style="margin: 16px 0 0; display: flex; gap: 8px; flex-wrap: wrap;">
+        <span class="momentum-chip"><span class="dot"></span>14 players registered this week</span>
+        <span class="momentum-chip">Filling fast — 3 events under 50% capacity</span>
+      </div>
+
+      <h2 style="margin: 24px 0 12px; font-size: 18px;">Events (7)</h2>
+      <div class="event-list">
+        <div class="event-card" style="flex-direction:column;align-items:stretch;">
+          <div style="display:flex;gap:16px;align-items:flex-start;">
+            <div style="flex:1;min-width:0;">
+              <h3>Womens 3.5-3.99</h3>
+              <div class="meta-line">Doubles · Women · 11 win by 2 · max 10 teams</div>
+              <div class="price-line"><strong>$60.00</strong> first event</div>
+            </div>
+            <button class="ghost-btn-bordered">Cancel</button>
+          </div>
+          <div class="register-form">
+            <label class="form-label">Your doubles partner</label>
+            <div class="partner-search-stub">
+              <span style="color:#444;">🔍 Search by name, email, or phone…</span>
+              <button class="btn-secondary" style="padding:4px 10px;">Add new player</button>
+            </div>
+            <div style="margin-top:12px;font-size:12px;color:#666;line-height:1.55;">
+              We'll hold your spot in a "pending payment" state while you
+              decide. Partner won't be notified until you check out and pay.
+            </div>
+            <div style="display:flex;gap:8px;margin-top:14px;">
+              <button class="btn-primary btn-big">Register (hold spot)</button>
+              <button class="ghost-btn-bordered" style="padding:12px 20px;">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mens 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Men · 11 win by 2</div>
+          </div>
+          <button class="btn-primary">Register →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Register-in-place.</strong> Clicking <em>Register</em> expands
+  the event card inline with the partner picker. No modal, no route
+  change. On submit the card collapses with a "Pending payment" pill
+  (next screen). For singles events the form is just a single
+  <em>Register</em> button + a confirmation step.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 3: Just registered — pending pill + bottom bar          -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">3 · After clicking Register — pending pill + persistent bottom bar appears</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <div class="confirm-banner">
+        <div class="info">
+          ✓ Registered for <strong>Womens 3.5-3.99</strong> with
+          <strong>Jane Davis</strong>. Spot's held — check out when you're done browsing.
+        </div>
+        <button class="btn-primary">Go to checkout →</button>
+      </div>
+      <div style="margin: 16px 0 0; display: flex; gap: 8px; flex-wrap: wrap;">
+        <span class="momentum-chip"><span class="dot"></span>14 players registered this week</span>
+        <span class="momentum-chip">Filling fast — 3 events under 50% capacity</span>
+      </div>
+
+      <h2 style="margin: 24px 0 12px; font-size: 18px;">Events (7)</h2>
+      <div class="event-list">
+        <div class="event-card pending">
+          <div style="flex:1;min-width:0;">
+            <h3>Womens 3.5-3.99 <span class="pill pill-pending">Pending payment</span></h3>
+            <div class="meta-line">Doubles · Women · 11 win by 2</div>
+            <div style="font-size:12px;color:#7a5d00;margin-top:4px;">
+              Partner: <strong>Jane Davis</strong>
+            </div>
+          </div>
+          <button class="btn-secondary">Cancel</button>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mens 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Men · 11 win by 2</div>
+          </div>
+          <button class="btn-primary">Register →</button>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mixed 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Mixed · 11 win by 2</div>
+          </div>
+          <button class="btn-primary">Register →</button>
+        </div>
+      </div>
+    </div>
+    <div class="pending-bar">
+      <div>
+        <div class="info">
+          <strong>1 event</strong> waiting for payment ·
+          <strong>$60.00</strong> total
+        </div>
+      </div>
+      <button class="btn-primary btn-big">Check out →</button>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Two surfaces for the pending state.</strong> The card itself
+  picks up an amber pill and a partner line. A sticky bottom bar
+  reminds the user globally — visible whether they're on the
+  tournament page, the homepage, an admin page, anywhere — with the
+  count, total, and a fat <em>Check out</em> button. Critically: no
+  countdown, no anxiety. The hold cleanup happens server-side after
+  a quiet timeout; if it ever fires, the user finds out in calm
+  language at checkout.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 4: After registering for 2 more events                  -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">4 · Three events registered, bar updates</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <div style="margin: 16px 0 0; display: flex; gap: 8px; flex-wrap: wrap;">
+        <span class="momentum-chip"><span class="dot"></span>14 players registered this week</span>
+        <span class="momentum-chip">Filling fast — 3 events under 50% capacity</span>
+      </div>
+
+      <h2 style="margin: 24px 0 12px; font-size: 18px;">Events (7)</h2>
+      <div class="event-list">
+        <div class="event-card pending">
+          <div style="flex:1;min-width:0;">
+            <h3>Womens 3.5-3.99 <span class="pill pill-pending">Pending payment</span></h3>
+            <div style="font-size:12px;color:#7a5d00;margin-top:4px;">
+              Partner: <strong>Jane Davis</strong>
+            </div>
+          </div>
+          <button class="btn-secondary">Cancel</button>
+        </div>
+        <div class="event-card pending">
+          <div style="flex:1;min-width:0;">
+            <h3>Mens 3.5-3.99 <span class="pill pill-pending">Pending payment</span></h3>
+            <div style="font-size:12px;color:#7a5d00;margin-top:4px;">
+              Partner: <strong>Mark Carter</strong>
+            </div>
+          </div>
+          <button class="btn-secondary">Cancel</button>
+        </div>
+        <div class="event-card pending">
+          <div style="flex:1;min-width:0;">
+            <h3>Mixed 3.5-3.99 <span class="pill pill-pending">Pending payment</span></h3>
+            <div style="font-size:12px;color:#7a5d00;margin-top:4px;">
+              Partner: <strong>Sue Brown</strong>
+            </div>
+          </div>
+          <button class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div class="pending-bar">
+      <div>
+        <div class="info">
+          <strong>3 events</strong> waiting for payment ·
+          <strong>$100.00</strong> total ($60 + $20 + $20)
+        </div>
+      </div>
+      <button class="btn-primary btn-big">Check out →</button>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>The "first event vs. additional" math runs against pending
+  regs.</strong> $60 + $20 + $20 = $100, with the priciest single
+  registration counting as the "first event." Same algorithm as D
+  (just merged in PR #2). When the user cancels or pays, the math
+  re-resolves.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 5: Pending bar visible on a DIFFERENT page              -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">5 · Pending bar follows you everywhere — even browsing other tournaments</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <h1 style="margin: 0 0 8px; font-size: 28px;">Find a pickleball tournament</h1>
+      <p style="color:#555;font-size:15px;line-height:1.55;margin:0 0 24px;">
+        Upcoming events from every organizer on Tournament Manager.
+      </p>
+      <input type="search" placeholder="Search…" style="width:100%;padding:12px 14px;border:1px solid #e2e2e2;border-radius:8px;font-size:15px;box-sizing:border-box;margin-bottom:20px;">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;">
+          <strong>3rd Annual Mud Season Invitational</strong>
+          <div style="font-size:13px;color:#666;margin-top:4px;">WMPC · Jun 12–14, 2026</div>
+        </div>
+        <div style="padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;">
+          <strong>Summer Showdown 2026</strong>
+          <div style="font-size:13px;color:#666;margin-top:4px;">Other Org · Jul 4–6, 2026</div>
+        </div>
+      </div>
+    </div>
+    <div class="pending-bar">
+      <div>
+        <div class="info">
+          <strong>3 events</strong> waiting for payment at
+          <strong>2nd Annual Mud Season Invitational</strong>
+        </div>
+        <div class="sub">$100.00 total</div>
+      </div>
+      <button class="btn-primary btn-big">Check out →</button>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>The bar is on every page.</strong> Tournament list, admin
+  area, profile, wherever. If the user has pending regs across
+  multiple tournaments, the bar groups by tournament — clicking
+  Check out either opens a dropdown to pick which tournament to pay
+  for, or routes to a per-tournament checkout sequence.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 6: Checkout                                             -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">6 · Checkout — review pending regs, pay</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell wide">
+      <a href="#" style="color:#2563eb;text-decoration:none;font-size:13px;">← Back to 2nd Annual Mud Season Invitational</a>
+      <h1 style="margin: 12px 0 4px; font-size: 24px;">Checkout</h1>
+      <p style="color:#666;margin:0 0 24px;font-size:14px;">
+        Pay to finalize your registrations. Partners will be notified
+        and your spots will be confirmed once payment goes through.
+      </p>
+
+      <div class="checkout-grid">
+        <div class="checkout-main">
+          <div class="checkout-card">
+            <h3>Womens 3.5-3.99 <span class="pill pill-pending" style="margin-left:6px;">Pending</span></h3>
+            <div class="sub">Doubles · Women</div>
+            <div class="partner-line">✓ Partner: Jane Davis (will be invited when you pay)</div>
+          </div>
+          <div class="checkout-card">
+            <h3>Mens 3.5-3.99 <span class="pill pill-pending" style="margin-left:6px;">Pending</span></h3>
+            <div class="sub">Doubles · Men</div>
+            <div class="partner-line">✓ Partner: Mark Carter (will be invited when you pay)</div>
+          </div>
+          <div class="checkout-card">
+            <h3>Mixed 3.5-3.99 <span class="pill pill-pending" style="margin-left:6px;">Pending</span></h3>
+            <div class="sub">Doubles · Mixed</div>
+            <div class="partner-line">✓ Partner: Sue Brown (will be invited when you pay)</div>
+          </div>
+          <div style="font-size:12px;color:#888;text-align:center;padding:8px;">
+            By paying you agree to the tournament's refund policy.
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div style="font-size:13px;font-weight:600;color:#444;margin-bottom:10px;">Order summary</div>
+          <div class="summary-row">
+            <span>Womens 3.5-3.99 <span style="color:#888;">(first event)</span></span>
+            <span>$60.00</span>
+          </div>
+          <div class="summary-row">
+            <span>Mens 3.5-3.99 <span style="color:#888;">(additional)</span></span>
+            <span>$20.00</span>
+          </div>
+          <div class="summary-row">
+            <span>Mixed 3.5-3.99 <span style="color:#888;">(additional)</span></span>
+            <span>$20.00</span>
+          </div>
+          <div class="summary-row total">
+            <span>Total</span><span>$100.00</span>
+          </div>
+          <button class="btn-primary btn-big" style="width:100%;margin-top:14px;">Pay $100.00 →</button>
+          <button class="btn-ghost-text" style="width:100%;margin-top:8px;text-align:center;">Cancel checkout (keep registrations)</button>
+        </div>
+      </div>
+    </div>
+    <div class="pending-bar">
+      <div>
+        <div class="info">
+          <strong>3 events</strong> waiting for payment ·
+          <strong>$100.00</strong> total
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Checkout is just review + pay.</strong> Partners are already
+  picked from the register step, so nothing to fill in here. The
+  cards show what's about to happen ("will be invited when you pay")
+  to set expectations. <em>Cancel checkout (keep holds)</em> lets the
+  user back out without losing their pending regs — useful if they
+  realize they want to add one more event before paying.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 7: Stripe stub                                          -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">7 · Stripe-hosted checkout (same as cart flow)</div>
+  <div style="background:#f0f4ff;padding:48px 24px;text-align:center;">
+    <div style="display:inline-block;padding:24px 36px;background:#fff;border:1px solid #d1d5db;border-radius:12px;">
+      <div style="font-size:14px;color:#888;margin-bottom:8px;">stripe.com</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:16px;">2nd Annual Mud Season Invitational</div>
+      <div style="font-size:32px;font-weight:700;margin-bottom:24px;">$100.00</div>
+      <button class="btn-primary btn-big" style="width:100%;margin-top:18px;">Pay $100.00</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 8: Success                                              -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">8 · Success — pending becomes paid, partners notified</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <div class="success-banner">
+        <h1>🎉 You're paid up!</h1>
+        <p>
+          3 events confirmed in <strong>2nd Annual Mud Season Invitational</strong>.
+          Total charged: <strong>$100.00</strong>. Your partners have been emailed
+          their invites.
+        </p>
+      </div>
+      <h2 style="margin:0 0 8px;font-size:16px;">Now confirmed</h2>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
+          <strong>Womens 3.5-3.99</strong> with <strong>Jane Davis</strong>
+          <span class="pill pill-registered" style="margin-left:6px;">Registered</span>
+        </div>
+        <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
+          <strong>Mens 3.5-3.99</strong> with <strong>Mark Carter</strong>
+          <span class="pill pill-registered" style="margin-left:6px;">Registered</span>
+        </div>
+        <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
+          <strong>Mixed 3.5-3.99</strong> with <strong>Sue Brown</strong>
+          <span class="pill pill-registered" style="margin-left:6px;">Registered</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:24px;">
+        <a href="#" class="btn-secondary btn-big">← Back to tournament</a>
+        <a href="#" class="btn-primary btn-big">Register for more events</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 9: Edge case — hold expired                             -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">9 · Edge case — some pending registrations got released while user was away</div>
+  <div>
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+      </nav>
+    </div>
+    <div class="page-shell wide">
+      <h1 style="margin: 12px 0 4px; font-size: 24px;">Checkout</h1>
+
+      <div style="padding:14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:600;color:#991b1b;margin-bottom:6px;">
+          A couple of changes since you were last here
+        </div>
+        <div style="font-size:13px;color:#991b1b;line-height:1.55;">
+          <strong>Mens 3.5-3.99</strong> still has openings —
+          re-register if you want it.<br>
+          <strong>Mixed 3.5-3.99</strong> filled up while you were away;
+          waitlist is open.
+          <div style="margin-top:8px;">
+            <button class="btn-secondary" style="padding:4px 10px;margin-right:4px;">Re-register for Mens</button>
+            <button class="btn-secondary" style="padding:4px 10px;">Join Mixed waitlist</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="checkout-card">
+        <h3>Womens 3.5-3.99 <span class="pill pill-pending" style="margin-left:6px;">Pending</span></h3>
+        <div class="sub">Doubles · Women</div>
+        <div class="partner-line">✓ Partner: Jane Davis</div>
+      </div>
+
+      <div style="margin-top:14px;padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Order summary</div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:600;">
+          <span>Total</span><span>$60.00</span>
+        </div>
+        <button class="btn-primary btn-big" style="width:100%;margin-top:14px;">Pay $60.00 →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Holds are silent.</strong> A backstage cleanup job runs after
+  a quiet timeout (say, 30 minutes of inactivity) and releases any
+  pending-payment regs that have been idle — but the user never sees
+  a countdown timer anywhere. When something does get released, the
+  checkout page explains what changed in calm language and offers
+  recovery (re-register or join a waitlist where applicable). Same
+  capacity protection, much less anxiety.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- Open questions                                                 -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="open-q">
+  <strong>Open questions for the design conversation</strong>
+  <ul>
+    <li><strong>Do pending-payment regs count against capacity?</strong>
+      Defaulted to YES with a 30-min hold. Alternative: NO, regs are
+      effectively cart-state until paid (matches cart-first mockup
+      more closely). YES is more honest about slot availability;
+      NO avoids the auto-cancel cleanup job.</li>
+    <li><strong>Partner invite timing.</strong>
+      Defaulted to AT-CHECKOUT. Alternative: AT-REGISTER, with a
+      "Bob registered you but hasn't paid yet — your spot won't be
+      held until he does" note in the invite email. Lets partners
+      respond earlier but risks ghost-partnering.</li>
+    <li><strong>Hold-expiry semantics.</strong>
+      Auto-cancel after 30 min, or auto-extend if the user is active
+      on the site? Active-extension is gentler for slow browsers but
+      penalizes anyone who walked away from a session.</li>
+    <li><strong>What's in the pending-bar when multiple tournaments
+      are pending?</strong> Group by tournament with a per-tournament
+      Check out, or show a unified total with a dropdown? Mockup
+      shows the former, but it gets awkward with 3+ tournaments.</li>
+    <li><strong>What about editing a pending reg?</strong>
+      Can the user swap partners on a pending Mens 3.5 before paying?
+      Probably yes — same edit-mode register page as today, but the
+      partner-change side effects (cancel email, etc.) don't fire
+      since no invite has gone out yet.</li>
+    <li><strong>Stripe Connect cross-org behavior.</strong>
+      Each tournament's checkout is a separate Stripe session because
+      each org has its own Connect account. Fine in theory; awkward
+      if the user has pendings across 5 tournaments and has to do 5
+      checkouts. Probably rare in practice, but worth flagging.</li>
+    <li><strong>Free tournaments.</strong>
+      If total is $0, skip Stripe entirely and just flip pending →
+      paid on the Pay button. Stripe Checkout requires &gt; $0.</li>
+  </ul>
+</div>
+
+<div class="compare-note">
+  <strong>Take this back to the other mockup to compare:</strong>
+  <code>mockups/registration-checkout-flow.html</code>. Same player-
+  facing happy path; the key difference is what's in the DB during
+  the "browsing + adding" phase. Decide which property matters more —
+  immediate organizer visibility into who's interested
+  (register-then-checkout) vs. zero state to clean up if someone
+  abandons (cart-first).
+</div>
+
+</div>
+</body>
+</html>

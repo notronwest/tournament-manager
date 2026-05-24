@@ -1,0 +1,980 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Mockup — shopping-cart registration flow</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #222;
+    background: #f6f7f9;
+    margin: 0;
+    padding: 0;
+  }
+  .doc {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px 24px 96px;
+  }
+  h1.doc-title {
+    margin: 0 0 8px;
+    font-size: 28px;
+  }
+  .doc-lede {
+    color: #555;
+    margin: 0 0 24px;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .screen {
+    margin: 32px 0 8px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    overflow: hidden;
+  }
+  .screen-label {
+    padding: 10px 16px;
+    background: #f0f4ff;
+    color: #1e40af;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #dbe5ff;
+  }
+  .screen-body {
+    padding: 0;
+  }
+  .note {
+    padding: 16px 18px;
+    background: #fffbeb;
+    border-left: 4px solid #fbbf24;
+    margin: 20px 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: #5b4604;
+    border-radius: 0 8px 8px 0;
+  }
+  .note strong { color: #3b2c00; }
+  .open-q {
+    padding: 16px 18px;
+    background: #eef2ff;
+    border-left: 4px solid #6366f1;
+    margin: 20px 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: #3730a3;
+    border-radius: 0 8px 8px 0;
+  }
+  .open-q ul { margin: 8px 0 0 0; padding-left: 20px; }
+  .open-q li { margin-bottom: 4px; }
+
+  /* App-like header. Mirrors SiteHeader visually. */
+  .app-header {
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .app-header .brand {
+    font-weight: 600;
+    color: #111;
+    font-size: 16px;
+    text-decoration: none;
+  }
+  .app-header .nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .app-header .nav .greet { color: #666; margin-right: 8px; }
+  .ghost-btn {
+    padding: 6px 12px;
+    color: #444;
+    text-decoration: none;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .ghost-btn-bordered {
+    padding: 6px 12px;
+    color: #444;
+    text-decoration: none;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid #e2e2e2;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .cart-icon-btn {
+    position: relative;
+    padding: 6px 12px;
+    background: #fff;
+    border: 1px solid #e2e2e2;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    color: #444;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cart-icon-btn .badge {
+    background: #2563eb;
+    color: #fff;
+    font-size: 11px;
+    border-radius: 10px;
+    padding: 1px 7px;
+    min-width: 16px;
+    text-align: center;
+    font-weight: 600;
+  }
+
+  /* Page content shell, mirrors public pages. */
+  .page-shell {
+    padding: 32px 24px;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  .page-shell.wide { max-width: 900px; }
+
+  /* Tournament header / cards. */
+  h1.tournament-name { margin: 0; font-size: 26px; }
+  .tournament-desc { color: #444; margin: 8px 0 0; font-size: 15px; line-height: 1.5; }
+  .meta-row {
+    display: flex; gap: 16px; margin-top: 16px;
+    flex-wrap: wrap; font-size: 14px; color: #444;
+  }
+  .meta .label {
+    font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .meta .value { margin-top: 2px; }
+  .reg-status-banner {
+    display: flex; gap: 12px; align-items: center;
+    padding: 16px;
+    background: #eff6ff; border: 1px solid #bfdbfe;
+    border-radius: 8px; margin: 24px 0;
+  }
+  .reg-status-banner .label {
+    font-size: 13px; font-weight: 600; color: #1e40af;
+  }
+
+  .event-list { display: flex; flex-direction: column; gap: 12px; }
+  .event-card {
+    padding: 16px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .event-card.in-cart {
+    border-color: #bfdbfe;
+    background: #f5f9ff;
+  }
+  .event-card h3 { margin: 0; font-size: 16px; font-weight: 600; }
+  .event-card .meta-line { color: #666; font-size: 13px; margin-top: 4px; }
+  .event-card .price-line { color: #444; font-size: 13px; margin-top: 8px; }
+  .event-card .chip {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #eff6ff; color: #1e40af;
+    border-radius: 4px; font-size: 11px; font-weight: 500;
+    margin-right: 4px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-left: 8px;
+  }
+  .pill-in-cart { background: #dbeafe; color: #1e40af; }
+  .pill-registered { background: #dcfce7; color: #166534; }
+  .pill-invited { background: #fef3c7; color: #7a5d00; }
+
+  /* Buttons */
+  .btn-primary, .btn-secondary {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .btn-primary {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+  }
+  .btn-secondary {
+    background: #fff;
+    color: #2563eb;
+    border-color: #2563eb;
+  }
+  .btn-big {
+    padding: 12px 24px;
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .btn-disabled {
+    background: #9ca3af;
+    color: #fff;
+    border-color: #9ca3af;
+    cursor: not-allowed;
+  }
+  .btn-ghost-text {
+    background: none;
+    border: none;
+    color: #2563eb;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    text-decoration: underline;
+    padding: 0;
+  }
+
+  /* Cart drawer. */
+  .with-drawer { position: relative; }
+  .drawer {
+    position: absolute;
+    top: 0; right: 0;
+    width: 360px;
+    height: 100%;
+    background: #fff;
+    border-left: 1px solid #e5e7eb;
+    box-shadow: -8px 0 24px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .drawer-header h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  .drawer-body { flex: 1; padding: 14px 16px; overflow-y: auto; }
+  .drawer-footer {
+    padding: 14px 16px;
+    border-top: 1px solid #e5e7eb;
+    background: #fafafa;
+  }
+  .cart-item {
+    padding: 10px 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .cart-item:last-child { border-bottom: none; }
+  .cart-item .name { font-size: 14px; font-weight: 500; }
+  .cart-item .sub { font-size: 12px; color: #888; margin-top: 2px; }
+  .cart-item .price { font-size: 13px; font-weight: 500; color: #444; }
+  .cart-item .tier { font-size: 11px; color: #888; }
+  .x-btn {
+    border: none;
+    background: none;
+    color: #888;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 2px 6px;
+  }
+  .x-btn:hover { color: #ef4444; }
+
+  /* Checkout page */
+  .checkout-grid {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+  }
+  @media (max-width: 720px) {
+    .checkout-grid { grid-template-columns: 1fr; }
+  }
+  .checkout-main { display: flex; flex-direction: column; gap: 16px; }
+  .checkout-card {
+    padding: 16px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+  .checkout-card h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+  .summary-card {
+    padding: 18px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    position: sticky; top: 16px;
+    align-self: flex-start;
+  }
+  .summary-row {
+    display: flex; justify-content: space-between;
+    font-size: 13px; color: #444; margin-bottom: 8px;
+  }
+  .summary-row.total {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 16px; font-weight: 600; color: #111;
+  }
+  .partner-required {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #5b4604;
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 6px;
+    margin-top: 8px;
+  }
+  .partner-set {
+    color: #166534;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .partner-search-stub {
+    margin-top: 6px;
+    padding: 10px;
+    background: #fafafa;
+    border: 1px dashed #d1d5db;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #888;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  /* Empty cart state */
+  .empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #888;
+    font-size: 14px;
+  }
+
+  /* Success */
+  .success-banner {
+    padding: 20px;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    margin-bottom: 24px;
+  }
+  .success-banner h1 { margin: 0 0 8px; font-size: 22px; color: #166534; }
+  .success-banner p { margin: 0; color: #166534; font-size: 14px; line-height: 1.55; }
+
+  /* Spacers between sections */
+  .h-12 { height: 12px; }
+  .h-24 { height: 24px; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+<h1 class="doc-title">Mockup — shopping-cart registration flow</h1>
+<p class="doc-lede">
+  Replace the current "click <em>Register</em> → atomic confirm" flow with a cart-based
+  one where picks accumulate, partners are picked at checkout, and nothing
+  writes to <code>event_registrations</code> until payment lands. Stack of
+  screens below shows the full path with notes calling out design decisions
+  and open questions.
+</p>
+
+<div class="open-q">
+  <strong>Anchoring decisions baked into this mockup.</strong> Push back on any of these.
+  <ul>
+    <li><strong>Single-tournament cart.</strong> One tournament at a time. Cross-tournament adds Stripe Connect complications (each org has its own Connect account). Starting a second tournament's cart prompts to clear or finish the current one.</li>
+    <li><strong>Cart lives in localStorage</strong> until checkout. Survives sign-out, refresh, browser close. Re-validated against current event capacity at checkout time.</li>
+    <li><strong>Partners picked at checkout</strong>, not at add-to-cart. Lower friction to add; partner decision happens in the review step alongside everything else.</li>
+    <li><strong>Invites + emails fire after payment</strong>. No partner notification until the money is committed.</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 1: Tournament page with "Add to cart" buttons         -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">1 · Tournament page — empty cart</div>
+  <div class="screen-body">
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+        <button class="cart-icon-btn">🛒 Cart</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <h1 class="tournament-name">2nd Annual Mud Season Invitational</h1>
+      <p class="tournament-desc">This is the most amazing tournament you will ever play in — guaranteed!</p>
+      <div class="meta-row">
+        <div class="meta">
+          <div class="label">When</div>
+          <div class="value">Fri, May 29, 2026 – Sun, May 31, 2026</div>
+        </div>
+        <div class="meta">
+          <div class="label">Entry fee</div>
+          <div class="value">$60.00 first event · $20.00 additional</div>
+        </div>
+        <div class="meta">
+          <div class="label">Status</div>
+          <div class="value">Published</div>
+        </div>
+      </div>
+
+      <div class="reg-status-banner">
+        <div style="flex:1">
+          <div class="label">Registration is open</div>
+          <div style="font-size:12px;color:#1e40af;margin-top:2px;">Closes Fri, May 22</div>
+        </div>
+      </div>
+
+      <h2 style="margin: 24px 0 12px; font-size: 18px;">Events (7)</h2>
+      <div class="event-list">
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Womens 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Women · 11 win by 2 · top 4 to playoffs · max 10 teams</div>
+            <div class="price-line"><strong>$60.00</strong> as your first event, <strong>$20.00</strong> as an additional event</div>
+          </div>
+          <button class="btn-primary">Add to cart</button>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mens 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Men · 11 win by 2 · top 4 to playoffs · max 10 teams</div>
+            <div class="price-line"><strong>$60.00</strong> as your first event, <strong>$20.00</strong> as an additional event</div>
+          </div>
+          <button class="btn-primary">Add to cart</button>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mixed 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Mixed · 11 win by 2 · top 4 to playoffs · max 10 teams</div>
+            <div class="price-line"><strong>$60.00</strong> as your first event, <strong>$20.00</strong> as an additional event</div>
+          </div>
+          <button class="btn-primary">Add to cart</button>
+        </div>
+        <div class="event-card" style="opacity:.6">
+          <div style="flex:1;min-width:0;">
+            <h3>Open Division</h3>
+            <div class="meta-line">Doubles · Mixed · 11 win by 2 · top 4 to playoffs · max 10 teams</div>
+            <div class="price-line" style="color:#888;">Full — waitlist available</div>
+          </div>
+          <button class="ghost-btn-bordered" disabled>Join waitlist</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Buttons changed:</strong> <em>Register →</em> becomes <em>Add to cart</em>. The cart icon in the
+  header is the persistent indicator that anything is in flight. No
+  blue "primary CTA at the top of the page" — adding events one at a
+  time is the new primary gesture.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 2: After adding 2 events — cart icon shows badge      -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">2 · Two events added — cart badge shows count + drawer flyout</div>
+  <div class="screen-body with-drawer">
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+        <button class="cart-icon-btn">🛒 Cart <span class="badge">2</span></button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <h1 class="tournament-name">2nd Annual Mud Season Invitational</h1>
+      <h2 style="margin: 24px 0 12px; font-size: 18px;">Events (7)</h2>
+      <div class="event-list">
+        <div class="event-card in-cart">
+          <div style="flex:1;min-width:0;">
+            <h3>Womens 3.5-3.99 <span class="pill pill-in-cart">In cart</span></h3>
+            <div class="meta-line">Doubles · Women · 11 win by 2</div>
+            <div class="price-line"><strong>$60.00</strong> as your first event</div>
+          </div>
+          <button class="btn-secondary">Remove</button>
+        </div>
+        <div class="event-card in-cart">
+          <div style="flex:1;min-width:0;">
+            <h3>Mixed 3.5-3.99 <span class="pill pill-in-cart">In cart</span></h3>
+            <div class="meta-line">Doubles · Mixed · 11 win by 2</div>
+            <div class="price-line"><strong>$20.00</strong> as an additional event</div>
+          </div>
+          <button class="btn-secondary">Remove</button>
+        </div>
+        <div class="event-card">
+          <div style="flex:1;min-width:0;">
+            <h3>Mens 3.5-3.99</h3>
+            <div class="meta-line">Doubles · Men · 11 win by 2</div>
+            <div class="price-line"><strong>$60.00</strong> as your first event, <strong>$20.00</strong> as an additional event</div>
+          </div>
+          <button class="btn-primary">Add to cart</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drawer overlay -->
+    <div class="drawer">
+      <div class="drawer-header">
+        <h2>Your cart</h2>
+        <button class="x-btn">×</button>
+      </div>
+      <div class="drawer-body">
+        <div style="font-size:12px;color:#888;margin-bottom:8px;">
+          2nd Annual Mud Season Invitational
+        </div>
+        <div class="cart-item">
+          <div style="flex:1;min-width:0;">
+            <div class="name">Womens 3.5-3.99</div>
+            <div class="sub">First event · partner needed</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="price">$60.00</div>
+            <button class="x-btn">×</button>
+          </div>
+        </div>
+        <div class="cart-item">
+          <div style="flex:1;min-width:0;">
+            <div class="name">Mixed 3.5-3.99</div>
+            <div class="sub">Additional event · partner needed</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="price">$20.00</div>
+            <button class="x-btn">×</button>
+          </div>
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <div class="summary-row" style="margin:0 0 4px;">
+          <span>Subtotal (2 events)</span><span>$80.00</span>
+        </div>
+        <div class="summary-row total" style="border:none;padding:0;margin-top:8px;">
+          <span>Total</span><span>$80.00</span>
+        </div>
+        <button class="btn-primary btn-big" style="width:100%;margin-top:14px;">Go to checkout →</button>
+        <button class="btn-ghost-text" style="width:100%;margin-top:8px;text-align:center;">Continue browsing</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Cart drawer slides in</strong> when the user clicks the cart icon. Shows
+  current items, subtotal, total, and a checkout CTA. Cards on the
+  underlying page get an "In cart" pill + a Remove button so the user
+  can manage from either spot.
+</div>
+
+<div class="open-q">
+  <strong>Add-to-cart across tournaments?</strong> If the user has Mud Season
+  picks in the cart and visits a different tournament's public page,
+  clicking <em>Add to cart</em> there should:
+  <ul>
+    <li>(a) Show a confirm dialog: "Start a new cart? Your Mud Season picks will be cleared." (Recommended for v1.)</li>
+    <li>(b) Allow multiple tournaments in one cart; checkout splits into multiple Stripe payments. Bigger scope.</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 3: Checkout page — partner picker per event           -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">3 · Checkout page — partner picker + payment review</div>
+  <div class="screen-body">
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+        <button class="cart-icon-btn">🛒 Cart <span class="badge">2</span></button>
+      </nav>
+    </div>
+    <div class="page-shell wide">
+      <a href="#" style="color:#2563eb;text-decoration:none;font-size:13px;">← Back to 2nd Annual Mud Season Invitational</a>
+      <h1 style="margin: 12px 0 4px; font-size: 24px;">Review and check out</h1>
+      <p style="color:#666;margin:0 0 24px;font-size:14px;">
+        Confirm partners, review your total, then pay to finalize your spots.
+        Nothing's locked in until payment goes through.
+      </p>
+
+      <div class="checkout-grid">
+        <div class="checkout-main">
+          <div class="checkout-card">
+            <h3>Womens 3.5-3.99</h3>
+            <div style="font-size:13px;color:#666;">Doubles · Women · 11 win by 2</div>
+            <div style="margin-top:12px;font-size:13px;color:#444;">Pick your partner:</div>
+            <div class="partner-search-stub">
+              <span style="color:#444;">🔍 Search by name, email, or phone…</span>
+              <button class="btn-secondary" style="padding:4px 10px;">Add new player</button>
+            </div>
+            <div class="partner-required">⚠ Pick a partner to continue — doubles events can't check out without one.</div>
+          </div>
+
+          <div class="checkout-card">
+            <h3>Mixed 3.5-3.99</h3>
+            <div style="font-size:13px;color:#666;">Doubles · Mixed · 11 win by 2</div>
+            <div style="margin-top:12px;font-size:13px;color:#444;">Pick your partner:</div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:10px;padding:10px;background:#f5f9ff;border:1px solid #bfdbfe;border-radius:6px;">
+              <div style="width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;">SB</div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:500;">Sue Brown</div>
+                <div style="font-size:12px;color:#1e40af;">sue.brown@example.com · 555-0102</div>
+              </div>
+              <button class="x-btn">×</button>
+            </div>
+            <div class="partner-set">✓ Sue will get an invite after you pay.</div>
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div style="font-size:13px;font-weight:600;color:#444;margin-bottom:10px;">Order summary</div>
+          <div class="summary-row">
+            <span>Womens 3.5-3.99 <span style="color:#888;">(first event)</span></span>
+            <span>$60.00</span>
+          </div>
+          <div class="summary-row">
+            <span>Mixed 3.5-3.99 <span style="color:#888;">(additional)</span></span>
+            <span>$20.00</span>
+          </div>
+          <div class="summary-row total">
+            <span>Total</span><span>$80.00</span>
+          </div>
+          <button class="btn-disabled btn-big" style="width:100%;margin-top:14px;">Pay $80.00 →</button>
+          <div style="font-size:11px;color:#888;text-align:center;margin-top:8px;">
+            Pick all partners to enable payment
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Two-column checkout.</strong> Left column = per-event partner
+  pickers, in cart order. Right column = sticky order summary with the
+  total and the <em>Pay $X</em> CTA. The CTA is disabled until every
+  doubles event has a partner picked.
+</div>
+
+<div class="open-q">
+  <strong>Partner already-registered check.</strong> If the picked partner
+  is already registered for the same event (e.g. they signed up
+  themselves earlier today), we should surface that immediately on
+  selection — same logic as F3 in the backlog, but enforced inline at
+  checkout time too.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 4: Checkout with all partners set — Pay enabled        -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">4 · All partners set — Pay button active</div>
+  <div class="screen-body">
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+        <button class="cart-icon-btn">🛒 Cart <span class="badge">2</span></button>
+      </nav>
+    </div>
+    <div class="page-shell wide">
+      <h1 style="margin: 12px 0 4px; font-size: 24px;">Review and check out</h1>
+
+      <div class="checkout-grid">
+        <div class="checkout-main">
+          <div class="checkout-card">
+            <h3>Womens 3.5-3.99</h3>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:10px;padding:10px;background:#f5f9ff;border:1px solid #bfdbfe;border-radius:6px;">
+              <div style="width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;">JD</div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:500;">Jane Davis</div>
+                <div style="font-size:12px;color:#1e40af;">jane.davis@example.com</div>
+              </div>
+              <button class="x-btn">×</button>
+            </div>
+            <div class="partner-set">✓ Jane will get an invite after you pay.</div>
+          </div>
+
+          <div class="checkout-card">
+            <h3>Mixed 3.5-3.99</h3>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:10px;padding:10px;background:#f5f9ff;border:1px solid #bfdbfe;border-radius:6px;">
+              <div style="width:32px;height:32px;border-radius:50%;background:#2563eb;color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;">SB</div>
+              <div style="flex:1;">
+                <div style="font-size:14px;font-weight:500;">Sue Brown</div>
+                <div style="font-size:12px;color:#1e40af;">sue.brown@example.com · 555-0102</div>
+              </div>
+              <button class="x-btn">×</button>
+            </div>
+            <div class="partner-set">✓ Sue will get an invite after you pay.</div>
+          </div>
+
+          <div style="font-size:12px;color:#888;text-align:center;padding:8px;">
+            By paying you agree to the tournament's refund policy (organizer-specific).
+          </div>
+        </div>
+
+        <div class="summary-card">
+          <div style="font-size:13px;font-weight:600;color:#444;margin-bottom:10px;">Order summary</div>
+          <div class="summary-row">
+            <span>Womens 3.5-3.99 <span style="color:#888;">(first event)</span></span>
+            <span>$60.00</span>
+          </div>
+          <div class="summary-row">
+            <span>Mixed 3.5-3.99 <span style="color:#888;">(additional)</span></span>
+            <span>$20.00</span>
+          </div>
+          <div class="summary-row total">
+            <span>Total</span><span>$80.00</span>
+          </div>
+          <button class="btn-primary btn-big" style="width:100%;margin-top:14px;">Pay $80.00 →</button>
+          <button class="btn-ghost-text" style="width:100%;margin-top:8px;text-align:center;">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 5: Stripe redirect (visual stub)                      -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">5 · Stripe-hosted checkout (redirect; just a stub here)</div>
+  <div class="screen-body" style="background:#f0f4ff;padding:48px 24px;text-align:center;">
+    <div style="display:inline-block;padding:24px 36px;background:#fff;border:1px solid #d1d5db;border-radius:12px;">
+      <div style="font-size:14px;color:#888;margin-bottom:8px;">stripe.com</div>
+      <div style="font-size:18px;font-weight:600;margin-bottom:16px;">2nd Annual Mud Season Invitational</div>
+      <div style="font-size:32px;font-weight:700;margin-bottom:24px;">$80.00</div>
+      <div style="text-align:left;font-size:13px;color:#444;line-height:1.7;border-top:1px solid #e5e7eb;padding-top:14px;margin-top:14px;">
+        Card number<br>
+        <div style="background:#fafafa;padding:8px;border-radius:4px;font-family:monospace;color:#888;">•••• •••• •••• 4242</div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <div style="flex:1;background:#fafafa;padding:8px;border-radius:4px;font-family:monospace;color:#888;">12 / 28</div>
+          <div style="flex:1;background:#fafafa;padding:8px;border-radius:4px;font-family:monospace;color:#888;">123</div>
+        </div>
+      </div>
+      <button class="btn-primary btn-big" style="width:100%;margin-top:18px;">Pay $80.00</button>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Stripe-hosted checkout</strong> via Stripe Connect — same flow Stripe
+  already runs for every PaymentIntent. On success Stripe redirects
+  back to <code>/t/:org/:slug/cart/success?session_id=...</code>; our
+  webhook fires in parallel, writes the <code>event_registrations</code>
+  rows and any <code>partner_invites</code>, and fires the invite emails.
+  Return page polls / shows skeleton briefly until webhook lands.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 6: Success page                                       -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">6 · Success — registrations confirmed, invites sent</div>
+  <div class="screen-body">
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+        <button class="cart-icon-btn">🛒 Cart</button>
+      </nav>
+    </div>
+    <div class="page-shell">
+      <div class="success-banner">
+        <h1>🎉 You're registered!</h1>
+        <p>
+          Confirmed for <strong>Womens 3.5-3.99</strong> and <strong>Mixed 3.5-3.99</strong> in
+          <strong>2nd Annual Mud Season Invitational</strong>. Total charged:
+          <strong>$80.00</strong>.
+        </p>
+      </div>
+
+      <div style="margin-bottom:24px;">
+        <h2 style="margin:0 0 8px;font-size:16px;">Partner invites</h2>
+        <p style="margin:0 0 12px;color:#666;font-size:13px;">
+          We emailed both partners a confirmation link. You can also share the link directly:
+        </p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="font-size:13px;font-weight:500;">Womens 3.5-3.99</div>
+              <span class="pill" style="background:#dcfce7;color:#166534;">Emailed</span>
+            </div>
+            <div style="font-size:12px;color:#666;margin-top:2px;">Invite for <strong>jane.davis@example.com</strong></div>
+          </div>
+          <div style="padding:12px;background:#fff;border:1px solid #e5e7eb;border-radius:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="font-size:13px;font-weight:500;">Mixed 3.5-3.99</div>
+              <span class="pill" style="background:#dcfce7;color:#166534;">Emailed</span>
+            </div>
+            <div style="font-size:12px;color:#666;margin-top:2px;">Invite for <strong>sue.brown@example.com</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <a href="#" class="btn-secondary btn-big">← Back to tournament</a>
+        <a href="#" class="btn-primary btn-big">Add more events</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 7: Empty cart state                                    -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">7 · Empty cart state (drawer)</div>
+  <div class="screen-body with-drawer" style="min-height:360px;">
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+        <button class="cart-icon-btn">🛒 Cart</button>
+      </nav>
+    </div>
+
+    <div class="drawer">
+      <div class="drawer-header">
+        <h2>Your cart</h2>
+        <button class="x-btn">×</button>
+      </div>
+      <div class="drawer-body">
+        <div class="empty">
+          🛒<br><br>
+          Your cart is empty.<br>
+          Browse a tournament and add events to get started.
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <a href="#" class="btn-primary btn-big" style="width:100%;display:block;text-align:center;">Find a tournament</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 8: Edge case — event filled while in cart              -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">8 · Edge case — event filled up between add-to-cart and checkout</div>
+  <div class="screen-body">
+    <div class="app-header">
+      <a class="brand" href="#">Tournament Manager</a>
+      <nav class="nav">
+        <span class="greet">Hi, Dave</span>
+        <a class="ghost-btn" href="#">Admin</a>
+        <a class="ghost-btn" href="#">Profile</a>
+        <button class="ghost-btn-bordered">Sign out</button>
+        <button class="cart-icon-btn">🛒 Cart <span class="badge">2</span></button>
+      </nav>
+    </div>
+    <div class="page-shell wide">
+      <h1 style="margin: 12px 0 4px; font-size: 24px;">Review and check out</h1>
+
+      <div style="padding:14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin-bottom:16px;">
+        <div style="font-size:13px;font-weight:600;color:#991b1b;margin-bottom:6px;">⚠ One event filled up while you were deciding</div>
+        <div style="font-size:13px;color:#991b1b;line-height:1.55;">
+          <strong>Womens 3.5-3.99</strong> reached its max-teams cap. We've removed
+          it from your cart. The waitlist is still open — want to join?
+          <button class="btn-secondary" style="margin-left:8px;padding:4px 10px;">Join waitlist</button>
+        </div>
+      </div>
+
+      <div class="checkout-grid">
+        <div class="checkout-main">
+          <div class="checkout-card">
+            <h3>Mixed 3.5-3.99</h3>
+            <div class="partner-set">✓ Partnered with Sue Brown — she'll get an invite after you pay.</div>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div style="font-size:13px;font-weight:600;color:#444;margin-bottom:10px;">Order summary</div>
+          <div class="summary-row">
+            <span>Mixed 3.5-3.99 <span style="color:#888;">(first event)</span></span>
+            <span>$60.00</span>
+          </div>
+          <div class="summary-row total">
+            <span>Total</span><span>$60.00</span>
+          </div>
+          <button class="btn-primary btn-big" style="width:100%;margin-top:14px;">Pay $60.00 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Capacity re-validation at checkout.</strong> Because nothing is
+  written to the DB while the cart sits in localStorage, an event can
+  fill up between add-to-cart and checkout. Re-check capacity on the
+  checkout page load + again right before the Stripe redirect. If
+  something filled, drop it from the cart with a red banner explaining
+  what happened and offer the waitlist (when waitlists ship). Note
+  also that the "first event" classification can shift when items
+  get dropped — the surviving Mixed 3.5-3.99 is now the first event
+  at $60 instead of an additional at $20.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- Closing notes                                                 -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="open-q">
+  <strong>Bigger open questions for the design discussion</strong>
+  <ul>
+    <li><strong>Does the existing edit-mode register page survive?</strong> Today's <code>/register</code> lets a registered player change partners or withdraw. Under the cart model, those mutations on an EXISTING registration probably don't go through the cart at all — they stay as direct edits (same flow as today). The cart is for net-new picks only.</li>
+    <li><strong>What about free tournaments?</strong> If total is $0, do we still route through Stripe? Probably bypass it and just write the rows directly. Stripe Checkout requires &gt; $0.</li>
+    <li><strong>Abandoned-cart visibility (organizer side).</strong> Storing the cart in localStorage means we can't see it from the server. To enable the "organizer sees who's browsing" story, we'd need either (a) a lightweight <code>cart_drafts</code> table written on each cart change, or (b) a "save my picks" button that writes a draft, or (c) accept that visibility ends at "they hit Pay."</li>
+    <li><strong>Partner-change side effects under cart model.</strong> Same logic as commit C in the recent PR — cancel old invite + email + new invite — but it now runs at payment-webhook time, not at the moment the user clicks confirm. Slightly different ordering implication: if the user re-edits before paying, the old invite hasn't fired yet.</li>
+    <li><strong>Refund semantics.</strong> Withdrawals from a cart-based registration land squarely in the existing withdraw/refund-flow item in the backlog — nothing new here, but worth checking that the same code path handles cart-originated regs cleanly.</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

@@ -99,6 +99,24 @@ Known work that's not next-next but is on the radar.
 
 **Open question:** are the new statuses a true enum (organizer manages explicitly) or are they DERIVED from date columns + a smaller status enum? Derived is less error-prone but harder to override for one-off cases ("registration closed early because we sold out"). Worth a design pass before the migration.
 
+### Social-proof / momentum signals on the public pages
+- **As a Player** browsing tournaments, I want quiet, honest signals that an event has momentum ("14 players registered this week" / "3 spots left in Womens 3.5"), **so that** I know when to register now vs. wait without being manipulated by fake "8 people viewing right now" theater.
+- **As an Organizer**, I want the momentum signals to reflect REAL data from my tournament's own registration history, **so that** they're trustworthy long-term and don't quietly turn into noise.
+
+**Touches:** Public tournament page header gets a small chip row driven by aggregates over `event_registrations` (last 7 days, capacity %). Per-event "X spots left" badge only when capacity is under ~30% so the signal stays meaningful. No live-presence infrastructure — pure historical counts. Mocked in `mockups/register-then-checkout-flow.html`.
+
+**Open question:** at small-tournament scale (under 50 registrants), do these signals work or do they read as embarrassing? Need a floor — maybe hide the chips entirely when counts are under a threshold so a new tournament doesn't say "1 player this week."
+
+### Register-then-Checkout flow (separate registration from payment)
+- **As a Player**, I want to register for an event right when I see it (one click instead of "add to cart" semantics), and pay later when I'm done browsing — **so that** the act of committing to an event feels distinct from the act of paying for it, and my partner gets locked in before anyone else can grab them.
+- **As an Organizer**, I want pending-payment registrations to be visible in my admin views (with a "pending" pill), **so that** I can see who's about to commit and plan capacity accordingly.
+
+**Touches:** Significant flow rewrite. New `pending_payment` status on `event_registrations` (probably already in the enum). Capacity counts include pending. Background cleanup job auto-cancels pending regs that have been idle ~30 min. Partner invites fire at checkout, not at register. Persistent bottom bar across the app surfaces pending count + total + Check-out CTA. Mocked in `mockups/register-then-checkout-flow.html`.
+
+**Hold UX is silent.** No countdown timer shown to the user — anxiety belongs to the system, not the player. If a hold gets released, the checkout page explains it in calm language and offers re-register / waitlist recovery.
+
+**Open question:** do we ship this as a replacement for the current "click Confirm → atomic" register flow, or layer it in alongside? Replacement is cleaner code but a meaningful UX shift for existing users.
+
 ### Add GameID to scorecards + Court Manager search
 - **As a Referee or Organizer**, I want a short, unique GameID printed on every scorecard, **so that** I can match a paper card back to the right match when I'm entering scores.
 - **As an Organizer**, I want to search the Court Manager by GameID, **so that** when a referee hands me a scorecard I can jump straight to the right match instead of scrolling.
