@@ -91,6 +91,14 @@ Known work that's not next-next but is on the radar.
 
 **Touches:** Significant rethink of the current "click Confirm → everything writes atomically" flow. **First step is an HTML mockup** to land on shape before touching code. Open questions: do existing event_registrations rows exist while in the cart (with `status='cart'`?) or only after checkout? How does the cart survive a sign-out / session expiry? Does Stripe Connect onboarding sequencing change? Worth a design pass before any code.
 
+### Tournament lifecycle statuses + early-bird / late pricing windows
+- **As an Organizer**, I want my tournament's status to walk through the real lifecycle — *Scheduled* (announced but registration not open) → *Early Bird Registration Open* → *Registration Open* → *Late Registration Open* → *Registration Closed* → *Running* → *Completed* — **so that** pricing tiers, public visibility, and admin controls shift automatically at each stage instead of me flipping flags manually.
+- **As a Player**, I want to see at a glance which registration window is currently active and when the next deadline hits ("Early bird ends in 4 days," "Late registration opens Friday"), **so that** I know whether to sign up now, wait, or hurry.
+
+**Touches:** `tournament_status` enum gets new values (currently `draft / published / closed / completed`); existing `published` likely splits into the three open-registration variants. Schema probably also gains `early_bird_ends_at`, `late_starts_at`, plus optional pricing modifiers (early-bird discount or late-fee surcharge as offsets on top of the base entry / additional fees). Public tournament page + admin status controls need to render the broader state machine. Probably also a scheduled job (or RLS-side computed status) to auto-advance based on the date columns so the admin doesn't have to click through stages.
+
+**Open question:** are the new statuses a true enum (organizer manages explicitly) or are they DERIVED from date columns + a smaller status enum? Derived is less error-prone but harder to override for one-off cases ("registration closed early because we sold out"). Worth a design pass before the migration.
+
 ### Add GameID to scorecards + Court Manager search
 - **As a Referee or Organizer**, I want a short, unique GameID printed on every scorecard, **so that** I can match a paper card back to the right match when I'm entering scores.
 - **As an Organizer**, I want to search the Court Manager by GameID, **so that** when a referee hands me a scorecard I can jump straight to the right match instead of scrolling.
