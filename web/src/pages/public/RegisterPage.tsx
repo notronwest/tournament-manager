@@ -14,6 +14,11 @@ import {
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
 import { eligibilityChips } from "../../lib/eligibility";
+import {
+  computeLineItems,
+  formatUsd,
+  type LineItem,
+} from "../../lib/pricing";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -468,6 +473,24 @@ export default function RegisterPage() {
     partnerChangedEvents.length;
   const hasChanges = changeCount > 0;
 
+  // Live-computed pricing across the FULL post-submit basket (every
+  // event the player will end up registered for, including ones
+  // they're keeping unchanged). Used to:
+  //   * label per-row prices on EventRow with the right tier
+  //   * compute the running total banner above Confirm
+  //   * compute the cents-to-charge on each ADDED registration's
+  //     INSERT in onSubmit (existing regs keep their stored
+  //     event_fee_cents — withdraw/refund is a separate concern)
+  const basketEvents = tournament
+    ? events.filter((ev) => selections.get(ev.id)?.selected)
+    : [];
+  const { items: lineItems, totalCents } = tournament
+    ? computeLineItems(basketEvents, tournament)
+    : { items: [] as LineItem[], totalCents: 0 };
+  const lineItemByEventId = new Map(
+    lineItems.map((item) => [item.event.id, item]),
+  );
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!user || !me) return;
@@ -612,12 +635,20 @@ export default function RegisterPage() {
       }
 
       // ─── Insert my event_registration.
+      // Use the price the player saw on the form — the line-item
+      // tier (first / additional / override) snapshots into the
+      // event_registrations row so the historical record reflects
+      // what was actually quoted, even if tournament pricing
+      // changes later.
+      const lineItem = lineItemByEventId.get(ev.id);
+      const chargedCents = lineItem ? lineItem.cents : ev.event_fee_cents;
+
       const { error: myRegErr } = await supabase
         .from("event_registrations")
         .insert({
           event_id: ev.id,
           player_id: me.id,
-          event_fee_cents: ev.event_fee_cents,
+          event_fee_cents: chargedCents,
           status: "paid",
           // For the inbound-invite case, partner_status starts at
           // 'solo' and the accept_partner_invite RPC bumps it to
@@ -1243,6 +1274,7 @@ export default function RegisterPage() {
                     selection={sel}
                     existing={existing}
                     change={changeFor(ev.id)}
+                    lineItem={lineItemByEventId.get(ev.id)}
                     disabled={submitting}
                     onChange={(patch) => setSel(ev.id, patch)}
                     // Stop the user from picking themselves as their
@@ -1269,6 +1301,55 @@ export default function RegisterPage() {
             }}
           >
             {error}
+          </div>
+        )}
+
+        {/* Running total — reflects the FULL post-submit basket
+            (kept existing regs + the player's current picks). Only
+            renders when something is selected so a fresh form
+            doesn't show "$0.00 across 0 events". */}
+        {lineItems.length > 0 && (
+          <div
+            style={{
+              padding: 14,
+              background: "#fafafa",
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              marginBottom: 16,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontSize: 13, color: "#444" }}>
+              {lineItems.length} event{lineItems.length === 1 ? "" : "s"}
+              {(() => {
+                // Tier breakdown — e.g. "1 first + 2 additional + 1 flat".
+                const first = lineItems.filter((i) => i.tier === "first").length;
+                const additional = lineItems.filter(
+                  (i) => i.tier === "additional",
+                ).length;
+                const override = lineItems.filter(
+                  (i) => i.tier === "override",
+                ).length;
+                const parts: string[] = [];
+                if (first > 0) parts.push(`${first} first`);
+                if (additional > 0) parts.push(`${additional} additional`);
+                if (override > 0)
+                  parts.push(`${override} flat-fee`);
+                return parts.length > 0 ? (
+                  <span style={{ color: "#888" }}>
+                    {" "}
+                    ({parts.join(" + ")})
+                  </span>
+                ) : null;
+              })()}
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 600 }}>
+              {formatUsd(totalCents)}
+            </div>
           </div>
         )}
 
@@ -1336,6 +1417,7 @@ function EventRow({
   selection,
   existing,
   change,
+  lineItem,
   disabled,
   onChange,
   excludePlayerIds,
@@ -1344,6 +1426,11 @@ function EventRow({
   selection: EventSelection;
   existing: ExistingReg | undefined;
   change: ChangeType;
+  // Live-computed line item for this row (when selected). Carries
+  // the cents to charge AND the tier classification (first /
+  // additional / override) so the per-row price label can tell the
+  // user which rate they're getting.
+  lineItem: LineItem | undefined;
   disabled: boolean;
   onChange: (patch: Partial<EventSelection>) => void;
   excludePlayerIds: string[];
@@ -1483,10 +1570,31 @@ function EventRow({
           <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
             {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
             {event.points_to_win} win by {event.win_by}
-            {event.event_fee_cents > 0
-              ? ` · $${(event.event_fee_cents / 100).toFixed(2)}`
-              : ""}
           </div>
+          {/* Per-row price + tier label, shown for any selected
+              event regardless of state (will-add, registered, or
+              partner-changed). Withdrawals hide the price — it
+              isn't going to be charged. */}
+          {lineItem && !isWillWithdraw && lineItem.cents > 0 && (
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                color: "#444",
+              }}
+            >
+              <strong>{formatUsd(lineItem.cents)}</strong>{" "}
+              <span style={{ color: "#888" }}>
+                (
+                {lineItem.tier === "first"
+                  ? "first event"
+                  : lineItem.tier === "additional"
+                    ? "additional event"
+                    : "flat fee"}
+                )
+              </span>
+            </div>
+          )}
           {chips.length > 0 && (
             <div
               style={{
