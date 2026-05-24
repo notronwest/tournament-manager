@@ -46,6 +46,8 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
   const [registrationOpensAt, setRegistrationOpensAt] = useState("");
   const [registrationClosesAt, setRegistrationClosesAt] = useState("");
   const [entryFeeDollars, setEntryFeeDollars] = useState("0");
+  const [additionalEventFeeDollars, setAdditionalEventFeeDollars] =
+    useState("0");
   const [courtCount, setCourtCount] = useState("0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +93,9 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       setRegistrationOpensAt(isoToLocal(data.registration_opens_at));
       setRegistrationClosesAt(isoToLocal(data.registration_closes_at));
       setEntryFeeDollars((data.entry_fee_cents / 100).toFixed(2));
+      setAdditionalEventFeeDollars(
+        (data.additional_event_fee_cents / 100).toFixed(2),
+      );
       setCourtCount(String(data.court_count));
       setLoading(false);
     })();
@@ -125,7 +130,17 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       parseFloat(entryFeeDollars || "0") * 100,
     );
     if (Number.isNaN(entryFeeCents) || entryFeeCents < 0) {
-      setError("Entry fee must be a non-negative number.");
+      setError("First-event fee must be a non-negative number.");
+      return;
+    }
+    const additionalEventFeeCents = Math.round(
+      parseFloat(additionalEventFeeDollars || "0") * 100,
+    );
+    if (
+      Number.isNaN(additionalEventFeeCents) ||
+      additionalEventFeeCents < 0
+    ) {
+      setError("Additional-event fee must be a non-negative number.");
       return;
     }
     const courtCountNum = parseInt(courtCount || "0", 10);
@@ -145,6 +160,7 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       registration_opens_at: toIso(registrationOpensAt),
       registration_closes_at: toIso(registrationClosesAt),
       entry_fee_cents: entryFeeCents,
+      additional_event_fee_cents: additionalEventFeeCents,
       court_count: courtCountNum,
     };
 
@@ -341,8 +357,8 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
 
         <FieldRow>
           <Field
-            label="Entry fee (USD)"
-            hint="Tournament-level fee charged once per registrant. Per-event fees are set on each event."
+            label="First-event fee (USD)"
+            hint="What a player pays for their first event in this tournament. Per-event overrides on individual events take precedence."
           >
             <input
               type="number"
@@ -353,6 +369,24 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
               style={{ ...inputStyle, maxWidth: 160 }}
             />
           </Field>
+          <Field
+            label="Additional-event fee (USD)"
+            hint="Charged for each event AFTER the first (a player's most expensive pick counts as the first). Set to 0 for 'additional events included with entry'."
+          >
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={additionalEventFeeDollars}
+              onChange={(e) =>
+                setAdditionalEventFeeDollars(e.target.value)
+              }
+              style={{ ...inputStyle, maxWidth: 160 }}
+            />
+          </Field>
+        </FieldRow>
+
+        <FieldRow>
           <Field
             label="Court count"
             hint="Total courts available at the venue. Used by the schedule estimator."
