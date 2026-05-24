@@ -1,8 +1,19 @@
 # Backlog
 
-Living list of what's next, organized by how soon we're likely to pull it. Update as we go — move items between sections, drop them under "Recently shipped" when they land, prune that section when it gets long.
+Living list of what's next, organized by how soon we're likely to pull it. Each item is one or more **user stories** in the canonical *"As a X, I want Y, so that Z"* form. Items with multiple stakeholders carry multiple stories.
 
-Last updated: **2026-05-23**
+Update as we go — move items between sections, drop them under "Recently shipped" when they land, prune that section when it gets long.
+
+Last updated: **2026-05-24**
+
+> **In flight:** D (Two-tier pricing) — PR [#2](https://github.com/notronwest/tournament-manager/pull/2) open, awaiting merge.
+
+### Personas
+- **Player** — registers and competes
+- **Organizer** — runs a tournament, owns or admins an org
+- **Visitor** — unauthenticated browser, may or may not become a player
+- **Spectator** — watches a tournament without registering
+- **Developer** — internal QA / load-testing role
 
 ---
 
@@ -11,19 +22,25 @@ Last updated: **2026-05-23**
 Things actively queued — the next handful of commits.
 
 ### D. First-event + additional-event pricing
-Tournaments usually price the first event at one rate ($50) and each additional event cheaper ($25). Schema migration adds `tournaments.additional_event_fee_cents`; we treat existing `entry_fee_cents` as the first-event fee. Per-event `event_fee_cents` becomes an optional override for special cases. Admin form exposes both; public tournament page + register page show per-event prices and a running total at the bottom of the events list.
+- **As an Organizer**, I want to set a higher fee for a player's first event and a lower fee for each additional event in the same tournament, **so that** players are incentivized to register for multiple events without me having to override prices manually.
+- **As a Player**, I want to see clear pricing for each event including the additional-event discount and a running total as I pick, **so that** I know exactly what I'll pay before I confirm.
 
-**Touches:** migration, types, `TournamentFormPage`, `PublicTournamentPage`, `RegisterPage`.
+**Touches:** migration (`tournaments.additional_event_fee_cents`), types, `TournamentFormPage`, `PublicTournamentPage`, `RegisterPage`. Per-event `event_fee_cents` becomes an optional override for special cases.
 
-### F1. "I need a partner" registration option (doubles)
-For doubles events, a third option alongside "Pick a partner" / partner search: **"Sign me up — I need a partner."** Registers solo with a new `partner_status='seeking'` enum value. No matching UI yet; that's F2.
+### F1. "I need a partner" registration option
+- **As a Player** who wants to play a doubles event but doesn't have a partner yet, I want to register as "seeking a partner," **so that** I can lock in my spot before someone else fills it and find a partner later.
 
-**Touches:** migration (enum value), `RegisterPage` event row, validation.
+**Touches:** enum migration (add `'seeking'` to `partner_status`), `RegisterPage` event row, validation.
 
 ### F2. Admin view of partner seekers
-Add a "Seekers" section to the event admin / attendees view showing players who registered as seekers, with contact info, so organizers can match people up offline.
+- **As an Organizer**, I want a list of players who registered as seekers for each event with their contact info, **so that** I can match them up offline or follow up with the ones still unpaired close to event start.
 
 **Touches:** `AttendeesPage` (or `EventConsolePage`), filter on `partner_status='seeking'`.
+
+### F3. Hide already-registered players from partner search
+- **As a Player**, I want the partner search to exclude anyone who's already registered for the same event, **so that** I don't waste a click on someone who can't accept anyway and so the invitee doesn't get a confusing "you've been invited" banner when they're already in.
+
+**Touches:** `PartnerSearch` — accept an `eventId` prop and filter results by a subquery joined to `event_registrations`. Easiest path: have the parent compute the registered-player-ids for the event and pass them in via the existing `excludePlayerIds` array (we already use it to keep the user from picking themselves).
 
 ---
 
@@ -32,24 +49,53 @@ Add a "Seekers" section to the event admin / attendees view showing players who 
 Known work that's not next-next but is on the radar.
 
 ### Stripe Connect onboarding (organizer side)
-`/admin/:org/settings/stripe` page with a "Connect Stripe" button → Stripe-hosted onboarding → webhook updates `organizations.stripe_account_status`. Edge function: `supabase/functions/stripe-webhook/`. This unblocks paid registration; right now registrations all save with `status='paid'` as a placeholder.
+- **As an Organizer**, I want to connect my Stripe account through a guided onboarding flow, **so that** registration fees flow directly into my account minus the platform's cut, with no manual reconciliation.
+
+**Touches:** `/admin/:org/settings/stripe` page, Stripe-hosted onboarding redirect, `supabase/functions/stripe-webhook/` Edge Function, `organizations.stripe_account_status` updates. Blocks paid registration; registrations currently save with `status='paid'` as a placeholder.
 
 ### Real payment flow on registration
-Stripe `PaymentIntent` created at submit with `application_fee_amount` for our platform cut and `transfer_data.destination` = organizer's connected account. Replace the current "always paid" placeholder. Needs Stripe Connect (above) to land first.
+- **As a Player**, I want to pay for my registrations with a credit card at the point of signup, **so that** my spot is locked in immediately and the organizer doesn't have to chase me for money.
+
+**Touches:** `RegisterPage` submit, Stripe `PaymentIntent` with `application_fee_amount` (platform cut) + `transfer_data.destination` (organizer's connected account). Depends on Stripe Connect onboarding landing first.
 
 ### Roster view for organizers
-The admin equivalent of the partner-seekers list, but for confirmed teams: see who registered for each event, contact info, partner pairings, payment status. Probably an expansion of `AttendeesPage`.
+- **As an Organizer**, I want a complete roster per event showing all confirmed teams with contact info, partner pairings, and payment status, **so that** I can run the tournament without flipping between admin pages.
+
+**Touches:** expansion of `AttendeesPage` — likely a per-event filter + grouped layout.
 
 ### Withdraw / refund flow once payments are real
-Withdraw currently soft-deletes the registration with no payment side effect. Once Stripe is wired, withdrawing within the refund window should issue a refund via the Stripe API; outside the window should require organizer approval.
+- **As a Player**, I want to withdraw from an event and automatically receive a refund if I'm within the refund window, **so that** I'm not punished for schedule changes I made in good faith.
+- **As an Organizer**, I want late withdrawals (outside the refund window) to require my approval, **so that** I can handle hardship cases without auto-refunding everyone who flakes the night before.
+
+**Touches:** Withdraw currently soft-deletes the registration with no payment side effect. After Stripe lands, hook into the Stripe Refunds API; add a `refund_requested` state for the out-of-window path.
 
 ### Pending invite count on the homepage
-Tournament page surfaces invites for *that tournament*. The site homepage (`/`) should also show a chip / banner if the signed-in user has any pending invites anywhere, so they don't have to find the right tournament first.
+- **As a Player**, I want to see at a glance from the site homepage if I have any pending partner invites anywhere, **so that** I don't have to remember which tournament to visit to find them.
+
+**Touches:** `HomePage` — chip or banner driven by the same query the tournament page already uses, scoped to invitee_player_id = me.
 
 ### Partner-change UX polish
-Right now changing a partner means clear the chip + search for someone else. Two improvements worth doing:
-- Inline "Find a new partner" button on the partnered chip (vs. only the × clear).
-- "Undo this change" affordance in the diff summary banner so a misclick is recoverable without leaving the page.
+- **As a Player** changing my doubles partner, I want a clear "Find a new partner" button on my current partner's chip and an undo affordance after I clear them, **so that** swapping is one obvious gesture and I can recover from a misclick without leaving the page.
+
+**Touches:** `PartnerSearch` chip render (add inline button next to ×), `ChangeSummary` banner (per-row undo).
+
+### Pricing copy refinement: "entry fee includes one event"
+- **As an Organizer**, I want the pricing form to be framed as "tournament entry fee (includes one event) + each additional event" instead of "first-event fee + additional-event fee," **so that** the model matches how I describe it to players ("$60 to enter, $20 each extra event").
+- **As a Player**, I want the running total breakdown to read "Entry + 2 extra events" rather than "1 first + 2 additional," **so that** the line items match how I think about what I'm paying for.
+
+**Touches:** Copy changes only in `TournamentFormPage`, `PublicTournamentPage`, `RegisterPage`. The underlying math (D) already produces the right numbers — this is reframing labels so the model maps cleanly to PickleballBrackets-style "entry + additional" mental models. Verify with side-by-side examples before shipping.
+
+### Shopping-cart registration model (mockup first)
+- **As a Player** picking multiple events across one or more visits, I want to add events to a cart and confirm payment at a single checkout step, **so that** my picks aren't half-saved if I bail out partway and so I can review the full bill before committing money.
+- **As an Organizer**, I want abandoned-cart visibility, **so that** I can see which players started registering but didn't finish and follow up if I want.
+
+**Touches:** Significant rethink of the current "click Confirm → everything writes atomically" flow. **First step is an HTML mockup** to land on shape before touching code. Open questions: do existing event_registrations rows exist while in the cart (with `status='cart'`?) or only after checkout? How does the cart survive a sign-out / session expiry? Does Stripe Connect onboarding sequencing change? Worth a design pass before any code.
+
+### Add GameID to scorecards + Court Manager search
+- **As a Referee or Organizer**, I want a short, unique GameID printed on every scorecard, **so that** I can match a paper card back to the right match when I'm entering scores.
+- **As an Organizer**, I want to search the Court Manager by GameID, **so that** when a referee hands me a scorecard I can jump straight to the right match instead of scrolling.
+
+**Touches:** `matches` table probably already has a UUID; we need to add (or derive) a short human-friendly id (e.g. first 6 chars, base32, or a per-tournament sequence). `ScorecardsPage` adds the id to the printed layout; `CourtManagerPage` gets a search input that resolves to a match.
 
 ---
 
@@ -58,31 +104,89 @@ Right now changing a partner means clear the chip + search for someone else. Two
 Bigger themes, not committed to. Listed so we don't forget them, not in any particular order.
 
 ### Bracket / scoring improvements
-Round-robin generator exists; single/double-elim work continues. Bigger items:
-- Seeded brackets from ratings on registration
-- Tiebreak rules surfaced in admin (head-to-head, point differential)
-- Live standings page for spectators
+- **As an Organizer**, I want brackets seeded automatically from player ratings, **so that** strong teams don't meet in the first round and the bracket is competitive end-to-end.
+- **As an Organizer**, I want tiebreak rules (head-to-head, point differential) surfaced in the admin and applied automatically, **so that** rankings are defensible without me doing spreadsheet math.
+- **As a Spectator**, I want a live standings page that updates as scores are entered, **so that** I can follow the tournament without being at the venue.
 
 ### Communications
-Reminder emails (registration confirmed, schedule posted, your match is up). Probably a small Edge Function + a `communications` table for an audit trail.
+- **As a Player**, I want reminder emails for registration confirmation, schedule posted, and "your match is up," **so that** I don't miss anything important.
+- **As an Organizer**, I want an audit trail of every message sent on my tournament's behalf, **so that** I can confirm whether a player was actually notified before issuing a refund or DQ.
+
+**Touches:** Edge Function per notification type, `communications` table for the audit log.
 
 ### Waitlists
-When an event hits `max_teams`, additional registrants land on a waitlist instead of a hard fail. Auto-promote on a withdraw.
+- **As a Player** registering for a full event, I want to join a waitlist instead of being rejected, **so that** I get my spot if a withdrawal opens up.
+- **As an Organizer**, I want auto-promotion from the waitlist when a registered player withdraws, **so that** I don't have to manually invite the next person.
+
+**Touches:** `event_registrations` gets a `waitlist_position` column or similar; promotion logic in the withdraw path.
 
 ### Player profiles
-Public `/players/:id` page with tournament history, rating progression. Cross-tournament value once we have a few orgs running.
+- **As a Player**, I want a public profile page showing my tournament history and rating progression, **so that** potential partners can see my level and I have a single link to share.
+
+**Touches:** new `/players/:id` route, RLS to expose match results + rating snapshots; cross-tournament value once we have multiple orgs running.
 
 ### Multi-org admin UX
-The admin sidebar currently scopes to one org at a time and switches via `/admin`. For users who staff several orgs, an org-switcher in the sidebar header would be cleaner than going through the org picker.
+- **As an Organizer** who staffs multiple orgs, I want a quick org-switcher in the sidebar header, **so that** I can hop between tournaments without bouncing through the `/admin` picker every time.
+
+**Touches:** `AdminLayout` sidebar header, `useCurrentOrg` to expose all my memberships, a small popover/select.
 
 ### Public homepage filtering
-The homepage shows all upcoming tournaments and a single search box. As volumes grow, useful filters: by location radius, by organizer, by date range, by skill level.
+- **As a Player** browsing for tournaments, I want filters for location radius, organizer, date range, and skill level, **so that** I find relevant tournaments quickly as volumes grow.
+
+**Touches:** `HomePage` — additional filter inputs + matching client-side or server-side filter logic.
 
 ### Mobile polish
-Layouts are responsive-ish (flex/wrap) but no real mobile design pass yet. Sidebar collapses on small screens? Bottom-sheet partner picker?
+- **As a Player using my phone**, I want every screen to be usable on a small viewport with thumb-friendly controls, **so that** I can register, accept invites, and check my schedule on the go without pinch-zooming.
+
+**Touches:** every page; first pass is a sidebar collapse for `AdminLayout`, then a bottom-sheet pattern for the partner picker, then table-to-card transformations on the bulk-edit screens.
 
 ### Test-account expansion
-The current 20 seeded test players cover registration testing. For load / bracket testing, a "seed N teams into this event" tool (which already exists at `tools/seed-event`) plus a way to drive automated matches would let us stress-test schedule generation without manual clicking.
+- **As a Developer**, I want a tool that seeds N filled teams into an event and can drive automated matches, **so that** I can stress-test schedule generation, bracket logic, and live scoring without hours of manual clicking.
+
+**Touches:** `tools/seed-event` already covers the "fill an event" half; the match-driving half needs a new tool that walks a generated schedule and writes scores via the existing RPC.
+
+---
+
+## To explore
+
+Topics worth a conversation before committing to build, organized in case any of them turn out to be the right next thing.
+
+### PickleballBrackets feature audit (setup + dashboard)
+Two reference screenshots from PickleballBrackets — sketches of the setup-wizard steps and the per-tournament admin dashboard. None of these are committed work; the goal is to walk through what they offer, decide which match our model, which are MVP-relevant for WMPC, and which we'd never build.
+
+**Setup wizard steps** (their order):
+1. **Tourney Info** — we have (`TournamentFormPage`)
+2. **Registration Cost** — we have (D shipped)
+3. **Checkout Options** — *don't have.* Cash / check / Stripe per tournament? Deposits vs. full payment?
+4. **Logo & Files** — *don't have.* Tournament-level branding / waivers / rule docs
+5. **Discount Codes** — *don't have.* Promo codes, early-bird, club-member rates
+6. **Sponsors** — *don't have.* Logo/text blocks on the public page
+7. **Payment Method** — *partially* via the planned Stripe Connect work
+8. **Venues** — *don't have a model for it.* Multi-venue tournaments; per-event venue assignment
+9. **Amenities** — *don't have.* "What's at this venue" (showers, parking, food)
+10. **Managers** — we have (`organization_members`)
+11. **Overview** — we have (`TournamentDetailPage`)
+
+**Dashboard items** (their organization):
+- **View Tourney** — public page (we have)
+- **Events** — we have
+- **User Defined** — custom fields on registration (waivers, t-shirt size). *Don't have.*
+- **Sanctioned / Approved & Ratings** — integration with rating bodies (DUPR, USAP, UTPR). *Don't have, but `rating_source` enum is already in place.*
+- **Attendees** — we have
+- **Attendees in Multiple Events** — filter / report. *Don't have.*
+- **Simulator** — RR estimator (we have at `tools/round-robin`)
+- **Referees** — assign refs to courts / matches. *Don't have.*
+- **Volunteers** — non-playing helpers. *Don't have.*
+- **Completed Event Matches** — match history view. *Partial — exists inside `EventConsole`.*
+- **Messages** — in-app messaging to registrants. *Don't have.*
+- **Edit Scores** — we have (in `EventConsole`)
+- **Limit Registration by Territory** — geographic restrictions. *Don't have.*
+- **Reports** — exportable summaries (financial, attendance). *Don't have.*
+- **FAQs** — tournament-specific Q&A. *Don't have.*
+- **Link Tourney** — link to another related tournament. *Don't have.*
+- **PT Perks** — vendor / member benefits. *Don't have, probably never.*
+
+Use this section as a checklist when discussing what to promote into Soon / Next up.
 
 ---
 
@@ -112,6 +216,6 @@ Trailing log of what landed, so the doc stays grounded. Prune entries older than
 ## Conventions for this doc
 
 - **Sections are by urgency, not date.** Items move *between* sections as priorities shift.
-- **Each item gets a one-paragraph description** plus a "Touches" line if helpful — enough that someone returning to it next month can pick it up cold.
+- **Each item is one or more user stories** in *"As a X, I want Y, so that Z"* form. Multiple stakeholders → multiple stories. The story is the contract; the "Touches:" line is the implementation hint.
 - **When an item ships,** move it to "Recently shipped" with a date + PR link if there is one. Keep that section trimmed — long-tail history belongs in `git log`, not here.
 - **Don't track tasks here that are already in flight.** Use the harness's task tools for sub-day work. This doc is for the *next* thing.
