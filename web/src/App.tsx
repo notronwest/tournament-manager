@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import PendingPaymentsBar from "./components/PendingPaymentsBar";
+import { PendingPaymentsProvider } from "./components/PendingPaymentsContext";
 import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -14,6 +16,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
+import CheckoutPage from "./pages/public/CheckoutPage";
 import HomePage from "./pages/public/HomePage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
@@ -28,7 +31,7 @@ import TournamentsListPage from "./pages/admin/TournamentsListPage";
 
 export default function App() {
   return (
-    <>
+    <PendingPaymentsProvider>
       {/* Global top banner — rendered once for the whole app.
           SiteHeader hides itself on /login so the only "Sign in"
           surface there is the page itself. */}
@@ -66,6 +69,20 @@ export default function App() {
           <RequireAuth>
             <RequireProfile>
               <RegisterPage />
+            </RequireProfile>
+          </RequireAuth>
+        }
+      />
+      {/* Checkout for the new register-then-checkout flow. Auth +
+          profile required (you need a player record to have pending
+          regs). Reads pending_payment regs for this tournament,
+          flips them to paid on Pay + fires partner-invite emails. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/checkout"
+        element={
+          <RequireAuth>
+            <RequireProfile>
+              <CheckoutPage />
             </RequireProfile>
           </RequireAuth>
         }
@@ -164,6 +181,11 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+      {/* Persistent pending-payments bar — sticky at the bottom of
+          every page when the signed-in user has pending_payment
+          registrations anywhere. Hides itself otherwise (and on
+          the checkout page where its CTA would be redundant). */}
+      <PendingPaymentsBar />
+    </PendingPaymentsProvider>
   );
 }

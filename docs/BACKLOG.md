@@ -4,9 +4,9 @@ Living list of what's next, organized by how soon we're likely to pull it. Each 
 
 Update as we go — move items between sections, drop them under "Recently shipped" when they land, prune that section when it gets long.
 
-Last updated: **2026-05-24**
+Last updated: **2026-05-25**
 
-> **In flight:** D (Two-tier pricing) — PR [#2](https://github.com/notronwest/tournament-manager/pull/2) open, awaiting merge.
+> **In flight:** Register-then-Checkout flow (the mockup at `mockups/register-then-checkout-flow.html` is being implemented).
 
 ### Personas
 - **Player** — registers and competes
@@ -20,12 +20,6 @@ Last updated: **2026-05-24**
 ## Next up
 
 Things actively queued — the next handful of commits.
-
-### D. First-event + additional-event pricing
-- **As an Organizer**, I want to set a higher fee for a player's first event and a lower fee for each additional event in the same tournament, **so that** players are incentivized to register for multiple events without me having to override prices manually.
-- **As a Player**, I want to see clear pricing for each event including the additional-event discount and a running total as I pick, **so that** I know exactly what I'll pay before I confirm.
-
-**Touches:** migration (`tournaments.additional_event_fee_cents`), types, `TournamentFormPage`, `PublicTournamentPage`, `RegisterPage`. Per-event `event_fee_cents` becomes an optional override for special cases.
 
 ### F1. "I need a partner" registration option
 - **As a Player** who wants to play a doubles event but doesn't have a partner yet, I want to register as "seeking a partner," **so that** I can lock in my spot before someone else fills it and find a partner later.
@@ -115,6 +109,8 @@ Known work that's not next-next but is on the radar.
 - "Filling fast" chip only renders when the tournament as a whole is ≥30% full.
 - Per-event "X spots left" badge only when the event is ≥30% full *and* has fewer than ~5 spots remaining.
 - New / sparse tournaments show no chips at all — page looks clean rather than broadcasting low activity.
+
+**RLS hurdle to solve before building.** The public tournament page is anon-readable, but `event_registrations` RLS limits SELECTs to the owning player or org members — anon visitors can't count other people's regs. Resolution: add a SECURITY DEFINER RPC `get_tournament_stats(tournament_id)` that returns aggregate counts (no PII — just totals + per-event counts + spots-left math). Page fetches the stats alongside the tournament + events.
 
 ### Register-then-Checkout flow (separate registration from payment)
 - **As a Player**, I want to register for an event right when I see it (one click instead of "add to cart" semantics), and pay later when I'm done browsing — **so that** the act of committing to an event feels distinct from the act of paying for it, and my partner gets locked in before anyone else can grab them.
@@ -244,6 +240,9 @@ Use this section as a checklist when discussing what to promote into Soon / Next
 ## Recently shipped
 
 Trailing log of what landed, so the doc stays grounded. Prune entries older than ~4 weeks.
+
+### 2026-05-25 (PR [#2](https://github.com/notronwest/tournament-manager/pull/2) — 3 commits)
+- **D. First-event + additional-event pricing** — `tournaments.additional_event_fee_cents` migration, per-event override semantics, shared pricing helper (`web/src/lib/pricing.ts`), admin form gets both fee fields, public tournament page shows tiered prices, register page shows per-event price + running total
 
 ### 2026-05-23 (PR [#1](https://github.com/notronwest/tournament-manager/pull/1) — 26 commits)
 - Public tournament page (`/t/:org/:slug`) — anon-readable, eligibility chips, per-event Register buttons
