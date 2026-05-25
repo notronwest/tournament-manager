@@ -105,6 +105,8 @@ Known work that's not next-next but is on the radar.
 - Per-event "X spots left" badge only when the event is ≥30% full *and* has fewer than ~5 spots remaining.
 - New / sparse tournaments show no chips at all — page looks clean rather than broadcasting low activity.
 
+**RLS hurdle to solve before building.** The public tournament page is anon-readable, but `event_registrations` RLS limits SELECTs to the owning player or org members — anon visitors can't count other people's regs. Resolution: add a SECURITY DEFINER RPC `get_tournament_stats(tournament_id)` that returns aggregate counts (no PII — just totals + per-event counts + spots-left math). Page fetches the stats alongside the tournament + events.
+
 ### Register-then-Checkout flow (separate registration from payment)
 - **As a Player**, I want to register for an event right when I see it (one click instead of "add to cart" semantics), and pay later when I'm done browsing — **so that** the act of committing to an event feels distinct from the act of paying for it, and my partner gets locked in before anyone else can grab them.
 - **As an Organizer**, I want pending-payment registrations to be visible in my admin views (with a "pending" pill), **so that** I can see who's about to commit and plan capacity accordingly.
