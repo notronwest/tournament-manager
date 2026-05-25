@@ -105,7 +105,11 @@ Known work that's not next-next but is on the radar.
 
 **Touches:** Public tournament page header gets a small chip row driven by aggregates over `event_registrations` (last 7 days, capacity %). Per-event "X spots left" badge only when capacity is under ~30% so the signal stays meaningful. No live-presence infrastructure — pure historical counts. Mocked in `mockups/register-then-checkout-flow.html`.
 
-**Open question:** at small-tournament scale (under 50 registrants), do these signals work or do they read as embarrassing? Need a floor — maybe hide the chips entirely when counts are under a threshold so a new tournament doesn't say "1 player this week."
+**Threshold rules (no zero-state shouting):**
+- "X players registered this week" chip only renders when ≥5 players registered in the last 7 days.
+- "Filling fast" chip only renders when the tournament as a whole is ≥30% full.
+- Per-event "X spots left" badge only when the event is ≥30% full *and* has fewer than ~5 spots remaining.
+- New / sparse tournaments show no chips at all — page looks clean rather than broadcasting low activity.
 
 ### Register-then-Checkout flow (separate registration from payment)
 - **As a Player**, I want to register for an event right when I see it (one click instead of "add to cart" semantics), and pay later when I'm done browsing — **so that** the act of committing to an event feels distinct from the act of paying for it, and my partner gets locked in before anyone else can grab them.
@@ -116,6 +120,14 @@ Known work that's not next-next but is on the radar.
 **Hold UX is silent.** No countdown timer shown to the user — anxiety belongs to the system, not the player. If a hold gets released, the checkout page explains it in calm language and offers re-register / waitlist recovery.
 
 **Open question:** do we ship this as a replacement for the current "click Confirm → atomic" register flow, or layer it in alongside? Replacement is cleaner code but a meaningful UX shift for existing users.
+
+### Coupon codes at checkout
+- **As a Player**, I want to enter a coupon code on the checkout page and see the discount applied before I pay, **so that** I get the price I was promised by the organizer / email / club newsletter.
+- **As an Organizer**, I want to create one-off and reusable coupon codes (fixed amount, percentage, or "free entry") with expiry dates and usage caps, **so that** I can run early-bird incentives, club-member discounts, and comp codes without spreadsheet juggling.
+
+**Touches:** New `coupons` table (code, kind, value, expires_at, max_uses, uses_count, organization_id or tournament_id scope). Checkout page gets a "Have a code?" input that calls a `validate_coupon` RPC and shows the discount in the order summary. Stripe `PaymentIntent` adjusted by the discount. Admin gets a coupons CRUD page under the tournament settings. Audit trail per use so organizers can see who redeemed what.
+
+**Open question:** scope — org-level coupons usable across that org's tournaments, or strictly per-tournament? Probably per-tournament for v1; cross-tournament codes can come later if anyone asks. Also: do coupons stack with the additional-event discount (D)? Default no — coupon applies to the *post-tier* total.
 
 ### Custom domains for organizations
 - **As an Organizer**, I want my tournament pages to live at my own domain (e.g. `tournaments.whitemountainpickleball.com`) instead of `tournament-manager.pages.dev/t/wmpc/...`, **so that** players see my brand consistently and the URL itself builds trust.

@@ -252,7 +252,7 @@
     <li><strong>Capacity holds — silent.</strong> Pending-payment regs DO count against <code>max_teams</code>, but the user NEVER sees a countdown timer. A backstage cleanup job releases pending regs that have been idle for ~30 min. If something gets released while the user was away, the checkout page explains it calmly and offers re-register / waitlist.</li>
     <li><strong>Partner invites fire at checkout</strong>, not at register. Safer — partner isn't notified about a half-baked registration. (Open question below covers the alternative.)</li>
     <li><strong>Persistent bottom bar</strong> shows whenever you have pending regs anywhere on the site. Count + total + a fat <em>Check out</em> button. No countdown — anxiety belongs to the system, not the user.</li>
-    <li><strong>Social proof — momentum, not live counts.</strong> Tournament header shows "X players registered this week" / "Filling fast — 3 spots left." Based on real historical data, no Amazon-style "8 people viewing right now."</li>
+    <li><strong>Social proof — momentum, not live counts.</strong> Tournament header shows "X players registered this week" / "Filling fast — 3 spots left." Based on real historical data, no Amazon-style "8 people viewing right now." <strong>Thresholds:</strong> the weekly chip only shows when ≥5 players have registered in the last 7 days; the per-event "X spots left" badge only appears when an event is ≥30% full <em>and</em> has fewer than ~5 spots remaining. New / sparse tournaments show no chips at all — better to look empty than to broadcast that you ARE empty.</li>
     <li><strong>Single-tournament checkout.</strong> Checking out covers all your pending regs for a single tournament. If you have pending regs across multiple tournaments, the bottom bar groups by tournament and you pay each separately. (Stripe Connect math is per-org anyway.)</li>
   </ul>
 </div>
@@ -323,11 +323,15 @@
 </div>
 
 <div class="note">
-  <strong>Two-layer social proof.</strong> Tournament-level chips at the
-  top ("14 players this week" / "filling fast") give the overall
-  pulse; per-event "spots left" only shows up when the count actually
-  matters (under ~30% capacity). Both pull from real data — no fake
-  presence counts.
+  <strong>Two-layer social proof — both gated by real-data thresholds.</strong>
+  Tournament-level chips at the top ("14 players this week" / "filling
+  fast") only render when there's enough activity to be honest: ≥5
+  registrations in the last 7 days for the weekly chip, ≥30% capacity
+  for the "filling fast" one. The per-event "X spots left" badge only
+  appears when the event is filling AND has fewer than ~5 spots
+  remaining, so it stays meaningful. A brand-new tournament with zero
+  activity shows no chips at all — the page looks clean rather than
+  shouting "0 players registered this week."
 </div>
 
 <div class="note">
@@ -379,9 +383,10 @@
               We'll hold your spot in a "pending payment" state while you
               decide. Partner won't be notified until you check out and pay.
             </div>
-            <div style="display:flex;gap:8px;margin-top:14px;">
-              <button class="btn-primary btn-big">Register (hold spot)</button>
+            <div style="display:flex;gap:8px;margin-top:14px;align-items:center;">
+              <button class="btn-disabled btn-big">Register</button>
               <button class="ghost-btn-bordered" style="padding:12px 20px;">Cancel</button>
+              <div style="font-size:12px;color:#888;">Pick a partner to continue.</div>
             </div>
           </div>
         </div>
@@ -400,9 +405,13 @@
 <div class="note">
   <strong>Register-in-place.</strong> Clicking <em>Register</em> expands
   the event card inline with the partner picker. No modal, no route
-  change. On submit the card collapses with a "Pending payment" pill
-  (next screen). For singles events the form is just a single
-  <em>Register</em> button + a confirmation step.
+  change. <strong>The Register button stays disabled until a partner is
+  picked</strong> (for doubles), with a quiet "Pick a partner to
+  continue" hint next to it — no error toast, no surprise. Once a
+  partner is selected the button activates. On submit the card
+  collapses with a "Pending payment" pill (next screen). Singles
+  events skip the partner step entirely — Register is active from
+  the moment the form expands.
 </div>
 
 <!-- ───────────────────────────────────────────────────────────── -->
