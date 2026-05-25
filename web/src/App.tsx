@@ -16,6 +16,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
+import CheckoutPage from "./pages/public/CheckoutPage";
 import HomePage from "./pages/public/HomePage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
@@ -68,6 +69,20 @@ export default function App() {
           <RequireAuth>
             <RequireProfile>
               <RegisterPage />
+            </RequireProfile>
+          </RequireAuth>
+        }
+      />
+      {/* Checkout for the new register-then-checkout flow. Auth +
+          profile required (you need a player record to have pending
+          regs). Reads pending_payment regs for this tournament,
+          flips them to paid on Pay + fires partner-invite emails. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/checkout"
+        element={
+          <RequireAuth>
+            <RequireProfile>
+              <CheckoutPage />
             </RequireProfile>
           </RequireAuth>
         }
