@@ -117,6 +117,14 @@ Known work that's not next-next but is on the radar.
 
 **Open question:** do we ship this as a replacement for the current "click Confirm → atomic" register flow, or layer it in alongside? Replacement is cleaner code but a meaningful UX shift for existing users.
 
+### Custom domains for organizations
+- **As an Organizer**, I want my tournament pages to live at my own domain (e.g. `tournaments.whitemountainpickleball.com`) instead of `tournament-manager.pages.dev/t/wmpc/...`, **so that** players see my brand consistently and the URL itself builds trust.
+- **As a Player** visiting an organizer's custom domain, I want the tournament list / detail / registration pages to work identically to the canonical paths, **so that** the experience is the same no matter how I arrived.
+
+**Touches:** DNS (organizer points a CNAME at our hosting). Multi-tenant routing in the SPA — detect the request host, resolve to an `organizations.custom_domain` row, treat the page as if `:orgSlug` were implicit. Schema adds `organizations.custom_domain` (citext, unique) and probably `organizations.custom_domain_verified_at`. Public routes (`/`, `/t/:org/...`) collapse the org segment from the path when served on a custom domain — `/wmpc-classic/register` instead of `/t/wmpc/wmpc-classic/register`. Admin routes stay on the canonical host (`tournament-manager.pages.dev/admin/...`) so cross-org admins don't get confused.
+
+**Open question:** Cloudflare Pages supports a fixed set of custom domains per project — fine for a handful of orgs, but we'd need to script the per-org domain attach (Cloudflare API) when an organizer onboards. Worth checking the upper limit before promising it. Alternative: Cloudflare for SaaS (custom hostname API), which is purpose-built for this and scales to thousands of tenants. Probably want to evaluate the SaaS path before shipping.
+
 ### Add GameID to scorecards + Court Manager search
 - **As a Referee or Organizer**, I want a short, unique GameID printed on every scorecard, **so that** I can match a paper card back to the right match when I'm entering scores.
 - **As an Organizer**, I want to search the Court Manager by GameID, **so that** when a referee hands me a scorecard I can jump straight to the right match instead of scrolling.
