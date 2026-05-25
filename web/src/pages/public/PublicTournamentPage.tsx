@@ -1,27 +1,45 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import {
+  emptySelection,
+  persistPlayerSelection,
+  type PlayerSelection,
+} from "../../components/PlayerPicker";
+import { PartnerSearch } from "../../components/PartnerSearch";
 import { eligibilityChips } from "../../lib/eligibility";
 import { formatUsd, priceTiers } from "../../lib/pricing";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
+type Player = Database["public"]["Tables"]["players"]["Row"];
 
 // Per-event registration status for the currently signed-in user.
 // Only computed when the user is logged in; for anon visitors the
 // map is empty and event cards render the normal "Register" CTA.
 type MyRegStatus = {
-  // 'registered' means a confirmed event_registration row. For
-  // doubles, partnerLabel is the partner's display name once
-  // they've accepted, or null/the-invitee-email while pending.
-  // 'pending' means I created the reg but my partner hasn't
-  // accepted yet (the partner_status is still 'pending').
-  // 'invited' means someone ELSE invited me to be their partner
-  // here and I haven't responded yet. inviteToken is set in this
-  // case and links to the partner-accept page.
-  state: "registered" | "pending" | "invited";
+  // 'paid'             → my event_registrations row has status='paid'.
+  //                     For singles or doubles-with-confirmed-partner,
+  //                     this is the "registered and done" state.
+  // 'pending_payment'  → my reg has status='pending_payment'. I
+  //                     registered but haven't paid yet (new
+  //                     register-then-checkout flow). Card shows
+  //                     amber tint + a Cancel option.
+  // 'awaiting_partner' → my reg is paid but partner hasn't accepted
+  //                     yet (partner_status='pending'). Rare under
+  //                     the new flow but possible during transition.
+  // 'invited'          → no reg on my side; someone else invited me
+  //                     to be their partner. inviteToken set.
+  state:
+    | "paid"
+    | "pending_payment"
+    | "awaiting_partner"
+    | "invited";
+  // The id of my event_registrations row — null only for 'invited'.
+  // Used by Cancel-pending to know which row to soft-delete.
+  regId: string | null;
   partnerLabel: string | null;
   inviteToken: string | null;
   inviterName: string | null;
@@ -50,10 +68,17 @@ export default function PublicTournamentPage() {
     tournamentSlug: string;
   }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The signed-in user's player record. Needed for the inline
+  // register/cancel actions (we insert event_registrations.player_id
+  // from this). Null when nobody's signed in OR when the user
+  // hasn't set up a profile yet — RequireProfile handles that case
+  // when they navigate to anything write-capable.
+  const [me, setMe] = useState<Player | null>(null);
   // Per-event registration status for the signed-in user, keyed by
   // event_id. Empty when nobody's signed in.
   const [myStatus, setMyStatus] = useState<Map<string, MyRegStatus>>(
@@ -64,216 +89,226 @@ export default function PublicTournamentPage() {
   // sees the invite the moment they hit the tournament page.
   const [inboundInvites, setInboundInvites] = useState<InboundInvite[]>([]);
 
-  useEffect(() => {
+  // Single source of truth for the page's data. Wrapped in a
+  // useCallback + invoked by the useEffect on mount and by the
+  // inline register/cancel handlers after a write, so the UI stays
+  // in sync without a full page reload.
+  const reload = useCallback(async () => {
     if (!orgSlug || !tournamentSlug) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
+    setError(null);
 
-      // Fetch org → tournament → events. Anon-keyed Supabase client
-      // hits the same RLS as a logged-in non-member: published-only.
-      const { data: org, error: orgErr } = await supabase
-        .from("organizations")
-        .select("id, name, slug")
-        .eq("slug", orgSlug)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (cancelled) return;
-      if (orgErr) {
-        setError(orgErr.message);
-        setLoading(false);
-        return;
-      }
-      if (!org) {
-        setError("Organization not found.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: t, error: tErr } = await supabase
-        .from("tournaments")
-        .select("*")
-        .eq("organization_id", org.id)
-        .eq("slug", tournamentSlug)
-        .in("status", ["published", "closed", "completed"])
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (cancelled) return;
-      if (tErr) {
-        setError(tErr.message);
-        setLoading(false);
-        return;
-      }
-      if (!t) {
-        setError("Tournament not found or not yet published.");
-        setLoading(false);
-        return;
-      }
-      setTournament(t);
-
-      const { data: evs, error: evErr } = await supabase
-        .from("events")
-        .select("*")
-        .eq("tournament_id", t.id)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true });
-      if (cancelled) return;
-      if (evErr) {
-        setError(evErr.message);
-        setLoading(false);
-        return;
-      }
-      setEvents(evs ?? []);
-
-      // When the user is signed in, pull their existing registrations
-      // for any of these events plus any outbound pending partner
-      // invites they sent — that's enough to label each card as
-      // "Registered" or "Waiting for partner" with a partner name
-      // where we have one.
-      if (user && evs && evs.length > 0) {
-        const eventIds = evs.map((e) => e.id);
-
-        // We need the user's player id to scope queries. The
-        // players row may not exist yet (fresh signup); that's fine,
-        // we'll just leave the status map empty.
-        const { data: me } = await supabase
-          .from("players")
-          .select("id")
-          .eq("auth_user_id", user.id)
-          .is("deleted_at", null)
-          .maybeSingle();
-        if (cancelled) return;
-
-        if (me) {
-          // Three reads in parallel:
-          //  * my registrations (with partner-reg join for confirmed pairs)
-          //  * my OUTBOUND pending invites (I picked someone, awaiting them)
-          //  * my INBOUND pending invites (someone picked me, I haven't
-          //    responded) — surfaces as a top-of-page banner + per-card pill
-          const [regsRes, outboundRes, inboundRes] = await Promise.all([
-            supabase
-              .from("event_registrations")
-              .select(
-                `event_id, partner_status,
-                 partner_registration:event_registrations!partner_registration_id (
-                   player:players!player_id (first_name, last_name)
-                 )`,
-              )
-              .eq("player_id", me.id)
-              .in("event_id", eventIds)
-              .is("deleted_at", null),
-            supabase
-              .from("partner_invites")
-              .select(
-                `event_id, invitee_email,
-                 invitee:players!invitee_player_id (first_name, last_name)`,
-              )
-              .eq("inviter_player_id", me.id)
-              .eq("status", "pending")
-              .in("event_id", eventIds),
-            supabase
-              .from("partner_invites")
-              .select(
-                `event_id, token,
-                 inviter:players!inviter_player_id (first_name, last_name)`,
-              )
-              .eq("invitee_player_id", me.id)
-              .eq("status", "pending")
-              .in("event_id", eventIds),
-          ]);
-          if (cancelled) return;
-
-          const map = new Map<string, MyRegStatus>();
-          type RegRow = {
-            event_id: string;
-            partner_status: Database["public"]["Enums"]["partner_status"];
-            partner_registration:
-              | { player: { first_name: string; last_name: string } | null }
-              | null;
-          };
-          type OutboundRow = {
-            event_id: string;
-            invitee_email: string | null;
-            invitee: { first_name: string; last_name: string } | null;
-          };
-          type InboundRow = {
-            event_id: string;
-            token: string;
-            inviter: { first_name: string; last_name: string } | null;
-          };
-
-          for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
-            const partner = r.partner_registration?.player;
-            const partnerLabel = partner
-              ? `${partner.first_name} ${partner.last_name}`
-              : null;
-            map.set(r.event_id, {
-              state:
-                r.partner_status === "pending" ? "pending" : "registered",
-              partnerLabel,
-              inviteToken: null,
-              inviterName: null,
-            });
-          }
-          // Outbound invites: fill in invitee names for pending state
-          // where we didn't already have a partnerLabel from the reg
-          // join.
-          for (const inv of (outboundRes.data ?? []) as unknown as OutboundRow[]) {
-            const cur = map.get(inv.event_id);
-            const label = inv.invitee
-              ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
-              : inv.invitee_email ?? null;
-            if (cur && !cur.partnerLabel) {
-              map.set(inv.event_id, { ...cur, partnerLabel: label });
-            }
-          }
-          // Inbound invites: any event I was picked for and haven't
-          // accepted/declined yet. Overrides the "no status" default
-          // and sits alongside any existing reg (e.g. I registered
-          // solo, then someone picked me — both states matter, but
-          // the invite is the more actionable one).
-          const inbound: InboundInvite[] = [];
-          for (const inv of (inboundRes.data ?? []) as unknown as InboundRow[]) {
-            const inviterName = inv.inviter
-              ? `${inv.inviter.first_name} ${inv.inviter.last_name}`
-              : "Someone";
-            const ev = evs.find((e) => e.id === inv.event_id);
-            if (ev) {
-              inbound.push({
-                eventId: inv.event_id,
-                eventName: ev.name,
-                inviterName,
-                token: inv.token,
-              });
-            }
-            // Override the per-card status so the pill on that card
-            // makes the invite obvious. If I'm already registered
-            // for this event, the partnerLabel from above stays so
-            // both bits of info show.
-            const cur = map.get(inv.event_id);
-            map.set(inv.event_id, {
-              state: "invited",
-              partnerLabel: cur?.partnerLabel ?? null,
-              inviteToken: inv.token,
-              inviterName,
-            });
-          }
-          setMyStatus(map);
-          setInboundInvites(inbound);
-        }
-      } else {
-        // Signed out → clear any stale state from a previous session.
-        setMyStatus(new Map());
-        setInboundInvites([]);
-      }
-
+    // Fetch org → tournament → events. Anon-keyed Supabase client
+    // hits the same RLS as a logged-in non-member: published-only.
+    const { data: org, error: orgErr } = await supabase
+      .from("organizations")
+      .select("id, name, slug")
+      .eq("slug", orgSlug)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (orgErr) {
+      setError(orgErr.message);
       setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
+      return;
+    }
+    if (!org) {
+      setError("Organization not found.");
+      setLoading(false);
+      return;
+    }
+
+    const { data: t, error: tErr } = await supabase
+      .from("tournaments")
+      .select("*")
+      .eq("organization_id", org.id)
+      .eq("slug", tournamentSlug)
+      .in("status", ["published", "closed", "completed"])
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (tErr) {
+      setError(tErr.message);
+      setLoading(false);
+      return;
+    }
+    if (!t) {
+      setError("Tournament not found or not yet published.");
+      setLoading(false);
+      return;
+    }
+    setTournament(t);
+
+    const { data: evs, error: evErr } = await supabase
+      .from("events")
+      .select("*")
+      .eq("tournament_id", t.id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+    if (evErr) {
+      setError(evErr.message);
+      setLoading(false);
+      return;
+    }
+    setEvents(evs ?? []);
+
+    if (!user || !evs || evs.length === 0) {
+      // Anon visitor — clear any stale state from a previous session.
+      setMe(null);
+      setMyStatus(new Map());
+      setInboundInvites([]);
+      setLoading(false);
+      return;
+    }
+
+    // Pull the user's player row (full record — needed by the
+    // inline-register handlers). May not exist yet for fresh
+    // signups; the inline Register button will route them through
+    // RequireProfile if so.
+    const { data: myPlayer } = await supabase
+      .from("players")
+      .select("*")
+      .eq("auth_user_id", user.id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    setMe(myPlayer ?? null);
+
+    if (!myPlayer) {
+      setMyStatus(new Map());
+      setInboundInvites([]);
+      setLoading(false);
+      return;
+    }
+
+    const eventIds = evs.map((e) => e.id);
+    // Three reads in parallel:
+    //  * my non-deleted registrations (any status) with partner-reg
+    //    join — drives "paid" / "pending_payment" / "awaiting_partner"
+    //  * my OUTBOUND pending invites (I picked someone, awaiting them)
+    //    — fills in partner labels when no partner_registration link yet
+    //  * my INBOUND pending invites — surfaces as banner + per-card pill
+    const [regsRes, outboundRes, inboundRes] = await Promise.all([
+      supabase
+        .from("event_registrations")
+        .select(
+          `id, event_id, status, partner_status,
+           partner_registration:event_registrations!partner_registration_id (
+             player:players!player_id (first_name, last_name)
+           )`,
+        )
+        .eq("player_id", myPlayer.id)
+        .in("event_id", eventIds)
+        .is("deleted_at", null),
+      supabase
+        .from("partner_invites")
+        .select(
+          `event_id, invitee_email,
+           invitee:players!invitee_player_id (first_name, last_name)`,
+        )
+        .eq("inviter_player_id", myPlayer.id)
+        .eq("status", "pending")
+        .in("event_id", eventIds),
+      supabase
+        .from("partner_invites")
+        .select(
+          `event_id, token,
+           inviter:players!inviter_player_id (first_name, last_name)`,
+        )
+        .eq("invitee_player_id", myPlayer.id)
+        .eq("status", "pending")
+        .in("event_id", eventIds),
+    ]);
+
+    const map = new Map<string, MyRegStatus>();
+    type RegRow = {
+      id: string;
+      event_id: string;
+      status: Database["public"]["Enums"]["registration_status"];
+      partner_status: Database["public"]["Enums"]["partner_status"];
+      partner_registration:
+        | { player: { first_name: string; last_name: string } | null }
+        | null;
     };
+    type OutboundRow = {
+      event_id: string;
+      invitee_email: string | null;
+      invitee: { first_name: string; last_name: string } | null;
+    };
+    type InboundRow = {
+      event_id: string;
+      token: string;
+      inviter: { first_name: string; last_name: string } | null;
+    };
+
+    for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
+      const partner = r.partner_registration?.player;
+      const partnerLabel = partner
+        ? `${partner.first_name} ${partner.last_name}`
+        : null;
+      // Derive the per-card state from the reg's payment + partner
+      // status. pending_payment wins over partner_status (haven't
+      // committed yet); for paid regs the partner_status splits
+      // "paid" vs "awaiting_partner".
+      let state: MyRegStatus["state"];
+      if (r.status === "pending_payment") {
+        state = "pending_payment";
+      } else if (r.partner_status === "pending") {
+        state = "awaiting_partner";
+      } else {
+        state = "paid";
+      }
+      map.set(r.event_id, {
+        state,
+        regId: r.id,
+        partnerLabel,
+        inviteToken: null,
+        inviterName: null,
+      });
+    }
+    // Outbound invites: fill in invitee names for pending state
+    // where we didn't already have a partnerLabel from the reg join.
+    for (const inv of (outboundRes.data ?? []) as unknown as OutboundRow[]) {
+      const cur = map.get(inv.event_id);
+      const label = inv.invitee
+        ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
+        : inv.invitee_email ?? null;
+      if (cur && !cur.partnerLabel) {
+        map.set(inv.event_id, { ...cur, partnerLabel: label });
+      }
+    }
+    // Inbound invites: any event I was picked for and haven't
+    // accepted/declined yet. Overrides the per-card status so the
+    // invite pill is the obvious thing to act on.
+    const inbound: InboundInvite[] = [];
+    for (const inv of (inboundRes.data ?? []) as unknown as InboundRow[]) {
+      const inviterName = inv.inviter
+        ? `${inv.inviter.first_name} ${inv.inviter.last_name}`
+        : "Someone";
+      const ev = evs.find((e) => e.id === inv.event_id);
+      if (ev) {
+        inbound.push({
+          eventId: inv.event_id,
+          eventName: ev.name,
+          inviterName,
+          token: inv.token,
+        });
+      }
+      const cur = map.get(inv.event_id);
+      map.set(inv.event_id, {
+        state: "invited",
+        regId: cur?.regId ?? null,
+        partnerLabel: cur?.partnerLabel ?? null,
+        inviteToken: inv.token,
+        inviterName,
+      });
+    }
+    setMyStatus(map);
+    setInboundInvites(inbound);
+    setLoading(false);
   }, [orgSlug, tournamentSlug, user]);
+
+  useEffect(() => {
+    setLoading(true);
+    void reload();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+  }, [reload]);
 
   if (loading) {
     return (
@@ -491,6 +526,16 @@ export default function PublicTournamentPage() {
                 orgSlug={orgSlug ?? ""}
                 tournamentSlug={tournamentSlug ?? ""}
                 myStatus={myStatus.get(ev.id)}
+                me={me}
+                user={user}
+                onChanged={reload}
+                onNeedsAuth={() => {
+                  // Anon visitor or no profile yet → bounce through
+                  // login + profile, then come back here.
+                  navigate("/login", {
+                    state: { from: { pathname: `/t/${orgSlug}/${tournamentSlug}` } },
+                  });
+                }}
               />
             ))}
           </div>
@@ -507,6 +552,10 @@ function EventCard({
   orgSlug,
   tournamentSlug,
   myStatus,
+  me,
+  user,
+  onChanged,
+  onNeedsAuth,
 }: {
   event: Event;
   tournament: Tournament;
@@ -514,210 +563,528 @@ function EventCard({
   orgSlug: string;
   tournamentSlug: string;
   myStatus: MyRegStatus | undefined;
+  me: Player | null;
+  user: ReturnType<typeof useAuth>["user"];
+  onChanged: () => Promise<void> | void;
+  onNeedsAuth: () => void;
 }) {
   const chips = eligibilityChips(event);
   const tiers = priceTiers(event, tournament);
   const isOverride = event.event_fee_cents > 0;
-  // Display price for the card. For overrides we just show the
-  // flat amount. For tournament-default events we show the
-  // first-event rate as the prominent number, with a smaller
-  // "additional: $X" line below when it actually differs.
   const showsFee = tiers.fullPrice > 0 || isOverride;
+  const isDoubles = event.format === "doubles";
+
+  // ─── Local state for the inline-expand register form ─────────────
+  // Each card carries its own form state. We don't enforce
+  // "one card open at a time" — keep it permissive; users can
+  // open multiple cards if they want to compare. They still pay
+  // through the per-tournament checkout at the end.
+  const [expanded, setExpanded] = useState(false);
+  const [partner, setPartner] = useState<PlayerSelection>(emptySelection);
+  const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // ─── Derived state for visual treatment ──────────────────────────
+  const isPaid =
+    myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
+  const isPending = myStatus?.state === "pending_payment";
+  const borderColor = isPending
+    ? "#fde68a"
+    : isPaid
+      ? "#bbf7d0"
+      : "#e5e7eb";
+  const bg = isPending ? "#fffbeb" : "#fff";
+
+  // ─── Handlers ────────────────────────────────────────────────────
+  const startRegister = () => {
+    if (!user || !me) {
+      // Anon visitor or no profile yet — bounce through auth, then
+      // they come back here and click Register again.
+      onNeedsAuth();
+      return;
+    }
+    setExpanded(true);
+    setFormError(null);
+  };
+
+  const cancelExpand = () => {
+    setExpanded(false);
+    setPartner(emptySelection);
+    setFormError(null);
+  };
+
+  const onSubmitRegister = async () => {
+    if (!me) {
+      onNeedsAuth();
+      return;
+    }
+    setFormError(null);
+
+    // Validate doubles partner pick. Singles events bypass entirely.
+    if (isDoubles) {
+      if (partner.mode === "empty") {
+        setFormError("Pick a partner to continue.");
+        return;
+      }
+      if (partner.mode === "existing" && partner.player.id === me.id) {
+        setFormError("You picked yourself as your partner.");
+        return;
+      }
+      if (partner.mode === "new") {
+        if (
+          !partner.firstName.trim() ||
+          !partner.lastName.trim() ||
+          !partner.email.trim()
+        ) {
+          setFormError(
+            "Partner first name, last name, and email are required.",
+          );
+          return;
+        }
+        if (
+          user?.email &&
+          partner.email.trim().toLowerCase() === user.email.toLowerCase()
+        ) {
+          setFormError("Partner email can't be your own.");
+          return;
+        }
+      }
+    }
+
+    setSubmitting(true);
+
+    // Resolve partner: existing-mode returns the picked player as-is;
+    // new-mode inserts a fresh players row. Singles events skip this.
+    let resolvedPartnerId: string | null = null;
+    let resolvedPartnerEmail: string | null = null;
+    if (isDoubles && partner.mode !== "empty") {
+      const resolved = await persistPlayerSelection(partner);
+      if (!resolved.player) {
+        setFormError(resolved.error ?? "Failed to set up partner.");
+        setSubmitting(false);
+        return;
+      }
+      resolvedPartnerId = resolved.player.id;
+      resolvedPartnerEmail =
+        resolved.player.email ??
+        (partner.mode === "new" ? partner.email.trim() : null);
+    }
+
+    // Insert MY event_registration with status='pending_payment'.
+    // The fee cents stay 0 here — the actual amount is computed at
+    // checkout based on the full basket (D's first-vs-additional
+    // tier math). Checkout's "Pay" handler snapshots the cents
+    // onto the row before flipping status to 'paid'.
+    const { error: regErr } = await supabase
+      .from("event_registrations")
+      .insert({
+        event_id: event.id,
+        player_id: me.id,
+        event_fee_cents: 0,
+        status: "pending_payment",
+        partner_status: isDoubles ? "pending" : "solo",
+      })
+      .select()
+      .single();
+    if (regErr) {
+      setFormError(regErr.message ?? "Failed to register.");
+      setSubmitting(false);
+      return;
+    }
+
+    // For doubles, queue the partner_invite as 'pending'. The
+    // invite EMAIL doesn't fire yet — it fires from the checkout
+    // page after payment, so an unpaid registrant doesn't ghost
+    // their partner.
+    if (isDoubles && resolvedPartnerId) {
+      const { error: invErr } = await supabase
+        .from("partner_invites")
+        .insert({
+          event_id: event.id,
+          inviter_player_id: me.id,
+          invitee_player_id: resolvedPartnerId,
+          invitee_email: resolvedPartnerEmail,
+          status: "pending",
+        });
+      if (invErr) {
+        // Reg landed, invite row didn't. Surface the error so the
+        // user knows but don't roll back — the partner is still
+        // visible to them on the manage page.
+        setFormError(
+          `Registered, but partner invite setup failed: ${invErr.message}`,
+        );
+      }
+    }
+
+    setExpanded(false);
+    setPartner(emptySelection);
+    setSubmitting(false);
+    await onChanged();
+  };
+
+  const onCancelPending = async () => {
+    if (!myStatus?.regId || !me) return;
+    setCancelling(true);
+    // Soft-delete the pending reg + cancel any outbound invite for
+    // this event. (If the user paid already and then changes their
+    // mind, that's the manage-page withdraw flow — different path.)
+    await supabase
+      .from("event_registrations")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", myStatus.regId);
+    await supabase
+      .from("partner_invites")
+      .update({ status: "cancelled" })
+      .eq("event_id", event.id)
+      .eq("inviter_player_id", me.id)
+      .eq("status", "pending");
+    setCancelling(false);
+    await onChanged();
+  };
+
+  // ─── Right-side action button — depends on current state ─────────
+  const renderAction = () => {
+    if (!registrationOpen) return null;
+    if (myStatus?.state === "invited" && myStatus.inviteToken) {
+      // Invited state takes priority — the inbound invite is the
+      // most actionable thing on this row.
+      return (
+        <Link
+          to={`/t/${orgSlug}/${tournamentSlug}/invites/${myStatus.inviteToken}`}
+          style={{
+            padding: "8px 16px",
+            background: "#2563eb",
+            color: "#fff",
+            textDecoration: "none",
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            border: "1px solid #2563eb",
+          }}
+        >
+          Review invite →
+        </Link>
+      );
+    }
+    if (myStatus?.state === "pending_payment") {
+      return (
+        <button
+          type="button"
+          onClick={() => void onCancelPending()}
+          disabled={cancelling}
+          style={{
+            padding: "8px 16px",
+            background: "#fff",
+            color: "#991b1b",
+            border: "1px solid #fca5a5",
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: cancelling ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {cancelling ? "Cancelling…" : "Cancel"}
+        </button>
+      );
+    }
+    if (isPaid) {
+      // Already-paid registration — Manage page handles withdraw +
+      // partner change. (That's the existing /register page.)
+      return (
+        <Link
+          to={`/t/${orgSlug}/${tournamentSlug}/register?event=${event.id}`}
+          style={{
+            padding: "8px 16px",
+            background: "#fff",
+            color: "#2563eb",
+            border: "1px solid #2563eb",
+            textDecoration: "none",
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Manage
+        </Link>
+      );
+    }
+    if (expanded) return null; // expanded form has its own buttons
+    return (
+      <button
+        type="button"
+        onClick={startRegister}
+        style={{
+          padding: "8px 16px",
+          background: "#2563eb",
+          color: "#fff",
+          border: "1px solid #2563eb",
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Register
+      </button>
+    );
+  };
+
+  const partnerPicked = partner.mode !== "empty";
+  const canSubmit = !isDoubles || partnerPicked;
+
   return (
     <div
       style={{
         padding: 16,
-        background: "#fff",
-        border: `1px solid ${myStatus ? "#bbf7d0" : "#e5e7eb"}`,
+        background: bg,
+        border: `1px solid ${borderColor}`,
         borderRadius: 8,
-        display: "flex",
-        gap: 16,
-        alignItems: "flex-start",
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexWrap: "wrap",
-          }}
-        >
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-            {event.name}
-          </h3>
-          {myStatus?.state === "registered" && (
-            <span
-              style={{
-                padding: "2px 8px",
-                background: "#dcfce7",
-                color: "#166534",
-                borderRadius: 3,
-                fontSize: 11,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: 0.3,
-              }}
-            >
-              Registered
-            </span>
-          )}
-          {myStatus?.state === "pending" && (
-            <span
-              style={{
-                padding: "2px 8px",
-                background: "#fffbeb",
-                color: "#92400e",
-                borderRadius: 3,
-                fontSize: 11,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: 0.3,
-              }}
-            >
-              Awaiting partner
-            </span>
-          )}
-          {myStatus?.state === "invited" && (
-            <span
-              style={{
-                padding: "2px 8px",
-                background: "#fef3c7",
-                color: "#7a5d00",
-                borderRadius: 3,
-                fontSize: 11,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: 0.3,
-              }}
-            >
-              You're invited
-            </span>
-          )}
-        </div>
-        {myStatus?.state === "invited" && myStatus.inviterName ? (
-          <div style={{ color: "#7a5d00", fontSize: 12, marginTop: 4 }}>
-            <strong>{myStatus.inviterName}</strong> picked you as their
-            partner
-          </div>
-        ) : myStatus?.partnerLabel ? (
-          <div style={{ color: "#166534", fontSize: 12, marginTop: 4 }}>
-            {myStatus.state === "registered" ? "Partnered with " : "Invited "}
-            <strong>{myStatus.partnerLabel}</strong>
-          </div>
-        ) : null}
-        <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
-          {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
-          {event.points_to_win} win by {event.win_by}
-          {event.teams_advancing_to_playoff > 0
-            ? ` · top ${event.teams_advancing_to_playoff} to playoffs`
-            : ""}
-          {event.max_teams ? ` · max ${event.max_teams} teams` : ""}
-        </div>
-        {chips.length > 0 && (
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Title + status pill */}
           <div
             style={{
               display: "flex",
+              alignItems: "center",
+              gap: 8,
               flexWrap: "wrap",
-              gap: 4,
-              marginTop: 8,
             }}
           >
-            {chips.map((c) => (
-              <span
-                key={c}
-                style={{
-                  padding: "2px 8px",
-                  background: "#eff6ff",
-                  color: "#1e40af",
-                  borderRadius: 4,
-                  fontSize: 11,
-                  fontWeight: 500,
-                }}
-              >
-                {c}
-              </span>
-            ))}
-          </div>
-        )}
-        {showsFee && (
-          <div
-            style={{
-              color: "#444",
-              fontSize: 13,
-              marginTop: 8,
-            }}
-          >
-            {isOverride ? (
-              <>
-                Event fee: <strong>{formatUsd(event.event_fee_cents)}</strong>
-              </>
-            ) : tiers.fullPrice === tiers.additionalPrice ? (
-              <>
-                Event fee: <strong>{formatUsd(tiers.fullPrice)}</strong>
-              </>
-            ) : (
-              <>
-                <strong>{formatUsd(tiers.fullPrice)}</strong> as your
-                first event,{" "}
-                <strong>{formatUsd(tiers.additionalPrice)}</strong> as
-                an additional event
-              </>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+              {event.name}
+            </h3>
+            {myStatus?.state === "paid" && (
+              <Pill bg="#dcfce7" fg="#166534">Registered</Pill>
+            )}
+            {myStatus?.state === "pending_payment" && (
+              <Pill bg="#fef3c7" fg="#7a5d00">Pending payment</Pill>
+            )}
+            {myStatus?.state === "awaiting_partner" && (
+              <Pill bg="#fffbeb" fg="#92400e">Awaiting partner</Pill>
+            )}
+            {myStatus?.state === "invited" && (
+              <Pill bg="#fef3c7" fg="#7a5d00">You're invited</Pill>
             )}
           </div>
-        )}
+          {/* Partner label */}
+          {myStatus?.state === "invited" && myStatus.inviterName ? (
+            <div style={{ color: "#7a5d00", fontSize: 12, marginTop: 4 }}>
+              <strong>{myStatus.inviterName}</strong> picked you as their
+              partner
+            </div>
+          ) : myStatus?.partnerLabel ? (
+            <div
+              style={{
+                color: isPending ? "#7a5d00" : "#166534",
+                fontSize: 12,
+                marginTop: 4,
+              }}
+            >
+              {isPaid && myStatus.state === "paid"
+                ? "Partnered with "
+                : "Invited "}
+              <strong>{myStatus.partnerLabel}</strong>
+            </div>
+          ) : null}
+          {/* Meta line */}
+          <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
+            {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
+            {event.points_to_win} win by {event.win_by}
+            {event.teams_advancing_to_playoff > 0
+              ? ` · top ${event.teams_advancing_to_playoff} to playoffs`
+              : ""}
+            {event.max_teams ? ` · max ${event.max_teams} teams` : ""}
+          </div>
+          {chips.length > 0 && (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 4,
+                marginTop: 8,
+              }}
+            >
+              {chips.map((c) => (
+                <span
+                  key={c}
+                  style={{
+                    padding: "2px 8px",
+                    background: "#eff6ff",
+                    color: "#1e40af",
+                    borderRadius: 4,
+                    fontSize: 11,
+                    fontWeight: 500,
+                  }}
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+          {showsFee && (
+            <div style={{ color: "#444", fontSize: 13, marginTop: 8 }}>
+              {isOverride ? (
+                <>
+                  Event fee:{" "}
+                  <strong>{formatUsd(event.event_fee_cents)}</strong>
+                </>
+              ) : tiers.fullPrice === tiers.additionalPrice ? (
+                <>
+                  Event fee: <strong>{formatUsd(tiers.fullPrice)}</strong>
+                </>
+              ) : (
+                <>
+                  <strong>{formatUsd(tiers.fullPrice)}</strong> as your
+                  first event,{" "}
+                  <strong>{formatUsd(tiers.additionalPrice)}</strong> as
+                  an additional event
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        <div style={{ alignSelf: "center" }}>{renderAction()}</div>
       </div>
-      {registrationOpen &&
-        (myStatus?.state === "invited" && myStatus.inviteToken ? (
-          // Invited state's primary action is "Review invite" → drops
-          // the user on the existing partner-accept page where they
-          // can accept or decline. This takes priority over the
-          // normal Register / Edit flow because the inbound invite
-          // is the most actionable thing.
-          <Link
-            to={`/t/${orgSlug}/${tournamentSlug}/invites/${myStatus.inviteToken}`}
+
+      {/* Inline-expand register form. Slides in below the metadata
+          row when the user clicks Register on an unregistered event.
+          For singles, no partner picker — just the buttons. */}
+      {expanded && (
+        <div
+          style={{
+            marginTop: 14,
+            paddingTop: 14,
+            borderTop: "1px dashed #e5e7eb",
+          }}
+        >
+          {isDoubles && (
+            <>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#666",
+                  marginBottom: 8,
+                  lineHeight: 1.5,
+                }}
+              >
+                Your doubles partner. Search by name, email, or phone —
+                if they're not in the list yet, add them as a new
+                player. We won't email them until you check out.
+              </div>
+              <PartnerSearch
+                selection={partner}
+                onChange={setPartner}
+                excludePlayerIds={me ? [me.id] : []}
+              />
+            </>
+          )}
+          {formError && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 8,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: 6,
+                color: "#991b1b",
+                fontSize: 12,
+              }}
+            >
+              {formError}
+            </div>
+          )}
+          <div
             style={{
-              padding: "8px 16px",
-              background: "#2563eb",
-              color: "#fff",
-              textDecoration: "none",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500,
-              whiteSpace: "nowrap",
-              alignSelf: "center",
-              border: "1px solid #2563eb",
+              marginTop: 12,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
             }}
           >
-            Review invite →
-          </Link>
-        ) : (
-          // Pre-selects this event on the register page via the ?event=
-          // query param so the user lands on a screen with their pick
-          // already checked. They can still add other events before
-          // confirming if they want. Already-registered users see the
-          // same button as "Edit" so they understand it'll let them
-          // change partners / withdraw.
-          <Link
-            to={`/t/${orgSlug}/${tournamentSlug}/register?event=${event.id}`}
-            style={{
-              padding: "8px 16px",
-              background: myStatus ? "#fff" : "#2563eb",
-              color: myStatus ? "#2563eb" : "#fff",
-              border: "1px solid #2563eb",
-              textDecoration: "none",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500,
-              whiteSpace: "nowrap",
-              alignSelf: "center",
-            }}
-          >
-            {myStatus ? "Edit" : "Register →"}
-          </Link>
-        ))}
+            <button
+              type="button"
+              onClick={() => void onSubmitRegister()}
+              disabled={submitting || !canSubmit}
+              style={{
+                padding: "10px 18px",
+                background:
+                  submitting || !canSubmit ? "#9ca3af" : "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 14,
+                fontWeight: 500,
+                cursor:
+                  submitting || !canSubmit ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {submitting ? "Registering…" : "Register"}
+            </button>
+            <button
+              type="button"
+              onClick={cancelExpand}
+              disabled={submitting}
+              style={{
+                padding: "10px 18px",
+                background: "#fff",
+                color: "#555",
+                border: "1px solid #e2e2e2",
+                borderRadius: 6,
+                fontSize: 13,
+                cursor: submitting ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Cancel
+            </button>
+            {isDoubles && !partnerPicked && !submitting && (
+              <span style={{ fontSize: 12, color: "#888" }}>
+                Pick a partner to continue.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// Small status pill used inside the EventCard header.
+function Pill({
+  bg,
+  fg,
+  children,
+}: {
+  bg: string;
+  fg: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      style={{
+        padding: "2px 8px",
+        background: bg,
+        color: fg,
+        borderRadius: 3,
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: 0.3,
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
