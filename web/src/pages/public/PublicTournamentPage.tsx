@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { eligibilityChips } from "../../lib/eligibility";
+import { formatUsd, priceTiers } from "../../lib/pricing";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -342,7 +343,16 @@ export default function PublicTournamentPage() {
           {tournament.entry_fee_cents > 0 && (
             <Meta
               label="Entry fee"
-              value={`$${(tournament.entry_fee_cents / 100).toFixed(2)}`}
+              value={
+                // Two-tier label when the additional-event fee
+                // differs from the first-event fee. Otherwise a
+                // single price is clearer than spelling out the
+                // tiers redundantly.
+                tournament.additional_event_fee_cents !==
+                tournament.entry_fee_cents
+                  ? `$${(tournament.entry_fee_cents / 100).toFixed(2)} first event · $${(tournament.additional_event_fee_cents / 100).toFixed(2)} additional`
+                  : `$${(tournament.entry_fee_cents / 100).toFixed(2)} per event`
+              }
             />
           )}
           <Meta
@@ -476,6 +486,7 @@ export default function PublicTournamentPage() {
               <EventCard
                 key={ev.id}
                 event={ev}
+                tournament={tournament}
                 registrationOpen={registrationOpen}
                 orgSlug={orgSlug ?? ""}
                 tournamentSlug={tournamentSlug ?? ""}
@@ -491,18 +502,27 @@ export default function PublicTournamentPage() {
 
 function EventCard({
   event,
+  tournament,
   registrationOpen,
   orgSlug,
   tournamentSlug,
   myStatus,
 }: {
   event: Event;
+  tournament: Tournament;
   registrationOpen: boolean;
   orgSlug: string;
   tournamentSlug: string;
   myStatus: MyRegStatus | undefined;
 }) {
   const chips = eligibilityChips(event);
+  const tiers = priceTiers(event, tournament);
+  const isOverride = event.event_fee_cents > 0;
+  // Display price for the card. For overrides we just show the
+  // flat amount. For tournament-default events we show the
+  // first-event rate as the prominent number, with a smaller
+  // "additional: $X" line below when it actually differs.
+  const showsFee = tiers.fullPrice > 0 || isOverride;
   return (
     <div
       style={{
@@ -621,7 +641,7 @@ function EventCard({
             ))}
           </div>
         )}
-        {event.event_fee_cents > 0 && (
+        {showsFee && (
           <div
             style={{
               color: "#444",
@@ -629,8 +649,22 @@ function EventCard({
               marginTop: 8,
             }}
           >
-            Event fee:{" "}
-            <strong>${(event.event_fee_cents / 100).toFixed(2)}</strong>
+            {isOverride ? (
+              <>
+                Event fee: <strong>{formatUsd(event.event_fee_cents)}</strong>
+              </>
+            ) : tiers.fullPrice === tiers.additionalPrice ? (
+              <>
+                Event fee: <strong>{formatUsd(tiers.fullPrice)}</strong>
+              </>
+            ) : (
+              <>
+                <strong>{formatUsd(tiers.fullPrice)}</strong> as your
+                first event,{" "}
+                <strong>{formatUsd(tiers.additionalPrice)}</strong> as
+                an additional event
+              </>
+            )}
           </div>
         )}
       </div>

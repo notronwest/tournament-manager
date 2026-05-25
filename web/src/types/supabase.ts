@@ -786,6 +786,7 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          additional_event_fee_cents: number
           court_count: number
           created_at: string
           deleted_at: string | null
@@ -806,6 +807,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          additional_event_fee_cents?: number
           court_count?: number
           created_at?: string
           deleted_at?: string | null
@@ -826,6 +828,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          additional_event_fee_cents?: number
           court_count?: number
           created_at?: string
           deleted_at?: string | null
