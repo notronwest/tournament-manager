@@ -38,9 +38,14 @@ Things actively queued — the next handful of commits.
 **Touches:** `AttendeesPage` (or `EventConsolePage`), filter on `partner_status='seeking'`.
 
 ### F3. Hide already-registered players from partner search
-- **As a Player**, I want the partner search to exclude anyone who's already registered for the same event, **so that** I don't waste a click on someone who can't accept anyway and so the invitee doesn't get a confusing "you've been invited" banner when they're already in.
+- **As a Player**, I want the partner search to exclude anyone who's already registered for the same event (whether confirmed or pending), **so that** I don't waste a click on someone who can't accept anyway and so the invitee doesn't get a confusing "you've been invited" banner when they're already in.
 
-**Touches:** `PartnerSearch` — accept an `eventId` prop and filter results by a subquery joined to `event_registrations`. Easiest path: have the parent compute the registered-player-ids for the event and pass them in via the existing `excludePlayerIds` array (we already use it to keep the user from picking themselves).
+**Touches:** `PartnerSearch` — accept an `eventId` prop and filter results by a subquery joined to `event_registrations`. Easiest path: have the parent compute the registered-player-ids for the event and pass them in via the existing `excludePlayerIds` array (we already use it to keep the user from picking themselves). Applies to BOTH the existing `/register` page AND the new inline-expand register on the tournament page (PR #3) — both should plumb the same filter.
+
+### Clarify partner-search rating label
+- **As a Player** picking a partner, I want their rating to render as "3.0 doubles" (or similar) instead of "3 doubles", **so that** I can't misread it as "registered for 3 doubles events" — the current format is genuinely ambiguous.
+
+**Touches:** `formatPlayerMeta` in `web/src/components/PartnerSearch.tsx` (line ~343). One-line fix: format the numeric rating with `.toFixed(1)` so it always shows a decimal, OR change the separator (e.g. "Doubles 3.0" or "3.0 ★ doubles"). Cheap win — should ship in a small commit on its own.
 
 ---
 
