@@ -8,6 +8,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
+import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import { eligibilityChips } from "../../lib/eligibility";
 import { formatUsd, priceTiers } from "../../lib/pricing";
 import type { Database } from "../../types/supabase";
@@ -69,6 +70,9 @@ export default function PublicTournamentPage() {
   }>();
   const { user } = useAuth();
   const navigate = useNavigate();
+  // Used to refresh the global PendingPaymentsBar after we mutate
+  // event_registrations from this page (inline register / cancel).
+  const { refresh: refreshPending } = usePendingPayments();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -528,7 +532,12 @@ export default function PublicTournamentPage() {
                 myStatus={myStatus.get(ev.id)}
                 me={me}
                 user={user}
-                onChanged={reload}
+                onChanged={async () => {
+                  // Refetch both the page's local state AND the
+                  // site-wide pending bar — they read different
+                  // slices of the same rows.
+                  await Promise.all([reload(), refreshPending()]);
+                }}
                 onNeedsAuth={() => {
                   // Anon visitor or no profile yet → bounce through
                   // login + profile, then come back here.

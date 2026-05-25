@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import PendingPaymentsBar from "./components/PendingPaymentsBar";
+import { PendingPaymentsProvider } from "./components/PendingPaymentsContext";
 import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -28,7 +30,7 @@ import TournamentsListPage from "./pages/admin/TournamentsListPage";
 
 export default function App() {
   return (
-    <>
+    <PendingPaymentsProvider>
       {/* Global top banner — rendered once for the whole app.
           SiteHeader hides itself on /login so the only "Sign in"
           surface there is the page itself. */}
@@ -164,6 +166,11 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+      {/* Persistent pending-payments bar — sticky at the bottom of
+          every page when the signed-in user has pending_payment
+          registrations anywhere. Hides itself otherwise (and on
+          the checkout page where its CTA would be redundant). */}
+      <PendingPaymentsBar />
+    </PendingPaymentsProvider>
   );
 }
