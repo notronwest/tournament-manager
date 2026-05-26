@@ -108,6 +108,22 @@ Things actively queued — the next handful of commits.
 
 **Principle being established:** buttons are for actions. Selections that drive what's visible should look like selections (radios, segments, tabs). Worth a one-time pattern pass + a small note in `docs/DESIGN_PREFERENCES.md` so the rule lives somewhere durable.
 
+### Lock pricing once anyone is registered
+- **As an Organizer**, I want tournament + event pricing fields to lock the moment the first paid (or pending_payment) registration lands, **so that** I can't accidentally change what a player has already committed to and create a refund mess.
+
+**Touches:** `TournamentFormPage` + `EventFormPage` render pricing fields read-only when active regs exist, with explanatory copy ("3 players registered — pricing is locked. Cancel + refund affected players from the attendees view first."). Server-side guard via RPC or trigger so a stale browser tab can't sneak through. Small / defensive. See scenario E3 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Clone a tournament from a prior year
+- **As an Organizer** running the same tournament I ran last year, I want a "Clone tournament" action that copies everything (events with their formats / ratings / capacities / fees, description, sponsors, FAQs, branding) into a fresh draft tournament, **so that** I'm reviewing-and-adjusting instead of entering it all over again.
+
+**Touches:** Button on `TournamentDetailPage` (and / or `TournamentsListPage`). Server-side: an RPC that deep-copies the tournament row + its events + sponsor / FAQ rows into a new tournament with `status='draft'` and dates left blank. After clone, route the user into the new tournament's edit form (or the upcoming creation wizard's review step) with everything pre-filled. See scenario C1 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Creation wizard: friendly off-ramps + default event template
+- **As a first-time Organizer**, I want tournament creation to be a multi-step wizard with explicit "Skip / I'll do this later" affordances and inline "what does this mean?" hints, **so that** I can build a publishable tournament without needing to understand every term up front.
+- **As an experienced Organizer**, I want the wizard's Events step to come pre-populated with a sensible default set of divisions (typical club bracket: Mens / Womens / Mixed across 3.0 / 3.5 / 4.0 / 4.5), **so that** I'm removing and adjusting instead of entering twelve events from scratch.
+
+**Touches:** Big-rock item. Replaces the create-mode of `TournamentFormPage` with a wizard component. Required-core fields in step 1 (name / dates / location); subsequent steps (events template, pricing, sponsors, FAQs, cancellation policy — see separate item below, Stripe Connect connection) each carry an explicit Skip. Tournament lands in `status='draft'` after step 1 — publishable any time the organizer hits Publish. See scenarios C2 + C3 + C4 in `docs/scenarios/tournament-lifecycle.md` (C4 — quick test tournament — falls out for free if this wizard is genuinely fast and skippable).
+
 ---
 
 ## Soon
@@ -129,11 +145,12 @@ Known work that's not next-next but is on the radar.
 
 **Touches:** expansion of `AttendeesPage` — likely a per-event filter + grouped layout.
 
-### Withdraw / refund flow once payments are real
+### Withdraw / refund flow + admin-initiated tournament cancellation
 - **As a Player**, I want to withdraw from an event and automatically receive a refund if I'm within the refund window, **so that** I'm not punished for schedule changes I made in good faith.
 - **As an Organizer**, I want late withdrawals (outside the refund window) to require my approval, **so that** I can handle hardship cases without auto-refunding everyone who flakes the night before.
+- **As an Organizer**, I want a strong-confirmation "Cancel tournament" action that bulk-refunds every registered player according to the tournament's pre-set Cancellation Policy and emails them all what happened, **so that** an emergency cancellation (venue falls through, weather) is one focused workflow instead of a manual day of cleanup.
 
-**Touches:** Withdraw currently soft-deletes the registration with no payment side effect. After Stripe lands, hook into the Stripe Refunds API; add a `refund_requested` state for the out-of-window path.
+**Touches:** Withdraw currently soft-deletes the registration with no payment side effect. After Stripe lands, hook into the Stripe Refunds API; both player-side withdraws and admin-side full-tournament cancellation consult the tournament's `cancellation_policy` (see separate item) to drive the refund math. Tournament cancellation lives behind a ConfirmModal with a reason field; status flips to `cancelled`; the public tournament page stays up with a "cancelled" banner so players have context. See scenario E6 in `docs/scenarios/tournament-lifecycle.md`.
 
 ### Pending invite count on the homepage
 - **As a Player**, I want to see at a glance from the site homepage if I have any pending partner invites anywhere, **so that** I don't have to remember which tournament to visit to find them.
@@ -218,7 +235,35 @@ Decision rule: build org-wide stats / content first (members count, Stripe Conne
 - **As a Referee or Organizer**, I want a short, unique GameID printed on every scorecard, **so that** I can match a paper card back to the right match when I'm entering scores.
 - **As an Organizer**, I want to search the Court Manager by GameID, **so that** when a referee hands me a scorecard I can jump straight to the right match instead of scrolling.
 
-**Touches:** `matches` table probably already has a UUID; we need to add (or derive) a short human-friendly id (e.g. first 6 chars, base32, or a per-tournament sequence). `ScorecardsPage` adds the id to the printed layout; `CourtManagerPage` gets a search input that resolves to a match.
+**Touches:** `matches` table probably already has a UUID; we need to add (or derive) a short human-friendly id (e.g. first 6 chars, base32, or a per-tournament sequence). `ScorecardsPage` adds the id to the printed layout; `CourtManagerPage` gets a search input that resolves to a match. **Also call out from R2 in the scenarios doc:** the Court Manager surfaces currently-running games inline so for most scorecards no search is needed — the GameID search is the fallback for everything else.
+
+### Cancellation Policy as a creation-wizard step + enforcement everywhere
+- **As a new Organizer**, I want to pick a Cancellation Policy from a few plain-English presets ("Generous: full refund up to 7 days before tournament" / "Standard: half refund within 30 days, none within 7" / "Strict: no refunds after registration") during creation, **so that** I have a defensible policy without having to invent one and so the system can enforce it automatically downstream.
+- **As a Player** about to register, I want to see the cancellation policy on the public tournament page before I commit money, **so that** I understand the rules before I pay.
+
+**Touches:** New `tournaments.cancellation_policy` storage (jsonb with `{ kind: 'preset' | 'custom', preset?: 'generous' | 'standard' | 'strict', custom?: { ... } }` or similar). Preset definitions live client-side. Wizard step renders the three presets as cards with their effective text + a Custom option. Public tournament page shows the policy text near the entry fee meta. The Withdraw / refund item above reads from this; the admin tournament-cancel flow same. See scenarios C5 + E6 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Common Tasks dashboard for the Editing surface
+- **As an Organizer** mid-registration, I want the tournament edit screen to lead with a Common Tasks panel — quick-access tiles for the things I actually do (add sponsor, add FAQ, edit description, adjust capacity, email registrants) — **so that** I'm not re-walking the creation wizard every time I need to fix one small thing.
+- **As an Organizer**, I want any task with downstream impact (touches registrations, pricing, dates, events) to carry a clear "this will affect N registered players" warning before save, **so that** I'm never surprised by what a save just did.
+
+**Touches:** New surface for `/admin/:org/tournaments/:slug` once a tournament is published — leads with a Common Tasks panel above the existing event list. Each task tile opens a focused mini-form (not the full wizard). The full "Edit all settings" path stays reachable but secondary. Safe edits save silently; impactful edits flash a count-based warning first. See scenario E1 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Schedule estimator surface
+- **As an Organizer** post-registration-close, I want a tool that takes my registrant counts + per-event format + total court count and proposes a time-and-court plan with auto-suggested court allocations, **so that** I'm not doing the schedule math by hand and so finalization (R1 lifecycle item below) starts from a sensible default.
+
+**Touches:** Expansion of the existing `tools/round-robin` estimator. Inputs: tournament-wide court count, per-event format / registrant count. Output: per-event suggested court allocation + estimated duration, plus a tournament-wide timeline. Organizer accepts / adjusts; the output writes to per-event `court_count` + suggested `scheduled_start_at`. Advisory until finalization (event Lock step) locks it in. See scenario E4 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Player change-request admin queue
+- **As a Player** with a registration issue (need to switch divisions, partner-change after the partner accepted, withdraw with a special-circumstance reason), I want to file a request that goes to the organizer instead of trying to self-serve, **so that** an admin handles the refund / bracket consequences correctly.
+- **As an Organizer**, I want all incoming change-requests for my tournaments visible in one queue, **so that** I'm not hunting through email and can process them in batches.
+
+**Touches:** New `tournament_change_requests` table (player_id, tournament_id, kind enum, payload jsonb, status enum, organizer_resolution). Player-side surface: a "Request a change" link in the manage-registration UI. Admin surface: a queue under the tournament admin (or org-level), one row per request, with quick-approve / quick-deny actions and a free-text reply. See scenario E5 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Expanded event lifecycle: ready_to_run → locked → planned → running → complete
+- **As an Organizer** managing a published tournament with events, I want to manually mark events as "Ready to Run" (signaling registrants look right) and "Locked" (signaling N days out from the event — no more new regs or partner changes), **so that** the running phase begins from an intentional, finalized state.
+
+**Touches:** Migration adds new values to `event_status` enum (`ready_to_run`, `locked`, `planned`). Two new manual-gate actions on the event admin UI. The "Lock" action freezes the registrant list and disables partner picker for that event. After Lock, a planning step assigns start times + courts (uses the Schedule estimator output as the starting draft). Auto-complete behavior at end of pool / each playoff round is its own item (R6, Later). See scenario R1 in `docs/scenarios/tournament-lifecycle.md`.
 
 ---
 
@@ -267,6 +312,26 @@ Bigger themes, not committed to. Listed so we don't forget them, not in any part
 - **As a Developer**, I want a tool that seeds N filled teams into an event and can drive automated matches, **so that** I can stress-test schedule generation, bracket logic, and live scoring without hours of manual clicking.
 
 **Touches:** `tools/seed-event` already covers the "fill an event" half; the match-driving half needs a new tool that walks a generated schedule and writes scores via the existing RPC.
+
+### Public standings page
+- **As a Spectator or off-court Player**, I want a public URL I can hit on my phone to see the current standings + bracket state for an event that's running, **so that** I can follow along without needing access to the admin Court Manager.
+
+**Touches:** New route `/t/:org/:slug/standings` (or per-event `/t/:org/:slug/events/:eventId/standings`). Anon-readable. Reads from `matches` + `event_registrations`; renders bracket / standings view. Auto-refresh as scores update. See scenario R4 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Event auto-complete at natural inflection points
+- **As an Organizer** scoring matches throughout the day, I want events to auto-complete when their last match in a round (pool play, then each playoff round) is scored, **so that** I'm not hunting for a "mark complete" button on every event after every round.
+
+**Touches:** Server-side detection (likely a trigger on `matches` inserts/updates) that flips event status to `complete` when (a) every pool-play match has a score, or (b) the championship match has a score. Intermediate "round complete" detection (semis done → finals can start) used to surface "next round ready" affordances in Court Manager. See scenario R6 in `docs/scenarios/tournament-lifecycle.md`. Depends on the event-lifecycle expansion item (Soon) landing first.
+
+### No-show / forfeit flow (design pass needed)
+- **As an Organizer** with a no-show player, I want a path that doesn't blindly hand the opponent the win — some kind of investigation step before the forfeit gets applied (try to reach the player, wait a grace period, then confirm) — **so that** mistakes aren't permanent and the bracket reflects reality.
+
+**Touches:** Design TBD. Initial intuition: an explicit no-show action on a match starts a "pending forfeit" state with a configurable grace window (5 / 10 / 15 min?). Forfeit applies after grace unless cancelled. Records who marked it + when. Worth a focused design pass once the main Running mockup exists and we can see where this action would live in the flow. See scenario R3 in `docs/scenarios/tournament-lifecycle.md`.
+
+### Multi-day tournament support
+- **As an Organizer** running a 2-3 day tournament, I want events distributed across days with day-specific schedules + advancing-player communications, **so that** I'm not relying on people to know "you play Saturday, not Sunday."
+
+**Touches:** Defer for v1 — design pending until we have a real multi-day tournament to design against. Likely overlaps with the "Communications" item: emailing advancing players is a notification design we'll do once and reuse. See scenario R5 in `docs/scenarios/tournament-lifecycle.md`.
 
 ---
 
@@ -345,3 +410,13 @@ Trailing log of what landed, so the doc stays grounded. Prune entries older than
 - **Each item is one or more user stories** in *"As a X, I want Y, so that Z"* form. Multiple stakeholders → multiple stories. The story is the contract; the "Touches:" line is the implementation hint.
 - **When an item ships,** move it to "Recently shipped" with a date + PR link if there is one. Keep that section trimmed — long-tail history belongs in `git log`, not here.
 - **Don't track tasks here that are already in flight.** Use the harness's task tools for sub-day work. This doc is for the *next* thing.
+- **Cross-cutting design decisions** (the *how we'll build everything in this area*) live below, not as backlog items. Items above assume these.
+
+## Architectural directions in play
+
+These came out of the scenario pass (`docs/scenarios/tournament-lifecycle.md`) and shape multiple items above. Logged here so future stories don't relitigate.
+
+- **Three separate admin surfaces for a tournament's lifecycle.** Creation (the wizard), Editing (the Common Tasks dashboard for published-with-registrations), Running (Court-Manager-centric, scoreboard front-and-center). Each has its own URL and its own layout. A tournament's primary admin URL adapts based on phase; the others are reachable but secondary.
+- **Per-event lifecycle gating is manual.** The organizer is always in the driver's seat for transitions (Ready to Run → Lock → Plan → Running). No global date-based auto-transition for the tournament. Event auto-complete IS automatic, but only at natural inflection points (end of pool, end of each playoff round).
+- **A tournament can have events in different lifecycle states at once.** Running is per-event, not per-tournament. One event scoring its final while another hasn't started is the normal case.
+- **Pricing locks the moment money is committed.** Once any active registration exists for a tournament / event, pricing fields are read-only. Refund-and-re-register is the only path to fix a price.
