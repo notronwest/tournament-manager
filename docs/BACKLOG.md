@@ -41,6 +41,33 @@ Things actively queued — the next handful of commits.
 
 **Touches:** `formatPlayerMeta` in `web/src/components/PartnerSearch.tsx` (line ~343). One-line fix: format the numeric rating with `.toFixed(1)` so it always shows a decimal, OR change the separator (e.g. "Doubles 3.0" or "3.0 ★ doubles"). Cheap win — should ship in a small commit on its own.
 
+### Enforce event eligibility (rating + gender) at registration
+- **As an Organizer**, I want a player to be blocked from registering for an event whose rating / gender requirements they don't meet, **so that** my brackets don't show up race-day with the wrong people in them.
+- **As a Player** trying to register for an event I'm not eligible for, I want a clear "you're not eligible for this event" message that names the specific gate I'm missing (rating range / gender), **so that** I understand why and can pick a different event or update my profile if it's outdated.
+
+**Touches:** Today we render `eligibilityChips` as a *display* signal but don't actually enforce eligibility at insert time — a determined player could submit anyway. Add a check in the inline-register submit handler on `PublicTournamentPage` AND in the legacy `RegisterPage` submit. The right server-side enforcement is a SECURITY DEFINER RPC or an `event_registrations` BEFORE INSERT trigger that compares the player's `gender` + `self_rating_*` against the event's `min_rating` / `max_rating` / `gender`; the client check is for UX, the server check is for trust.
+
+**Open question:** which rating field counts toward the gate — doubles, mixed, or singles? Probably matches the event format (doubles event → `self_rating_doubles`). Document the rule explicitly in the touches when we build.
+
+### "Play up" + "Require DUPR" event flags
+- **As an Organizer**, I want to optionally let players register *above* their rating ("play up" allowed: a 3.5 can play in the 4.0 division), **so that** my brackets aren't stuck with empty slots when players want a harder match.
+- **As an Organizer**, I want to optionally require a verified DUPR rating (vs. self-reported) for some events, **so that** competitive divisions are gated on something more reliable than the honor system.
+
+**Touches:**
+- Schema: `events.allow_play_up boolean default false`, `events.require_dupr boolean default false` (or `events.required_rating_source` enum that includes 'dupr'). Migration + types regen.
+- Admin: `EventFormPage` exposes both toggles with hover-hints.
+- Eligibility logic: when `allow_play_up` is true, the `min_rating` check still applies but the `max_rating` is treated as a target rather than a hard cap. When `require_dupr` is true, only DUPR-source `player_ratings` count toward the gate — `self_rating_*` is ignored.
+- Display: the event card shows "Play-up welcome" / "DUPR required" badges so players know before clicking Register.
+
+**Depends on:** the eligibility-enforcement item above lands first — these are configuration knobs on a check that doesn't exist yet.
+
+### Replace mode-toggle buttons with a real segmented control
+- **As a Player** seeing the "Pick a partner / I need a partner" toggle on the inline register form, I want it to look like a selection control (pill / radio / tab style), **so that** I don't read it as "two actions I might take" — it's currently styled as two buttons that confusingly toggle hidden UI when clicked.
+
+**Touches:** The toggle in `PublicTournamentPage.tsx`'s EventCard expanded form (built with `partnerModeBtnStyle`) — semantically it's already `role="radio"` inside a `role="radiogroup"`, but the visuals say "button." Replace with a real segmented control or a radio-list pattern (visible radio dots + label rows). Same fix anywhere else we have buttons that toggle hidden UI rather than performing an action — audit and replace.
+
+**Principle being established:** buttons are for actions. Selections that drive what's visible should look like selections (radios, segments, tabs). Worth a one-time pattern pass + a small note in `docs/DESIGN_PREFERENCES.md` so the rule lives somewhere durable.
+
 ---
 
 ## Soon
