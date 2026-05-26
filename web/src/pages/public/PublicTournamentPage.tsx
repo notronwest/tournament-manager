@@ -637,7 +637,14 @@ function EventCard({
   // "one card open at a time" — keep it permissive; users can
   // open multiple cards if they want to compare. They still pay
   // through the per-tournament checkout at the end.
-  const [expanded, setExpanded] = useState(false);
+  // "register"        → expanded form is for creating a new reg.
+  // "change-partner"  → expanded form is for swapping the partner
+  //                     on an EXISTING pending reg (no new INSERT).
+  // null              → form is collapsed.
+  const [editMode, setEditMode] = useState<
+    "register" | "change-partner" | null
+  >(null);
+  const expanded = editMode !== null;
   const [partner, setPartner] = useState<PlayerSelection>(emptySelection);
   // F1: doubles users can opt into "I need a partner" instead of
   // picking one. When true, the partner picker hides + the submit
@@ -667,12 +674,25 @@ function EventCard({
       onNeedsAuth();
       return;
     }
-    setExpanded(true);
+    setEditMode("register");
+    setPartner(emptySelection);
+    setSeekingPartner(false);
+    setFormError(null);
+  };
+
+  // F-#9: open the expanded form on a PENDING reg to swap partner
+  // without losing the reg itself. Pre-fills "seekingPartner" with
+  // the current state so toggling between picking-a-partner and
+  // seeking is a one-click affordance.
+  const startChangePartner = () => {
+    setEditMode("change-partner");
+    setPartner(emptySelection);
+    setSeekingPartner(myStatus?.isSeekingPartner ?? false);
     setFormError(null);
   };
 
   const cancelExpand = () => {
-    setExpanded(false);
+    setEditMode(null);
     setPartner(emptySelection);
     setSeekingPartner(false);
     setFormError(null);
@@ -844,7 +864,154 @@ function EventCard({
       }
     }
 
-    setExpanded(false);
+    setEditMode(null);
+    setPartner(emptySelection);
+    setSeekingPartner(false);
+    setSubmitting(false);
+    await onChanged();
+  };
+
+  // F-#9: change-partner submit. Doesn't insert a new reg — updates
+  // the existing pending reg's partner_status and swaps the
+  // outbound invite. Auto-pair still applies (if the new pick
+  // already invited me, accept theirs instead). Email doesn't
+  // fire from here either; it'll fire from checkout like always.
+  const onSubmitChangePartner = async () => {
+    if (!me || !myStatus?.regId) return;
+    setFormError(null);
+
+    // Same validation as the register form for doubles, minus the
+    // singles path (you don't get here from a singles event).
+    if (!seekingPartner) {
+      if (partner.mode === "empty") {
+        setFormError("Pick a partner to continue.");
+        return;
+      }
+      if (partner.mode === "existing" && partner.player.id === me.id) {
+        setFormError("You picked yourself as your partner.");
+        return;
+      }
+      if (partner.mode === "new") {
+        if (
+          !partner.firstName.trim() ||
+          !partner.lastName.trim() ||
+          !partner.email.trim()
+        ) {
+          setFormError(
+            "Partner first name, last name, and email are required.",
+          );
+          return;
+        }
+        if (
+          user?.email &&
+          partner.email.trim().toLowerCase() === user.email.toLowerCase()
+        ) {
+          setFormError("Partner email can't be your own.");
+          return;
+        }
+      }
+    }
+
+    setSubmitting(true);
+
+    // 1. Cancel any pending outbound invite for this event — the
+    //    new partner pick supersedes it. Safe to call even when
+    //    there isn't one (no rows updated).
+    await supabase
+      .from("partner_invites")
+      .update({ status: "cancelled" })
+      .eq("event_id", event.id)
+      .eq("inviter_player_id", me.id)
+      .eq("status", "pending");
+
+    // 2. Resolve the new partner (skip when seeking).
+    let resolvedPartnerId: string | null = null;
+    let resolvedPartnerEmail: string | null = null;
+    if (!seekingPartner && partner.mode !== "empty") {
+      const resolved = await persistPlayerSelection(partner);
+      if (!resolved.player) {
+        setFormError(resolved.error ?? "Failed to set up partner.");
+        setSubmitting(false);
+        return;
+      }
+      resolvedPartnerId = resolved.player.id;
+      resolvedPartnerEmail =
+        resolved.player.email ??
+        (partner.mode === "new" ? partner.email.trim() : null);
+    }
+
+    // 3. Auto-pair lookup (same as register flow).
+    let inboundInviteId: string | null = null;
+    if (!seekingPartner && resolvedPartnerId && user?.email) {
+      const { data: inbound } = await supabase
+        .from("partner_invites")
+        .select("id")
+        .eq("event_id", event.id)
+        .eq("inviter_player_id", resolvedPartnerId)
+        .eq("invitee_email", user.email)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (inbound) inboundInviteId = inbound.id;
+    }
+
+    // 4. Update my reg's partner_status. The accept_partner_invite
+    //    RPC will overwrite to 'confirmed' if we auto-pair below,
+    //    so for that case we set 'solo' as a placeholder.
+    const newPartnerStatus = seekingPartner
+      ? "seeking"
+      : inboundInviteId
+        ? "solo"
+        : "pending";
+    await supabase
+      .from("event_registrations")
+      .update({
+        partner_status: newPartnerStatus,
+        // If switching TO seeking or about to re-pair, drop any
+        // stale link to the previous partner's reg.
+        partner_registration_id: null,
+      })
+      .eq("id", myStatus.regId);
+
+    // 5. Either accept the inbound invite or insert a fresh one.
+    if (!seekingPartner && resolvedPartnerId) {
+      if (inboundInviteId) {
+        const { error: acceptErr } = await supabase.rpc(
+          "accept_partner_invite",
+          { p_invite_id: inboundInviteId },
+        );
+        if (acceptErr) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            "auto-pair failed during partner change, falling back",
+            acceptErr,
+          );
+          await insertNewInvite();
+        }
+      } else {
+        await insertNewInvite();
+      }
+    }
+
+    async function insertNewInvite() {
+      const { error: invErr } = await supabase
+        .from("partner_invites")
+        .insert({
+          event_id: event.id,
+          inviter_player_id: me!.id,
+          invitee_player_id: resolvedPartnerId!,
+          invitee_email: resolvedPartnerEmail,
+          status: "pending",
+        });
+      if (invErr) {
+        setFormError(
+          `Partner updated but invite setup failed: ${invErr.message}`,
+        );
+      }
+    }
+
+    setEditMode(null);
     setPartner(emptySelection);
     setSeekingPartner(false);
     setSubmitting(false);
@@ -897,26 +1064,53 @@ function EventCard({
       );
     }
     if (myStatus?.state === "pending_payment") {
+      // F-#9: doubles pending regs get a "Change partner" button
+      // next to Cancel so the user can swap their partner without
+      // canceling + re-registering (which would risk losing the
+      // pending slot to capacity sweep).
       return (
-        <button
-          type="button"
-          onClick={() => void onCancelPending()}
-          disabled={cancelling}
-          style={{
-            padding: "8px 16px",
-            background: "#fff",
-            color: "#991b1b",
-            border: "1px solid #fca5a5",
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: cancelling ? "not-allowed" : "pointer",
-            fontFamily: "inherit",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {cancelling ? "Cancelling…" : "Cancel"}
-        </button>
+        <div style={{ display: "flex", gap: 6 }}>
+          {isDoubles && !expanded && (
+            <button
+              type="button"
+              onClick={startChangePartner}
+              disabled={cancelling}
+              style={{
+                padding: "8px 14px",
+                background: "#fff",
+                color: "#2563eb",
+                border: "1px solid #2563eb",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: cancelling ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Change partner
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void onCancelPending()}
+            disabled={cancelling}
+            style={{
+              padding: "8px 14px",
+              background: "#fff",
+              color: "#991b1b",
+              border: "1px solid #fca5a5",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: cancelling ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {cancelling ? "Cancelling…" : "Cancel"}
+          </button>
+        </div>
       );
     }
     if (isPaid) {
@@ -1206,7 +1400,11 @@ function EventCard({
           >
             <button
               type="button"
-              onClick={() => void onSubmitRegister()}
+              onClick={() =>
+                void (editMode === "change-partner"
+                  ? onSubmitChangePartner()
+                  : onSubmitRegister())
+              }
               disabled={submitting || !canSubmit}
               style={{
                 padding: "10px 18px",
@@ -1222,7 +1420,13 @@ function EventCard({
                 fontFamily: "inherit",
               }}
             >
-              {submitting ? "Registering…" : "Register"}
+              {submitting
+                ? editMode === "change-partner"
+                  ? "Saving…"
+                  : "Registering…"
+                : editMode === "change-partner"
+                  ? "Save partner change"
+                  : "Register"}
             </button>
             <button
               type="button"
