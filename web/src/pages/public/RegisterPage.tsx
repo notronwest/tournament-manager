@@ -122,6 +122,14 @@ export default function RegisterPage() {
   const [existingRegs, setExistingRegs] = useState<Map<string, ExistingReg>>(
     new Map(),
   );
+  // F3: registered player_ids per event (paid + pending), used to
+  // filter the PartnerSearch results so we can't pick someone
+  // who's already in. Populated by the players_registered_for_events
+  // RPC because event_registrations RLS would otherwise hide them
+  // from a non-org-member SELECT.
+  const [registeredByEvent, setRegisteredByEvent] = useState<
+    Map<string, Set<string>>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -219,6 +227,30 @@ export default function RegisterPage() {
         return;
       }
       setEvents(evs ?? []);
+
+      // 3a. F3: pull registered player ids per event so PartnerSearch
+      //     can filter them out of the picker. Goes through the
+      //     SECURITY DEFINER RPC because event_registrations RLS
+      //     limits non-org-member SELECTs to my own rows.
+      if (evs && evs.length > 0) {
+        const { data: regsByEvent } = await supabase.rpc(
+          "players_registered_for_events",
+          { p_event_ids: evs.map((e) => e.id) },
+        );
+        if (cancelled) return;
+        const grouped = new Map<string, Set<string>>();
+        for (const row of regsByEvent ?? []) {
+          let set = grouped.get(row.event_id);
+          if (!set) {
+            set = new Set<string>();
+            grouped.set(row.event_id, set);
+          }
+          set.add(row.player_id);
+        }
+        setRegisteredByEvent(grouped);
+      } else {
+        setRegisteredByEvent(new Map());
+      }
 
       // 3. The user's player row. Guaranteed to exist + have a name
       //    by the time we render — RequireProfile redirects to
@@ -1256,6 +1288,41 @@ export default function RegisterPage() {
             partnerChanged={partnerChangedEvents}
             existingRegs={existingRegs}
             selections={selections}
+            onUndo={(ev, kind) => {
+              // Reset whatever piece of state was changed back to
+              // its initial value at load time. Doesn't write to
+              // the DB — just clears the diff for that row.
+              if (kind === "added") {
+                setSel(ev.id, {
+                  selected: false,
+                  partner: emptySelection,
+                });
+                return;
+              }
+              if (kind === "withdrawn") {
+                // Re-check the existing reg; partner state in
+                // selections is already the original from init.
+                setSel(ev.id, { selected: true });
+                return;
+              }
+              if (kind === "partner_changed") {
+                // Restore partner from existingRegs (same data the
+                // init logic seeds from).
+                const existing = existingRegs.get(ev.id);
+                if (existing?.partner && ev.format === "doubles") {
+                  setSel(ev.id, {
+                    partner: {
+                      mode: "existing",
+                      player: existing.partner as unknown as Player,
+                      emailDraft: existing.partner.email ?? "",
+                      phoneDraft: existing.partner.phone ?? "",
+                    },
+                  });
+                } else {
+                  setSel(ev.id, { partner: emptySelection });
+                }
+              }
+            }}
           />
         )}
 
@@ -1278,9 +1345,16 @@ export default function RegisterPage() {
                     disabled={submitting}
                     onChange={(patch) => setSel(ev.id, patch)}
                     // Stop the user from picking themselves as their
-                    // own partner. The picker excludes these ids
-                    // from its search results.
-                    excludePlayerIds={me ? [me.id] : []}
+                    // own partner, AND filter out anyone already
+                    // registered (paid OR pending) for this event —
+                    // they can't accept the invite anyway. The set
+                    // for this event was loaded via the F3 RPC.
+                    excludePlayerIds={[
+                      ...(me ? [me.id] : []),
+                      ...Array.from(
+                        registeredByEvent.get(ev.id) ?? new Set<string>(),
+                      ),
+                    ]}
                   />
                 );
               })}
@@ -1693,12 +1767,17 @@ function ChangeSummary({
   partnerChanged,
   existingRegs,
   selections,
+  onUndo,
 }: {
   added: Event[];
   withdrawn: Event[];
   partnerChanged: Event[];
   existingRegs: Map<string, ExistingReg>;
   selections: Map<string, EventSelection>;
+  // Per-row undo: clears that specific change without affecting
+  // the others. Misclick recovery — the user shouldn't have to
+  // hunt through the events list to find the row they changed.
+  onUndo: (ev: Event, kind: ChangeType) => void;
 }) {
   // Render a partner swap as "old → new" so the user can verify
   // the diff before hitting Confirm. Falls back to "previous
@@ -1752,22 +1831,51 @@ function ChangeSummary({
       >
         {added.map((ev) => (
           <li key={`a-${ev.id}`}>
-            <strong>Register</strong> for {ev.name}
+            <strong>Register</strong> for {ev.name}{" "}
+            <UndoLink onClick={() => onUndo(ev, "added")} />
           </li>
         ))}
         {withdrawn.map((ev) => (
           <li key={`w-${ev.id}`}>
-            <strong>Withdraw</strong> from {ev.name}
+            <strong>Withdraw</strong> from {ev.name}{" "}
+            <UndoLink onClick={() => onUndo(ev, "withdrawn")} />
           </li>
         ))}
         {partnerChanged.map((ev) => (
           <li key={`p-${ev.id}`}>
             <strong>Change partner</strong> for {ev.name} (
-            {describePartnerSwap(ev)})
+            {describePartnerSwap(ev)}){" "}
+            <UndoLink onClick={() => onUndo(ev, "partner_changed")} />
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+// Small inline "↶ Undo" button rendered next to each entry in the
+// ChangeSummary list. Underlined link styling so it reads as a
+// natural recovery action rather than competing with the primary
+// Confirm button below.
+function UndoLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        background: "none",
+        border: "none",
+        color: "#7a5d00",
+        textDecoration: "underline",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        fontSize: 12,
+        padding: 0,
+        marginLeft: 4,
+      }}
+    >
+      ↶ Undo
+    </button>
   );
 }
 

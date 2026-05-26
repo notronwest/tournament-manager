@@ -97,6 +97,10 @@ export function PartnerSearch({
             </div>
           )}
         </div>
+        {/* "Change" instead of a bare ×. The × was small enough to
+            miss, and the label tells the user what's going to
+            happen — clear the chip and surface the search input so
+            they can pick someone else. */}
         <button
           type="button"
           onClick={() => {
@@ -106,11 +110,11 @@ export function PartnerSearch({
             setResults([]);
             setHasSearched(false);
           }}
-          style={clearBtn}
-          aria-label="Clear partner"
-          title="Clear partner"
+          style={changeBtn}
+          aria-label="Change partner"
+          title="Change partner"
         >
-          ×
+          Change
         </button>
       </div>
     );
@@ -341,6 +345,9 @@ function Avatar({
 }
 
 // Compact "email · phone · 3.5 mixed" line. Skips anything blank.
+// Ratings stored as numeric in Postgres come back as 3 (not 3.0) when
+// the trailing zero is "dropped" — format with toFixed(1) so "3
+// doubles" doesn't look like "3 doubles events."
 function formatPlayerMeta(p: Player): string {
   const bits: string[] = [];
   if (p.email) bits.push(p.email);
@@ -356,7 +363,7 @@ function formatPlayerMeta(p: Player): string {
         : p.self_rating_mixed != null
           ? "mixed"
           : "singles";
-    bits.push(`${r} ${which}`);
+    bits.push(`${r.toFixed(1)} ${which}`);
   }
   return bits.join(" · ");
 }
@@ -434,18 +441,17 @@ const chipRow: CSSProperties = {
   borderRadius: 8,
 };
 
-const clearBtn: CSSProperties = {
-  width: 28,
-  height: 28,
-  padding: 0,
-  background: "transparent",
+const changeBtn: CSSProperties = {
+  padding: "6px 12px",
+  background: "#fff",
   border: "1px solid #bfdbfe",
-  borderRadius: 4,
+  borderRadius: 6,
   cursor: "pointer",
-  fontSize: 16,
-  lineHeight: 1,
+  fontSize: 12,
+  fontWeight: 500,
   color: "#1e40af",
   fontFamily: "inherit",
+  whiteSpace: "nowrap",
 };
 
 const newCardStyle: CSSProperties = {
