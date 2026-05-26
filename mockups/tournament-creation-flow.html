@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Mockup — Tournament Creation</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #222;
+    background: #f6f7f9;
+    margin: 0;
+    padding: 0;
+  }
+  .doc { max-width: 1080px; margin: 0 auto; padding: 24px 24px 96px; }
+  h1.doc-title { margin: 0 0 8px; font-size: 28px; }
+  .doc-lede {
+    color: #555; margin: 0 0 24px; font-size: 15px; line-height: 1.55;
+  }
+  .ref {
+    padding: 14px 16px; background: #f0fdf4; border-left: 4px solid #16a34a;
+    margin: 12px 0 24px; font-size: 13px; color: #064e3b; line-height: 1.6;
+    border-radius: 0 8px 8px 0;
+  }
+  .ref code { background: #fff; padding: 1px 4px; border-radius: 3px; }
+  .ref a { color: #047857; }
+
+  .screen {
+    margin: 32px 0 8px; border-radius: 12px; background: #fff;
+    border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    overflow: hidden;
+  }
+  .screen-label {
+    padding: 10px 16px; background: #f0f4ff; color: #1e40af;
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; border-bottom: 1px solid #dbe5ff;
+  }
+  .note {
+    padding: 16px 18px; background: #fffbeb; border-left: 4px solid #fbbf24;
+    margin: 20px 0; font-size: 14px; line-height: 1.55; color: #5b4604;
+    border-radius: 0 8px 8px 0;
+  }
+  .note strong { color: #3b2c00; }
+  .open-q {
+    padding: 16px 18px; background: #eef2ff; border-left: 4px solid #6366f1;
+    margin: 20px 0; font-size: 14px; line-height: 1.55; color: #3730a3;
+    border-radius: 0 8px 8px 0;
+  }
+  .open-q ul { margin: 8px 0 0 0; padding-left: 20px; }
+  .open-q li { margin-bottom: 4px; }
+
+  /* App header */
+  .app-header {
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+    padding: 10px 24px; display: flex;
+    align-items: center; justify-content: space-between;
+  }
+  .app-header .brand {
+    font-weight: 600; color: #111; font-size: 16px; text-decoration: none;
+  }
+  .app-header .nav { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .app-header .nav .greet { color: #666; margin-right: 8px; }
+  .ghost-btn {
+    padding: 6px 12px; color: #444; text-decoration: none;
+    border-radius: 6px; background: transparent; border: 1px solid transparent;
+  }
+  .ghost-btn-bordered {
+    padding: 6px 12px; color: #444; text-decoration: none;
+    border-radius: 6px; background: transparent; border: 1px solid #e2e2e2;
+    cursor: pointer; font-family: inherit; font-size: 13px;
+  }
+
+  /* Admin two-pane layout (Tournaments list intro screen) */
+  .admin-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: 480px;
+  }
+  .admin-sidebar {
+    background: #fafafa;
+    border-right: 1px solid #e2e2e2;
+    padding: 16px 0;
+  }
+  .admin-sidebar .org-block {
+    padding: 0 16px 12px;
+    border-bottom: 1px solid #e2e2e2;
+    margin-bottom: 8px;
+  }
+  .admin-sidebar .org-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .admin-sidebar .org-name {
+    font-weight: 500;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+  .admin-sidebar .role {
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+  }
+  .admin-sidebar nav a {
+    display: block;
+    padding: 8px 16px;
+    color: #555;
+    text-decoration: none;
+    font-size: 14px;
+    border-left: 3px solid transparent;
+  }
+  .admin-sidebar nav a.active {
+    background: #eff6ff;
+    color: #2563eb;
+    border-left-color: #2563eb;
+  }
+  .admin-main {
+    padding: 32px;
+  }
+
+  /* Wizard layout — left rail with steps, right pane with the form */
+  .wizard {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: 560px;
+    background: #fafafa;
+  }
+  .wizard-rail {
+    background: #fff;
+    border-right: 1px solid #e2e2e2;
+    padding: 20px 0;
+  }
+  .wizard-rail .rail-header {
+    padding: 0 20px 16px;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 12px;
+  }
+  .wizard-rail .rail-header .label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .wizard-rail .rail-header .name {
+    font-weight: 500;
+    font-size: 14px;
+    margin-top: 4px;
+  }
+  .wizard-rail .rail-header .draft-badge {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 2px 8px;
+    background: #fef3c7;
+    color: #7a5d00;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .wizard-rail .save-indicator {
+    padding: 0 20px;
+    margin-bottom: 16px;
+    font-size: 11px;
+    color: #888;
+  }
+  .wizard-rail ol.steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .wizard-rail .step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    color: #555;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+  }
+  .wizard-rail .step.active {
+    background: #eff6ff;
+    color: #2563eb;
+    border-left-color: #2563eb;
+    font-weight: 500;
+  }
+  .wizard-rail .step.done { color: #166534; }
+  .wizard-rail .step.skipped { color: #888; }
+  .wizard-rail .step .indicator {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    background: #f0f0f0;
+    color: #888;
+    border: 1px solid #e0e0e0;
+    flex-shrink: 0;
+  }
+  .wizard-rail .step.active .indicator {
+    background: #2563eb;
+    color: #fff;
+    border-color: #2563eb;
+  }
+  .wizard-rail .step.done .indicator {
+    background: #dcfce7;
+    color: #166534;
+    border-color: #86efac;
+  }
+  .wizard-rail .step.skipped .indicator {
+    background: #fef3c7;
+    color: #7a5d00;
+    border-color: #fde68a;
+  }
+  .wizard-rail .step-meta {
+    flex: 1;
+    min-width: 0;
+  }
+  .wizard-rail .step-meta .step-title {
+    font-size: 13px;
+  }
+  .wizard-rail .step-meta .step-sub {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+  }
+  .wizard-rail .rail-footer {
+    border-top: 1px solid #f0f0f0;
+    margin-top: 16px;
+    padding: 16px 20px 0;
+  }
+  .wizard-rail .rail-footer .publish-btn {
+    display: block;
+    padding: 10px 14px;
+    background: #2563eb;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .wizard-rail .rail-footer .publish-btn.disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+  }
+  .wizard-rail .rail-footer .save-exit {
+    display: block;
+    margin-top: 8px;
+    text-align: center;
+    color: #666;
+    font-size: 12px;
+    text-decoration: none;
+  }
+
+  .wizard-pane {
+    padding: 32px 36px;
+  }
+  .wizard-pane h1.step-h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 600;
+  }
+  .wizard-pane .step-lede {
+    margin: 0 0 24px;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+  .wizard-pane .field {
+    margin-bottom: 18px;
+  }
+  .wizard-pane .field label {
+    display: block;
+    font-size: 13px;
+    color: #555;
+    margin-bottom: 4px;
+  }
+  .wizard-pane .field label .req {
+    color: #ef4444;
+    margin-left: 4px;
+  }
+  .wizard-pane .field input[type="text"],
+  .wizard-pane .field input[type="date"],
+  .wizard-pane .field input[type="number"],
+  .wizard-pane .field input[type="datetime-local"],
+  .wizard-pane .field textarea,
+  .wizard-pane .field select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid #e2e2e2;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+    background: #fff;
+  }
+  .wizard-pane .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .wizard-pane .hint {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #1e40af;
+    margin-top: 6px;
+    line-height: 1.55;
+  }
+  .wizard-pane .hint summary {
+    cursor: pointer;
+    font-weight: 500;
+    list-style: none;
+    color: #1e40af;
+  }
+  .wizard-pane .hint summary::-webkit-details-marker { display: none; }
+  .wizard-pane .hint summary::before {
+    content: "ⓘ ";
+  }
+  .wizard-pane .hint .body {
+    margin-top: 8px;
+    color: #334155;
+  }
+
+  /* Wizard footer actions */
+  .wizard-actions {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn-primary, .btn-secondary, .btn-ghost {
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .btn-secondary { background: #fff; color: #2563eb; border-color: #2563eb; }
+  .btn-ghost { background: transparent; color: #666; border-color: #e2e2e2; }
+  .btn-big { padding: 12px 24px; font-size: 14px; }
+
+  /* Default-event template list */
+  .events-grid {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .events-grid table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .events-grid th {
+    background: #fafafa;
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #666;
+    font-weight: 600;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  .events-grid td {
+    padding: 10px 12px;
+    border-top: 1px solid #f0f0f0;
+  }
+  .events-grid .pill {
+    display: inline-block;
+    padding: 2px 6px;
+    background: #eff6ff;
+    color: #1e40af;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .events-grid .pill-default {
+    background: #ecfdf5;
+    color: #065f46;
+  }
+  .events-grid .pill-custom {
+    background: #fef3c7;
+    color: #7a5d00;
+  }
+  .events-grid .row-actions {
+    text-align: right;
+    color: #888;
+  }
+  .events-grid .row-actions a {
+    color: #2563eb;
+    text-decoration: none;
+    margin-left: 12px;
+    font-size: 12px;
+  }
+  .events-add-btn {
+    margin-top: 12px;
+    background: #fff;
+    border: 1px dashed #d1d5db;
+    color: #666;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  /* Pricing preview math */
+  .preview-math {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 13px;
+    color: #166534;
+    margin-top: 14px;
+  }
+  .preview-math .row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+  }
+  .preview-math .label {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  /* Cancellation policy preset cards */
+  .policy-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 720px) {
+    .policy-cards { grid-template-columns: 1fr; }
+  }
+  .policy-card {
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+  }
+  .policy-card.selected {
+    border-color: #2563eb;
+    background: #eff6ff;
+  }
+  .policy-card .title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 6px;
+  }
+  .policy-card .desc {
+    color: #555;
+    font-size: 12px;
+    line-height: 1.5;
+    flex: 1;
+  }
+  .policy-card .pick {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #2563eb;
+    font-weight: 500;
+  }
+  .policy-card.selected .pick { color: #166534; }
+  .policy-card .radio-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #cbd5e1;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
+    background: #fff;
+  }
+  .policy-card.selected .radio-dot {
+    border-color: #2563eb;
+    background: #2563eb;
+    box-shadow: inset 0 0 0 3px #fff;
+  }
+
+  /* Review screen summary */
+  .review-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 720px) { .review-grid { grid-template-columns: 1fr; } }
+  .review-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .review-card .title {
+    font-size: 13px;
+    color: #555;
+    font-weight: 600;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .review-card .body {
+    font-size: 13px;
+    color: #333;
+    line-height: 1.55;
+  }
+  .review-card.skipped {
+    background: #fffbeb;
+    border-color: #fde68a;
+  }
+  .review-card.skipped .body {
+    color: #7a5d00;
+  }
+  .review-card .edit-link {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #2563eb;
+    text-decoration: none;
+  }
+  .pill-status {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .pill-done { background: #dcfce7; color: #166534; }
+  .pill-skipped { background: #fef3c7; color: #7a5d00; }
+
+  /* Clone destination drawer */
+  .clone-drawer {
+    background: #f0fdf4;
+    border-left: 4px solid #16a34a;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    border-radius: 0 8px 8px 0;
+    font-size: 13px;
+    color: #064e3b;
+  }
+</style>
+</head>
+<body>
+<div class="doc">
+
+<h1 class="doc-title">Mockup — Tournament Creation</h1>
+<p class="doc-lede">
+  Wizard for going from blank slate to a publishable (or draft-able)
+  tournament. Friendly to the first-time organizer (skip-able steps,
+  inline hints), efficient for the returning organizer (clone + default
+  event template), and never trapping the user — Save as draft is
+  always one click away.
+</p>
+
+<div class="ref">
+  <strong>Briefs being drawn from:</strong>
+  <code>docs/scenarios/tournament-lifecycle.md</code> — scenarios C1
+  (Ron / clone), C2 (Sarah / first-timer), C3 (Dave / multi-event),
+  C5 (Cancellation policy preset). Backlog items above
+  ("Creation wizard," "Clone a tournament," "Cancellation Policy as
+  a creation-wizard step") get their UI from this mockup.
+</div>
+
+<div class="open-q">
+  <strong>Defaults baked into this mockup.</strong> Push back on any of these.
+  <ul>
+    <li><strong>Wizard, not single form.</strong> Left rail with 8 steps; right pane is the active step.</li>
+    <li><strong>Step 1 (Basics) is the only required step.</strong> Every other step has an explicit Skip. Once Step 1 is filled, the tournament exists as a <code>draft</code> and Publish becomes possible (subject to "at least one event" later).</li>
+    <li><strong>Autosave per step.</strong> The user never loses progress; the save indicator in the rail confirms that.</li>
+    <li><strong>"What does this mean?"</strong> collapsible hints next to fields that use jargon, so a first-timer doesn't need to leave the wizard to look something up.</li>
+    <li><strong>Default event template</strong> on Step 2 — typical club bracket pre-populated. The organizer adjusts rather than enters from scratch.</li>
+    <li><strong>Clone deep-copies everything</strong> and lands in the Review step with all fields pre-filled (just verify the new dates).</li>
+    <li><strong>Publish is always reachable from the rail</strong>, not just at the end. Once required fields are set, Publish goes blue.</li>
+  </ul>
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 1: Entry — Tournaments list with Create / Clone        -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">1 · Entry — Tournaments list with Create + Clone</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Ron</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="admin-layout">
+    <div class="admin-sidebar">
+      <div class="org-block">
+        <div class="org-label">Organization</div>
+        <div class="org-name">WMPC</div>
+        <div class="role">owner</div>
+      </div>
+      <nav>
+        <a href="#">Overview</a>
+        <a href="#" class="active">Tournaments</a>
+        <a href="#">RR estimator</a>
+        <a href="#">Seed test data</a>
+        <a href="#">Test players</a>
+      </nav>
+    </div>
+    <div class="admin-main">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:18px;flex-wrap:wrap;gap:12px;">
+        <h2 style="margin:0;font-size:20px;">Tournaments</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-secondary">Clone from a past tournament…</button>
+          <a class="btn-primary" href="#">+ New tournament</a>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="padding:14px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-weight:600;">2nd Annual Mud Season Invitational</div>
+            <div style="font-size:13px;color:#666;margin-top:2px;">May 29–31, 2026 · Published · 47 players</div>
+          </div>
+          <a href="#" style="color:#2563eb;text-decoration:none;font-size:13px;">Manage →</a>
+        </div>
+        <div style="padding:14px;border:1px solid #e5e7eb;border-radius:8px;background:#fafafa;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-weight:600;color:#444;">1st Annual Mud Season Invitational</div>
+            <div style="font-size:13px;color:#666;margin-top:2px;">May 26–28, 2025 · Completed · 52 players</div>
+          </div>
+          <a href="#" style="color:#2563eb;text-decoration:none;font-size:13px;">View results →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Two entry points.</strong> "Clone from a past tournament…" is
+  surfaced as a peer to "+ New tournament" because for most organizers
+  it's the more common path. The clone button opens a small picker
+  (next screen would show that — omitted from the mockup, just a
+  modal listing past tournaments). "+ New tournament" routes into the
+  wizard at Step 1. Clone routes into the wizard at the <em>Review</em>
+  step with everything pre-filled.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 2: Step 1 — Basics                                    -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">2 · Step 1 of 8 — Basics (the only required step)</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">New tournament</div>
+        <div class="name">Untitled tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ Saved a few seconds ago</div>
+      <ol class="steps">
+        <li class="step active"><span class="indicator">1</span><div class="step-meta"><div class="step-title">Basics</div><div class="step-sub">Required</div></div></li>
+        <li class="step"><span class="indicator">2</span><div class="step-meta"><div class="step-title">Events</div><div class="step-sub">Defaults provided</div></div></li>
+        <li class="step"><span class="indicator">3</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step"><span class="indicator">4</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div><div class="step-sub">Optional</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div><div class="step-sub">Optional</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div><div class="step-sub">Stripe Connect</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn disabled" aria-disabled="true">Publish (after Step 1)</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Basics</h1>
+      <p class="step-lede">
+        Just enough to call this a tournament. You can come back and
+        flesh everything else out — sponsors, FAQs, payment setup —
+        before you publish.
+      </p>
+
+      <div class="field">
+        <label>Tournament name <span class="req">*</span></label>
+        <input type="text" placeholder="e.g. 2nd Annual Mud Season Invitational">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Start date <span class="req">*</span></label>
+          <input type="date">
+        </div>
+        <div class="field">
+          <label>End date <span class="req">*</span></label>
+          <input type="date">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Venue / location <span class="req">*</span></label>
+        <input type="text" placeholder="e.g. WMPC Indoor Courts">
+        <details class="hint" style="margin-top:6px;">
+          <summary>Not sure what to put here?</summary>
+          <div class="body">
+            The name players will recognize on the public tournament page.
+            If you have multiple venues, just pick the primary one for now —
+            per-event venues can be set later in the Events step.
+          </div>
+        </details>
+      </div>
+
+      <div class="field">
+        <label>Short description</label>
+        <textarea rows="3" placeholder="Anything you want players to know before they register…"></textarea>
+      </div>
+
+      <div class="wizard-actions">
+        <span style="flex:1;font-size:12px;color:#888;">Required fields marked with <span style="color:#ef4444;">*</span></span>
+        <button class="btn-primary">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Step 1 is the only step that's required.</strong> Once it
+  saves, the tournament exists as a <code>draft</code> in the
+  database, the rail's name updates, and Publish becomes
+  conditionally available (turns blue once there's at least one
+  event in Step 2). All other steps are skip-able from here on.
+  Autosave triggers on field-blur — no manual save needed for the
+  defer-to-later case.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 3: Step 2 — Events with default template               -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">3 · Step 2 of 8 — Events (default template pre-populated)</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Dave</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">3-Day Spring Open</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ Saved 12 seconds ago</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step active"><span class="indicator">2</span><div class="step-meta"><div class="step-title">Events</div><div class="step-sub">Defaults provided</div></div></li>
+        <li class="step"><span class="indicator">3</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step"><span class="indicator">4</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Events</h1>
+      <p class="step-lede">
+        We've pre-populated a typical club bracket. Remove anything you
+        don't need, tweak capacity, add a custom division. Every
+        tournament needs at least one event before you can publish.
+      </p>
+
+      <div class="events-grid">
+        <table>
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Format</th>
+              <th>Max teams</th>
+              <th>Source</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Womens 3.0-3.49</strong></td>
+              <td>Doubles · Women</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Womens 3.5-3.99</strong></td>
+              <td>Doubles · Women</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Womens 4.0+</strong></td>
+              <td>Doubles · Women</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Mens 3.0-3.49</strong></td>
+              <td>Doubles · Men</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Mens 3.5-3.99</strong></td>
+              <td>Doubles · Men</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Mens 4.0+</strong></td>
+              <td>Doubles · Men</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Mixed 3.0-3.49</strong></td>
+              <td>Doubles · Mixed</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Mixed 3.5-3.99</strong></td>
+              <td>Doubles · Mixed</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Mixed 4.0+</strong></td>
+              <td>Doubles · Mixed</td>
+              <td>10</td>
+              <td><span class="pill pill-default">Default</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+            <tr>
+              <td><strong>Open Singles</strong></td>
+              <td>Singles · Mixed</td>
+              <td>16</td>
+              <td><span class="pill pill-custom">Custom</span></td>
+              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <button class="events-add-btn">+ Add custom event</button>
+
+      <details class="hint" style="margin-top:14px;">
+        <summary>Why are these the defaults?</summary>
+        <div class="body">
+          Most club tournaments run the same basic bracket year over
+          year: men's / women's / mixed doubles across the common skill
+          tiers (3.0, 3.5, 4.0+). If you want a leaner tournament, just
+          delete the rows you don't want. If you want different skill
+          breakpoints (2.5, 4.5, 5.0), edit any row's rating range.
+        </div>
+      </details>
+
+      <div class="wizard-actions">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Skip — I'll add events later</button>
+        <button class="btn-primary" style="margin-left:auto;">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Default-template + adjust beats blank slate.</strong> The
+  table is pre-filled with 9 typical doubles divisions; Dave has
+  already added one custom event ("Open Singles") to give the demo
+  some texture. Per-row Edit opens a focused modal for that event's
+  full settings (format, gender, rating range, capacity, fees,
+  bracket type). Skip is available — a tournament with no events
+  saved as draft is fine; just blocks Publish until at least one
+  event exists.
+</div>
+
+<div class="open-q">
+  <strong>Open question:</strong> the default template is "typical
+  club bracket." Should it be configurable per organization (e.g.
+  WMPC always uses 2.5/3.0/3.5/4.0/4.5, another club starts at 3.0)?
+  An org-level default-events setting would mean a new club's first
+  tournament walks through this once and never has to again. Probably
+  a follow-up after the basic version ships.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 4: Step 3 — Pricing with preview math                  -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">4 · Step 3 of 8 — Pricing</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">My First Tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ Saved 1 minute ago</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div><div class="step-sub">9 events</div></div></li>
+        <li class="step active"><span class="indicator">3</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step"><span class="indicator">4</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Pricing</h1>
+      <p class="step-lede">
+        Two tiers — what a player pays for their first event, and what
+        they pay for each additional event. We'll show you the math
+        live so you can see what a 1-event vs 3-event registrant pays.
+      </p>
+
+      <div class="field-row">
+        <div class="field">
+          <label>First-event fee (USD)</label>
+          <input type="number" value="60.00">
+          <details class="hint" style="margin-top:6px;">
+            <summary>What's this?</summary>
+            <div class="body">
+              The amount a player pays for their FIRST event in this
+              tournament. Think of it as "entry — includes one event."
+              If a player only signs up for one event, this is all they
+              pay.
+            </div>
+          </details>
+        </div>
+        <div class="field">
+          <label>Each additional event (USD)</label>
+          <input type="number" value="20.00">
+          <details class="hint" style="margin-top:6px;">
+            <summary>What's this?</summary>
+            <div class="body">
+              Charged once for each event AFTER the first. Set to 0 if
+              players can sign up for unlimited events for the first-
+              event fee.
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="preview-math">
+        <div class="label">Preview math</div>
+        <div class="row"><span>1 event</span><span>$60.00</span></div>
+        <div class="row"><span>2 events</span><span>$80.00</span></div>
+        <div class="row"><span>3 events</span><span>$100.00</span></div>
+        <div class="row"><span>5 events</span><span>$140.00</span></div>
+      </div>
+
+      <details class="hint" style="margin-top:18px;">
+        <summary>Need a different price for a specific event?</summary>
+        <div class="body">
+          Most tournaments use the same two-tier price for every event.
+          If one of your events (e.g. an "Elite" division) should cost
+          something different, you can override that event's fee from
+          the Events step — it'll be a flat charge that ignores these
+          tiers for that event only.
+        </div>
+      </details>
+
+      <div class="wizard-actions">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Skip — free tournament</button>
+        <button class="btn-primary" style="margin-left:auto;">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Preview math is the cure for misconfiguration.</strong> The
+  green panel updates live as the user types — they see the
+  consequence of their inputs at three common counts (1 / 2 / 3
+  events) plus a stretch case. This is the org-side answer to the
+  backlog item that flagged organizers confusing the override model
+  (event fee = flat) with the additive model (event fee = surcharge).
+  The hint at the bottom links back to the Events step for the
+  rare per-event override case.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 5: Step 4 — Cancellation Policy presets                -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">5 · Step 4 of 8 — Cancellation policy (pick a preset)</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">My First Tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ Saved 2 minutes ago</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step active"><span class="indicator">4</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Cancellation policy</h1>
+      <p class="step-lede">
+        Pick a refund policy that fits how strict you want to be.
+        We'll show this to players before they pay, and use it to
+        process refunds automatically when someone withdraws or if
+        you cancel the tournament.
+      </p>
+
+      <div class="policy-cards">
+        <div class="policy-card">
+          <div class="title"><span class="radio-dot"></span>Generous</div>
+          <div class="desc">
+            <strong>Full refund</strong> up to 7 days before the tournament starts.<br>
+            <strong>No refund</strong> within 7 days.<br>
+            <em>Good for: new tournaments building trust with players.</em>
+          </div>
+          <div class="pick">Pick this</div>
+        </div>
+        <div class="policy-card selected">
+          <div class="title"><span class="radio-dot"></span>Standard</div>
+          <div class="desc">
+            <strong>Full refund</strong> within 7 days of registration.<br>
+            <strong>Half refund</strong> within 30 days of tournament.<br>
+            <strong>No refund</strong> within 7 days of tournament.<br>
+            <em>Good for: most tournaments. The default.</em>
+          </div>
+          <div class="pick">✓ Selected</div>
+        </div>
+        <div class="policy-card">
+          <div class="title"><span class="radio-dot"></span>Strict</div>
+          <div class="desc">
+            <strong>No refunds</strong> after registration — your spot
+            is locked in.<br>
+            <em>Good for: high-demand events with waitlists where you
+            don't want flake risk.</em>
+          </div>
+          <div class="pick">Pick this</div>
+        </div>
+      </div>
+
+      <details class="hint">
+        <summary>Need something different? Pick "Custom" instead.</summary>
+        <div class="body">
+          Set your own refund windows (days before tournament) and
+          percentages (100% / 50% / 0% / something custom). The math
+          for player withdraws + tournament cancellation will follow
+          whatever you set here.
+        </div>
+      </details>
+
+      <div class="wizard-actions">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Skip — I'll set this later</button>
+        <button class="btn-primary" style="margin-left:auto;">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Three presets + Custom + Skip.</strong> Three cards, one
+  always selected by default (Standard), with plain-English copy
+  that names the refund windows. Below, a collapsed "Custom" option
+  for organizers who want full control. Skip is still available —
+  the tournament publishes with "no policy set," in which case the
+  player-facing public page reads "Contact organizer for refund
+  questions" rather than a structured policy.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 6: A skipped step — Sponsors                           -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">6 · Skipping an optional step — Sponsors &amp; branding</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">My First Tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ All changes saved</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step active"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Sponsors &amp; branding</h1>
+      <p class="step-lede">
+        Tournament logo, sponsor logos, social links — anything you want
+        on the public tournament page besides the basic event info.
+        Most first-time tournaments skip this and add sponsors after
+        they've sold a few.
+      </p>
+
+      <div style="background:#fafafa;border:1px dashed #d1d5db;border-radius:8px;padding:32px;text-align:center;color:#888;font-size:14px;line-height:1.6;">
+        Drag a logo here, or click to upload.<br>
+        <span style="font-size:12px;">PNG / SVG, ideally square, under 500 KB</span>
+      </div>
+
+      <div style="margin-top:24px;font-size:13px;color:#555;font-weight:500;">Sponsors</div>
+      <div style="margin-top:8px;padding:14px;background:#fafafa;border:1px dashed #d1d5db;border-radius:8px;color:#888;font-size:13px;text-align:center;">
+        No sponsors added yet. <a href="#" style="color:#2563eb;">+ Add a sponsor</a>
+      </div>
+
+      <div style="margin-top:18px;padding:14px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;color:#7a5d00;font-size:13px;line-height:1.55;">
+        <strong>Heads up:</strong> nothing here is required. Sponsors,
+        logos, and social links can be added or changed at any time
+        after publishing from the tournament's Edit page.
+      </div>
+
+      <div class="wizard-actions">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Skip for now</button>
+        <button class="btn-primary" style="margin-left:auto;">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Skip is a first-class action, not hidden.</strong> Both
+  buttons (Skip and Save & continue) are visible. Skipping marks the
+  step as <em>skipped</em> in the rail — different from <em>done</em>
+  — and the Review step at the end will surface skipped steps so
+  the user can fill them later. The amber callout at the bottom
+  reassures the first-timer that this isn't a one-shot decision.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 7: Step 8 — Review & publish                           -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">7 · Step 8 of 8 — Review &amp; publish</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">My First Tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ All changes saved</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step skipped"><span class="indicator">!</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div><div class="step-sub">Skipped</div></div></li>
+        <li class="step skipped"><span class="indicator">!</span><div class="step-meta"><div class="step-title">FAQs</div><div class="step-sub">Skipped</div></div></li>
+        <li class="step skipped"><span class="indicator">!</span><div class="step-meta"><div class="step-title">Accept payment</div><div class="step-sub">Skipped</div></div></li>
+        <li class="step active"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Review &amp; publish</h1>
+      <p class="step-lede">
+        Here's everything you've set up. Anything skipped is highlighted
+        in amber — you can come back to those after publishing. Or
+        publish now and fill them in later from the tournament's edit page.
+      </p>
+
+      <div class="review-grid">
+        <div class="review-card">
+          <div class="title">Basics <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            <strong>My First Tournament</strong><br>
+            Jun 14–16, 2026 · WMPC Indoor Courts<br>
+            <em>"A friendly weekend of pickleball at the home of WMPC."</em>
+          </div>
+          <a href="#" class="edit-link">Edit basics →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">Events <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            <strong>9 events</strong>: Womens 3.0 / 3.5 / 4.0+, Mens 3.0
+            / 3.5 / 4.0+, Mixed 3.0 / 3.5 / 4.0+
+          </div>
+          <a href="#" class="edit-link">Edit events →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">Pricing <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            <strong>$60</strong> first event · <strong>$20</strong> each additional<br>
+            (1 event = $60 · 3 events = $100)
+          </div>
+          <a href="#" class="edit-link">Edit pricing →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">Cancellation policy <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            <strong>Standard</strong> — full refund within 7 days of
+            registration, half refund within 30 days of tournament,
+            no refund within 7 days.
+          </div>
+          <a href="#" class="edit-link">Edit policy →</a>
+        </div>
+        <div class="review-card skipped">
+          <div class="title">Sponsors &amp; branding <span class="pill-status pill-skipped">Skipped</span></div>
+          <div class="body">
+            Public page will show the default WMPC org branding. Add
+            sponsors any time.
+          </div>
+          <a href="#" class="edit-link">Configure now →</a>
+        </div>
+        <div class="review-card skipped">
+          <div class="title">FAQs <span class="pill-status pill-skipped">Skipped</span></div>
+          <div class="body">
+            Public page won't have an FAQ section. Add common Qs any time.
+          </div>
+          <a href="#" class="edit-link">Configure now →</a>
+        </div>
+        <div class="review-card skipped">
+          <div class="title">Accept payment <span class="pill-status pill-skipped">Skipped</span></div>
+          <div class="body">
+            <strong>Heads up:</strong> until Stripe Connect is connected,
+            registrations will be marked as paid without actually
+            collecting money. Fine for testing; not fine for a real run.
+          </div>
+          <a href="#" class="edit-link">Connect Stripe →</a>
+        </div>
+      </div>
+
+      <div class="wizard-actions" style="margin-top:24px;">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Save as draft (don't publish yet)</button>
+        <button class="btn-primary btn-big" style="margin-left:auto;">Publish tournament</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Review is a state-of-the-tournament dashboard, not a final
+  approval step.</strong> Every section is a card with done / skipped
+  state, the content set in that step summarized inline, and an Edit
+  link that jumps back to the step. Skipped steps are amber but not
+  blocking. Two CTAs: Publish (commits the tournament to
+  <code>status='published'</code> and makes the public page live)
+  or Save as draft (stays as draft; the wizard can be re-entered
+  anytime from the Tournaments list).
+</div>
+
+<div class="open-q">
+  <strong>Open question:</strong> what's the smallest blocking set
+  before Publish actually does anything? Definitely: name + dates +
+  ≥1 event. Probably: location, otherwise the public page reads weirdly.
+  Maybe: pricing — though a $0 free tournament is legitimate. Should
+  Publish be a single button that's just enabled-or-not, or a button
+  that on-click runs a validation pass and explains what's missing?
+  Leaning toward the latter — friendlier for the first-timer.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 8: After Clone — Review with everything pre-filled     -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">8 · After clicking "Clone from a past tournament…" — lands straight at Review</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Ron</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">2nd Annual Mud Season Invitational (Copy)</div>
+        <div class="draft-badge">Draft · Cloned</div>
+      </div>
+      <div class="save-indicator">✓ Cloned from "2nd Annual Mud Season Invitational"</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div><div class="step-sub">Dates need updating</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step active"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn disabled" aria-disabled="true">Publish (dates needed)</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <div class="clone-drawer">
+        <strong>Cloned from "2nd Annual Mud Season Invitational" (May 2026).</strong>
+        Everything's copied — events, pricing, cancellation policy,
+        sponsors, FAQs. The new tournament's start &amp; end dates
+        were left blank for you to set. Update those and you're
+        ready to publish.
+      </div>
+
+      <h1 class="step-h1">Review &amp; publish</h1>
+      <p class="step-lede">
+        Skim the summary below — if last year's setup is right for
+        this year, you're done except for the dates. Click any
+        section to make a change.
+      </p>
+
+      <div class="review-grid">
+        <div class="review-card" style="border-color:#fbbf24;background:#fffbeb;">
+          <div class="title">Basics <span class="pill-status" style="background:#fef3c7;color:#7a5d00;">Needs dates</span></div>
+          <div class="body">
+            <strong>2nd Annual Mud Season Invitational (Copy)</strong><br>
+            <span style="color:#7a5d00;">Dates not set — please update</span> · WMPC Indoor Courts<br>
+            <em>"This is the most amazing tournament you will ever play in — guaranteed!"</em>
+          </div>
+          <a href="#" class="edit-link">Set dates →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">Events <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            <strong>7 events</strong> · cloned from last year's
+            structure
+          </div>
+          <a href="#" class="edit-link">Edit events →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">Pricing <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            <strong>$60</strong> first event · <strong>$20</strong> each additional
+          </div>
+          <a href="#" class="edit-link">Edit pricing →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">Cancellation policy <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            <strong>Standard</strong> (cloned)
+          </div>
+          <a href="#" class="edit-link">Edit policy →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">Sponsors &amp; branding <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            4 sponsor logos · WMPC banner image
+          </div>
+          <a href="#" class="edit-link">Edit branding →</a>
+        </div>
+        <div class="review-card">
+          <div class="title">FAQs <span class="pill-status pill-done">Done</span></div>
+          <div class="body">
+            8 questions cloned. Worth re-reading once before publishing.
+          </div>
+          <a href="#" class="edit-link">Edit FAQs →</a>
+        </div>
+      </div>
+
+      <div class="wizard-actions" style="margin-top:24px;">
+        <button class="btn-ghost">← Back to Basics (set dates)</button>
+        <button class="btn-secondary">Save as draft (don't publish yet)</button>
+        <button class="btn-primary btn-big" style="margin-left:auto;" disabled>Publish — set dates first</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Clone lands at Review with everything pre-filled.</strong>
+  Every step shows as Done in the rail (the user can dive into any
+  step to adjust); a green callout at the top of the pane reminds
+  them WHERE the data came from. The Basics card is highlighted
+  amber because dates were intentionally left blank — they're the
+  one thing that must change. Publish is disabled until dates land,
+  with the button's copy explaining why.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- Closing — what's worth deciding next                          -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="open-q">
+  <strong>Bigger open questions worth resolving before code</strong>
+  <ul>
+    <li><strong>Is the wizard one URL with internal steps, or one URL per step?</strong> Per-step URLs (e.g. <code>/admin/:org/tournaments/new/events</code>) make deep-linking + bookmark-resume easy but add routing complexity. One-URL-with-internal-steps is simpler but doesn't survive a page refresh as cleanly. I'd lean toward per-step URLs since "Save & exit, come back tomorrow" is a real use case.</li>
+    <li><strong>How does Save & exit work mid-wizard?</strong> The tournament already exists as draft after Step 1, so "exit" just routes the user back to the Tournaments list. Re-entering opens the wizard at the next-unfinished step. That seems right.</li>
+    <li><strong>Where does the wizard live alongside the existing TournamentFormPage?</strong> Three options: (a) replace the form entirely for create-mode and keep the form only for edit-mode; (b) wizard is the default but a "switch to all-fields form" escape hatch exists for power users; (c) the form stays and the wizard is layered on top via per-step routing. Leaning (a) for v1 — the wizard IS the create flow.</li>
+    <li><strong>Default event template — org-level configurable?</strong> Already flagged. A new club might want different skill breakpoints baked into their defaults. Add to backlog as a Soon follow-up to the wizard's main item.</li>
+    <li><strong>Where do per-event Edit modals live?</strong> The Events step's per-row Edit link opens what? A modal with all event settings (format, gender, rating range, capacity, fees, bracket type, points-to-win, etc.) is a lot of fields. Maybe an inline expand on the row, like the inline-register pattern from the public flow.</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>
