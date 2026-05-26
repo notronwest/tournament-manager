@@ -14,6 +14,10 @@ import {
   formatUsd,
   type LineItem,
 } from "../../lib/pricing";
+import {
+  pickActivePricingTier,
+  type PricingTier,
+} from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -74,6 +78,13 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
+  // The tournament's pricing tiers. Loaded alongside the tournament.
+  // The active tier (today vs. tier windows) supplies first-event and
+  // additional-event fees to computeLineItems — which then snapshots
+  // those values onto event_registrations.event_fee_cents at pay-time,
+  // locking the price for this checkout regardless of future tier
+  // changes.
+  const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [rows, setRows] = useState<PendingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +128,16 @@ export default function CheckoutPage() {
       return;
     }
     setTournament(t);
+
+    // Load pricing tiers alongside the tournament. computeLineItems
+    // below reads the active tier's first-event + additional-event
+    // fees, and the price snapshot on pay-time uses those same values.
+    const { data: tierRows } = await supabase
+      .from("tournament_pricing_tiers")
+      .select("*")
+      .eq("tournament_id", t.id)
+      .order("sort_order", { ascending: true });
+    setTiers(tierRows ?? []);
 
     // Find my player id, then load my pending regs joined to event
     // info + any pending outbound invite (for partner display +
@@ -242,18 +263,26 @@ export default function CheckoutPage() {
     void reload();
   }, [reload]);
 
-  // Compute the line items + total using D's pricing helper. This
-  // is the same math the bar runs, just localized to this
-  // tournament's rows.
-  const { items: lineItems, totalCents } = tournament
+  // Compute the line items + total using D's pricing helper, fed
+  // by the currently-active pricing tier. The same math runs in
+  // PendingPaymentsBar across all open tournaments — here it's
+  // localized to this tournament's rows.
+  //
+  // The tier picked at *render* is the tier whose price gets
+  // snapshotted at pay-time. If the user sits on this page across
+  // a tier boundary, they'll see the active tier update on next
+  // reload — we deliberately don't lock the displayed total until
+  // they actually click Pay, which is also when the snapshot lands.
+  const activeTier = pickActivePricingTier(tiers);
+  const { items: lineItems, totalCents } = tournament && activeTier
     ? computeLineItems(
         rows.map((r) => ({
           id: r.eventId,
           event_fee_cents: r.eventFeeCentsOverride,
         })),
         {
-          entry_fee_cents: tournament.entry_fee_cents,
-          additional_event_fee_cents: tournament.additional_event_fee_cents,
+          entry_fee_cents: activeTier.first_event_fee_cents,
+          additional_event_fee_cents: activeTier.additional_event_fee_cents,
         },
       )
     : { items: [] as LineItem[], totalCents: 0 };

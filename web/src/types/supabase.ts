@@ -784,6 +784,53 @@ export type Database = {
           },
         ]
       }
+      tournament_pricing_tiers: {
+        Row: {
+          additional_event_fee_cents: number
+          created_at: string
+          ends_at: string | null
+          first_event_fee_cents: number
+          id: string
+          label: string
+          sort_order: number
+          starts_at: string | null
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          additional_event_fee_cents?: number
+          created_at?: string
+          ends_at?: string | null
+          first_event_fee_cents?: number
+          id?: string
+          label: string
+          sort_order: number
+          starts_at?: string | null
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          additional_event_fee_cents?: number
+          created_at?: string
+          ends_at?: string | null
+          first_event_fee_cents?: number
+          id?: string
+          label?: string
+          sort_order?: number
+          starts_at?: string | null
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_pricing_tiers_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tournaments: {
         Row: {
           additional_event_fee_cents: number
@@ -799,6 +846,7 @@ export type Database = {
           location_name: string | null
           name: string
           organization_id: string
+          pricing_pattern: Database["public"]["Enums"]["pricing_pattern"]
           registration_closes_at: string | null
           registration_opens_at: string | null
           slug: string
@@ -820,6 +868,7 @@ export type Database = {
           location_name?: string | null
           name: string
           organization_id: string
+          pricing_pattern?: Database["public"]["Enums"]["pricing_pattern"]
           registration_closes_at?: string | null
           registration_opens_at?: string | null
           slug: string
@@ -841,6 +890,7 @@ export type Database = {
           location_name?: string | null
           name?: string
           organization_id?: string
+          pricing_pattern?: Database["public"]["Enums"]["pricing_pattern"]
           registration_closes_at?: string | null
           registration_opens_at?: string | null
           slug?: string
@@ -868,6 +918,27 @@ export type Database = {
         Returns: undefined
       }
       current_player_id: { Args: never; Returns: string }
+      current_pricing_tier: {
+        Args: { as_of?: string; tournament_id_arg: string }
+        Returns: {
+          additional_event_fee_cents: number
+          created_at: string
+          ends_at: string | null
+          first_event_fee_cents: number
+          id: string
+          label: string
+          sort_order: number
+          starts_at: string | null
+          tournament_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tournament_pricing_tiers"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       decline_partner_invite: {
         Args: { p_invite_id: string }
         Returns: undefined
@@ -941,6 +1012,11 @@ export type Database = {
         | "refunded"
         | "partially_refunded"
       player_gender: "M" | "F" | "X"
+      pricing_pattern:
+        | "single"
+        | "early_bird"
+        | "early_bird_plus_late"
+        | "custom"
       rating_source: "dupr" | "pbvision" | "wmpc_rating_hub"
       registration_status:
         | "pending_payment"
@@ -1123,6 +1199,12 @@ export const Constants = {
         "partially_refunded",
       ],
       player_gender: ["M", "F", "X"],
+      pricing_pattern: [
+        "single",
+        "early_bird",
+        "early_bird_plus_late",
+        "custom",
+      ],
       rating_source: ["dupr", "pbvision", "wmpc_rating_hub"],
       registration_status: [
         "pending_payment",

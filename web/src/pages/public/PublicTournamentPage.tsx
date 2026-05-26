@@ -11,6 +11,11 @@ import { PartnerSearch } from "../../components/PartnerSearch";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import { eligibilityChips } from "../../lib/eligibility";
 import { formatUsd, priceTiers } from "../../lib/pricing";
+import {
+  pickActivePricingTier,
+  pickNextPricingTier,
+  type PricingTier,
+} from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -80,6 +85,12 @@ export default function PublicTournamentPage() {
   const { refresh: refreshPending } = usePendingPayments();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
+  // Ordered pricing tiers for this tournament. Backfilled by migration
+  // 20260526170000 — every existing tournament has at least one
+  // ('Standard') tier holding the legacy entry_fee + additional fees.
+  // The active tier (today vs. the tier windows) drives both the
+  // price meta shown in the header and the math used at checkout.
+  const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // The signed-in user's player record. Needed for the inline
@@ -166,6 +177,22 @@ export default function PublicTournamentPage() {
       return;
     }
     setEvents(evs ?? []);
+
+    // Pricing tiers — anon-readable via the same parent-visibility
+    // RLS as events. Pulled alongside events so the meta header can
+    // show the active tier's prices + an upcoming-tier countdown if
+    // one applies.
+    const { data: tierRows, error: tierErr } = await supabase
+      .from("tournament_pricing_tiers")
+      .select("*")
+      .eq("tournament_id", t.id)
+      .order("sort_order", { ascending: true });
+    if (tierErr) {
+      setError(tierErr.message);
+      setLoading(false);
+      return;
+    }
+    setTiers(tierRows ?? []);
 
     // F3: pull the set of already-registered player_ids for every
     // event in this tournament. Goes through a SECURITY DEFINER RPC
@@ -420,21 +447,41 @@ export default function PublicTournamentPage() {
               }
             />
           )}
-          {tournament.entry_fee_cents > 0 && (
-            <Meta
-              label="Entry fee"
-              value={
-                // Two-tier label when the additional-event fee
-                // differs from the first-event fee. Otherwise a
-                // single price is clearer than spelling out the
-                // tiers redundantly.
-                tournament.additional_event_fee_cents !==
-                tournament.entry_fee_cents
-                  ? `$${(tournament.entry_fee_cents / 100).toFixed(2)} first event · $${(tournament.additional_event_fee_cents / 100).toFixed(2)} additional`
-                  : `$${(tournament.entry_fee_cents / 100).toFixed(2)} per event`
-              }
-            />
-          )}
+          {(() => {
+            // Pricing meta is driven by the active tier, not the
+            // legacy tournament.entry_fee_cents. Single-tier
+            // tournaments (the default / backfill case) get the
+            // same simple label they always did; multi-tier
+            // tournaments also surface "Early bird ends …" /
+            // "Late registration starts …" countdowns.
+            const activeTier = pickActivePricingTier(tiers);
+            const nextTier = pickNextPricingTier(tiers);
+            if (!activeTier || activeTier.first_event_fee_cents === 0) {
+              return null;
+            }
+            const priceLabel =
+              activeTier.additional_event_fee_cents !==
+              activeTier.first_event_fee_cents
+                ? `$${(activeTier.first_event_fee_cents / 100).toFixed(2)} first event · $${(activeTier.additional_event_fee_cents / 100).toFixed(2)} additional`
+                : `$${(activeTier.first_event_fee_cents / 100).toFixed(2)} per event`;
+            // Only label the tier when there's more than one — a
+            // single-tier tournament doesn't need to say "Standard."
+            const showsTierLabel = tiers.length > 1;
+            return (
+              <>
+                <Meta
+                  label={showsTierLabel ? `Entry fee · ${activeTier.label}` : "Entry fee"}
+                  value={priceLabel}
+                />
+                {nextTier && activeTier.ends_at && (
+                  <Meta
+                    label="Next price window"
+                    value={`${nextTier.label} starts ${fmtDate(activeTier.ends_at)}`}
+                  />
+                )}
+              </>
+            );
+          })()}
           <Meta
             label="Status"
             value={capitalize(tournament.status)}
