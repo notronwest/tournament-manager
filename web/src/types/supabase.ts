@@ -897,6 +897,13 @@ export type Database = {
         Returns: boolean
       }
       is_org_member: { Args: { org: string }; Returns: boolean }
+      players_registered_for_events: {
+        Args: { p_event_ids: string[] }
+        Returns: {
+          event_id: string
+          player_id: string
+        }[]
+      }
     }
     Enums: {
       bracket_type:

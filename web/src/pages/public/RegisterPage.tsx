@@ -122,6 +122,14 @@ export default function RegisterPage() {
   const [existingRegs, setExistingRegs] = useState<Map<string, ExistingReg>>(
     new Map(),
   );
+  // F3: registered player_ids per event (paid + pending), used to
+  // filter the PartnerSearch results so we can't pick someone
+  // who's already in. Populated by the players_registered_for_events
+  // RPC because event_registrations RLS would otherwise hide them
+  // from a non-org-member SELECT.
+  const [registeredByEvent, setRegisteredByEvent] = useState<
+    Map<string, Set<string>>
+  >(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -219,6 +227,30 @@ export default function RegisterPage() {
         return;
       }
       setEvents(evs ?? []);
+
+      // 3a. F3: pull registered player ids per event so PartnerSearch
+      //     can filter them out of the picker. Goes through the
+      //     SECURITY DEFINER RPC because event_registrations RLS
+      //     limits non-org-member SELECTs to my own rows.
+      if (evs && evs.length > 0) {
+        const { data: regsByEvent } = await supabase.rpc(
+          "players_registered_for_events",
+          { p_event_ids: evs.map((e) => e.id) },
+        );
+        if (cancelled) return;
+        const grouped = new Map<string, Set<string>>();
+        for (const row of regsByEvent ?? []) {
+          let set = grouped.get(row.event_id);
+          if (!set) {
+            set = new Set<string>();
+            grouped.set(row.event_id, set);
+          }
+          set.add(row.player_id);
+        }
+        setRegisteredByEvent(grouped);
+      } else {
+        setRegisteredByEvent(new Map());
+      }
 
       // 3. The user's player row. Guaranteed to exist + have a name
       //    by the time we render — RequireProfile redirects to
@@ -1278,9 +1310,16 @@ export default function RegisterPage() {
                     disabled={submitting}
                     onChange={(patch) => setSel(ev.id, patch)}
                     // Stop the user from picking themselves as their
-                    // own partner. The picker excludes these ids
-                    // from its search results.
-                    excludePlayerIds={me ? [me.id] : []}
+                    // own partner, AND filter out anyone already
+                    // registered (paid OR pending) for this event —
+                    // they can't accept the invite anyway. The set
+                    // for this event was loaded via the F3 RPC.
+                    excludePlayerIds={[
+                      ...(me ? [me.id] : []),
+                      ...Array.from(
+                        registeredByEvent.get(ev.id) ?? new Set<string>(),
+                      ),
+                    ]}
                   />
                 );
               })}

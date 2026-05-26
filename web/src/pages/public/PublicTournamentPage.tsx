@@ -92,6 +92,15 @@ export default function PublicTournamentPage() {
   // render these as a banner at the top so a player who got picked
   // sees the invite the moment they hit the tournament page.
   const [inboundInvites, setInboundInvites] = useState<InboundInvite[]>([]);
+  // F3: set of player_ids already registered (paid or pending) per
+  // event, keyed by event_id. We pass these into PartnerSearch's
+  // excludePlayerIds so a search never returns someone who's
+  // already in the event — they can't accept the invite anyway,
+  // and the invitee would see a confusing "you've been invited"
+  // banner for an event they're already in.
+  const [registeredByEvent, setRegisteredByEvent] = useState<
+    Map<string, Set<string>>
+  >(new Map());
 
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
@@ -152,6 +161,31 @@ export default function PublicTournamentPage() {
       return;
     }
     setEvents(evs ?? []);
+
+    // F3: pull the set of already-registered player_ids for every
+    // event in this tournament. Goes through a SECURITY DEFINER RPC
+    // because event_registrations RLS blocks anon / non-org-member
+    // SELECTs of other players' rows. The RPC returns only ids —
+    // no PII — and lets the partner picker exclude them from
+    // results. Done in parallel with the auth + me load below.
+    if (evs && evs.length > 0) {
+      const { data: regsByEvent } = await supabase.rpc(
+        "players_registered_for_events",
+        { p_event_ids: evs.map((e) => e.id) },
+      );
+      const grouped = new Map<string, Set<string>>();
+      for (const row of regsByEvent ?? []) {
+        let set = grouped.get(row.event_id);
+        if (!set) {
+          set = new Set<string>();
+          grouped.set(row.event_id, set);
+        }
+        set.add(row.player_id);
+      }
+      setRegisteredByEvent(grouped);
+    } else {
+      setRegisteredByEvent(new Map());
+    }
 
     if (!user || !evs || evs.length === 0) {
       // Anon visitor — clear any stale state from a previous session.
@@ -532,6 +566,9 @@ export default function PublicTournamentPage() {
                 myStatus={myStatus.get(ev.id)}
                 me={me}
                 user={user}
+                alreadyRegisteredPlayerIds={
+                  registeredByEvent.get(ev.id) ?? new Set()
+                }
                 onChanged={async () => {
                   // Refetch both the page's local state AND the
                   // site-wide pending bar — they read different
@@ -563,6 +600,7 @@ function EventCard({
   myStatus,
   me,
   user,
+  alreadyRegisteredPlayerIds,
   onChanged,
   onNeedsAuth,
 }: {
@@ -574,6 +612,10 @@ function EventCard({
   myStatus: MyRegStatus | undefined;
   me: Player | null;
   user: ReturnType<typeof useAuth>["user"];
+  // F3: ids of players already registered for THIS event. Folded
+  // into the PartnerSearch excludePlayerIds so the search can't
+  // surface someone who's already in.
+  alreadyRegisteredPlayerIds: Set<string>;
   onChanged: () => Promise<void> | void;
   onNeedsAuth: () => void;
 }) {
@@ -992,7 +1034,10 @@ function EventCard({
               <PartnerSearch
                 selection={partner}
                 onChange={setPartner}
-                excludePlayerIds={me ? [me.id] : []}
+                excludePlayerIds={[
+                  ...(me ? [me.id] : []),
+                  ...Array.from(alreadyRegisteredPlayerIds),
+                ]}
               />
             </>
           )}
