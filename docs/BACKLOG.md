@@ -145,6 +145,15 @@ Known work that's not next-next but is on the radar.
 
 **Touches:** `PartnerSearch` chip render (add inline button next to ×), `ChangeSummary` banner (per-row undo).
 
+### Admin: drop or merge the Overview page
+- **As an Organizer**, I want the admin sidebar to lead me straight to my Tournaments list instead of stopping at a near-empty "Overview" page, **so that** my landing experience reflects where the actual work lives.
+
+**Touches:** `OrgOverviewPage` is currently the index route under `/admin/:orgSlug`. Two paths:
+- **Drop it:** change the index route to render `TournamentsListPage` directly. Sidebar loses the "Overview" link; Tournaments becomes the implicit home.
+- **Merge it:** keep the index route but make it Tournaments + a small org-context strip (member count, Stripe status, last-activity) at the top. Becomes a useful overview rather than a placeholder.
+
+Decision rule: build org-wide stats / content first (members count, Stripe Connect status, recent activity across tournaments, payouts summary once Stripe lands). If that content materializes → keep Overview and add it. If we go a quarter without anything legit to put there → drop the page.
+
 ### Pricing copy refinement: "entry fee includes one event"
 - **As an Organizer**, I want the pricing form to be framed as "tournament entry fee (includes one event) + each additional event" instead of "first-event fee + additional-event fee," **so that** the model matches how I describe it to players ("$60 to enter, $20 each extra event").
 - **As a Player**, I want the running total breakdown to read "Entry + 2 extra events" rather than "1 first + 2 additional," **so that** the line items match how I think about what I'm paying for.
