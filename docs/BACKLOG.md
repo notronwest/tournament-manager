@@ -118,11 +118,23 @@ Things actively queued — the next handful of commits.
 
 **Touches:** Button on `TournamentDetailPage` (and / or `TournamentsListPage`). Server-side: an RPC that deep-copies the tournament row + its events + sponsor / FAQ rows into a new tournament with `status='draft'` and dates left blank. After clone, route the user into the new tournament's edit form (or the upcoming creation wizard's review step) with everything pre-filled. See scenario C1 in `docs/scenarios/tournament-lifecycle.md`.
 
+### Org-level default venue (and other org settings)
+- **As an Organizer** running multiple tournaments at the same venue, I want my organization to have a saved default venue / location that pre-fills on every new tournament I create, **so that** I'm not re-typing "WMPC Indoor Courts" for the tenth time and can change it per-tournament when needed.
+
+**Touches:** New columns on `organizations` (`default_venue_name text`, `default_venue_address text` — keep it flat for v1; a multi-venue `venues` table is a follow-up if/when clubs need it). New "Organization settings" admin page (or section on a future Org Overview). Wizard's Basics step pre-fills the location field from these and offers a "Save this as my org's default for future tournaments" checkbox so a first-time tournament writes the default back. Same hook is useful for org-wide settings down the line (default event template, default cancellation policy preset).
+
 ### Creation wizard: friendly off-ramps + default event template
 - **As a first-time Organizer**, I want tournament creation to be a multi-step wizard with explicit "Skip / I'll do this later" affordances and inline "what does this mean?" hints, **so that** I can build a publishable tournament without needing to understand every term up front.
-- **As an experienced Organizer**, I want the wizard's Events step to come pre-populated with a sensible default set of divisions (typical club bracket: Mens / Womens / Mixed across 3.0 / 3.5 / 4.0 / 4.5), **so that** I'm removing and adjusting instead of entering twelve events from scratch.
+- **As an experienced Organizer**, I want the wizard's Events step to come pre-populated with a sensible default set of divisions (typical club bracket: Mens / Womens / Mixed across 3.0 / 3.5 / 4.0 / 4.5) with **checkboxes** to include/exclude each one, **so that** I'm un-checking and adjusting instead of entering twelve events from scratch.
 
-**Touches:** Big-rock item. Replaces the create-mode of `TournamentFormPage` with a wizard component. Required-core fields in step 1 (name / dates / location); subsequent steps (events template, pricing, sponsors, FAQs, cancellation policy — see separate item below, Stripe Connect connection) each carry an explicit Skip. Tournament lands in `status='draft'` after step 1 — publishable any time the organizer hits Publish. See scenarios C2 + C3 + C4 in `docs/scenarios/tournament-lifecycle.md` (C4 — quick test tournament — falls out for free if this wizard is genuinely fast and skippable).
+**Touches:** Big-rock item. Replaces the create-mode of `TournamentFormPage` with a wizard component. **Per-step URLs** (`/admin/:org/tournaments/new/basics` → `/events` → `/pricing` → ...) so refresh and bookmarks work. Tournament lands in `status='draft'` after step 1; Save & exit returns to Tournaments list and re-entering resumes at the next unfinished step. Per-event Edit is inline expand on the row (matches the public-flow register pattern, no modal-soup). See scenarios C2 + C3 + C4 in `docs/scenarios/tournament-lifecycle.md` and the mockup at `mockups/tournament-creation-flow.html`.
+
+**Minimum-to-publish (decided):**
+- **Hard-required** (Publish button stays disabled until met): name, start + end date, location, ≥1 event checked, pricing decision made (any value including $0).
+- **Soft-required** (Publish allowed but a confirm modal calls out gaps): cancellation policy, Stripe Connect.
+- **Optional** (no nag): sponsors / branding, FAQs.
+
+The Review step renders a status banner — "Ready to publish ✓" when hard-required is met, "Set N more things before you can publish" otherwise with a checklist.
 
 ---
 

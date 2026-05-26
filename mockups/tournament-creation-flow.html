@@ -586,14 +586,25 @@
 <div class="open-q">
   <strong>Defaults baked into this mockup.</strong> Push back on any of these.
   <ul>
-    <li><strong>Wizard, not single form.</strong> Left rail with 8 steps; right pane is the active step.</li>
-    <li><strong>Step 1 (Basics) is the only required step.</strong> Every other step has an explicit Skip. Once Step 1 is filled, the tournament exists as a <code>draft</code> and Publish becomes possible (subject to "at least one event" later).</li>
+    <li><strong>Wizard, not single form.</strong> Left rail with 8 steps; right pane is the active step. Per-step URLs (e.g. <code>/admin/:org/tournaments/new/events</code>) so deep-link / refresh / bookmark all work.</li>
+    <li><strong>Wizard replaces create-mode</strong> of <code>TournamentFormPage</code> entirely. Edit-mode stays as the existing all-fields form for now.</li>
+    <li><strong>Save &amp; exit</strong> at any step routes back to the Tournaments list. Re-entering opens the wizard at the next unfinished step.</li>
     <li><strong>Autosave per step.</strong> The user never loses progress; the save indicator in the rail confirms that.</li>
     <li><strong>"What does this mean?"</strong> collapsible hints next to fields that use jargon, so a first-timer doesn't need to leave the wizard to look something up.</li>
-    <li><strong>Default event template</strong> on Step 2 — typical club bracket pre-populated. The organizer adjusts rather than enters from scratch.</li>
+    <li><strong>Default event template</strong> on Step 2 — typical club bracket pre-populated. The organizer adjusts rather than enters from scratch. Per-event Edit is inline-expand on the row (matches the public-flow pattern).</li>
     <li><strong>Clone deep-copies everything</strong> and lands in the Review step with all fields pre-filled (just verify the new dates).</li>
-    <li><strong>Publish is always reachable from the rail</strong>, not just at the end. Once required fields are set, Publish goes blue.</li>
+    <li><strong>Publish is reachable from the rail</strong> but stays disabled until the hard-required set is met — see "Minimum to publish" callout below.</li>
   </ul>
+</div>
+
+<div class="ref" style="background:#fef3c7;border-color:#f59e0b;color:#5b4604;">
+  <strong>Minimum to publish (decided):</strong>
+  <ul style="margin: 6px 0 0; padding-left: 18px;">
+    <li><strong>Hard-required</strong> (Publish stays disabled until met): tournament <strong>name</strong>, <strong>start + end date</strong>, <strong>location</strong>, <strong>≥1 event</strong>, and <strong>pricing decision made</strong> (any value, including $0 for a free tournament).</li>
+    <li><strong>Soft-required</strong> (Publish allowed, but a confirm modal calls out what's missing): <strong>cancellation policy</strong> (public page falls back to "contact organizer" if unset) and <strong>Stripe Connect</strong> (registrations save as paid without collecting money — fine for testing, not for production).</li>
+    <li><strong>Optional</strong>: sponsors / branding, FAQs.</li>
+  </ul>
+  Hard-required set drives the Publish-button enabled state on every screen of the wizard. Review screen surfaces both hard and soft gaps as concrete checklist items.
 </div>
 
 <!-- ───────────────────────────────────────────────────────────── -->
@@ -726,7 +737,14 @@
 
       <div class="field">
         <label>Venue / location <span class="req">*</span></label>
-        <input type="text" placeholder="e.g. WMPC Indoor Courts">
+        <input type="text" value="WMPC Indoor Courts" placeholder="e.g. WMPC Indoor Courts">
+        <div style="font-size:11px;color:#888;margin-top:4px;">
+          Pre-filled from your organization's default venue.
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-top:8px;cursor:pointer;">
+          <input type="checkbox" checked>
+          Save this as my organization's default for future tournaments
+        </label>
         <details class="hint" style="margin-top:6px;">
           <summary>Not sure what to put here?</summary>
           <div class="body">
@@ -805,10 +823,16 @@
         tournament needs at least one event before you can publish.
       </p>
 
+      <div style="font-size:13px;color:#666;margin-bottom:10px;">
+        ✓ Checked rows are <strong>included</strong> in this tournament.
+        Uncheck what you don't want; the row will fade so you can still
+        see what's been excluded.
+      </div>
       <div class="events-grid">
         <table>
           <thead>
             <tr>
+              <th style="width:36px;"></th>
               <th>Event</th>
               <th>Format</th>
               <th>Max teams</th>
@@ -818,79 +842,92 @@
           </thead>
           <tbody>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Womens 3.0-3.49</strong></td>
               <td>Doubles · Women</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Womens 3.5-3.99</strong></td>
               <td>Doubles · Women</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Womens 4.0+</strong></td>
               <td>Doubles · Women</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
-            <tr>
-              <td><strong>Mens 3.0-3.49</strong></td>
+            <tr style="opacity:0.45;">
+              <td><input type="checkbox"></td>
+              <td><strong style="text-decoration:line-through;">Mens 3.0-3.49</strong></td>
               <td>Doubles · Men</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><span style="font-size:11px;color:#888;">Excluded</span></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Mens 3.5-3.99</strong></td>
               <td>Doubles · Men</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Mens 4.0+</strong></td>
               <td>Doubles · Men</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Mixed 3.0-3.49</strong></td>
               <td>Doubles · Mixed</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Mixed 3.5-3.99</strong></td>
               <td>Doubles · Mixed</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Mixed 4.0+</strong></td>
               <td>Doubles · Mixed</td>
               <td>10</td>
               <td><span class="pill pill-default">Default</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
             <tr>
+              <td><input type="checkbox" checked></td>
               <td><strong>Open Singles</strong></td>
               <td>Singles · Mixed</td>
               <td>16</td>
               <td><span class="pill pill-custom">Custom</span></td>
-              <td class="row-actions"><a href="#">Edit</a> <a href="#" style="color:#dc2626;">Remove</a></td>
+              <td class="row-actions"><a href="#">Edit</a></td>
             </tr>
           </tbody>
         </table>
       </div>
       <button class="events-add-btn">+ Add custom event</button>
+      <div style="margin-top:10px;font-size:12px;color:#666;">
+        <strong>8 events included</strong> · 1 excluded
+      </div>
 
       <details class="hint" style="margin-top:14px;">
         <summary>Why are these the defaults?</summary>
@@ -913,14 +950,17 @@
 </div>
 
 <div class="note">
-  <strong>Default-template + adjust beats blank slate.</strong> The
-  table is pre-filled with 9 typical doubles divisions; Dave has
-  already added one custom event ("Open Singles") to give the demo
-  some texture. Per-row Edit opens a focused modal for that event's
-  full settings (format, gender, rating range, capacity, fees,
-  bracket type). Skip is available — a tournament with no events
-  saved as draft is fine; just blocks Publish until at least one
-  event exists.
+  <strong>Default-template + checkbox adjust beats blank slate.</strong> The
+  table is pre-filled with the typical doubles divisions plus the
+  custom "Open Singles" Dave added. <strong>Checkboxes drive
+  inclusion</strong> — checked = will be created when the tournament
+  publishes; unchecked = excluded and faded out (still visible so the
+  user can re-check easily). Per-row Edit is an inline-expand on the
+  row (same pattern as the public-flow register card) that reveals
+  format / gender / rating range / capacity / fees / bracket type
+  controls without leaving the page. Skip is available — a tournament
+  with no events saves as draft; Publish stays disabled until at
+  least one event is checked.
 </div>
 
 <div class="open-q">
@@ -1276,6 +1316,14 @@
         publish now and fill them in later from the tournament's edit page.
       </p>
 
+      <div style="padding:14px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;line-height:1.55;margin-bottom:18px;">
+        <strong>✓ Ready to publish.</strong> Required: name ✓ · dates
+        ✓ · location ✓ · 9 events ✓ · pricing ✓. Skipped steps
+        (sponsors, FAQs, payment) won't block — but heads up that
+        without payment connected, registrations save without
+        collecting money.
+      </div>
+
       <div class="review-grid">
         <div class="review-card">
           <div class="title">Basics <span class="pill-status pill-done">Done</span></div>
@@ -1491,14 +1539,14 @@
 <!-- Closing — what's worth deciding next                          -->
 <!-- ───────────────────────────────────────────────────────────── -->
 
-<div class="open-q">
-  <strong>Bigger open questions worth resolving before code</strong>
+<div class="ref">
+  <strong>Open questions — resolved.</strong>
   <ul>
-    <li><strong>Is the wizard one URL with internal steps, or one URL per step?</strong> Per-step URLs (e.g. <code>/admin/:org/tournaments/new/events</code>) make deep-linking + bookmark-resume easy but add routing complexity. One-URL-with-internal-steps is simpler but doesn't survive a page refresh as cleanly. I'd lean toward per-step URLs since "Save & exit, come back tomorrow" is a real use case.</li>
-    <li><strong>How does Save & exit work mid-wizard?</strong> The tournament already exists as draft after Step 1, so "exit" just routes the user back to the Tournaments list. Re-entering opens the wizard at the next-unfinished step. That seems right.</li>
-    <li><strong>Where does the wizard live alongside the existing TournamentFormPage?</strong> Three options: (a) replace the form entirely for create-mode and keep the form only for edit-mode; (b) wizard is the default but a "switch to all-fields form" escape hatch exists for power users; (c) the form stays and the wizard is layered on top via per-step routing. Leaning (a) for v1 — the wizard IS the create flow.</li>
-    <li><strong>Default event template — org-level configurable?</strong> Already flagged. A new club might want different skill breakpoints baked into their defaults. Add to backlog as a Soon follow-up to the wizard's main item.</li>
-    <li><strong>Where do per-event Edit modals live?</strong> The Events step's per-row Edit link opens what? A modal with all event settings (format, gender, rating range, capacity, fees, bracket type, points-to-win, etc.) is a lot of fields. Maybe an inline expand on the row, like the inline-register pattern from the public flow.</li>
+    <li><strong>Routing:</strong> per-step URLs. <code>/admin/:org/tournaments/new/basics</code> → <code>/events</code> → <code>/pricing</code> → … Refresh-safe, bookmark-able, "come back tomorrow" works.</li>
+    <li><strong>Save &amp; exit:</strong> always routes to the Tournaments list; re-entering the draft tournament opens the wizard at the next-unfinished step.</li>
+    <li><strong>Wizard vs existing form:</strong> wizard replaces create-mode of <code>TournamentFormPage</code> entirely for v1. Edit-mode stays as the existing all-fields form (until Editing-mockup work redesigns that).</li>
+    <li><strong>Default event template configurable per org:</strong> backlog item (Soon, after the basic wizard ships). New clubs that want different skill breakpoints baked into their default get a Settings page eventually.</li>
+    <li><strong>Per-event Edit:</strong> inline expand on the row, matching the public-flow register pattern. Avoids a modal-soup of 12 sub-fields.</li>
   </ul>
 </div>
 
