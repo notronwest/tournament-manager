@@ -44,6 +44,11 @@ type MyRegStatus = {
   partnerLabel: string | null;
   inviteToken: string | null;
   inviterName: string | null;
+  // F1: true when partner_status='seeking' on my reg — I'm
+  // registered but explicitly looking for a partner. Rendered as
+  // a secondary "Looking for a partner" badge alongside the
+  // state pill so the user sees both bits of info.
+  isSeekingPartner: boolean;
 };
 
 // Top-of-page banner content for a pending inbound invite.
@@ -298,6 +303,7 @@ export default function PublicTournamentPage() {
         partnerLabel,
         inviteToken: null,
         inviterName: null,
+        isSeekingPartner: r.partner_status === "seeking",
       });
     }
     // Outbound invites: fill in invitee names for pending state
@@ -335,6 +341,7 @@ export default function PublicTournamentPage() {
         partnerLabel: cur?.partnerLabel ?? null,
         inviteToken: inv.token,
         inviterName,
+        isSeekingPartner: cur?.isSeekingPartner ?? false,
       });
     }
     setMyStatus(map);
@@ -632,6 +639,11 @@ function EventCard({
   // through the per-tournament checkout at the end.
   const [expanded, setExpanded] = useState(false);
   const [partner, setPartner] = useState<PlayerSelection>(emptySelection);
+  // F1: doubles users can opt into "I need a partner" instead of
+  // picking one. When true, the partner picker hides + the submit
+  // path skips the partner-invite insert and stamps
+  // partner_status='seeking' on the reg.
+  const [seekingPartner, setSeekingPartner] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -662,6 +674,7 @@ function EventCard({
   const cancelExpand = () => {
     setExpanded(false);
     setPartner(emptySelection);
+    setSeekingPartner(false);
     setFormError(null);
   };
 
@@ -672,8 +685,10 @@ function EventCard({
     }
     setFormError(null);
 
-    // Validate doubles partner pick. Singles events bypass entirely.
-    if (isDoubles) {
+    // Validate doubles partner pick. Singles events bypass
+    // entirely. So does "I need a partner" — they're registering
+    // without a partner intentionally.
+    if (isDoubles && !seekingPartner) {
       if (partner.mode === "empty") {
         setFormError("Pick a partner to continue.");
         return;
@@ -707,9 +722,11 @@ function EventCard({
 
     // Resolve partner: existing-mode returns the picked player as-is;
     // new-mode inserts a fresh players row. Singles events skip this.
+    // F1 "I need a partner" also skips — the seeker reg goes in
+    // with partner_status='seeking' and no partner_invite row.
     let resolvedPartnerId: string | null = null;
     let resolvedPartnerEmail: string | null = null;
-    if (isDoubles && partner.mode !== "empty") {
+    if (isDoubles && !seekingPartner && partner.mode !== "empty") {
       const resolved = await persistPlayerSelection(partner);
       if (!resolved.player) {
         setFormError(resolved.error ?? "Failed to set up partner.");
@@ -747,10 +764,20 @@ function EventCard({
     // tier math). Checkout's "Pay" handler snapshots the cents
     // onto the row before flipping status to 'paid'.
     //
-    // partner_status starts at 'solo' when we're about to auto-
-    // pair (the accept_partner_invite RPC bumps it to 'confirmed'
-    // along with the link) OR for singles. For outbound-invite
-    // doubles it starts 'pending' until the partner accepts.
+    // partner_status:
+    //   * singles               → 'solo'
+    //   * doubles + seeking     → 'seeking' (F1)
+    //   * doubles + auto-pair   → 'solo' (the RPC bumps it to
+    //                             'confirmed' along with the link)
+    //   * doubles + outbound    → 'pending' (until partner accepts)
+    const partnerStatusOnInsert: Database["public"]["Enums"]["partner_status"] =
+      !isDoubles
+        ? "solo"
+        : seekingPartner
+          ? "seeking"
+          : inboundInviteId
+            ? "solo"
+            : "pending";
     const { error: regErr } = await supabase
       .from("event_registrations")
       .insert({
@@ -758,8 +785,7 @@ function EventCard({
         player_id: me.id,
         event_fee_cents: 0,
         status: "pending_payment",
-        partner_status:
-          !isDoubles || inboundInviteId ? "solo" : "pending",
+        partner_status: partnerStatusOnInsert,
       })
       .select()
       .single();
@@ -769,7 +795,7 @@ function EventCard({
       return;
     }
 
-    if (isDoubles && resolvedPartnerId) {
+    if (isDoubles && !seekingPartner && resolvedPartnerId) {
       // Capture into a local that's narrowed non-null so the
       // closure-captured value in insertOutboundInvite doesn't
       // re-widen to nullable.
@@ -820,6 +846,7 @@ function EventCard({
 
     setExpanded(false);
     setPartner(emptySelection);
+    setSeekingPartner(false);
     setSubmitting(false);
     await onChanged();
   };
@@ -938,7 +965,9 @@ function EventCard({
   };
 
   const partnerPicked = partner.mode !== "empty";
-  const canSubmit = !isDoubles || partnerPicked;
+  // Submit gate: singles always submit-able. Doubles need EITHER a
+  // partner picked OR the "I need a partner" toggle on.
+  const canSubmit = !isDoubles || partnerPicked || seekingPartner;
 
   return (
     <div
@@ -974,6 +1003,9 @@ function EventCard({
             )}
             {myStatus?.state === "invited" && (
               <Pill bg="#fef3c7" fg="#7a5d00">You're invited</Pill>
+            )}
+            {myStatus?.isSeekingPartner && (
+              <Pill bg="#dbeafe" fg="#1e40af">Looking for partner</Pill>
             )}
           </div>
           {/* Partner label */}
@@ -1069,26 +1101,83 @@ function EventCard({
         >
           {isDoubles && (
             <>
+              {/* F1: two-mode picker — pick a partner OR sign up
+                  needing one. Defaults to "Pick a partner." */}
               <div
+                role="radiogroup"
+                aria-label="Partner mode"
                 style={{
-                  fontSize: 12,
-                  color: "#666",
-                  marginBottom: 8,
-                  lineHeight: 1.5,
+                  display: "flex",
+                  gap: 8,
+                  marginBottom: 10,
+                  flexWrap: "wrap",
                 }}
               >
-                Your doubles partner. Search by name, email, or phone —
-                if they're not in the list yet, add them as a new
-                player. We won't email them until you check out.
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!seekingPartner}
+                  onClick={() => setSeekingPartner(false)}
+                  style={partnerModeBtnStyle(!seekingPartner)}
+                >
+                  Pick a partner
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={seekingPartner}
+                  onClick={() => {
+                    setSeekingPartner(true);
+                    setPartner(emptySelection);
+                  }}
+                  style={partnerModeBtnStyle(seekingPartner)}
+                >
+                  I need a partner
+                </button>
               </div>
-              <PartnerSearch
-                selection={partner}
-                onChange={setPartner}
-                excludePlayerIds={[
-                  ...(me ? [me.id] : []),
-                  ...Array.from(alreadyRegisteredPlayerIds),
-                ]}
-              />
+              {seekingPartner ? (
+                <div
+                  style={{
+                    padding: 10,
+                    background: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    color: "#1e40af",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  We'll register you for this event without a partner.
+                  Other registrants will be able to find you in the
+                  partner search, and the organizer will see you in
+                  their "looking for a partner" list to help match you
+                  up.
+                </div>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#666",
+                      marginBottom: 8,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Your doubles partner. Search by name, email, or
+                    phone — if they're not in the list yet, add them
+                    as a new player. We won't email them until you
+                    check out.
+                  </div>
+                  <PartnerSearch
+                    selection={partner}
+                    onChange={setPartner}
+                    excludePlayerIds={[
+                      ...(me ? [me.id] : []),
+                      ...Array.from(alreadyRegisteredPlayerIds),
+                    ]}
+                  />
+                </>
+              )}
             </>
           )}
           {formError && (
@@ -1152,9 +1241,10 @@ function EventCard({
             >
               Cancel
             </button>
-            {isDoubles && !partnerPicked && !submitting && (
+            {isDoubles && !partnerPicked && !seekingPartner && !submitting && (
               <span style={{ fontSize: 12, color: "#888" }}>
-                Pick a partner to continue.
+                Pick a partner to continue (or choose "I need a
+                partner" above).
               </span>
             )}
           </div>
@@ -1190,6 +1280,23 @@ function Pill({
       {children}
     </span>
   );
+}
+
+// Two-mode toggle button used in EventCard's F1 partner-mode picker.
+// Same visual treatment as a segmented control — active mode gets a
+// filled blue background, inactive stays white with a thin border.
+function partnerModeBtnStyle(active: boolean) {
+  return {
+    padding: "8px 14px",
+    background: active ? "#2563eb" : "#fff",
+    color: active ? "#fff" : "#444",
+    border: `1px solid ${active ? "#2563eb" : "#e2e2e2"}`,
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500 as const,
+    cursor: "pointer",
+    fontFamily: "inherit",
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────

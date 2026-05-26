@@ -932,7 +932,7 @@ export type Database = {
         | "declined"
         | "cancelled"
         | "expired"
-      partner_status: "solo" | "pending" | "confirmed" | "declined"
+      partner_status: "solo" | "pending" | "confirmed" | "declined" | "seeking"
       payment_status:
         | "pending"
         | "processing"
@@ -1113,7 +1113,7 @@ export const Constants = {
         "cancelled",
         "expired",
       ],
-      partner_status: ["solo", "pending", "confirmed", "declined"],
+      partner_status: ["solo", "pending", "confirmed", "declined", "seeking"],
       payment_status: [
         "pending",
         "processing",
