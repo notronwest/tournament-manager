@@ -341,6 +341,9 @@ function Avatar({
 }
 
 // Compact "email · phone · 3.5 mixed" line. Skips anything blank.
+// Ratings stored as numeric in Postgres come back as 3 (not 3.0) when
+// the trailing zero is "dropped" — format with toFixed(1) so "3
+// doubles" doesn't look like "3 doubles events."
 function formatPlayerMeta(p: Player): string {
   const bits: string[] = [];
   if (p.email) bits.push(p.email);
@@ -356,7 +359,7 @@ function formatPlayerMeta(p: Player): string {
         : p.self_rating_mixed != null
           ? "mixed"
           : "singles";
-    bits.push(`${r} ${which}`);
+    bits.push(`${r.toFixed(1)} ${which}`);
   }
   return bits.join(" · ");
 }
