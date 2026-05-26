@@ -440,6 +440,148 @@
     font-weight: 600;
     margin-bottom: 4px;
   }
+  .preview-math .tier-divider {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed #86efac;
+    font-size: 12px;
+    color: #166534;
+    font-weight: 500;
+  }
+  .preview-math .tier-divider:first-of-type {
+    margin-top: 8px;
+  }
+
+  /* Pricing pattern picker (Single / Early bird / Late fee / Custom) */
+  .pattern-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 920px) {
+    .pattern-cards { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 520px) {
+    .pattern-cards { grid-template-columns: 1fr; }
+  }
+  .pattern-card {
+    background: #fff;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+  }
+  .pattern-card.selected {
+    border-color: #2563eb;
+    background: #eff6ff;
+  }
+  .pattern-card .title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+  }
+  .pattern-card .desc {
+    color: #555;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  /* Pricing tier rows */
+  .tier-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .tier-row {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .tier-row .tier-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tier-row .tier-label {
+    font-weight: 600;
+    font-size: 13px;
+    color: #333;
+  }
+  .tier-row .tier-window {
+    font-size: 12px;
+    color: #666;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tier-row .tier-window input[type="date"] {
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .tier-row .field-row {
+    margin-bottom: 0;
+  }
+  .tier-row .field {
+    margin-bottom: 0;
+  }
+  /* Custom-pattern affordances on tier rows */
+  .tier-row .tier-label-edit {
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #333;
+    background: #fff;
+    min-width: 180px;
+  }
+  .tier-row .tier-remove {
+    background: transparent;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    margin-left: 8px;
+  }
+  .tier-row .tier-remove:hover {
+    background: #fef2f2;
+  }
+  .tier-add-btn {
+    width: 100%;
+    margin-top: 0;
+    margin-bottom: 14px;
+    background: #fff;
+    border: 1px dashed #d1d5db;
+    color: #2563eb;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .tier-add-btn:hover {
+    background: #f8fafc;
+    border-color: #2563eb;
+  }
 
   /* Cancellation policy preset cards */
   .policy-cards {
@@ -973,11 +1115,37 @@
 </div>
 
 <!-- ───────────────────────────────────────────────────────────── -->
-<!-- SCREEN 4: Step 3 — Pricing with preview math                  -->
+<!-- SCREEN 4a / 4b / 4c: Step 3 — Pricing — three pattern variants -->
+<!-- Shown in complexity order: Single → Early bird → + Late fee   -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="note" style="margin-top:30px;">
+  <strong>Step 3 has four variants — pick the pattern that matches how you run pricing.</strong>
+  Most tournaments fall into one of four buckets:
+  <br><br>
+  <strong>Single price</strong> — one price for everyone, no dates. The
+  default and the simplest case. <br>
+  <strong>Early bird</strong> — discount up to a date, regular after.
+  Classic incentive to commit early. <br>
+  <strong>Early bird + Late fee</strong> — three windows with a
+  surcharge close to the start. Some clubs use the late fee to
+  discourage day-of registrations that throw off bracket sizes. <br>
+  <strong>Custom</strong> — N tiers with your own labels. Escape
+  hatch for unusual cases (members-only pre-sale, two-stage
+  discounts, etc.). Hopefully rarely used.
+  <br><br>
+  The pattern picker at the top of Step 3 hides the date inputs
+  entirely when "Single price" is chosen — the simple case stays
+  simple. The next four screens show what each variant looks like
+  in the wizard.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 4a: Single price (default — no date inputs)             -->
 <!-- ───────────────────────────────────────────────────────────── -->
 
 <div class="screen">
-  <div class="screen-label">4 · Step 3 of 8 — Pricing</div>
+  <div class="screen-label">4a · Step 3 of 8 — Pricing — Single price (default)</div>
   <div class="app-header">
     <a class="brand" href="#">Tournament Manager</a>
     <nav class="nav">
@@ -1012,11 +1180,31 @@
     <div class="wizard-pane">
       <h1 class="step-h1">Pricing</h1>
       <p class="step-lede">
-        Two tiers — what a player pays for their first event, and what
-        they pay for each additional event. We'll show you the math
-        live so you can see what a 1-event vs 3-event registrant pays.
+        Pick how pricing should change as the tournament gets closer.
+        Most organizers either use a single price or offer an
+        early-bird discount to reward people who commit early.
       </p>
 
+      <div class="pattern-cards">
+        <div class="pattern-card selected">
+          <div class="title"><span class="radio-dot"></span>Single price</div>
+          <div class="desc">One flat price for everyone. No dates.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Early bird</div>
+          <div class="desc">Discount up to a date, regular after.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Early bird + Late fee</div>
+          <div class="desc">Three windows — early, regular, late surcharge.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Custom…</div>
+          <div class="desc">Any number of tiers with your own labels &amp; dates.</div>
+        </div>
+      </div>
+
+      <!-- No tier list, no date pickers — just two fee inputs -->
       <div class="field-row">
         <div class="field">
           <label>First-event fee (USD)</label>
@@ -1053,13 +1241,167 @@
         <div class="row"><span>5 events</span><span>$140.00</span></div>
       </div>
 
-      <details class="hint" style="margin-top:18px;">
+      <details class="hint" style="margin-top:14px;">
         <summary>Need a different price for a specific event?</summary>
         <div class="body">
-          Most tournaments use the same two-tier price for every event.
-          If one of your events (e.g. an "Elite" division) should cost
-          something different, you can override that event's fee from
-          the Events step — it'll be a flat charge that ignores these
+          Most tournaments use the same price for every event. If one
+          of your events (e.g. an "Elite" division) should cost
+          something different, override that event's fee from the
+          Events step — it becomes a flat charge for that event only.
+        </div>
+      </details>
+
+      <div class="wizard-actions">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Skip — free tournament</button>
+        <button class="btn-primary" style="margin-left:auto;">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>The simplest case stays simple.</strong> No date pickers, no
+  tier rows, no extra inputs — when "Single price" is selected the
+  pane collapses to exactly the two fields the organizer needs. This
+  is what a new organizer sees by default, and it's all most clubs
+  ever need.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 4b: Early bird (2 tiers, 1 date)                        -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">4b · Step 3 of 8 — Pricing — Early bird (2 tiers)</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">My First Tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ Saved 1 minute ago</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div><div class="step-sub">9 events</div></div></li>
+        <li class="step active"><span class="indicator">3</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step"><span class="indicator">4</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Pricing</h1>
+      <p class="step-lede">
+        Pick how pricing should change as the tournament gets closer.
+        Most organizers either use a single price or offer an
+        early-bird discount to reward people who commit early.
+      </p>
+
+      <!-- Pattern picker -->
+      <div class="pattern-cards">
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Single price</div>
+          <div class="desc">One flat price for everyone. No dates.</div>
+        </div>
+        <div class="pattern-card selected">
+          <div class="title"><span class="radio-dot"></span>Early bird</div>
+          <div class="desc">Discount up to a date, regular after.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Early bird + Late fee</div>
+          <div class="desc">Three windows — early, regular, late surcharge.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Custom…</div>
+          <div class="desc">Any number of tiers with your own labels &amp; dates.</div>
+        </div>
+      </div>
+
+      <!-- Active pattern: Early bird (2 tiers) -->
+      <div class="tier-list">
+        <div class="tier-row">
+          <div class="tier-header">
+            <div class="tier-label">Tier 1 — Early bird</div>
+            <div class="tier-window">Through <input type="date" value="2026-06-15"></div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="50.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="15.00">
+            </div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-header">
+            <div class="tier-label">Tier 2 — Regular</div>
+            <div class="tier-window">From Jun 16 onward (auto)</div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="60.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="20.00">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details class="hint" style="margin-bottom:8px;">
+        <summary>How tier dates work</summary>
+        <div class="body">
+          A player pays the price that's active <em>when they
+          register</em> — locked in at checkout. If they register
+          during Early Bird, the lower price is theirs even if the
+          deadline passes before the tournament starts. Tier dates
+          also drive what your public tournament page advertises
+          ("Early bird ends in 4 days") and the lifecycle status
+          shown to players (Early Bird Registration Open → Registration
+          Open → Late Registration Open).
+        </div>
+      </details>
+
+      <div class="preview-math">
+        <div class="label">Preview math</div>
+        <div class="tier-divider">If they register <strong>on or before Jun 15</strong> (Early bird):</div>
+        <div class="row"><span>1 event</span><span>$50.00</span></div>
+        <div class="row"><span>2 events</span><span>$65.00</span></div>
+        <div class="row"><span>3 events</span><span>$80.00</span></div>
+        <div class="tier-divider">If they register <strong>on or after Jun 16</strong> (Regular):</div>
+        <div class="row"><span>1 event</span><span>$60.00</span></div>
+        <div class="row"><span>2 events</span><span>$80.00</span></div>
+        <div class="row"><span>3 events</span><span>$100.00</span></div>
+      </div>
+
+      <details class="hint" style="margin-top:14px;">
+        <summary>Need a different price for a specific event?</summary>
+        <div class="body">
+          Most tournaments use the same tiers for every event. If one
+          of your events (e.g. an "Elite" division) should cost
+          something different, override that event's fee from the
+          Events step — it becomes a flat charge that ignores these
           tiers for that event only.
         </div>
       </details>
@@ -1074,14 +1416,378 @@
 </div>
 
 <div class="note">
-  <strong>Preview math is the cure for misconfiguration.</strong> The
-  green panel updates live as the user types — they see the
-  consequence of their inputs at three common counts (1 / 2 / 3
-  events) plus a stretch case. This is the org-side answer to the
-  backlog item that flagged organizers confusing the override model
-  (event fee = flat) with the additive model (event fee = surcharge).
-  The hint at the bottom links back to the Events step for the
-  rare per-event override case.
+  <strong>Preview math is the cure for misconfiguration.</strong>
+  The green panel splits into banded sections so organizers can see
+  what someone pays under each tier window — sanity-checking that
+  the early-bird discount feels meaningful (and that the gap between
+  tiers isn't accidentally too small to motivate action). Each tier's
+  fee values flow into its band live as the inputs change.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 4c: Early bird + Late fee (3 tiers, 2 dates)            -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">4c · Step 3 of 8 — Pricing — Early bird + Late fee (3 tiers)</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">My First Tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ Saved 1 minute ago</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div><div class="step-sub">9 events</div></div></li>
+        <li class="step active"><span class="indicator">3</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step"><span class="indicator">4</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Pricing</h1>
+      <p class="step-lede">
+        Pick how pricing should change as the tournament gets closer.
+        Most organizers either use a single price or offer an
+        early-bird discount to reward people who commit early.
+      </p>
+
+      <div class="pattern-cards">
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Single price</div>
+          <div class="desc">One flat price for everyone. No dates.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Early bird</div>
+          <div class="desc">Discount up to a date, regular after.</div>
+        </div>
+        <div class="pattern-card selected">
+          <div class="title"><span class="radio-dot"></span>Early bird + Late fee</div>
+          <div class="desc">Three windows — early, regular, late surcharge.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Custom…</div>
+          <div class="desc">Any number of tiers with your own labels &amp; dates.</div>
+        </div>
+      </div>
+
+      <div class="tier-list">
+        <div class="tier-row">
+          <div class="tier-header">
+            <div class="tier-label">Tier 1 — Early bird</div>
+            <div class="tier-window">Through <input type="date" value="2026-06-15"></div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="50.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="15.00">
+            </div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-header">
+            <div class="tier-label">Tier 2 — Regular</div>
+            <div class="tier-window">Through <input type="date" value="2026-07-05"></div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="60.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="20.00">
+            </div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-header">
+            <div class="tier-label">Tier 3 — Late fee</div>
+            <div class="tier-window">From Jul 6 until registration closes (auto)</div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="75.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="25.00">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details class="hint" style="margin-bottom:8px;">
+        <summary>How tier dates work</summary>
+        <div class="body">
+          A player pays the price that's active <em>when they
+          register</em> — locked in at checkout. If they register
+          during Early Bird, the lower price is theirs even if the
+          deadline passes before the tournament starts. Tier dates
+          also drive what your public tournament page advertises
+          ("Early bird ends in 4 days") and the lifecycle status
+          shown to players (Early Bird Registration Open → Registration
+          Open → Late Registration Open).
+        </div>
+      </details>
+
+      <div class="preview-math">
+        <div class="label">Preview math</div>
+        <div class="tier-divider">If they register <strong>on or before Jun 15</strong> (Early bird):</div>
+        <div class="row"><span>1 event</span><span>$50.00</span></div>
+        <div class="row"><span>2 events</span><span>$65.00</span></div>
+        <div class="row"><span>3 events</span><span>$80.00</span></div>
+        <div class="tier-divider">If they register <strong>Jun 16 – Jul 5</strong> (Regular):</div>
+        <div class="row"><span>1 event</span><span>$60.00</span></div>
+        <div class="row"><span>2 events</span><span>$80.00</span></div>
+        <div class="row"><span>3 events</span><span>$100.00</span></div>
+        <div class="tier-divider">If they register <strong>on or after Jul 6</strong> (Late fee):</div>
+        <div class="row"><span>1 event</span><span>$75.00</span></div>
+        <div class="row"><span>2 events</span><span>$100.00</span></div>
+        <div class="row"><span>3 events</span><span>$125.00</span></div>
+      </div>
+
+      <div class="wizard-actions">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Skip — free tournament</button>
+        <button class="btn-primary" style="margin-left:auto;">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>One concept, two surfaces.</strong> These same tier dates
+  drive what the public tournament page advertises ("Early bird ends
+  in 4 days," "Late registration starts Jul 6") and the public
+  lifecycle status pill (Early Bird Registration Open → Registration
+  Open → Late Registration Open) — organizers don't manage status
+  flags separately from pricing. <br><br>
+  <strong>Price locks at checkout.</strong> When a player commits, the
+  active tier's price is snapshotted onto their registration — so
+  someone who registered during the Early Bird window keeps that
+  price even if the deadline passes before they pay or before the
+  tournament starts. No "wait, why did the price change on me?"
+  surprises. <br><br>
+  <strong>Adding a third tier costs almost nothing.</strong> The same
+  UI shape scales from one tier to three — same input rows, same
+  preview-math bands, just more of them. And if even three isn't
+  enough, the Custom variant on the next screen takes it to N.
+</div>
+
+<!-- ───────────────────────────────────────────────────────────── -->
+<!-- SCREEN 4d: Custom (N tiers — escape hatch for unusual cases)  -->
+<!-- ───────────────────────────────────────────────────────────── -->
+
+<div class="screen">
+  <div class="screen-label">4d · Step 3 of 8 — Pricing — Custom (N tiers, editable labels)</div>
+  <div class="app-header">
+    <a class="brand" href="#">Tournament Manager</a>
+    <nav class="nav">
+      <span class="greet">Hi, Sarah</span>
+      <a class="ghost-btn" href="#">Profile</a>
+      <button class="ghost-btn-bordered">Sign out</button>
+    </nav>
+  </div>
+  <div class="wizard">
+    <div class="wizard-rail">
+      <div class="rail-header">
+        <div class="label">Tournament</div>
+        <div class="name">My First Tournament</div>
+        <div class="draft-badge">Draft</div>
+      </div>
+      <div class="save-indicator">✓ Saved 1 minute ago</div>
+      <ol class="steps">
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Basics</div></div></li>
+        <li class="step done"><span class="indicator">✓</span><div class="step-meta"><div class="step-title">Events</div><div class="step-sub">9 events</div></div></li>
+        <li class="step active"><span class="indicator">3</span><div class="step-meta"><div class="step-title">Pricing</div></div></li>
+        <li class="step"><span class="indicator">4</span><div class="step-meta"><div class="step-title">Cancellation policy</div></div></li>
+        <li class="step"><span class="indicator">5</span><div class="step-meta"><div class="step-title">Sponsors &amp; branding</div></div></li>
+        <li class="step"><span class="indicator">6</span><div class="step-meta"><div class="step-title">FAQs</div></div></li>
+        <li class="step"><span class="indicator">7</span><div class="step-meta"><div class="step-title">Accept payment</div></div></li>
+        <li class="step"><span class="indicator">8</span><div class="step-meta"><div class="step-title">Review &amp; publish</div></div></li>
+      </ol>
+      <div class="rail-footer">
+        <a href="#" class="publish-btn">Publish</a>
+        <a href="#" class="save-exit">Save &amp; exit</a>
+      </div>
+    </div>
+    <div class="wizard-pane">
+      <h1 class="step-h1">Pricing</h1>
+      <p class="step-lede">
+        Pick how pricing should change as the tournament gets closer.
+        Most organizers either use a single price or offer an
+        early-bird discount to reward people who commit early.
+      </p>
+
+      <div class="pattern-cards">
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Single price</div>
+          <div class="desc">One flat price for everyone. No dates.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Early bird</div>
+          <div class="desc">Discount up to a date, regular after.</div>
+        </div>
+        <div class="pattern-card">
+          <div class="title"><span class="radio-dot"></span>Early bird + Late fee</div>
+          <div class="desc">Three windows — early, regular, late surcharge.</div>
+        </div>
+        <div class="pattern-card selected">
+          <div class="title"><span class="radio-dot"></span>Custom…</div>
+          <div class="desc">Any number of tiers with your own labels &amp; dates.</div>
+        </div>
+      </div>
+
+      <details class="hint" style="margin-bottom:14px;">
+        <summary>Heads-up: most organizers don't need this</summary>
+        <div class="body">
+          Custom is the escape hatch for unusual cases — multi-stage
+          early-bird discounts, member-only pre-sale windows, or any
+          shape the three presets don't fit. If one of the presets
+          works, use it; you'll get cleaner status labels on the
+          public page ("Early bird ends in 4 days") that match what
+          players expect to see.
+        </div>
+      </details>
+
+      <div class="tier-list">
+        <div class="tier-row">
+          <div class="tier-header">
+            <input class="tier-label-edit" type="text" value="Super early bird">
+            <div class="tier-window">Through <input type="date" value="2026-05-15"></div>
+            <button class="tier-remove">× Remove</button>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="40.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="10.00">
+            </div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-header">
+            <input class="tier-label-edit" type="text" value="Early bird">
+            <div class="tier-window">Through <input type="date" value="2026-06-15"></div>
+            <button class="tier-remove">× Remove</button>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="50.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="15.00">
+            </div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-header">
+            <input class="tier-label-edit" type="text" value="Regular">
+            <div class="tier-window">Through <input type="date" value="2026-07-05"></div>
+            <button class="tier-remove">× Remove</button>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="60.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="20.00">
+            </div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-header">
+            <input class="tier-label-edit" type="text" value="Walk-up">
+            <div class="tier-window">From Jul 6 until registration closes (auto)</div>
+            <button class="tier-remove">× Remove</button>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>First-event fee (USD)</label>
+              <input type="number" value="75.00">
+            </div>
+            <div class="field">
+              <label>Each additional event (USD)</label>
+              <input type="number" value="25.00">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="tier-add-btn">+ Add another tier</button>
+
+      <div class="preview-math">
+        <div class="label">Preview math</div>
+        <div class="tier-divider">If they register <strong>on or before May 15</strong> (Super early bird):</div>
+        <div class="row"><span>1 event</span><span>$40.00</span></div>
+        <div class="row"><span>3 events</span><span>$60.00</span></div>
+        <div class="tier-divider">If they register <strong>May 16 – Jun 15</strong> (Early bird):</div>
+        <div class="row"><span>1 event</span><span>$50.00</span></div>
+        <div class="row"><span>3 events</span><span>$80.00</span></div>
+        <div class="tier-divider">If they register <strong>Jun 16 – Jul 5</strong> (Regular):</div>
+        <div class="row"><span>1 event</span><span>$60.00</span></div>
+        <div class="row"><span>3 events</span><span>$100.00</span></div>
+        <div class="tier-divider">If they register <strong>on or after Jul 6</strong> (Walk-up):</div>
+        <div class="row"><span>1 event</span><span>$75.00</span></div>
+        <div class="row"><span>3 events</span><span>$125.00</span></div>
+      </div>
+
+      <div class="wizard-actions">
+        <button class="btn-ghost">← Back</button>
+        <button class="btn-secondary">Skip — free tournament</button>
+        <button class="btn-primary" style="margin-left:auto;">Save &amp; continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Custom is the escape hatch.</strong> Same data model, same UI
+  shape — just with editable tier labels, a Remove button per tier,
+  and an "Add another tier" button at the bottom. Two-stage
+  early-bird discounts, members-only pre-sale windows, and the rare
+  4+ tier setups all work without us having to ship new presets.
+  <br><br>
+  <strong>Custom tiers DON'T get nice public status labels.</strong>
+  The presets map cleanly to "Early Bird Registration Open" /
+  "Registration Open" / "Late Registration Open" — Custom shows the
+  organizer's literal tier name on the public page instead ("Super
+  early bird ends in 4 days"). The hint at the top of the screen
+  warns the organizer about this trade-off before they leave preset
+  land. <br><br>
+  <strong>Removing the last tier flips you back to "Single price."</strong>
+  We'll snap the pattern picker selection automatically rather than
+  let the wizard enter a "Custom with zero tiers" state.
 </div>
 
 <!-- ───────────────────────────────────────────────────────────── -->
