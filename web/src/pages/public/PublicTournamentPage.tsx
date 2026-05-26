@@ -722,11 +722,35 @@ function EventCard({
         (partner.mode === "new" ? partner.email.trim() : null);
     }
 
+    // Auto-pair check: did the chosen partner already invite ME to
+    // this event? If so, registering with them picked counts as
+    // accepting their invite — no new outbound invite, no
+    // duplicate. Mirrors the logic in the legacy /register page.
+    let inboundInviteId: string | null = null;
+    if (isDoubles && resolvedPartnerId && user?.email) {
+      const { data: inbound } = await supabase
+        .from("partner_invites")
+        .select("id")
+        .eq("event_id", event.id)
+        .eq("inviter_player_id", resolvedPartnerId)
+        .eq("invitee_email", user.email)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (inbound) inboundInviteId = inbound.id;
+    }
+
     // Insert MY event_registration with status='pending_payment'.
     // The fee cents stay 0 here — the actual amount is computed at
     // checkout based on the full basket (D's first-vs-additional
     // tier math). Checkout's "Pay" handler snapshots the cents
     // onto the row before flipping status to 'paid'.
+    //
+    // partner_status starts at 'solo' when we're about to auto-
+    // pair (the accept_partner_invite RPC bumps it to 'confirmed'
+    // along with the link) OR for singles. For outbound-invite
+    // doubles it starts 'pending' until the partner accepts.
     const { error: regErr } = await supabase
       .from("event_registrations")
       .insert({
@@ -734,7 +758,8 @@ function EventCard({
         player_id: me.id,
         event_fee_cents: 0,
         status: "pending_payment",
-        partner_status: isDoubles ? "pending" : "solo",
+        partner_status:
+          !isDoubles || inboundInviteId ? "solo" : "pending",
       })
       .select()
       .single();
@@ -744,27 +769,52 @@ function EventCard({
       return;
     }
 
-    // For doubles, queue the partner_invite as 'pending'. The
-    // invite EMAIL doesn't fire yet — it fires from the checkout
-    // page after payment, so an unpaid registrant doesn't ghost
-    // their partner.
     if (isDoubles && resolvedPartnerId) {
-      const { error: invErr } = await supabase
-        .from("partner_invites")
-        .insert({
-          event_id: event.id,
-          inviter_player_id: me.id,
-          invitee_player_id: resolvedPartnerId,
-          invitee_email: resolvedPartnerEmail,
-          status: "pending",
-        });
-      if (invErr) {
-        // Reg landed, invite row didn't. Surface the error so the
-        // user knows but don't roll back — the partner is still
-        // visible to them on the manage page.
-        setFormError(
-          `Registered, but partner invite setup failed: ${invErr.message}`,
+      // Capture into a local that's narrowed non-null so the
+      // closure-captured value in insertOutboundInvite doesn't
+      // re-widen to nullable.
+      const partnerIdNN = resolvedPartnerId;
+      const meIdNN = me.id;
+      const insertOutboundInvite = async () => {
+        // Queue the partner_invite as 'pending'. The invite EMAIL
+        // doesn't fire yet — it fires from the checkout page after
+        // payment so an unpaid registrant doesn't ghost their
+        // partner.
+        const { error: invErr } = await supabase
+          .from("partner_invites")
+          .insert({
+            event_id: event.id,
+            inviter_player_id: meIdNN,
+            invitee_player_id: partnerIdNN,
+            invitee_email: resolvedPartnerEmail,
+            status: "pending",
+          });
+        if (invErr) {
+          setFormError(
+            `Registered, but partner invite setup failed: ${invErr.message}`,
+          );
+        }
+      };
+
+      if (inboundInviteId) {
+        // Auto-pair: accept the existing inbound invite. RPC links
+        // both regs + flips partner_status='confirmed' on each.
+        const { error: acceptErr } = await supabase.rpc(
+          "accept_partner_invite",
+          { p_invite_id: inboundInviteId },
         );
+        if (acceptErr) {
+          // Auto-pair failed — fall back to the standard
+          // outbound-invite path. User is still registered.
+          // eslint-disable-next-line no-console
+          console.warn(
+            "auto-pair failed, falling back to outbound invite",
+            acceptErr,
+          );
+          await insertOutboundInvite();
+        }
+      } else {
+        await insertOutboundInvite();
       }
     }
 
