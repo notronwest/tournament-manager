@@ -36,10 +36,50 @@ Things actively queued — the next handful of commits.
 
 **Touches:** `PartnerSearch` — accept an `eventId` prop and filter results by a subquery joined to `event_registrations`. Easiest path: have the parent compute the registered-player-ids for the event and pass them in via the existing `excludePlayerIds` array (we already use it to keep the user from picking themselves). Applies to BOTH the existing `/register` page AND the new inline-expand register on the tournament page (PR #3) — both should plumb the same filter.
 
-### Clarify partner-search rating label
-- **As a Player** picking a partner, I want their rating to render as "3.0 doubles" (or similar) instead of "3 doubles", **so that** I can't misread it as "registered for 3 doubles events" — the current format is genuinely ambiguous.
+### Clarify partner-search rating label (richer format)
+- **As a Player** picking a partner, I want their rating to render as something like **"3.0 Men · Doubles (self-rated)"** or **"3.5 Women · Mixed (DUPR)"** — decimal forced, player's gender included, rating source called out — **so that** "3 doubles" doesn't read as "3 doubles events" and so I can tell at a glance whether the rating I'm trusting came from DUPR or the player's self-report.
 
-**Touches:** `formatPlayerMeta` in `web/src/components/PartnerSearch.tsx` (line ~343). One-line fix: format the numeric rating with `.toFixed(1)` so it always shows a decimal, OR change the separator (e.g. "Doubles 3.0" or "3.0 ★ doubles"). Cheap win — should ship in a small commit on its own.
+**Touches:** `formatPlayerMeta` in `web/src/components/PartnerSearch.tsx`. The PR-#4 fix added `.toFixed(1)` (covers the decimal part); this item completes the format by also surfacing gender + rating source. Source comes from `player_ratings.rating_source` once we wire DUPR (separate item below); for now we have `self_rating_*` so the source is always "self-rated."
+
+### Allow players to connect their DUPR ID
+- **As a Player**, I want to enter my DUPR ID on my profile and have my DUPR ratings pulled in automatically, **so that** organizers and partners can trust the number, and so my rating updates over time without me re-entering it.
+- **As an Organizer** running a competitive division, I want to require a DUPR-verified rating for some events (see the "Play up / Require DUPR" item), **so that** the bracket isn't gameable.
+
+**Touches:** Schema — `players.dupr_id text` (validated format) + maybe `players.dupr_last_synced_at`. `player_ratings` already has a `rating_source` enum with `'dupr'` as one option, so per-source rating history is already modeled. New Edge Function `sync-dupr-ratings` polls DUPR's API on a schedule (per player or batched) and inserts fresh `player_ratings` rows. Profile form gets a "Connect DUPR" field. Display layer (`formatPlayerMeta`, event cards) prefers DUPR over self-rated when present.
+
+**Open question:** does DUPR offer a public/free API or do we need an organizer-side API key? Affects whether the sync is per-player auth or one-shop key.
+
+### Always show DUPR rating when a player has connected
+- **As a Player** browsing partners or viewing my own profile, I want a DUPR-connected player's rating to always display as their DUPR rating (with the source labeled), **so that** the verified number is the one I see and decisions are made on consistent data.
+
+**Touches:** `formatPlayerMeta` + any other place we render ratings (event eligibility chips, attendees lists, future player profile pages). Single source-of-truth precedence rule: DUPR rating from `player_ratings` table wins over `self_rating_*` on the player row when both exist. Document this rule somewhere durable so we don't accidentally re-introduce the override.
+
+**Depends on:** "Allow players to connect DUPR ID" landing first.
+
+### Cancelling a registration with a picked partner needs a confirm step
+- **As a Player** about to cancel a pending registration that has a partner picked, I want a clear "are you sure?" confirmation step **so that** a misclick doesn't quietly drop my partner pick along with my registration. ABSOLUTELY NOT a `window.confirm` dialog — use the existing `ConfirmModal` component.
+
+**Touches:** EventCard's pending-state Cancel handler in `PublicTournamentPage.tsx` and the equivalent on the `/checkout` and `/register` pages. Wrap each in a `ConfirmModal` ("Cancel registration and drop Jane Davis as your partner?"). For seeker-state regs (no partner picked) the confirm is optional — the action is less consequential.
+
+### "Partner won't be notified until checkout" copy on the register form
+- **As a Player** registering with a partner picked, I want a clear note on the register form that **my partner will not be emailed until I check out**, **so that** I don't assume they got pinged the moment I clicked Register and wonder why they haven't responded.
+
+**Touches:** The EventCard expanded register form already has copy reading "We won't email them until you check out." That copy is too quiet — bump to a more visible callout. Same callout should appear on the bottom of the success/done view after the inline register lands, so the user knows the partner is still in the dark until they hit Pay.
+
+### Partner accepting an invite enters their own checkout flow
+- **As a Player** accepting a partner invite for an event, I want my registration to start in `pending_payment` and go through MY OWN checkout, **so that** each player on the team pays their own registration fee — that's how PickleballBrackets works and matches what tournament directors expect.
+- **As an Organizer**, I want both players on a doubles team to pay their own way, **so that** I'm not chasing one player to collect for two.
+
+**Touches:** `PartnerAcceptPage`'s onAccept handler currently inserts the invitee's reg with `status='paid'` (legacy from before register-then-checkout). Change to `status='pending_payment'`, then the global `PendingPaymentsBar` will surface it for the new player and walk them through checkout. The `accept_partner_invite` RPC already tolerates any reg status when linking, so the change is purely on the client side of the accept page.
+
+**Open question:** when the invitee declines, should the inviter be notified? Currently no — the invite just goes 'declined'. Probably worth surfacing on the inviter's tournament page so they can pick someone else.
+
+### Pricing model misconfiguration is easy to make (clarify in admin form)
+- **As an Organizer** setting up tournament + event fees, I want the admin form to make clear that `events.event_fee_cents` is a **per-event flat OVERRIDE**, not a per-event surcharge added on top of the tournament's entry fee, **so that** I don't accidentally set up "Tournament $60, each event $20" expecting 1 event = $80 when it actually means 1 event = $20.
+
+**Touches:** `EventFormPage` event-fee field needs an explicit "Leave at 0 to use the tournament's first/additional pricing. Set a value to override with a flat fee that ignores the tournament tiers." hint. Maybe a "Preview math: 1 event = $X, 2 events = $Y" widget at the bottom of the tournament form showing the expected total at common counts so the organizer can spot misconfiguration before publishing.
+
+**Background:** Reported as a "bug" but the math is doing what D specifies. The confusion is the model itself reads two ways. The "Pricing copy refinement" item in Soon addresses the player-facing labels; this item is the organizer-facing equivalent.
 
 ### Enforce event eligibility (rating + gender) at registration
 - **As an Organizer**, I want a player to be blocked from registering for an event whose rating / gender requirements they don't meet, **so that** my brackets don't show up race-day with the wrong people in them.
