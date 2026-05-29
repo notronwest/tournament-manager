@@ -975,6 +975,10 @@ export type Database = {
           player_id: string
         }[]
       }
+      replace_pricing_tiers: {
+        Args: { p_tiers: Json; p_tournament_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       bracket_type:

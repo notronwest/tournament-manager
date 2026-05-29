@@ -69,3 +69,225 @@ export function pickNextPricingTier(
   }
   return null;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Admin pricing-editor helpers — form-draft ↔ DB-row conversion.
+//
+// The editor (PricingTiersEditor) works with a friendlier draft
+// shape than the DB: dollars-as-strings (so typing "12.5" doesn't
+// fight a number input), and a single "through" date per tier
+// instead of explicit starts_at/ends_at windows. Adjacent tiers
+// share a boundary — tier N's "through" date IS tier N+1's start —
+// so the organizer only sets one date per gap. The first tier has
+// an implicit open start; the last tier has an implicit open end.
+// ─────────────────────────────────────────────────────────────────────
+
+// A tier as the form holds it while the organizer edits.
+export type TierDraft = {
+  // Stable client-only id for React keys + add/remove tracking.
+  key: string;
+  label: string;
+  // The inclusive "through" date for this tier, as a local date
+  // string (YYYY-MM-DD). Empty = open-ended. Only the LAST tier is
+  // allowed to be open-ended; the editor enforces that.
+  endsOn: string;
+  firstEventFeeDollars: string;
+  additionalEventFeeDollars: string;
+};
+
+// A DB-ready tier row for the replace_pricing_tiers RPC.
+export type TierInsert = {
+  label: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  first_event_fee_cents: number;
+  additional_event_fee_cents: number;
+};
+
+// How many tiers each preset pattern uses, and their fixed labels.
+// Custom is open-ended (any count, editable labels) so it's absent
+// here.
+const PRESET_LABELS: Record<
+  Exclude<PricingPattern, "custom">,
+  string[]
+> = {
+  single: ["Standard"],
+  early_bird: ["Early bird", "Regular"],
+  early_bird_plus_late: ["Early bird", "Regular", "Late fee"],
+};
+
+let draftKeySeq = 0;
+function nextDraftKey(): string {
+  draftKeySeq += 1;
+  return `tier-${draftKeySeq}`;
+}
+
+export function makeEmptyTierDraft(label = ""): TierDraft {
+  return {
+    key: nextDraftKey(),
+    label,
+    endsOn: "",
+    firstEventFeeDollars: "0",
+    additionalEventFeeDollars: "0",
+  };
+}
+
+// Reshape the current draft list to fit a newly-chosen pattern,
+// preserving fee values (and dates) by index where the slot survives.
+// Switching to a preset rewrites labels to the preset's fixed names;
+// switching to Custom keeps whatever's there (seeding two tiers if
+// the list was a single tier, so there's something to edit).
+export function defaultTiersForPattern(
+  pattern: PricingPattern,
+  existing: TierDraft[],
+): TierDraft[] {
+  if (pattern === "custom") {
+    if (existing.length >= 2) return existing;
+    // Seed from the single existing tier (keep its fees) + a blank
+    // second tier so the organizer has a gap to date.
+    const first = existing[0] ?? makeEmptyTierDraft("Tier 1");
+    return [
+      { ...first, label: first.label || "Tier 1" },
+      makeEmptyTierDraft("Tier 2"),
+    ];
+  }
+
+  const labels = PRESET_LABELS[pattern];
+  return labels.map((label, i) => {
+    const prev = existing[i];
+    return {
+      key: prev?.key ?? nextDraftKey(),
+      label,
+      // The last preset tier is open-ended; earlier ones keep any
+      // date the organizer already set.
+      endsOn: i === labels.length - 1 ? "" : (prev?.endsOn ?? ""),
+      firstEventFeeDollars: prev?.firstEventFeeDollars ?? "0",
+      additionalEventFeeDollars: prev?.additionalEventFeeDollars ?? "0",
+    };
+  });
+}
+
+// Convert a loaded DB tier set (edit mode) back into form drafts.
+export function tiersToDrafts(tiers: PricingTier[]): TierDraft[] {
+  const sorted = [...tiers].sort((a, b) => a.sort_order - b.sort_order);
+  return sorted.map((t) => ({
+    key: nextDraftKey(),
+    label: t.label,
+    endsOn: endsAtIsoToThroughDate(t.ends_at),
+    firstEventFeeDollars: (t.first_event_fee_cents / 100).toFixed(2),
+    additionalEventFeeDollars: (t.additional_event_fee_cents / 100).toFixed(2),
+  }));
+}
+
+// "through Jun 15" → ends_at = local midnight at the START of Jun 16.
+// The next tier's starts_at is set equal to this, so the windows are
+// contiguous and half-open: tier 1 is active [.., Jun16 00:00) and
+// tier 2 is active [Jun16 00:00, ..).
+export function throughDateToEndsAtIso(throughDate: string): string | null {
+  if (!throughDate) return null;
+  const d = new Date(`${throughDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
+// Inverse: ends_at ISO → the inclusive "through" date (local YYYY-MM-DD).
+export function endsAtIsoToThroughDate(endsAtIso: string | null): string {
+  if (!endsAtIso) return "";
+  const d = new Date(endsAtIso);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() - 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// Validate + convert the form drafts into DB-ready rows. Returns
+// either { rows } or { error } — the caller surfaces the error and
+// blocks save. Computes contiguous half-open windows from the
+// per-tier "through" dates.
+export function tierDraftsToInserts(
+  tiers: TierDraft[],
+): { rows: TierInsert[]; error: null } | { rows: null; error: string } {
+  if (tiers.length === 0) {
+    return { rows: null, error: "At least one pricing tier is required." };
+  }
+
+  // Parse fees + validate each row.
+  const parsed = tiers.map((t, i) => {
+    const first = Math.round(parseFloat(t.firstEventFeeDollars || "0") * 100);
+    const additional = Math.round(
+      parseFloat(t.additionalEventFeeDollars || "0") * 100,
+    );
+    return { t, i, first, additional };
+  });
+
+  for (const { t, i, first, additional } of parsed) {
+    const label = t.label.trim() || `Tier ${i + 1}`;
+    if (Number.isNaN(first) || first < 0) {
+      return {
+        rows: null,
+        error: `${label}: first-event fee must be a non-negative number.`,
+      };
+    }
+    if (Number.isNaN(additional) || additional < 0) {
+      return {
+        rows: null,
+        error: `${label}: additional-event fee must be a non-negative number.`,
+      };
+    }
+    // Every tier except the last needs a "through" date to define
+    // where it hands off to the next.
+    const isLast = i === tiers.length - 1;
+    if (!isLast && !t.endsOn) {
+      return {
+        rows: null,
+        error: `${label}: set the date this price runs through (the next tier starts the day after).`,
+      };
+    }
+    if (isLast && t.endsOn) {
+      return {
+        rows: null,
+        error: `${label}: the last tier runs until registration closes — it can't have an end date.`,
+      };
+    }
+  }
+
+  // Build contiguous windows. tier[i].ends_at = throughDate(i)+1day;
+  // tier[i+1].starts_at = tier[i].ends_at. First start + last end null.
+  const rows: TierInsert[] = [];
+  let prevEnd: string | null = null;
+  for (const { t, i, first, additional } of parsed) {
+    const isLast = i === tiers.length - 1;
+    const endsAt = isLast ? null : throughDateToEndsAtIso(t.endsOn);
+    if (!isLast && !endsAt) {
+      return {
+        rows: null,
+        error: `${t.label.trim() || `Tier ${i + 1}`}: invalid date.`,
+      };
+    }
+    rows.push({
+      label: t.label.trim() || `Tier ${i + 1}`,
+      starts_at: prevEnd,
+      ends_at: endsAt,
+      first_event_fee_cents: first,
+      additional_event_fee_cents: additional,
+    });
+    prevEnd = endsAt;
+  }
+
+  // Dates must be strictly increasing — a later tier can't start
+  // before an earlier one ends. (Contiguity guarantees starts match
+  // prior ends; this catches a non-monotonic date entry.)
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1].ends_at;
+    const curEnd = rows[i].ends_at;
+    if (prev && curEnd && new Date(curEnd).getTime() <= new Date(prev).getTime()) {
+      return {
+        rows: null,
+        error: `${rows[i].label}: each tier's date must be later than the one before it.`,
+      };
+    }
+  }
+
+  return { rows, error: null };
+}

@@ -8,6 +8,14 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { PricingTiersEditor } from "../../components/PricingTiersEditor";
+import {
+  makeEmptyTierDraft,
+  tierDraftsToInserts,
+  tiersToDrafts,
+  type PricingPattern,
+  type TierDraft,
+} from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -45,9 +53,14 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
   const [endsAt, setEndsAt] = useState("");
   const [registrationOpensAt, setRegistrationOpensAt] = useState("");
   const [registrationClosesAt, setRegistrationClosesAt] = useState("");
-  const [entryFeeDollars, setEntryFeeDollars] = useState("0");
-  const [additionalEventFeeDollars, setAdditionalEventFeeDollars] =
-    useState("0");
+  // Pricing: a pattern + an ordered list of tier drafts. Create mode
+  // starts as a single "Standard" tier (the simple default). Edit
+  // mode loads the tournament's real tiers + pattern below.
+  const [pricingPattern, setPricingPattern] =
+    useState<PricingPattern>("single");
+  const [pricingTiers, setPricingTiers] = useState<TierDraft[]>(() => [
+    makeEmptyTierDraft("Standard"),
+  ]);
   const [courtCount, setCourtCount] = useState("0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +105,33 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       setEndsAt(isoToLocal(data.ends_at));
       setRegistrationOpensAt(isoToLocal(data.registration_opens_at));
       setRegistrationClosesAt(isoToLocal(data.registration_closes_at));
-      setEntryFeeDollars((data.entry_fee_cents / 100).toFixed(2));
-      setAdditionalEventFeeDollars(
-        (data.additional_event_fee_cents / 100).toFixed(2),
-      );
       setCourtCount(String(data.court_count));
+      setPricingPattern(data.pricing_pattern);
+
+      // Load the tournament's pricing tiers and convert to drafts.
+      // Every tournament has at least one tier (backfilled by
+      // migration 20260526170000), so this should always return rows;
+      // fall back to a single Standard tier seeded from the legacy
+      // columns if it somehow doesn't.
+      const { data: tierRows } = await supabase
+        .from("tournament_pricing_tiers")
+        .select("*")
+        .eq("tournament_id", data.id)
+        .order("sort_order", { ascending: true });
+      if (cancelled) return;
+      if (tierRows && tierRows.length > 0) {
+        setPricingTiers(tiersToDrafts(tierRows));
+      } else {
+        setPricingTiers([
+          {
+            ...makeEmptyTierDraft("Standard"),
+            firstEventFeeDollars: (data.entry_fee_cents / 100).toFixed(2),
+            additionalEventFeeDollars: (
+              data.additional_event_fee_cents / 100
+            ).toFixed(2),
+          },
+        ]);
+      }
       setLoading(false);
     })();
     return () => {
@@ -126,29 +161,26 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       return;
     }
 
-    const entryFeeCents = Math.round(
-      parseFloat(entryFeeDollars || "0") * 100,
-    );
-    if (Number.isNaN(entryFeeCents) || entryFeeCents < 0) {
-      setError("First-event fee must be a non-negative number.");
+    // Validate + convert the pricing tier drafts into DB rows. This
+    // is also where date-window + fee validation happens.
+    const tierResult = tierDraftsToInserts(pricingTiers);
+    if (tierResult.error !== null) {
+      setError(tierResult.error);
       return;
     }
-    const additionalEventFeeCents = Math.round(
-      parseFloat(additionalEventFeeDollars || "0") * 100,
-    );
-    if (
-      Number.isNaN(additionalEventFeeCents) ||
-      additionalEventFeeCents < 0
-    ) {
-      setError("Additional-event fee must be a non-negative number.");
-      return;
-    }
+    const tierRows = tierResult.rows;
+
     const courtCountNum = parseInt(courtCount || "0", 10);
     if (Number.isNaN(courtCountNum) || courtCountNum < 0) {
       setError("Court count must be a non-negative integer.");
       return;
     }
 
+    // Tier 1 (the headline / earliest price) mirrors into the legacy
+    // entry_fee_cents + additional_event_fee_cents columns so the read
+    // sites still on those columns (PendingPaymentsContext, admin
+    // list, home) stay accurate during the bridge period. Slice 5
+    // migrates those reads to tiers; slice 6 drops the columns.
     const payload = {
       slug: finalSlug,
       name: name.trim(),
@@ -159,8 +191,9 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       ends_at: endsAtIso,
       registration_opens_at: toIso(registrationOpensAt),
       registration_closes_at: toIso(registrationClosesAt),
-      entry_fee_cents: entryFeeCents,
-      additional_event_fee_cents: additionalEventFeeCents,
+      entry_fee_cents: tierRows[0].first_event_fee_cents,
+      additional_event_fee_cents: tierRows[0].additional_event_fee_cents,
+      pricing_pattern: pricingPattern,
       court_count: courtCountNum,
     };
 
@@ -175,14 +208,23 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
         })
         .select()
         .single();
-      setBusy(false);
-      if (insErr) {
-        setError(insErr.message);
+      if (insErr || !data) {
+        setBusy(false);
+        setError(insErr?.message ?? "Failed to create tournament.");
         return;
       }
-      if (data) {
-        navigate(`/admin/${org.slug}/tournaments/${data.slug}`);
+      // Replace the tier set (the INSERT trigger created a placeholder
+      // 'Standard' tier; the RPC clears it and writes the real rows).
+      const { error: tierErr } = await supabase.rpc("replace_pricing_tiers", {
+        p_tournament_id: data.id,
+        p_tiers: tierRows,
+      });
+      setBusy(false);
+      if (tierErr) {
+        setError(`Tournament created, but pricing failed to save: ${tierErr.message}`);
+        return;
       }
+      navigate(`/admin/${org.slug}/tournaments/${data.slug}`);
     } else {
       if (!existing) return;
       const { data, error: updErr } = await supabase
@@ -191,15 +233,22 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
         .eq("id", existing.id)
         .select()
         .single();
-      setBusy(false);
-      if (updErr) {
-        setError(updErr.message);
+      if (updErr || !data) {
+        setBusy(false);
+        setError(updErr?.message ?? "Failed to save tournament.");
         return;
       }
-      if (data) {
-        // The slug may have changed; navigate to the (possibly new) URL.
-        navigate(`/admin/${org.slug}/tournaments/${data.slug}`);
+      const { error: tierErr } = await supabase.rpc("replace_pricing_tiers", {
+        p_tournament_id: existing.id,
+        p_tiers: tierRows,
+      });
+      setBusy(false);
+      if (tierErr) {
+        setError(`Saved details, but pricing failed to save: ${tierErr.message}`);
+        return;
       }
+      // The slug may have changed; navigate to the (possibly new) URL.
+      navigate(`/admin/${org.slug}/tournaments/${data.slug}`);
     }
   };
 
@@ -355,36 +404,14 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
           </Field>
         </FieldRow>
 
-        <FieldRow>
-          <Field
-            label="First-event fee (USD)"
-            hint="What a player pays for their first event in this tournament. Per-event overrides on individual events take precedence."
-          >
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={entryFeeDollars}
-              onChange={(e) => setEntryFeeDollars(e.target.value)}
-              style={{ ...inputStyle, maxWidth: 160 }}
-            />
-          </Field>
-          <Field
-            label="Additional-event fee (USD)"
-            hint="Charged for each event AFTER the first (a player's most expensive pick counts as the first). Set to 0 for 'additional events included with entry'."
-          >
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={additionalEventFeeDollars}
-              onChange={(e) =>
-                setAdditionalEventFeeDollars(e.target.value)
-              }
-              style={{ ...inputStyle, maxWidth: 160 }}
-            />
-          </Field>
-        </FieldRow>
+        <PricingTiersEditor
+          pattern={pricingPattern}
+          tiers={pricingTiers}
+          onChange={(nextPattern, nextTiers) => {
+            setPricingPattern(nextPattern);
+            setPricingTiers(nextTiers);
+          }}
+        />
 
         <FieldRow>
           <Field
