@@ -50,10 +50,15 @@ const PATTERNS: PatternMeta[] = [
 export function PricingTiersEditor({
   pattern,
   tiers,
+  paidRegistrationCount = 0,
   onChange,
 }: {
   pattern: PricingPattern;
   tiers: TierDraft[];
+  // How many registrations have already PAID. When > 0, the editor
+  // reassures the organizer that those locked-in prices won't change.
+  // 0 in create mode (and edit mode with no paid regs yet).
+  paidRegistrationCount?: number;
   onChange: (pattern: PricingPattern, tiers: TierDraft[]) => void;
 }) {
   const isCustom = pattern === "custom";
@@ -101,6 +106,19 @@ export function PricingTiersEditor({
           early-bird discount to reward people who commit early.
         </p>
       </div>
+
+      {paidRegistrationCount > 0 && (
+        <div style={paidNoticeStyle}>
+          <strong>
+            {paidRegistrationCount === 1
+              ? "1 registration has already paid."
+              : `${paidRegistrationCount} registrations have already paid.`}
+          </strong>{" "}
+          Changing prices here won't affect anyone who's already paid —
+          their price was locked in at checkout. New pricing applies
+          only to registrations made from now on.
+        </div>
+      )}
 
       {/* Pattern picker */}
       <div style={patternGridStyle}>
@@ -364,6 +382,18 @@ const warnHintStyle: CSSProperties = {
   padding: "10px 12px",
   fontSize: 12,
   color: "#7a5d00",
+  lineHeight: 1.55,
+};
+
+// Informational (not a warning) — paid registrations are protected,
+// so this is reassurance, hence the calm blue rather than amber.
+const paidNoticeStyle: CSSProperties = {
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  borderRadius: 6,
+  padding: "10px 12px",
+  fontSize: 13,
+  color: "#1e40af",
   lineHeight: 1.55,
 };
 

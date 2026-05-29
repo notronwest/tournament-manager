@@ -61,6 +61,12 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
   const [pricingTiers, setPricingTiers] = useState<TierDraft[]>(() => [
     makeEmptyTierDraft("Standard"),
   ]);
+  // Edit mode: how many registrations have already PAID for this
+  // tournament. Drives a reassurance banner in the pricing editor —
+  // those registrations have their price locked (snapshotted onto
+  // event_registrations.event_fee_cents at checkout) and a tier
+  // change here won't re-bill them.
+  const [paidRegCount, setPaidRegCount] = useState(0);
   const [courtCount, setCourtCount] = useState("0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +137,29 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
             ).toFixed(2),
           },
         ]);
+      }
+
+      // Count paid registrations so the pricing editor can reassure
+      // the organizer that those locked-in prices won't change. Two
+      // steps: event ids for this tournament, then a head-count of
+      // paid event_registrations in them. Org members can read these
+      // rows via the "event_regs read by player or org" RLS policy.
+      const { data: evIdRows } = await supabase
+        .from("events")
+        .select("id")
+        .eq("tournament_id", data.id)
+        .is("deleted_at", null);
+      if (cancelled) return;
+      const eventIds = (evIdRows ?? []).map((e) => e.id);
+      if (eventIds.length > 0) {
+        const { count } = await supabase
+          .from("event_registrations")
+          .select("id", { count: "exact", head: true })
+          .in("event_id", eventIds)
+          .eq("status", "paid")
+          .is("deleted_at", null);
+        if (cancelled) return;
+        setPaidRegCount(count ?? 0);
       }
       setLoading(false);
     })();
@@ -407,6 +436,7 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
         <PricingTiersEditor
           pattern={pricingPattern}
           tiers={pricingTiers}
+          paidRegistrationCount={paidRegCount}
           onChange={(nextPattern, nextTiers) => {
             setPricingPattern(nextPattern);
             setPricingTiers(nextTiers);
