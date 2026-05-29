@@ -10,6 +10,7 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
+import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
 import TournamentWizardPage from "./pages/admin/TournamentWizardPage";
 import EventConsolePage from "./pages/admin/EventConsolePage";
@@ -103,6 +104,19 @@ export default function App() {
         element={
           <RequireAuth>
             <AdminIndexPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only flow to spin up a new organization. Defined
+          BEFORE the :orgSlug catch-all so the router doesn't treat
+          "new-org" as a slug. The page itself double-gates on
+          usePlatformAdmin. */}
+      <Route
+        path="/admin/new-org"
+        element={
+          <RequireAuth>
+            <CreateOrganizationPage />
           </RequireAuth>
         }
       />

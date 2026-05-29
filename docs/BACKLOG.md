@@ -309,11 +309,6 @@ Decision rule: build org-wide stats / content first (members count, Stripe Conne
 
 **Touches:** Migration adds new values to `event_status` enum (`ready_to_run`, `locked`, `planned`). Two new manual-gate actions on the event admin UI. The "Lock" action freezes the registrant list and disables partner picker for that event. After Lock, a planning step assigns start times + courts (uses the Schedule estimator output as the starting draft). Auto-complete behavior at end of pool / each playoff round is its own item (R6, Later). See scenario R1 in `docs/scenarios/tournament-lifecycle.md`.
 
-### Super-admin: create new organizations from inside the app
-- **As the application super-admin**, I want a UI to create new organizations (set name + slug + initial owner email) from inside the app, **so that** onboarding a new club is a 30-second action instead of running SQL in the Supabase dashboard.
-
-**Touches:** Today the only path to creating an org is the init-migration seed or a direct DB insert. Needs a super-admin gate (probably a `superadmin` flag on `auth.users` metadata, OR membership in a sentinel `wmpc-platform` org with role `owner`). New route `/admin/_platform/orgs` (or similar) with a small form: org name (auto-slug), owner email. Server flow runs through an edge function with `service_role`: insert `organizations`, insert `organization_members` (role `owner`) for the email if an auth user already exists, otherwise stash an `org_owner_claims` row keyed by email that's redeemed when that user signs in for the first time. The same plumbing is what the future "self-serve organizer signup" flow would call.
-
 ### Tournament contact info + public contact form
 - **As a Tournament admin**, I want to attach one or more contacts (name, role, phone, email) to a tournament, **so that** players know who to reach for what (tournament director, registration questions, on-site coordinator).
 - **As a Player**, I want to send a question to the tournament organizers via a contact form on the public tournament page (without copying emails into my mail app), **so that** I can ask about parking, partner finding, etc. and the organizers get one consolidated inbox.
@@ -443,6 +438,9 @@ Use this section as a checklist when discussing what to promote into Soon / Next
 ## Recently shipped
 
 Trailing log of what landed, so the doc stays grounded. Prune entries older than ~4 weeks.
+
+### 2026-05-29 (Super-admin: create new organizations)
+- **Super-admin: create new organizations from inside the app.** New `platform_admins` table (read-self RLS, writes via service_role) marks the cross-org super-admin. `find_user_by_email` SECURITY DEFINER helper (service_role only) lets the edge function decide between link-existing and invite-new for the new org's owner. `create-organization` edge function verifies the caller is a platform admin, inserts the org, looks up or invites the owner via `auth.admin.inviteUserByEmail`, links them as `owner` in `organization_members`, and rolls the org back if any later step fails. React: `usePlatformAdmin` hook, "+ Create organization" button on `/admin` (the picker no longer auto-redirects platform admins so the button stays reachable), new `CreateOrganizationPage` at `/admin/new-org` with success-state messaging that differentiates between an invited new owner and a linked existing user. Ron seeded as the first platform admin via a one-time data migration.
 
 ### 2026-05-29 (F2 — Admin view of partner seekers)
 - **F2. Admin view of partner seekers** — `AttendeesPage` gains a "🤝 Looking for a partner" section at the top that lists every player with at least one `partner_status='seeking'` event registration. Shows name, click-to-email / click-to-call contact, and which event(s) they're seeking in. Lets organizers match seekers up offline. Only renders when at least one seeker exists.

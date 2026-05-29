@@ -635,6 +635,21 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       player_ratings: {
         Row: {
           as_of: string
@@ -937,6 +952,7 @@ export type Database = {
         Args: { p_invite_id: string }
         Returns: undefined
       }
+      find_user_by_email: { Args: { p_email: string }; Returns: string }
       get_invite_context: {
         Args: { p_token: string }
         Returns: {

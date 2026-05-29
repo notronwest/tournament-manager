@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 
 type OrgSummary = { slug: string; name: string };
 
@@ -11,12 +12,19 @@ type OrgSummary = { slug: string; name: string };
 export default function AdminIndexPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const isPlatformAdmin = usePlatformAdmin();
   const [orgs, setOrgs] = useState<OrgSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
     if (!user) return;
+    // Platform admins always see the picker so the "+ Create
+    // organization" button is reachable, even when they only belong
+    // to one org. Non-admins still get the auto-redirect for
+    // ergonomics. Wait until the admin check resolves so we don't
+    // redirect-then-bounce-back.
+    if (isPlatformAdmin === null) return;
 
     let cancelled = false;
     (async () => {
@@ -36,7 +44,7 @@ export default function AdminIndexPage() {
         .filter((o): o is OrgSummary => !!o);
 
       setOrgs(list);
-      if (list.length === 1) {
+      if (list.length === 1 && !isPlatformAdmin) {
         navigate(`/admin/${list[0].slug}`, { replace: true });
       }
     })();
@@ -44,7 +52,7 @@ export default function AdminIndexPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, navigate, isPlatformAdmin]);
 
   if (error) {
     return (
@@ -69,18 +77,62 @@ export default function AdminIndexPage() {
           You're not a member of any organization yet. Ask an organization
           owner to add you, or create your own.
         </p>
+        {isPlatformAdmin && (
+          <Link
+            to="/admin/new-org"
+            style={{
+              display: "inline-block",
+              marginTop: 12,
+              padding: "8px 14px",
+              background: "#2563eb",
+              color: "#fff",
+              textDecoration: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            + Create organization
+          </Link>
+        )}
       </main>
     );
   }
 
   return (
     <main style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 20, marginTop: 0 }}>Choose an organization</h1>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <h1 style={{ fontSize: 20, margin: 0 }}>Choose an organization</h1>
+        {isPlatformAdmin && (
+          <Link
+            to="/admin/new-org"
+            style={{
+              padding: "8px 14px",
+              background: "#2563eb",
+              color: "#fff",
+              textDecoration: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            + Create organization
+          </Link>
+        )}
+      </div>
       <ul
         style={{
           listStyle: "none",
           padding: 0,
-          marginTop: 16,
           display: "flex",
           flexDirection: "column",
           gap: 8,
