@@ -10,7 +10,6 @@ import {
 import { PartnerSearch } from "../../components/PartnerSearch";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import { eligibilityChips } from "../../lib/eligibility";
-import { formatUsd, priceTiers } from "../../lib/pricing";
 import {
   pickActivePricingTier,
   pickNextPricingTier,
@@ -407,6 +406,17 @@ export default function PublicTournamentPage() {
     (!tournament.registration_opens_at ||
       new Date(tournament.registration_opens_at) <= new Date());
 
+  // Active pricing tier drives the prominent "to register" headline
+  // in the CTA box below. The model we lead with: the registration
+  // fee gets you into your first event; each additional event adds
+  // the additional-event fee. (Per-event overrides were retired as
+  // the default — see migration 20260529150000.)
+  const activeTier = pickActivePricingTier(tiers);
+  const nextTier = pickNextPricingTier(tiers);
+  const regFeeCents = activeTier?.first_event_fee_cents ?? 0;
+  const additionalFeeCents = activeTier?.additional_event_fee_cents ?? 0;
+  const isMultiTier = tiers.length > 1;
+
   return (
     <Shell>
       <header style={{ marginBottom: 24 }}>
@@ -447,41 +457,6 @@ export default function PublicTournamentPage() {
               }
             />
           )}
-          {(() => {
-            // Pricing meta is driven by the active tier, not the
-            // legacy tournament.entry_fee_cents. Single-tier
-            // tournaments (the default / backfill case) get the
-            // same simple label they always did; multi-tier
-            // tournaments also surface "Early bird ends …" /
-            // "Late registration starts …" countdowns.
-            const activeTier = pickActivePricingTier(tiers);
-            const nextTier = pickNextPricingTier(tiers);
-            if (!activeTier || activeTier.first_event_fee_cents === 0) {
-              return null;
-            }
-            const priceLabel =
-              activeTier.additional_event_fee_cents !==
-              activeTier.first_event_fee_cents
-                ? `$${(activeTier.first_event_fee_cents / 100).toFixed(2)} first event · $${(activeTier.additional_event_fee_cents / 100).toFixed(2)} additional`
-                : `$${(activeTier.first_event_fee_cents / 100).toFixed(2)} per event`;
-            // Only label the tier when there's more than one — a
-            // single-tier tournament doesn't need to say "Standard."
-            const showsTierLabel = tiers.length > 1;
-            return (
-              <>
-                <Meta
-                  label={showsTierLabel ? `Entry fee · ${activeTier.label}` : "Entry fee"}
-                  value={priceLabel}
-                />
-                {nextTier && activeTier.ends_at && (
-                  <Meta
-                    label="Next price window"
-                    value={`${nextTier.label} starts ${fmtDate(activeTier.ends_at)}`}
-                  />
-                )}
-              </>
-            );
-          })()}
           <Meta
             label="Status"
             value={capitalize(tournament.status)}
@@ -523,10 +498,42 @@ export default function PublicTournamentPage() {
             </div>
           )}
         </div>
-        {/* No global Register button here on purpose — the per-event
-            Register buttons on each card below let the user pick what
-            they're registering for first, instead of registering and
-            then picking. */}
+        {/* Price headline. We lead with the registration fee — that's
+            what gets a player into their first event. The additional-
+            event fee is a quiet secondary line because most players
+            enter a single event. No global Register button here on
+            purpose: the per-event Register buttons on each card let
+            the player pick what they're registering for first. */}
+        {regFeeCents > 0 && (
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 700,
+                color: "#111",
+                lineHeight: 1.1,
+              }}
+            >
+              ${(regFeeCents / 100).toFixed(0)}
+            </div>
+            <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>
+              to register · includes 1 event
+            </div>
+            {additionalFeeCents > 0 && (
+              <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>
+                +${(additionalFeeCents / 100).toFixed(0)} each additional event
+              </div>
+            )}
+            {isMultiTier && activeTier && (
+              <div style={{ fontSize: 11, color: "#1e40af", marginTop: 4 }}>
+                {activeTier.label} pricing
+                {nextTier && activeTier.ends_at
+                  ? ` · ${nextTier.label} from ${fmtDate(activeTier.ends_at)}`
+                  : ""}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Pending-invite banner — the most actionable thing on the
@@ -613,7 +620,6 @@ export default function PublicTournamentPage() {
               <EventCard
                 key={ev.id}
                 event={ev}
-                tournament={tournament}
                 registrationOpen={registrationOpen}
                 orgSlug={orgSlug ?? ""}
                 tournamentSlug={tournamentSlug ?? ""}
@@ -647,7 +653,6 @@ export default function PublicTournamentPage() {
 
 function EventCard({
   event,
-  tournament,
   registrationOpen,
   orgSlug,
   tournamentSlug,
@@ -659,7 +664,6 @@ function EventCard({
   onNeedsAuth,
 }: {
   event: Event;
-  tournament: Tournament;
   registrationOpen: boolean;
   orgSlug: string;
   tournamentSlug: string;
@@ -674,9 +678,6 @@ function EventCard({
   onNeedsAuth: () => void;
 }) {
   const chips = eligibilityChips(event);
-  const tiers = priceTiers(event, tournament);
-  const isOverride = event.event_fee_cents > 0;
-  const showsFee = tiers.fullPrice > 0 || isOverride;
   const isDoubles = event.format === "doubles";
 
   // ─── Local state for the inline-expand register form ─────────────
@@ -1304,27 +1305,11 @@ function EventCard({
               ))}
             </div>
           )}
-          {showsFee && (
-            <div style={{ color: "#444", fontSize: 13, marginTop: 8 }}>
-              {isOverride ? (
-                <>
-                  Event fee:{" "}
-                  <strong>{formatUsd(event.event_fee_cents)}</strong>
-                </>
-              ) : tiers.fullPrice === tiers.additionalPrice ? (
-                <>
-                  Event fee: <strong>{formatUsd(tiers.fullPrice)}</strong>
-                </>
-              ) : (
-                <>
-                  <strong>{formatUsd(tiers.fullPrice)}</strong> as your
-                  first event,{" "}
-                  <strong>{formatUsd(tiers.additionalPrice)}</strong> as
-                  an additional event
-                </>
-              )}
-            </div>
-          )}
+          {/* No per-event price line here. Pricing is tournament-level
+              (registration fee includes one event, +additional per
+              extra event) and is shown prominently in the header CTA
+              box, so repeating a per-event number on every card just
+              muddied the model. */}
         </div>
         <div style={{ alignSelf: "center" }}>{renderAction()}</div>
       </div>

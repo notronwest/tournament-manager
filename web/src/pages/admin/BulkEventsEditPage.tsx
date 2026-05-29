@@ -301,7 +301,7 @@ export default function BulkEventsEditPage() {
                   <Th style={{ width: 140 }}>Status</Th>
                   <Th style={{ width: 200 }}>Scheduled start</Th>
                   <Th style={{ width: 110 }}>Max teams</Th>
-                  <Th style={{ width: 110 }}>Fee ($)</Th>
+                  <Th style={{ width: 130 }}>Custom price ($)</Th>
                 </tr>
               </thead>
               <tbody>
@@ -399,7 +399,7 @@ export default function BulkEventsEditPage() {
                           type="number"
                           min="0"
                           step="0.01"
-                          placeholder="0"
+                          placeholder="—"
                           value={d.feeDollars}
                           onChange={(e) =>
                             updateDraft(d.id, { feeDollars: e.target.value })
@@ -413,6 +413,23 @@ export default function BulkEventsEditPage() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 12,
+              color: "#888",
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>Custom price</strong> is an optional override for a
+            single event. Leave it blank (—) and the event uses the
+            tournament's pricing: players pay the registration fee for
+            their first event and the additional-event fee for each
+            event after that. Only set a custom price for a one-off
+            like a premium division — it replaces the tournament
+            pricing for that event entirely.
           </div>
 
           {error && (

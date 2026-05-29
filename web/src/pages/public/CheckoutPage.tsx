@@ -503,10 +503,10 @@ export default function CheckoutPage() {
                   <span style={{ color: "#888" }}>
                     (
                     {it.tier === "first"
-                      ? "first event"
+                      ? "registration · incl. 1 event"
                       : it.tier === "additional"
-                        ? "additional"
-                        : "flat fee"}
+                        ? "additional event"
+                        : "event fee"}
                     )
                   </span>
                 </span>
