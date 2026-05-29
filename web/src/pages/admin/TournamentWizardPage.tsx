@@ -1,0 +1,1360 @@
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { supabase } from "../../supabase";
+import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { PricingTiersEditor } from "../../components/PricingTiersEditor";
+import {
+  makeEmptyTierDraft,
+  tierDraftsToInserts,
+  tiersToDrafts,
+  type PricingPattern,
+  type TierDraft,
+} from "../../lib/pricingTiers";
+import type { Database } from "../../types/supabase";
+
+type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+
+// ─────────────────────────────────────────────────────────────────────
+// Step model
+// ─────────────────────────────────────────────────────────────────────
+
+type StepId =
+  | "basics"
+  | "events"
+  | "pricing"
+  | "cancellation"
+  | "sponsors"
+  | "faqs"
+  | "payment"
+  | "review";
+
+type StepMeta = {
+  id: StepId;
+  title: string;
+  // Required for publish (the minimum-to-publish gate enforces these).
+  required: boolean;
+  // True for steps that are "coming in a follow-up slice" — they
+  // render an explanation + link rather than a real form, so the
+  // wizard still flows but the work happens elsewhere for now.
+  stub: boolean;
+};
+
+const STEPS: StepMeta[] = [
+  { id: "basics", title: "Basics", required: true, stub: false },
+  { id: "events", title: "Events", required: true, stub: true },
+  { id: "pricing", title: "Pricing", required: true, stub: false },
+  { id: "cancellation", title: "Cancellation policy", required: false, stub: true },
+  { id: "sponsors", title: "Sponsors & branding", required: false, stub: true },
+  { id: "faqs", title: "FAQs", required: false, stub: true },
+  { id: "payment", title: "Accept payment", required: false, stub: true },
+  { id: "review", title: "Review & publish", required: true, stub: false },
+];
+
+// ─────────────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────────────
+
+// Tournament creation wizard. Steps a new organizer through a
+// tournament from a blank slate to publish in clear, focused
+// stages — instead of one long form. Lives at
+// /admin/:org/tournaments/new (new tournament) and
+// /admin/:org/tournaments/:tournamentSlug/wizard (resume a draft).
+//
+// Slice 1 wires three real steps (Basics / Pricing / Review) plus
+// five stubs (Events / Cancellation / Sponsors / FAQs / Payment).
+// Follow-up slices replace each stub with its full step. The mockup
+// (mockups/tournament-creation-flow.html) is the design source of
+// truth for layout + copy.
+export default function TournamentWizardPage() {
+  const { org } = useCurrentOrg();
+  const navigate = useNavigate();
+  const { tournamentSlug: routeSlug } = useParams<{
+    tournamentSlug?: string;
+  }>();
+  const isResume = !!routeSlug;
+
+  const [currentStep, setCurrentStep] = useState<StepId>("basics");
+  const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [eventCount, setEventCount] = useState(0);
+
+  // Basics form state
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
+  const [description, setDescription] = useState("");
+  const [locationName, setLocationName] = useState("");
+  const [locationAddress, setLocationAddress] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
+  const [registrationOpensAt, setRegistrationOpensAt] = useState("");
+  const [registrationClosesAt, setRegistrationClosesAt] = useState("");
+  const [courtCount, setCourtCount] = useState("0");
+
+  // Pricing state
+  const [pricingPattern, setPricingPattern] =
+    useState<PricingPattern>("single");
+  const [pricingTiers, setPricingTiers] = useState<TierDraft[]>(() => [
+    makeEmptyTierDraft("Standard"),
+  ]);
+  const [paidRegCount, setPaidRegCount] = useState(0);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingDraft, setLoadingDraft] = useState(isResume);
+
+  // Resume mode: hydrate every step's state from the existing draft.
+  useEffect(() => {
+    if (!isResume || !org || !routeSlug) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingDraft(true);
+      const { data: t, error: tErr } = await supabase
+        .from("tournaments")
+        .select("*")
+        .eq("organization_id", org.id)
+        .eq("slug", routeSlug)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (cancelled) return;
+      if (tErr || !t) {
+        setError(tErr?.message ?? "Tournament not found.");
+        setLoadingDraft(false);
+        return;
+      }
+      setTournament(t);
+      setName(t.name);
+      setSlug(t.slug);
+      setSlugTouched(true);
+      setDescription(t.description ?? "");
+      setLocationName(t.location_name ?? "");
+      setLocationAddress(t.location_address ?? "");
+      setStartsAt(isoToLocal(t.starts_at));
+      setEndsAt(isoToLocal(t.ends_at));
+      setRegistrationOpensAt(isoToLocal(t.registration_opens_at));
+      setRegistrationClosesAt(isoToLocal(t.registration_closes_at));
+      setCourtCount(String(t.court_count));
+      setPricingPattern(t.pricing_pattern);
+
+      // Pricing tiers
+      const { data: tierRows } = await supabase
+        .from("tournament_pricing_tiers")
+        .select("*")
+        .eq("tournament_id", t.id)
+        .order("sort_order", { ascending: true });
+      if (cancelled) return;
+      if (tierRows && tierRows.length > 0) {
+        setPricingTiers(tiersToDrafts(tierRows));
+      }
+
+      // Event count (gates Step 8 publish)
+      const { count: evCount } = await supabase
+        .from("events")
+        .select("id", { count: "exact", head: true })
+        .eq("tournament_id", t.id)
+        .is("deleted_at", null);
+      if (cancelled) return;
+      setEventCount(evCount ?? 0);
+
+      // Paid registration count (for the Pricing editor's reassurance)
+      const { data: evIdRows } = await supabase
+        .from("events")
+        .select("id")
+        .eq("tournament_id", t.id)
+        .is("deleted_at", null);
+      if (cancelled) return;
+      const eventIds = (evIdRows ?? []).map((e) => e.id);
+      if (eventIds.length > 0) {
+        const { count } = await supabase
+          .from("event_registrations")
+          .select("id", { count: "exact", head: true })
+          .in("event_id", eventIds)
+          .eq("status", "paid")
+          .is("deleted_at", null);
+        if (cancelled) return;
+        setPaidRegCount(count ?? 0);
+      }
+      setLoadingDraft(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isResume, org, routeSlug]);
+
+  if (!org) return null;
+  if (loadingDraft) {
+    return <div style={{ padding: 24, color: "#666" }}>Loading draft…</div>;
+  }
+
+  // ── Save handlers ───────────────────────────────────────────────
+
+  const saveBasics = async (): Promise<boolean> => {
+    setError(null);
+    const finalSlug = (slug || slugify(name)).trim();
+    if (!name.trim()) {
+      setError("Tournament name is required.");
+      return false;
+    }
+    if (!finalSlug) {
+      setError("URL slug is required.");
+      return false;
+    }
+    const startsAtIso = toIso(startsAt);
+    const endsAtIso = toIso(endsAt);
+    if (!startsAtIso || !endsAtIso) {
+      setError("Start and end dates are required.");
+      return false;
+    }
+    if (new Date(endsAtIso) < new Date(startsAtIso)) {
+      setError("End date must be on or after the start date.");
+      return false;
+    }
+    const courtCountNum = parseInt(courtCount || "0", 10);
+    if (Number.isNaN(courtCountNum) || courtCountNum < 0) {
+      setError("Court count must be a non-negative integer.");
+      return false;
+    }
+
+    const payload = {
+      slug: finalSlug,
+      name: name.trim(),
+      description: description.trim() || null,
+      location_name: locationName.trim() || null,
+      location_address: locationAddress.trim() || null,
+      starts_at: startsAtIso,
+      ends_at: endsAtIso,
+      registration_opens_at: toIso(registrationOpensAt),
+      registration_closes_at: toIso(registrationClosesAt),
+      court_count: courtCountNum,
+    };
+
+    setBusy(true);
+    if (!tournament) {
+      // First save of a brand-new tournament → INSERT.
+      const { data, error: insErr } = await supabase
+        .from("tournaments")
+        .insert({
+          ...payload,
+          organization_id: org.id,
+          status: "draft",
+        })
+        .select()
+        .single();
+      setBusy(false);
+      if (insErr || !data) {
+        setError(insErr?.message ?? "Failed to create tournament.");
+        return false;
+      }
+      setTournament(data);
+      // Move URL to the resume form so reloads + the rail's progress
+      // pick up the draft.
+      navigate(`/admin/${org.slug}/tournaments/${data.slug}/wizard`, {
+        replace: true,
+      });
+      return true;
+    }
+    // Resume mode → UPDATE existing draft.
+    const { data, error: updErr } = await supabase
+      .from("tournaments")
+      .update(payload)
+      .eq("id", tournament.id)
+      .select()
+      .single();
+    setBusy(false);
+    if (updErr || !data) {
+      setError(updErr?.message ?? "Failed to save.");
+      return false;
+    }
+    setTournament(data);
+    // Slug may have changed — update URL.
+    if (data.slug !== routeSlug) {
+      navigate(`/admin/${org.slug}/tournaments/${data.slug}/wizard`, {
+        replace: true,
+      });
+    }
+    return true;
+  };
+
+  const savePricing = async (): Promise<boolean> => {
+    if (!tournament) {
+      setError("Save Basics first so we have a draft to attach pricing to.");
+      return false;
+    }
+    setError(null);
+    const tierResult = tierDraftsToInserts(pricingTiers);
+    if (tierResult.error !== null) {
+      setError(tierResult.error);
+      return false;
+    }
+    setBusy(true);
+    const { error: updErr } = await supabase
+      .from("tournaments")
+      .update({ pricing_pattern: pricingPattern })
+      .eq("id", tournament.id);
+    if (updErr) {
+      setBusy(false);
+      setError(updErr.message);
+      return false;
+    }
+    const { error: tierErr } = await supabase.rpc("replace_pricing_tiers", {
+      p_tournament_id: tournament.id,
+      p_tiers: tierResult.rows,
+    });
+    setBusy(false);
+    if (tierErr) {
+      setError(`Pricing failed to save: ${tierErr.message}`);
+      return false;
+    }
+    return true;
+  };
+
+  const publish = async (): Promise<void> => {
+    if (!tournament) return;
+    setError(null);
+    setBusy(true);
+    const { error: pubErr } = await supabase
+      .from("tournaments")
+      .update({ status: "published" })
+      .eq("id", tournament.id);
+    setBusy(false);
+    if (pubErr) {
+      setError(pubErr.message);
+      return;
+    }
+    navigate(`/admin/${org.slug}/tournaments/${tournament.slug}`);
+  };
+
+  // ── Navigation ──────────────────────────────────────────────────
+
+  const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
+  const goStep = (id: StepId) => setCurrentStep(id);
+  const next = STEPS[stepIndex + 1];
+  const prev = STEPS[stepIndex - 1];
+
+  // On Save & continue: persist the current step (real steps only),
+  // then advance.
+  const saveAndContinue = async () => {
+    let ok = true;
+    if (currentStep === "basics") ok = await saveBasics();
+    else if (currentStep === "pricing") ok = await savePricing();
+    if (ok && next) goStep(next.id);
+  };
+
+  const saveAndExit = async () => {
+    let ok = true;
+    if (currentStep === "basics") ok = await saveBasics();
+    else if (currentStep === "pricing") ok = await savePricing();
+    if (ok) {
+      if (tournament) {
+        navigate(`/admin/${org.slug}/tournaments/${tournament.slug}`);
+      } else {
+        navigate(`/admin/${org.slug}/tournaments`);
+      }
+    }
+  };
+
+  // ── Minimum-to-publish gate ─────────────────────────────────────
+
+  const publishBlockers: string[] = [];
+  if (!tournament) publishBlockers.push("Basics not saved");
+  else {
+    if (!tournament.starts_at) publishBlockers.push("Start date missing");
+    if (eventCount === 0) publishBlockers.push("At least one event required");
+  }
+
+  // ── Render ──────────────────────────────────────────────────────
+
+  return (
+    <div style={shellStyle}>
+      <Rail
+        steps={STEPS}
+        current={currentStep}
+        tournamentName={tournament?.name || name || "Untitled tournament"}
+        onPick={goStep}
+        onPublish={() => goStep("review")}
+        onSaveExit={() => void saveAndExit()}
+        publishable={publishBlockers.length === 0}
+      />
+
+      <main style={paneStyle}>
+        {currentStep === "basics" && (
+          <BasicsStep
+            name={name}
+            setName={setName}
+            slug={slug}
+            setSlug={setSlug}
+            slugTouched={slugTouched}
+            setSlugTouched={setSlugTouched}
+            description={description}
+            setDescription={setDescription}
+            locationName={locationName}
+            setLocationName={setLocationName}
+            locationAddress={locationAddress}
+            setLocationAddress={setLocationAddress}
+            startsAt={startsAt}
+            setStartsAt={setStartsAt}
+            endsAt={endsAt}
+            setEndsAt={setEndsAt}
+            registrationOpensAt={registrationOpensAt}
+            setRegistrationOpensAt={setRegistrationOpensAt}
+            registrationClosesAt={registrationClosesAt}
+            setRegistrationClosesAt={setRegistrationClosesAt}
+            courtCount={courtCount}
+            setCourtCount={setCourtCount}
+            mode={tournament ? "edit" : "create"}
+          />
+        )}
+        {currentStep === "events" && (
+          <EventsStub
+            tournament={tournament}
+            orgSlug={org.slug}
+            eventCount={eventCount}
+          />
+        )}
+        {currentStep === "pricing" && (
+          <PricingStep
+            pattern={pricingPattern}
+            tiers={pricingTiers}
+            paidRegistrationCount={paidRegCount}
+            onChange={(p, t) => {
+              setPricingPattern(p);
+              setPricingTiers(t);
+            }}
+          />
+        )}
+        {currentStep === "cancellation" && (
+          <ComingSoonStub
+            title="Cancellation policy"
+            blurb="Pick a refund policy (full refund through date X / partial / no refunds) and show it to players before they pay. We'll add this in the next wizard slice."
+          />
+        )}
+        {currentStep === "sponsors" && (
+          <ComingSoonStub
+            title="Sponsors & branding"
+            blurb="Add a tournament logo, banner image, and sponsor strip that show on the public tournament page. Coming next."
+          />
+        )}
+        {currentStep === "faqs" && (
+          <ComingSoonStub
+            title="FAQs"
+            blurb="Add a short FAQ section to the public tournament page (parking, format details, lunch, etc.). Coming next."
+          />
+        )}
+        {currentStep === "payment" && (
+          <ComingSoonStub
+            title="Accept payment"
+            blurb="Connect a Stripe account so players can pay during registration. Comes with the Stripe Connect onboarding work."
+          />
+        )}
+        {currentStep === "review" && (
+          <ReviewStep
+            tournament={tournament}
+            eventCount={eventCount}
+            pricingTiers={pricingTiers}
+            pricingPattern={pricingPattern}
+            blockers={publishBlockers}
+            onPublish={() => void publish()}
+            onJumpTo={goStep}
+            busy={busy}
+          />
+        )}
+
+        {error && (
+          <div
+            style={{
+              marginTop: 16,
+              padding: 12,
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 6,
+              color: "#991b1b",
+              fontSize: 13,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {/* Bottom action bar — Back / Skip-when-optional / Save&continue
+            or Publish (on review). */}
+        <div style={actionBarStyle}>
+          <button
+            type="button"
+            style={btnGhost}
+            onClick={() => prev && goStep(prev.id)}
+            disabled={!prev || busy}
+          >
+            ← Back
+          </button>
+          {STEPS[stepIndex] && !STEPS[stepIndex].required && next && (
+            <button
+              type="button"
+              style={btnSecondary}
+              onClick={() => goStep(next.id)}
+              disabled={busy}
+            >
+              Skip
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
+          {currentStep === "review" ? (
+            <button
+              type="button"
+              style={btnPrimary(busy || publishBlockers.length > 0)}
+              onClick={() => void publish()}
+              disabled={busy || publishBlockers.length > 0}
+            >
+              {busy ? "Publishing…" : "Publish tournament"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              style={btnPrimary(busy)}
+              onClick={() => void saveAndContinue()}
+              disabled={busy}
+            >
+              {busy ? "Saving…" : "Save & continue →"}
+            </button>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Left rail
+// ─────────────────────────────────────────────────────────────────────
+
+function Rail({
+  steps,
+  current,
+  tournamentName,
+  onPick,
+  onPublish,
+  onSaveExit,
+  publishable,
+}: {
+  steps: StepMeta[];
+  current: StepId;
+  tournamentName: string;
+  onPick: (id: StepId) => void;
+  onPublish: () => void;
+  onSaveExit: () => void;
+  publishable: boolean;
+}) {
+  const currentIdx = steps.findIndex((s) => s.id === current);
+  return (
+    <aside style={railStyle}>
+      <div>
+        <div style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Tournament
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "#222", marginTop: 4 }}>
+          {tournamentName}
+        </div>
+        <div
+          style={{
+            display: "inline-block",
+            marginTop: 6,
+            padding: "2px 8px",
+            background: "#f3f4f6",
+            color: "#666",
+            borderRadius: 3,
+            fontSize: 10,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+          }}
+        >
+          Draft
+        </div>
+      </div>
+
+      <ol style={stepListStyle}>
+        {steps.map((s, i) => {
+          const state =
+            i < currentIdx ? "done" : i === currentIdx ? "active" : "todo";
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => onPick(s.id)}
+                style={stepBtnStyle(state)}
+              >
+                <span style={indicatorStyle(state)}>
+                  {state === "done" ? "✓" : i + 1}
+                </span>
+                <span style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: state === "active" ? 600 : 500,
+                    }}
+                  >
+                    {s.title}
+                  </div>
+                  {!s.required && (
+                    <div style={{ fontSize: 11, color: "#888" }}>
+                      Optional
+                    </div>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button
+          type="button"
+          onClick={onPublish}
+          disabled={!publishable}
+          style={{
+            padding: "10px 14px",
+            background: publishable ? "#16a34a" : "#e5e7eb",
+            color: publishable ? "#fff" : "#888",
+            border: "none",
+            borderRadius: 6,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: publishable ? "pointer" : "not-allowed",
+            fontFamily: "inherit",
+          }}
+        >
+          {publishable ? "Review & publish →" : "Publish (needs more info)"}
+        </button>
+        <button
+          type="button"
+          onClick={onSaveExit}
+          style={{
+            padding: "8px 14px",
+            background: "#fff",
+            color: "#555",
+            border: "1px solid #e2e2e2",
+            borderRadius: 6,
+            fontSize: 12,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Save &amp; exit
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Step 1: Basics
+// ─────────────────────────────────────────────────────────────────────
+
+function BasicsStep(props: {
+  name: string;
+  setName: (s: string) => void;
+  slug: string;
+  setSlug: (s: string) => void;
+  slugTouched: boolean;
+  setSlugTouched: (b: boolean) => void;
+  description: string;
+  setDescription: (s: string) => void;
+  locationName: string;
+  setLocationName: (s: string) => void;
+  locationAddress: string;
+  setLocationAddress: (s: string) => void;
+  startsAt: string;
+  setStartsAt: (s: string) => void;
+  endsAt: string;
+  setEndsAt: (s: string) => void;
+  registrationOpensAt: string;
+  setRegistrationOpensAt: (s: string) => void;
+  registrationClosesAt: string;
+  setRegistrationClosesAt: (s: string) => void;
+  courtCount: string;
+  setCourtCount: (s: string) => void;
+  mode: "create" | "edit";
+}) {
+  return (
+    <div>
+      <StepHeader
+        title="Basics"
+        lede="Name, dates, and where it's happening. This is the only step you have to fill in — everything else is skippable."
+      />
+      <FieldRow>
+        <Field label="Tournament name" required>
+          <input
+            type="text"
+            required
+            value={props.name}
+            onChange={(e) => {
+              props.setName(e.target.value);
+              if (props.mode === "create" && !props.slugTouched) {
+                props.setSlug(slugify(e.target.value));
+              }
+            }}
+            style={inputStyle}
+          />
+        </Field>
+        <Field
+          label="URL slug"
+          required
+          hint="Used in the public URL."
+        >
+          <input
+            type="text"
+            required
+            value={props.slug}
+            onChange={(e) => {
+              props.setSlug(slugify(e.target.value));
+              props.setSlugTouched(true);
+            }}
+            style={inputStyle}
+          />
+        </Field>
+      </FieldRow>
+
+      <Field label="Description">
+        <textarea
+          value={props.description}
+          onChange={(e) => props.setDescription(e.target.value)}
+          rows={3}
+          style={{ ...inputStyle, fontFamily: "inherit", resize: "vertical" }}
+        />
+      </Field>
+
+      <FieldRow>
+        <Field label="Location name">
+          <input
+            type="text"
+            value={props.locationName}
+            onChange={(e) => props.setLocationName(e.target.value)}
+            style={inputStyle}
+          />
+        </Field>
+        <Field label="Location address">
+          <input
+            type="text"
+            value={props.locationAddress}
+            onChange={(e) => props.setLocationAddress(e.target.value)}
+            style={inputStyle}
+          />
+        </Field>
+      </FieldRow>
+
+      <FieldRow>
+        <Field label="Starts at" required>
+          <input
+            type="datetime-local"
+            required
+            value={props.startsAt}
+            onChange={(e) => props.setStartsAt(e.target.value)}
+            style={inputStyle}
+          />
+        </Field>
+        <Field label="Ends at" required>
+          <input
+            type="datetime-local"
+            required
+            value={props.endsAt}
+            onChange={(e) => props.setEndsAt(e.target.value)}
+            style={inputStyle}
+          />
+        </Field>
+      </FieldRow>
+
+      <FieldRow>
+        <Field label="Registration opens">
+          <input
+            type="datetime-local"
+            value={props.registrationOpensAt}
+            onChange={(e) => props.setRegistrationOpensAt(e.target.value)}
+            style={inputStyle}
+          />
+        </Field>
+        <Field label="Registration closes">
+          <input
+            type="datetime-local"
+            value={props.registrationClosesAt}
+            onChange={(e) => props.setRegistrationClosesAt(e.target.value)}
+            style={inputStyle}
+          />
+        </Field>
+      </FieldRow>
+
+      <FieldRow>
+        <Field
+          label="Court count"
+          hint="Total courts available at the venue. Used by the schedule estimator."
+        >
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={props.courtCount}
+            onChange={(e) => props.setCourtCount(e.target.value)}
+            style={{ ...inputStyle, maxWidth: 160 }}
+          />
+        </Field>
+      </FieldRow>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Step 2: Events stub (links out to the existing bulk events editor
+// until the wizard slice that integrates it lands)
+// ─────────────────────────────────────────────────────────────────────
+
+function EventsStub({
+  tournament,
+  orgSlug,
+  eventCount,
+}: {
+  tournament: Tournament | null;
+  orgSlug: string;
+  eventCount: number;
+}) {
+  return (
+    <div>
+      <StepHeader
+        title="Events"
+        lede={
+          tournament
+            ? "Add the events (divisions / brackets) players can register for. We'll pull this into the wizard in a follow-up slice; for now use the bulk events editor."
+            : "Save Basics first — events get added to a draft tournament. Click ← Back to fill in Basics if you haven't yet."
+        }
+      />
+      {tournament ? (
+        <div
+          style={{
+            padding: 16,
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#1e40af",
+          }}
+        >
+          <div style={{ marginBottom: 10 }}>
+            <strong>
+              {eventCount === 0
+                ? "No events yet."
+                : `${eventCount} event${eventCount === 1 ? "" : "s"} added.`}
+            </strong>{" "}
+            Add and edit events in the bulk editor, then come back to continue.
+          </div>
+          <Link
+            to={`/admin/${orgSlug}/tournaments/${tournament.slug}/events/edit`}
+            style={{
+              display: "inline-block",
+              padding: "8px 14px",
+              background: "#2563eb",
+              color: "#fff",
+              textDecoration: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+            }}
+          >
+            Open events editor →
+          </Link>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Step 3: Pricing
+// ─────────────────────────────────────────────────────────────────────
+
+function PricingStep({
+  pattern,
+  tiers,
+  paidRegistrationCount,
+  onChange,
+}: {
+  pattern: PricingPattern;
+  tiers: TierDraft[];
+  paidRegistrationCount: number;
+  onChange: (p: PricingPattern, t: TierDraft[]) => void;
+}) {
+  return (
+    <div>
+      <StepHeader
+        title="Pricing"
+        lede="Pick how pricing should change as the tournament gets closer. Most organizers use a single price or offer an early-bird discount."
+      />
+      <PricingTiersEditor
+        pattern={pattern}
+        tiers={tiers}
+        paidRegistrationCount={paidRegistrationCount}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Generic "coming soon" stub for steps not yet integrated
+// ─────────────────────────────────────────────────────────────────────
+
+function ComingSoonStub({ title, blurb }: { title: string; blurb: string }) {
+  return (
+    <div>
+      <StepHeader title={title} lede="This step is optional — Skip moves you forward." />
+      <div
+        style={{
+          padding: 18,
+          background: "#fffbeb",
+          border: "1px solid #fde68a",
+          borderRadius: 8,
+          fontSize: 13,
+          color: "#7a5d00",
+          lineHeight: 1.55,
+        }}
+      >
+        <strong>Coming in a follow-up slice.</strong> {blurb}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Step 8: Review & publish
+// ─────────────────────────────────────────────────────────────────────
+
+function ReviewStep({
+  tournament,
+  eventCount,
+  pricingTiers,
+  pricingPattern,
+  blockers,
+  onPublish,
+  onJumpTo,
+  busy,
+}: {
+  tournament: Tournament | null;
+  eventCount: number;
+  pricingTiers: TierDraft[];
+  pricingPattern: PricingPattern;
+  blockers: string[];
+  onPublish: () => void;
+  onJumpTo: (id: StepId) => void;
+  busy: boolean;
+}) {
+  return (
+    <div>
+      <StepHeader
+        title="Review & publish"
+        lede="Final check before this goes live and players can register."
+      />
+
+      {blockers.length > 0 && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 14,
+            background: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#991b1b",
+          }}
+        >
+          <strong>Can't publish yet:</strong>
+          <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+            {blockers.map((b) => (
+              <li key={b}>{b}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 14,
+        }}
+      >
+        <ReviewCard
+          title="Basics"
+          onEdit={() => onJumpTo("basics")}
+          done={!!tournament}
+        >
+          {tournament ? (
+            <>
+              <div>
+                <strong>{tournament.name}</strong>
+              </div>
+              <div style={{ color: "#666", marginTop: 4 }}>
+                {fmtDate(tournament.starts_at)} – {fmtDate(tournament.ends_at)}
+              </div>
+              {tournament.location_name && (
+                <div style={{ color: "#666", marginTop: 2 }}>
+                  {tournament.location_name}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: "#7a5d00" }}>Not saved yet.</div>
+          )}
+        </ReviewCard>
+
+        <ReviewCard
+          title="Events"
+          onEdit={() => onJumpTo("events")}
+          done={eventCount > 0}
+        >
+          {eventCount > 0 ? (
+            <div>
+              {eventCount} event{eventCount === 1 ? "" : "s"} configured
+            </div>
+          ) : (
+            <div style={{ color: "#7a5d00" }}>
+              At least one event is required.
+            </div>
+          )}
+        </ReviewCard>
+
+        <ReviewCard
+          title="Pricing"
+          onEdit={() => onJumpTo("pricing")}
+          done={pricingTiers.length > 0}
+        >
+          <div>
+            Pattern: <strong>{prettyPattern(pricingPattern)}</strong>
+          </div>
+          <div style={{ color: "#666", marginTop: 4 }}>
+            {pricingTiers.length} tier
+            {pricingTiers.length === 1 ? "" : "s"}
+          </div>
+        </ReviewCard>
+
+        <ReviewCard
+          title="Optional steps"
+          onEdit={() => onJumpTo("cancellation")}
+          done={true}
+        >
+          <div style={{ color: "#666" }}>
+            Cancellation, sponsors, FAQs, payment — fill in any of these now or
+            after publish.
+          </div>
+        </ReviewCard>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <button
+          type="button"
+          style={btnPrimary(busy || blockers.length > 0)}
+          onClick={onPublish}
+          disabled={busy || blockers.length > 0}
+        >
+          {busy ? "Publishing…" : "Publish tournament"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReviewCard({
+  title,
+  onEdit,
+  done,
+  children,
+}: {
+  title: string;
+  onEdit: () => void;
+  done: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: 14,
+        background: done ? "#fff" : "#fffbeb",
+        border: `1px solid ${done ? "#e5e7eb" : "#fde68a"}`,
+        borderRadius: 8,
+        fontSize: 13,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 8,
+        }}
+      >
+        <strong>{title}</strong>
+        <button
+          type="button"
+          onClick={onEdit}
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#2563eb",
+            cursor: "pointer",
+            fontSize: 12,
+            fontFamily: "inherit",
+          }}
+        >
+          Edit
+        </button>
+      </div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Shared UI bits
+// ─────────────────────────────────────────────────────────────────────
+
+function StepHeader({ title, lede }: { title: string; lede: string }) {
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>{title}</h1>
+      <p style={{ margin: "4px 0 0", color: "#666", fontSize: 14, lineHeight: 1.55 }}>
+        {lede}
+      </p>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        fontSize: 13,
+        color: "#555",
+        marginBottom: 14,
+      }}
+    >
+      <span>
+        {label}
+        {required && <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>}
+      </span>
+      {children}
+      {hint && (
+        <span style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+          {hint}
+        </span>
+      )}
+    </label>
+  );
+}
+
+function FieldRow({ children }: { children: ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 16,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────
+
+const shellStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "260px 1fr",
+  gap: 24,
+  alignItems: "start",
+};
+
+const railStyle: CSSProperties = {
+  position: "sticky",
+  top: 24,
+  background: "#fafafa",
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  padding: 18,
+  display: "flex",
+  flexDirection: "column",
+  gap: 16,
+};
+
+const stepListStyle: CSSProperties = {
+  listStyle: "none",
+  padding: 0,
+  margin: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+};
+
+function stepBtnStyle(state: "done" | "active" | "todo"): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    padding: "8px 10px",
+    background: state === "active" ? "#fff" : "transparent",
+    border: state === "active" ? "1px solid #d1d5db" : "1px solid transparent",
+    borderRadius: 6,
+    cursor: "pointer",
+    textAlign: "left",
+    fontFamily: "inherit",
+    color: state === "todo" ? "#888" : "#333",
+  };
+}
+
+function indicatorStyle(state: "done" | "active" | "todo"): CSSProperties {
+  return {
+    width: 22,
+    height: 22,
+    borderRadius: "50%",
+    background:
+      state === "done"
+        ? "#16a34a"
+        : state === "active"
+          ? "#2563eb"
+          : "#e5e7eb",
+    color: state === "todo" ? "#888" : "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 11,
+    fontWeight: 600,
+    flexShrink: 0,
+  };
+}
+
+const paneStyle: CSSProperties = {
+  background: "#fff",
+  border: "1px solid #e5e7eb",
+  borderRadius: 10,
+  padding: "26px 30px",
+  minHeight: 400,
+};
+
+const inputStyle: CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  border: "1px solid #e2e2e2",
+  borderRadius: 6,
+  fontSize: 14,
+  fontFamily: "inherit",
+  boxSizing: "border-box",
+};
+
+const actionBarStyle: CSSProperties = {
+  marginTop: 22,
+  paddingTop: 16,
+  borderTop: "1px solid #f0f0f0",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const btnGhost: CSSProperties = {
+  padding: "9px 18px",
+  background: "transparent",
+  color: "#666",
+  border: "1px solid #e2e2e2",
+  borderRadius: 6,
+  fontSize: 13,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const btnSecondary: CSSProperties = {
+  padding: "9px 18px",
+  background: "#fff",
+  color: "#2563eb",
+  border: "1px solid #2563eb",
+  borderRadius: 6,
+  fontSize: 13,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+function btnPrimary(disabled: boolean): CSSProperties {
+  return {
+    padding: "9px 22px",
+    background: disabled ? "#9ca3af" : "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Helpers (mirror TournamentFormPage's set — kept inline to match the
+// "bits inline" project convention)
+// ─────────────────────────────────────────────────────────────────────
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+function toIso(localValue: string): string | null {
+  if (!localValue) return null;
+  return new Date(localValue).toISOString();
+}
+
+function isoToLocal(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function prettyPattern(p: PricingPattern): string {
+  switch (p) {
+    case "single":
+      return "Single price";
+    case "early_bird":
+      return "Early bird";
+    case "early_bird_plus_late":
+      return "Early bird + Late fee";
+    case "custom":
+      return "Custom";
+  }
+}

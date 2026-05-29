@@ -122,6 +122,15 @@ Things actively queued — the next handful of commits.
 - **As a first-time Organizer**, I want tournament creation to be a multi-step wizard with explicit "Skip / I'll do this later" affordances and inline "what does this mean?" hints, **so that** I can build a publishable tournament without needing to understand every term up front.
 - **As an experienced Organizer**, I want the wizard's Events step to come pre-populated with a sensible default set of divisions (typical club bracket: Mens / Womens / Mixed across 3.0 / 3.5 / 4.0 / 4.5) with **checkboxes** to include/exclude each one, **so that** I'm un-checking and adjusting instead of entering twelve events from scratch.
 
+**Shipping in slices** — slice 1 is live.
+
+- ✅ **Slice 1: Shell + Basics + Pricing + Review.** `TournamentWizardPage` at `/admin/:org/tournaments/new` (create) and `/admin/:org/tournaments/:slug/wizard` (resume a draft). Left-rail step nav, main pane, bottom action bar with Back / Skip (optional only) / Save & continue. Step 1 (Basics) INSERTs the draft on first save and redirects to the resume URL. Step 3 embeds `PricingTiersEditor` and writes via `replace_pricing_tiers`. Step 8 (Review) shows per-section cards + a minimum-to-publish gate (Basics saved + ≥1 event). Steps 2/4/5/6/7 are navigable stubs with explanations + (for Events) a link to the existing bulk editor. Edit mode of `TournamentFormPage` stays for single-page editing of existing tournaments.
+- 🚧 **Slice 2 (next): Step 2 Events** — integrate the bulk events table into the wizard (probably extract `BulkEventsEditPage`'s table as a reusable component); pre-populate with the default-divisions template + checkboxes per the experienced-organizer story.
+- 🚧 **Slice 3: Step 4 Cancellation policy** — preset cards (full refund / partial / no refunds) with a custom option.
+- 🚧 **Slice 4: Steps 5 + 6 (Sponsors + FAQs)** — banner image + sponsor strip + FAQ rows, surfaced on the public page.
+- 🚧 **Slice 5: Step 7 Accept payment** — lives with the Stripe Connect onboarding work.
+- 🚧 **Slice 6: Polish** — per-step deep-link URLs, refined publish-gate copy, resume-prompt from the tournament detail page.
+
 **Touches:** Big-rock item. Replaces the create-mode of `TournamentFormPage` with a wizard component. **Per-step URLs** (`/admin/:org/tournaments/new/basics` → `/events` → `/pricing` → ...) so refresh and bookmarks work. Tournament lands in `status='draft'` after step 1; Save & exit returns to Tournaments list and re-entering resumes at the next unfinished step. Per-event Edit is inline expand on the row (matches the public-flow register pattern, no modal-soup). See scenarios C2 + C3 + C4 in `docs/scenarios/tournament-lifecycle.md` and the mockup at `mockups/tournament-creation-flow.html`.
 
 **Minimum-to-publish (decided):**
