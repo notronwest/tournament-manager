@@ -17,6 +17,7 @@
 // these helpers exist to keep the boundary semantics in one place.
 
 import type { Database } from "../types/supabase";
+import { formatUsd } from "./pricing";
 
 export type PricingTier =
   Database["public"]["Tables"]["tournament_pricing_tiers"]["Row"];
@@ -68,6 +69,39 @@ export function pickNextPricingTier(
     }
   }
   return null;
+}
+
+// Group a flat list of tier rows (e.g. from one `.in("tournament_id",
+// ids)` query) into a per-tournament map. Used by list/home pages
+// that show many tournaments and want to batch-load tiers in one
+// round-trip instead of N+1.
+export function groupTiersByTournament(
+  rows: PricingTier[],
+): Map<string, PricingTier[]> {
+  const m = new Map<string, PricingTier[]>();
+  for (const r of rows) {
+    const arr = m.get(r.tournament_id);
+    if (arr) arr.push(r);
+    else m.set(r.tournament_id, [r]);
+  }
+  return m;
+}
+
+// Compact price label for list / detail / home displays. Shows the
+// active tier's first-event fee; when the tournament has more than
+// one tier, appends the active tier's label so "Early bird" pricing
+// is distinguishable from the regular price at a glance. Falls back
+// to the first tier if no window is currently active.
+export function compactTierPriceLabel(tiers: PricingTier[]): string {
+  if (tiers.length === 0) return "—";
+  const active =
+    pickActivePricingTier(tiers) ??
+    [...tiers].sort((a, b) => a.sort_order - b.sort_order)[0];
+  const base =
+    active.first_event_fee_cents === 0
+      ? "Free"
+      : formatUsd(active.first_event_fee_cents);
+  return tiers.length > 1 ? `${base} · ${active.label}` : base;
 }
 
 // ─────────────────────────────────────────────────────────────────────

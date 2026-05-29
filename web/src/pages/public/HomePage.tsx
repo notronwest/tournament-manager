@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
+import {
+  compactTierPriceLabel,
+  type PricingTier,
+} from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Organization = Database["public"]["Tables"]["organizations"]["Row"];
 
-// A tournament joined to its org. Supabase's PostgREST returns the
-// related row as a single object (not an array) for to-one relations,
-// but the generated types insist on `Organization | null` so we have
-// to be defensive on read.
+// A tournament joined to its org + its pricing tiers. Supabase's
+// PostgREST returns the related org as a single object (not an array)
+// for to-one relations, but the generated types insist on
+// `Organization | null` so we have to be defensive on read. Pricing
+// tiers are a to-many embed.
 type TournamentWithOrg = Tournament & {
   organizations: Pick<Organization, "name" | "slug"> | null;
+  tournament_pricing_tiers: PricingTier[] | null;
 };
 
 // Public landing page at /. Lists every published tournament across
@@ -52,7 +58,7 @@ export default function HomePage() {
       const { data, error: err } = await supabase
         .from("tournaments")
         .select(
-          "id, name, slug, starts_at, ends_at, location_name, location_address, entry_fee_cents, status, organization_id, court_count, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug)",
+          "id, name, slug, starts_at, ends_at, location_name, location_address, entry_fee_cents, status, organization_id, court_count, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at)",
         )
         .eq("status", "published")
         .gte("ends_at", todayIso)
@@ -234,11 +240,13 @@ function TournamentCard({ tournament }: { tournament: TournamentWithOrg }) {
         {tournament.location_name && (
           <span style={{ color: "#888" }}>· {tournament.location_name}</span>
         )}
-        {tournament.entry_fee_cents > 0 && (
-          <span style={{ color: "#888" }}>
-            · ${(tournament.entry_fee_cents / 100).toFixed(2)} entry
-          </span>
-        )}
+        {(() => {
+          const tiers = tournament.tournament_pricing_tiers ?? [];
+          const label = compactTierPriceLabel(tiers);
+          // Hide the chip for free tournaments / when no tiers loaded.
+          if (label === "Free" || label === "—") return null;
+          return <span style={{ color: "#888" }}>· {label} entry</span>;
+        })()}
       </div>
     </Link>
   );

@@ -11,6 +11,10 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { eligibilityChips } from "../../lib/eligibility";
 import { estimateMedalRound, estimatePoolPlay } from "../../lib/estimator";
+import {
+  compactTierPriceLabel,
+  type PricingTier,
+} from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -33,6 +37,7 @@ export default function TournamentDetailPage() {
   const { org } = useCurrentOrg();
   const { tournamentSlug } = useParams<{ tournamentSlug: string }>();
   const [t, setT] = useState<Tournament | null>(null);
+  const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [eventCourts, setEventCourts] = useState<EventCourt[]>([]);
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
@@ -67,8 +72,9 @@ export default function TournamentDetailPage() {
       return;
     }
 
-    // Events + their registrations + court allocations, in parallel.
-    const [evRes, regsRes, courtsRes] = await Promise.all([
+    // Events + their registrations + court allocations + pricing
+    // tiers, in parallel.
+    const [evRes, regsRes, courtsRes, tiersRes] = await Promise.all([
       supabase
         .from("events")
         .select("*")
@@ -84,7 +90,14 @@ export default function TournamentDetailPage() {
         .from("event_courts")
         .select("*, events!inner(tournament_id)")
         .eq("events.tournament_id", tData.id),
+      supabase
+        .from("tournament_pricing_tiers")
+        .select("*")
+        .eq("tournament_id", tData.id)
+        .order("sort_order", { ascending: true }),
     ]);
+
+    setTiers(tiersRes.data ?? []);
 
     if (evRes.error) {
       setError(evRes.error.message);
@@ -425,7 +438,7 @@ export default function TournamentDetailPage() {
       >
         <DtDd
           label="Entry fee"
-          value={`$${(t.entry_fee_cents / 100).toFixed(2)}`}
+          value={compactTierPriceLabel(tiers)}
         />
         <DtDd label="Location" value={t.location_name || "—"} />
         <DtDd label="Address" value={t.location_address || "—"} />

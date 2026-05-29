@@ -9,6 +9,7 @@ import {
 import { supabase } from "../supabase";
 import { useAuth } from "../auth/AuthProvider";
 import { computeLineItems } from "../lib/pricing";
+import { pickActivePricingTier, type PricingTier } from "../lib/pricingTiers";
 import type { Database } from "../types/supabase";
 
 // Aggregated view of the signed-in user's pending_payment
@@ -75,9 +76,10 @@ export function PendingPaymentsProvider({
     }
 
     // Pull every pending_payment registration with enough joined
-    // context to render the bar + group by tournament. We fetch
-    // the event + tournament rows we need for D's pricing tiers
-    // alongside the reg itself.
+    // context to render the bar + group by tournament. We fetch the
+    // event + tournament + its pricing tiers alongside the reg, so
+    // the bar can price the basket against the currently-active tier
+    // (what the player will actually owe at checkout).
     const { data, error } = await supabase
       .from("event_registrations")
       .select(
@@ -85,8 +87,13 @@ export function PendingPaymentsProvider({
          event:events!event_id (
            id, name, event_fee_cents,
            tournament:tournaments!tournament_id (
-             id, name, slug, entry_fee_cents, additional_event_fee_cents,
-             organization:organizations!organization_id (slug)
+             id, name, slug,
+             organization:organizations!organization_id (slug),
+             pricing_tiers:tournament_pricing_tiers (
+               id, sort_order, label, starts_at, ends_at,
+               first_event_fee_cents, additional_event_fee_cents,
+               tournament_id, created_at, updated_at
+             )
            )
          )`,
       )
@@ -111,9 +118,8 @@ export function PendingPaymentsProvider({
           id: string;
           name: string;
           slug: string;
-          entry_fee_cents: number;
-          additional_event_fee_cents: number;
           organization: { slug: string } | null;
+          pricing_tiers: PricingTier[] | null;
         } | null;
       } | null;
     };
@@ -121,7 +127,8 @@ export function PendingPaymentsProvider({
 
     // Group rows by tournament id. For each tournament group, run
     // D's pricing helper across that tournament's pending events to
-    // get per-event cents + total.
+    // get per-event cents + total. Fees come from the tournament's
+    // currently-active pricing tier.
     const byTournament = new Map<
       string,
       {
@@ -141,13 +148,14 @@ export function PendingPaymentsProvider({
       if (!ev || !t || !org) continue;
       let g = byTournament.get(t.id);
       if (!g) {
+        const activeTier = pickActivePricingTier(t.pricing_tiers ?? []);
         g = {
           tournamentId: t.id,
           tournamentName: t.name,
           tournamentSlug: t.slug,
           orgSlug: org.slug,
-          entryFeeCents: t.entry_fee_cents,
-          additionalEventFeeCents: t.additional_event_fee_cents,
+          entryFeeCents: activeTier?.first_event_fee_cents ?? 0,
+          additionalEventFeeCents: activeTier?.additional_event_fee_cents ?? 0,
           events: [],
         };
         byTournament.set(t.id, g);

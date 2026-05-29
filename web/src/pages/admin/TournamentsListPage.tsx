@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import {
+  compactTierPriceLabel,
+  groupTiersByTournament,
+  type PricingTier,
+} from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -10,6 +15,11 @@ type TournamentStatus = Database["public"]["Enums"]["tournament_status"];
 export default function TournamentsListPage() {
   const { org } = useCurrentOrg();
   const [tournaments, setTournaments] = useState<Tournament[] | null>(null);
+  // Pricing tiers for the listed tournaments, keyed by tournament id.
+  // Batch-loaded in one query to avoid N+1 across the table.
+  const [tiersByTournament, setTiersByTournament] = useState<
+    Map<string, PricingTier[]>
+  >(new Map());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,7 +38,20 @@ export default function TournamentsListPage() {
         setError(error.message);
         return;
       }
-      setTournaments(data ?? []);
+      const rows = data ?? [];
+      setTournaments(rows);
+
+      if (rows.length > 0) {
+        const { data: tierRows } = await supabase
+          .from("tournament_pricing_tiers")
+          .select("*")
+          .in(
+            "tournament_id",
+            rows.map((t) => t.id),
+          );
+        if (cancelled) return;
+        setTiersByTournament(groupTiersByTournament(tierRows ?? []));
+      }
     })();
     return () => {
       cancelled = true;
@@ -125,7 +148,7 @@ export default function TournamentsListPage() {
                   {fmtDate(t.starts_at)} – {fmtDate(t.ends_at)}
                 </td>
                 <td style={{ ...tdStyle, color: "#666" }}>
-                  ${(t.entry_fee_cents / 100).toFixed(2)}
+                  {compactTierPriceLabel(tiersByTournament.get(t.id) ?? [])}
                 </td>
                 <td style={{ ...tdStyle, textAlign: "right" }}>
                   <Link
