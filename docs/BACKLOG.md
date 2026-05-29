@@ -26,11 +26,6 @@ Things actively queued — the next handful of commits.
 
 **Touches:** enum migration (add `'seeking'` to `partner_status`), `RegisterPage` event row, validation.
 
-### F2. Admin view of partner seekers
-- **As an Organizer**, I want a list of players who registered as seekers for each event with their contact info, **so that** I can match them up offline or follow up with the ones still unpaired close to event start.
-
-**Touches:** `AttendeesPage` (or `EventConsolePage`), filter on `partner_status='seeking'`.
-
 ### F3. Hide already-registered players from partner search
 - **As a Player**, I want the partner search to exclude anyone who's already registered for the same event (whether confirmed or pending), **so that** I don't waste a click on someone who can't accept anyway and so the invitee doesn't get a confusing "you've been invited" banner when they're already in.
 
@@ -419,6 +414,9 @@ Use this section as a checklist when discussing what to promote into Soon / Next
 ## Recently shipped
 
 Trailing log of what landed, so the doc stays grounded. Prune entries older than ~4 weeks.
+
+### 2026-05-29 (F2 — Admin view of partner seekers)
+- **F2. Admin view of partner seekers** — `AttendeesPage` gains a "🤝 Looking for a partner" section at the top that lists every player with at least one `partner_status='seeking'` event registration. Shows name, click-to-email / click-to-call contact, and which event(s) they're seeking in. Lets organizers match seekers up offline. Only renders when at least one seeker exists.
 
 ### 2026-05-26 (commit [`6286e6d`](https://github.com/notronwest/tournament-manager/commit/6286e6d))
 - **Pricing tiers — schema + read-side first slice (of 7).** Date-based pricing tiers for tournaments. `tournament_pricing_tiers` child table + `pricing_pattern` enum (`single | early_bird | early_bird_plus_late | custom`) + `current_pricing_tier(tournament_id, as_of)` SQL helper (migration `20260526170000`). Backfill maps every existing tournament to `pricing_pattern='single'` with one "Standard" tier mirroring its legacy `entry_fee_cents` + `additional_event_fee_cents`. Forward-sync triggers (`20260526170001`) keep tier 1 in lock-step with the legacy columns so the existing `TournamentFormPage` keeps working without divergence. New `web/src/lib/pricingTiers.ts` exports `pickActivePricingTier` + `pickNextPricingTier` with matching half-open interval semantics. `PublicTournamentPage` displays the active tier's price + an upcoming-tier countdown when multi-tier; `CheckoutPage` feeds the active tier into `computeLineItems` so the price snapshot at pay-time uses the right values. **Next slice (#4): the multi-tier wizard.** See the open item "Tournament lifecycle statuses + early-bird / late pricing windows" for the slice-by-slice plan.
