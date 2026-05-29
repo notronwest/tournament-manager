@@ -18,6 +18,7 @@ import {
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+type Event = Database["public"]["Tables"]["events"]["Row"];
 
 // ─────────────────────────────────────────────────────────────────────
 // Step model
@@ -80,7 +81,8 @@ export default function TournamentWizardPage() {
 
   const [currentStep, setCurrentStep] = useState<StepId>("basics");
   const [tournament, setTournament] = useState<Tournament | null>(null);
-  const [eventCount, setEventCount] = useState(0);
+  const [events, setEvents] = useState<Event[]>([]);
+  const eventCount = events.length;
 
   // Basics form state
   const [name, setName] = useState("");
@@ -151,23 +153,18 @@ export default function TournamentWizardPage() {
         setPricingTiers(tiersToDrafts(tierRows));
       }
 
-      // Event count (gates Step 8 publish)
-      const { count: evCount } = await supabase
+      // Events for Step 2 (the publish gate uses events.length).
+      const { data: evRows } = await supabase
         .from("events")
-        .select("id", { count: "exact", head: true })
+        .select("*")
         .eq("tournament_id", t.id)
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
       if (cancelled) return;
-      setEventCount(evCount ?? 0);
+      setEvents(evRows ?? []);
 
       // Paid registration count (for the Pricing editor's reassurance)
-      const { data: evIdRows } = await supabase
-        .from("events")
-        .select("id")
-        .eq("tournament_id", t.id)
-        .is("deleted_at", null);
-      if (cancelled) return;
-      const eventIds = (evIdRows ?? []).map((e) => e.id);
+      const eventIds = (evRows ?? []).map((e) => e.id);
       if (eventIds.length > 0) {
         const { count } = await supabase
           .from("event_registrations")
@@ -328,6 +325,57 @@ export default function TournamentWizardPage() {
     navigate(`/admin/${org.slug}/tournaments/${tournament.slug}`);
   };
 
+  // ── Events handlers ─────────────────────────────────────────────
+
+  const reloadEvents = async () => {
+    if (!tournament) return;
+    const { data } = await supabase
+      .from("events")
+      .select("*")
+      .eq("tournament_id", tournament.id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+    setEvents(data ?? []);
+  };
+
+  const addDefaultEvents = async (divisions: DefaultDivision[]) => {
+    if (!tournament || divisions.length === 0) return;
+    setError(null);
+    setBusy(true);
+    const rows = divisions.map((d) => ({
+      tournament_id: tournament.id,
+      name: d.name,
+      format: d.format,
+      gender: d.gender,
+      min_rating: d.min_rating,
+      max_rating: d.max_rating,
+    }));
+    const { error: insErr } = await supabase.from("events").insert(rows);
+    if (insErr) {
+      setBusy(false);
+      setError(insErr.message);
+      return;
+    }
+    await reloadEvents();
+    setBusy(false);
+  };
+
+  const removeEvent = async (eventId: string) => {
+    setError(null);
+    setBusy(true);
+    const { error: delErr } = await supabase
+      .from("events")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", eventId);
+    if (delErr) {
+      setBusy(false);
+      setError(delErr.message);
+      return;
+    }
+    await reloadEvents();
+    setBusy(false);
+  };
+
   // ── Navigation ──────────────────────────────────────────────────
 
   const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
@@ -409,10 +457,13 @@ export default function TournamentWizardPage() {
           />
         )}
         {currentStep === "events" && (
-          <EventsStub
+          <EventsStep
             tournament={tournament}
+            events={events}
             orgSlug={org.slug}
-            eventCount={eventCount}
+            busy={busy}
+            onAddDefaults={(divs) => void addDefaultEvents(divs)}
+            onRemoveEvent={(id) => void removeEvent(id)}
           />
         )}
         {currentStep === "pricing" && (
@@ -806,68 +857,397 @@ function BasicsStep(props: {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Step 2: Events stub (links out to the existing bulk events editor
-// until the wizard slice that integrates it lands)
+// Step 2: Events — default-division template (checkboxes) for the
+// first pass, then a list of existing events with remove. The bulk
+// events editor stays as the deeper edit surface for fine-tuning.
 // ─────────────────────────────────────────────────────────────────────
 
-function EventsStub({
+type Gender = Database["public"]["Enums"]["event_gender"];
+type Format = Database["public"]["Enums"]["event_format"];
+
+type DefaultDivision = {
+  id: string;
+  name: string;
+  format: Format;
+  gender: Gender;
+  min_rating: number;
+  max_rating: number | null;
+};
+
+// Skill levels conventionally used at club tournaments. 3.0/3.5/4.0
+// each cover a 0.5 band; 4.5+ is open-ended for everyone above 4.5.
+const SKILL_LEVELS: { label: string; min: number; max: number | null }[] = [
+  { label: "3.0", min: 3.0, max: 3.49 },
+  { label: "3.5", min: 3.5, max: 3.99 },
+  { label: "4.0", min: 4.0, max: 4.49 },
+  { label: "4.5+", min: 4.5, max: null },
+];
+
+const GENDER_COLS: { id: Gender; label: string }[] = [
+  { id: "men", label: "Mens" },
+  { id: "women", label: "Womens" },
+  { id: "mixed", label: "Mixed" },
+];
+
+function buildDefaultTemplate(): DefaultDivision[] {
+  const out: DefaultDivision[] = [];
+  for (const g of GENDER_COLS) {
+    for (const s of SKILL_LEVELS) {
+      out.push({
+        id: `${g.id}-${s.label}`,
+        name: `${g.label} ${s.label}`,
+        format: "doubles",
+        gender: g.id,
+        min_rating: s.min,
+        max_rating: s.max,
+      });
+    }
+  }
+  return out;
+}
+
+// Identity for matching existing events against the default template
+// — same gender + format + rating window means "already covered."
+function divisionKey(d: {
+  gender: Gender;
+  format: Format;
+  min_rating: number | null;
+  max_rating: number | null;
+}): string {
+  return `${d.gender}-${d.format}-${d.min_rating ?? "lo"}-${d.max_rating ?? "hi"}`;
+}
+
+function EventsStep({
   tournament,
+  events,
   orgSlug,
-  eventCount,
+  busy,
+  onAddDefaults,
+  onRemoveEvent,
 }: {
   tournament: Tournament | null;
+  events: Event[];
   orgSlug: string;
-  eventCount: number;
+  busy: boolean;
+  onAddDefaults: (divs: DefaultDivision[]) => void;
+  onRemoveEvent: (id: string) => void;
 }) {
+  if (!tournament) {
+    return (
+      <div>
+        <StepHeader
+          title="Events"
+          lede="Save Basics first — events attach to a draft tournament. Click ← Back if you haven't filled in Basics yet."
+        />
+      </div>
+    );
+  }
+
+  const existingKeys = new Set(events.map(divisionKey));
+  const allTemplates = buildDefaultTemplate();
+  const availableTemplates = allTemplates.filter(
+    (d) => !existingKeys.has(divisionKey(d)),
+  );
+
+  // Start with every available template pre-checked so a first-time
+  // organizer can click one button and ship the whole bracket. They
+  // un-check what they don't want.
+  const [checked, setChecked] = useState<Set<string>>(
+    () => new Set(availableTemplates.map((d) => d.id)),
+  );
+  // Re-seed when the set of available templates changes (after add).
+  useEffect(() => {
+    setChecked((prev) => {
+      const next = new Set<string>();
+      for (const t of availableTemplates) {
+        // Default to checked for any newly-available template.
+        next.add(prev.has(t.id) ? t.id : t.id);
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events.length]);
+
+  const checkedCount = availableTemplates.filter((d) => checked.has(d.id))
+    .length;
+
   return (
     <div>
       <StepHeader
         title="Events"
-        lede={
-          tournament
-            ? "Add the events (divisions / brackets) players can register for. We'll pull this into the wizard in a follow-up slice; for now use the bulk events editor."
-            : "Save Basics first — events get added to a draft tournament. Click ← Back to fill in Basics if you haven't yet."
-        }
+        lede="Each event is one bracket players can register for. We've pre-checked the common club divisions — uncheck the ones you don't want, or add custom events from the bulk editor."
       />
-      {tournament ? (
-        <div
-          style={{
-            padding: 16,
-            background: "#eff6ff",
-            border: "1px solid #bfdbfe",
-            borderRadius: 8,
-            fontSize: 13,
-            color: "#1e40af",
-          }}
-        >
-          <div style={{ marginBottom: 10 }}>
-            <strong>
-              {eventCount === 0
-                ? "No events yet."
-                : `${eventCount} event${eventCount === 1 ? "" : "s"} added.`}
-            </strong>{" "}
-            Add and edit events in the bulk editor, then come back to continue.
-          </div>
-          <Link
-            to={`/admin/${orgSlug}/tournaments/${tournament.slug}/events/edit`}
+
+      {events.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div
             style={{
-              display: "inline-block",
-              padding: "8px 14px",
-              background: "#2563eb",
-              color: "#fff",
-              textDecoration: "none",
-              borderRadius: 6,
               fontSize: 13,
-              fontWeight: 500,
+              fontWeight: 600,
+              color: "#333",
+              marginBottom: 8,
             }}
           >
-            Open events editor →
-          </Link>
+            Added so far ({events.length})
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              overflow: "hidden",
+            }}
+          >
+            {events.map((e) => (
+              <div
+                key={e.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 14px",
+                  background: "#fff",
+                  borderTop: "1px solid #f3f4f6",
+                  fontSize: 13,
+                }}
+              >
+                <div>
+                  <strong>{e.name}</strong>
+                  <span style={{ color: "#888", marginLeft: 8 }}>
+                    {formatEventSummary(e)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onRemoveEvent(e.id)}
+                  disabled={busy}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid #fecaca",
+                    color: "#b91c1c",
+                    borderRadius: 4,
+                    padding: "3px 10px",
+                    fontSize: 12,
+                    cursor: busy ? "not-allowed" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
-      ) : null}
+      )}
+
+      {availableTemplates.length > 0 && (
+        <div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#333",
+              marginBottom: 8,
+            }}
+          >
+            {events.length > 0
+              ? "Add more standard divisions"
+              : "Standard club divisions"}
+          </div>
+          <div
+            style={{
+              border: "1px solid #e5e7eb",
+              borderRadius: 8,
+              overflow: "hidden",
+              marginBottom: 12,
+            }}
+          >
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 13,
+              }}
+            >
+              <thead>
+                <tr style={{ background: "#fafafa" }}>
+                  <th style={templateThStyle}>Skill</th>
+                  {GENDER_COLS.map((g) => (
+                    <th key={g.id} style={templateThStyle}>
+                      {g.label} doubles
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {SKILL_LEVELS.map((s) => (
+                  <tr
+                    key={s.label}
+                    style={{ borderTop: "1px solid #f0f0f0" }}
+                  >
+                    <td
+                      style={{
+                        padding: "8px 12px",
+                        fontWeight: 500,
+                        color: "#333",
+                      }}
+                    >
+                      {s.label}
+                    </td>
+                    {GENDER_COLS.map((g) => {
+                      const id = `${g.id}-${s.label}`;
+                      const isAvailable = availableTemplates.some(
+                        (t) => t.id === id,
+                      );
+                      if (!isAvailable) {
+                        return (
+                          <td
+                            key={g.id}
+                            style={{
+                              padding: "8px 12px",
+                              color: "#16a34a",
+                              fontSize: 12,
+                            }}
+                          >
+                            ✓ added
+                          </td>
+                        );
+                      }
+                      return (
+                        <td
+                          key={g.id}
+                          style={{ padding: "8px 12px" }}
+                        >
+                          <label
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked.has(id)}
+                              onChange={(e) => {
+                                const next = new Set(checked);
+                                if (e.target.checked) next.add(id);
+                                else next.delete(id);
+                                setChecked(next);
+                              }}
+                            />
+                            <span style={{ color: "#333" }}>Include</span>
+                          </label>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() =>
+                onAddDefaults(
+                  availableTemplates.filter((d) => checked.has(d.id)),
+                )
+              }
+              disabled={busy || checkedCount === 0}
+              style={{
+                padding: "9px 18px",
+                background:
+                  busy || checkedCount === 0 ? "#9ca3af" : "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor:
+                  busy || checkedCount === 0 ? "not-allowed" : "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              {busy
+                ? "Adding…"
+                : checkedCount === 0
+                  ? "Pick at least one division"
+                  : `Add ${checkedCount} event${checkedCount === 1 ? "" : "s"}`}
+            </button>
+            <Link
+              to={`/admin/${orgSlug}/tournaments/${tournament.slug}/events/edit`}
+              style={{ fontSize: 12, color: "#2563eb", textDecoration: "none" }}
+            >
+              Need a custom event (singles, age group, mixed format)? Open the
+              full events editor →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {availableTemplates.length === 0 && events.length > 0 && (
+        <div
+          style={{
+            padding: 14,
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#166534",
+          }}
+        >
+          All standard divisions added. Use the{" "}
+          <Link
+            to={`/admin/${orgSlug}/tournaments/${tournament.slug}/events/edit`}
+            style={{ color: "#15803d", fontWeight: 500 }}
+          >
+            full events editor
+          </Link>{" "}
+          to add custom divisions (singles, age groups, etc.) or fine-tune
+          max-teams + bracket type per event.
+        </div>
+      )}
     </div>
   );
 }
+
+// Compact human-readable summary of an event for the wizard's list.
+function formatEventSummary(e: Event): string {
+  const parts: string[] = [e.format];
+  if (e.gender) parts.push(`${e.gender}`);
+  if (e.min_rating != null || e.max_rating != null) {
+    if (e.min_rating != null && e.max_rating != null) {
+      parts.push(`${e.min_rating}–${e.max_rating}`);
+    } else if (e.min_rating != null) {
+      parts.push(`${e.min_rating}+`);
+    } else if (e.max_rating != null) {
+      parts.push(`≤${e.max_rating}`);
+    }
+  }
+  return `· ${parts.join(" · ")}`;
+}
+
+const templateThStyle: CSSProperties = {
+  textAlign: "left",
+  padding: "10px 12px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: "#666",
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  background: "#fafafa",
+};
 
 // ─────────────────────────────────────────────────────────────────────
 // Step 3: Pricing
