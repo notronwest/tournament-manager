@@ -417,6 +417,21 @@ export default function PublicTournamentPage() {
   const additionalFeeCents = activeTier?.additional_event_fee_cents ?? 0;
   const isMultiTier = tiers.length > 1;
 
+  // Does the signed-in player already hold an active registration in
+  // THIS tournament? If so, any further event they register is an
+  // "additional event" — it adds the additional-event fee, not the
+  // (already-paid-once) registration fee. We use this to show a
+  // context-aware cost line in each event's register form: the
+  // registration fee for their first event, "+$X additional" after.
+  const activeRegStates = new Set<MyRegStatus["state"]>([
+    "paid",
+    "pending_payment",
+    "awaiting_partner",
+  ]);
+  const hasActiveRegInTournament = Array.from(myStatus.values()).some((s) =>
+    activeRegStates.has(s.state),
+  );
+
   return (
     <Shell>
       <header style={{ marginBottom: 24 }}>
@@ -626,6 +641,9 @@ export default function PublicTournamentPage() {
                 myStatus={myStatus.get(ev.id)}
                 me={me}
                 user={user}
+                regFeeCents={regFeeCents}
+                additionalFeeCents={additionalFeeCents}
+                isAdditionalEvent={hasActiveRegInTournament}
                 alreadyRegisteredPlayerIds={
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
@@ -659,6 +677,9 @@ function EventCard({
   myStatus,
   me,
   user,
+  regFeeCents,
+  additionalFeeCents,
+  isAdditionalEvent,
   alreadyRegisteredPlayerIds,
   onChanged,
   onNeedsAuth,
@@ -670,6 +691,12 @@ function EventCard({
   myStatus: MyRegStatus | undefined;
   me: Player | null;
   user: ReturnType<typeof useAuth>["user"];
+  // Active-tier fees + whether the player already holds a reg in this
+  // tournament. Drive the context-aware cost line in the register
+  // form: registration fee for the first event, +additional after.
+  regFeeCents: number;
+  additionalFeeCents: number;
+  isAdditionalEvent: boolean;
   // F3: ids of players already registered for THIS event. Folded
   // into the PartnerSearch excludePlayerIds so the search can't
   // surface someone who's already in.
@@ -1325,6 +1352,36 @@ function EventCard({
             borderTop: "1px dashed #e5e7eb",
           }}
         >
+          {/* Context-aware cost line. Only on the register flow (not
+              the change-partner flow, which doesn't change the price).
+              We don't re-explain the whole first/additional model —
+              just tell the player what THIS event costs them given
+              what they've already signed up for. */}
+          {editMode === "register" && regFeeCents > 0 && (
+            <div
+              style={{
+                marginBottom: 12,
+                fontSize: 13,
+                color: "#444",
+              }}
+            >
+              {isAdditionalEvent ? (
+                <>
+                  Additional event:{" "}
+                  <strong>+${(additionalFeeCents / 100).toFixed(0)}</strong>{" "}
+                  <span style={{ color: "#888" }}>
+                    (added to your registration)
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>${(regFeeCents / 100).toFixed(0)}</strong>{" "}
+                  registration{" "}
+                  <span style={{ color: "#888" }}>· includes this event</span>
+                </>
+              )}
+            </div>
+          )}
           {isDoubles && (
             <>
               {/* F1: two-mode picker — pick a partner OR sign up
