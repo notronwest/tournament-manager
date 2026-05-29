@@ -105,6 +105,84 @@ export function compactTierPriceLabel(tiers: PricingTier[]): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Public lifecycle status — the OTHER surface of the tier dates.
+//
+// "One concept, two surfaces": the same tier windows that decide what
+// a player pays also decide the public registration-status label.
+// This derives that label from the registration window + the active
+// tier, so the public page shows "Early Bird Registration Open" /
+// "Registration Open" / "Late Registration Open" without the
+// organizer managing a separate status flag.
+// ─────────────────────────────────────────────────────────────────────
+
+export type RegistrationStatusTone = "open" | "soon" | "closed";
+
+export type RegistrationStatus = {
+  // The headline label, e.g. "Early Bird Registration Open".
+  label: string;
+  tone: RegistrationStatusTone;
+};
+
+// Minimal tournament shape this needs. Kept loose so callers can pass
+// either a full row or a projection.
+type StatusTournament = {
+  status: Database["public"]["Enums"]["tournament_status"];
+  registration_opens_at: string | null;
+  registration_closes_at: string | null;
+  pricing_pattern: PricingPattern;
+};
+
+// Map an active preset/custom tier to its lifecycle phrase. Presets
+// (early_bird / early_bird_plus_late) have fixed labels we match on;
+// Custom uses the organizer's literal tier name since we don't know
+// its intended semantics.
+function tierPhase(
+  pattern: PricingPattern,
+  activeTier: PricingTier | null,
+): string {
+  if (pattern === "single" || !activeTier) return "Registration Open";
+  if (pattern === "custom") {
+    return `${activeTier.label} — Registration Open`;
+  }
+  const label = activeTier.label.toLowerCase();
+  if (label.includes("early")) return "Early Bird Registration Open";
+  if (label.includes("late")) return "Late Registration Open";
+  return "Registration Open";
+}
+
+export function deriveRegistrationStatus(
+  t: StatusTournament,
+  tiers: PricingTier[],
+  now: Date = new Date(),
+): RegistrationStatus {
+  if (t.status === "completed") return { label: "Completed", tone: "closed" };
+  if (t.status === "cancelled") return { label: "Cancelled", tone: "closed" };
+  if (t.status === "closed") {
+    return { label: "Registration Closed", tone: "closed" };
+  }
+  if (t.status === "draft") return { label: "Draft", tone: "closed" };
+
+  // status === 'published'
+  const opensAt = t.registration_opens_at
+    ? new Date(t.registration_opens_at)
+    : null;
+  const closesAt = t.registration_closes_at
+    ? new Date(t.registration_closes_at)
+    : null;
+
+  if (opensAt && opensAt > now) {
+    return { label: "Registration Opens Soon", tone: "soon" };
+  }
+  if (closesAt && closesAt <= now) {
+    return { label: "Registration Closed", tone: "closed" };
+  }
+
+  // Registration is open — phase by the active pricing tier.
+  const activeTier = pickActivePricingTier(tiers, now);
+  return { label: tierPhase(t.pricing_pattern, activeTier), tone: "open" };
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Admin pricing-editor helpers — form-draft ↔ DB-row conversion.
 //
 // The editor (PricingTiersEditor) works with a friendlier draft

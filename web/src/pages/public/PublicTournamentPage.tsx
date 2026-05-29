@@ -11,6 +11,7 @@ import { PartnerSearch } from "../../components/PartnerSearch";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import { eligibilityChips } from "../../lib/eligibility";
 import {
+  deriveRegistrationStatus,
   pickActivePricingTier,
   pickNextPricingTier,
   type PricingTier,
@@ -432,6 +433,21 @@ export default function PublicTournamentPage() {
     activeRegStates.has(s.state),
   );
 
+  // Public lifecycle status pill — the second surface of the tier
+  // dates. "Early Bird Registration Open" / "Registration Open" /
+  // "Late Registration Open" / "Registration Closed", derived from
+  // the registration window + active tier (no separate status flag).
+  const regStatus = deriveRegistrationStatus(tournament, tiers);
+  const regStatusPalette: Record<
+    typeof regStatus.tone,
+    { bg: string; fg: string; border: string }
+  > = {
+    open: { bg: "#dcfce7", fg: "#166534", border: "#bbf7d0" },
+    soon: { bg: "#fef3c7", fg: "#92400e", border: "#fde68a" },
+    closed: { bg: "#f3f4f6", fg: "#666", border: "#e5e7eb" },
+  };
+  const regStatusColors = regStatusPalette[regStatus.tone];
+
   return (
     <Shell>
       <header style={{ marginBottom: 24 }}>
@@ -492,23 +508,32 @@ export default function PublicTournamentPage() {
         }}
       >
         <div style={{ flex: 1 }}>
-          <div
+          {/* Lifecycle status pill — derived from the registration
+              window + active pricing tier. */}
+          <span
             style={{
-              fontSize: 13,
+              display: "inline-block",
+              padding: "3px 10px",
+              borderRadius: 999,
+              background: regStatusColors.bg,
+              color: regStatusColors.fg,
+              border: `1px solid ${regStatusColors.border}`,
+              fontSize: 12,
               fontWeight: 600,
-              color: registrationOpen ? "#1e40af" : "#666",
             }}
           >
-            {registrationOpen
-              ? "Registration is open"
-              : tournament.status === "published" &&
-                  tournament.registration_opens_at &&
-                  new Date(tournament.registration_opens_at) > new Date()
-                ? `Registration opens ${fmtDateTime(tournament.registration_opens_at)}`
-                : "Registration is closed"}
-          </div>
+            {regStatus.label}
+          </span>
+          {/* Window detail under the pill: when it opens (if not yet)
+              or when it closes (if open). */}
+          {regStatus.tone === "soon" &&
+            tournament.registration_opens_at && (
+              <div style={{ fontSize: 12, color: "#92400e", marginTop: 6 }}>
+                Opens {fmtDateTime(tournament.registration_opens_at)}
+              </div>
+            )}
           {tournament.registration_closes_at && registrationOpen && (
-            <div style={{ fontSize: 12, color: "#1e40af", marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: "#1e40af", marginTop: 6 }}>
               Closes {fmtDateTime(tournament.registration_closes_at)}
             </div>
           )}
