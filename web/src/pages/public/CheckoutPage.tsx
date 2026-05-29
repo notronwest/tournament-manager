@@ -281,8 +281,8 @@ export default function CheckoutPage() {
           event_fee_cents: r.eventFeeCentsOverride,
         })),
         {
-          entry_fee_cents: activeTier.first_event_fee_cents,
-          additional_event_fee_cents: activeTier.additional_event_fee_cents,
+          firstEventFeeCents: activeTier.first_event_fee_cents,
+          additionalEventFeeCents: activeTier.additional_event_fee_cents,
         },
       )
     : { items: [] as LineItem[], totalCents: 0 };

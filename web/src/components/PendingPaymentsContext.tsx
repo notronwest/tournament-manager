@@ -170,8 +170,8 @@ export function PendingPaymentsProvider({
     const out: PendingTournamentGroup[] = [];
     for (const g of byTournament.values()) {
       const { items, totalCents } = computeLineItems(g.events, {
-        entry_fee_cents: g.entryFeeCents,
-        additional_event_fee_cents: g.additionalEventFeeCents,
+        firstEventFeeCents: g.entryFeeCents,
+        additionalEventFeeCents: g.additionalEventFeeCents,
       });
       out.push({
         tournamentId: g.tournamentId,

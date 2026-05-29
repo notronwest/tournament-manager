@@ -128,15 +128,10 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       if (tierRows && tierRows.length > 0) {
         setPricingTiers(tiersToDrafts(tierRows));
       } else {
-        setPricingTiers([
-          {
-            ...makeEmptyTierDraft("Standard"),
-            firstEventFeeDollars: (data.entry_fee_cents / 100).toFixed(2),
-            additionalEventFeeDollars: (
-              data.additional_event_fee_cents / 100
-            ).toFixed(2),
-          },
-        ]);
+        // No tiers found (shouldn't happen — every tournament gets at
+        // least one). Seed a blank Standard tier so the editor has
+        // something to work with rather than rendering empty.
+        setPricingTiers([makeEmptyTierDraft("Standard")]);
       }
 
       // Count paid registrations so the pricing editor can reassure
@@ -205,11 +200,10 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       return;
     }
 
-    // Tier 1 (the headline / earliest price) mirrors into the legacy
-    // entry_fee_cents + additional_event_fee_cents columns so the read
-    // sites still on those columns (PendingPaymentsContext, admin
-    // list, home) stay accurate during the bridge period. Slice 5
-    // migrates those reads to tiers; slice 6 drops the columns.
+    // Pricing lives entirely in tournament_pricing_tiers (written via
+    // the replace_pricing_tiers RPC below). The legacy entry_fee_cents
+    // / additional_event_fee_cents columns were dropped in migration
+    // 20260529160000, so this payload carries only the pattern.
     const payload = {
       slug: finalSlug,
       name: name.trim(),
@@ -220,8 +214,6 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       ends_at: endsAtIso,
       registration_opens_at: toIso(registrationOpensAt),
       registration_closes_at: toIso(registrationClosesAt),
-      entry_fee_cents: tierRows[0].first_event_fee_cents,
-      additional_event_fee_cents: tierRows[0].additional_event_fee_cents,
       pricing_pattern: pricingPattern,
       court_count: courtCountNum,
     };

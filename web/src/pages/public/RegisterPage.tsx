@@ -19,6 +19,10 @@ import {
   formatUsd,
   type LineItem,
 } from "../../lib/pricing";
+import {
+  pickActivePricingTier,
+  type PricingTier,
+} from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -108,6 +112,9 @@ export default function RegisterPage() {
   const preselectEventId = searchParams.get("event");
 
   const [tournament, setTournament] = useState<Tournament | null>(null);
+  // Pricing tiers for the tournament. The active tier (today vs. its
+  // windows) feeds the running-total math below.
+  const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   // Profile is guaranteed to exist (RequireProfile wraps this route).
   // We load it for two reasons: we need the player id to insert
@@ -210,6 +217,16 @@ export default function RegisterPage() {
         return;
       }
       setTournament(t);
+
+      // Pricing tiers — the active one supplies the rates for the
+      // running-total math.
+      const { data: tierRows } = await supabase
+        .from("tournament_pricing_tiers")
+        .select("*")
+        .eq("tournament_id", t.id)
+        .order("sort_order", { ascending: true });
+      if (cancelled) return;
+      setTiers(tierRows ?? []);
 
       // 2. Events (excluding completed ones — can't register for those).
       const { data: evs, error: evErr } = await supabase
@@ -516,8 +533,12 @@ export default function RegisterPage() {
   const basketEvents = tournament
     ? events.filter((ev) => selections.get(ev.id)?.selected)
     : [];
-  const { items: lineItems, totalCents } = tournament
-    ? computeLineItems(basketEvents, tournament)
+  const activeTier = pickActivePricingTier(tiers);
+  const { items: lineItems, totalCents } = tournament && activeTier
+    ? computeLineItems(basketEvents, {
+        firstEventFeeCents: activeTier.first_event_fee_cents,
+        additionalEventFeeCents: activeTier.additional_event_fee_cents,
+      })
     : { items: [] as LineItem[], totalCents: 0 };
   const lineItemByEventId = new Map(
     lineItems.map((item) => [item.event.id, item]),

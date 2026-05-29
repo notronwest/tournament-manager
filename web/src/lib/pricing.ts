@@ -2,14 +2,21 @@
 //
 // Centralized pricing logic for tournament registration. Shared
 // between the public tournament page (which displays per-event
-// indicative prices) and the register page (which computes the
-// running total based on what the user has selected).
+// indicative prices) and the checkout / pending-bar (which compute
+// the running total based on what the user has selected).
 //
-// See supabase/migrations/20260524180000_additional_event_fee.sql
-// for the data-model side. Short version: each event either has a
-// per-event override (event_fee_cents > 0, flat charge) or uses
-// the tournament's two-tier defaults (entry_fee_cents for the
-// first event, additional_event_fee_cents for each subsequent one).
+// Data-model side: a tournament's pricing lives in an ordered list
+// of pricing TIERS (tournament_pricing_tiers; see migration
+// 20260526170000). Each tier has a first-event fee and an
+// additional-event fee, and is active over a date window. Callers
+// pick the active tier and pass its rates in here as `PricingRates`.
+// This module is deliberately decoupled from the tournaments table:
+// it takes plain rate numbers, not a tournament row.
+//
+// Each event either has a per-event override (event_fee_cents > 0, a
+// flat charge — a rare advanced case for premium divisions) or uses
+// the active tier's rates: the first-event fee for the player's
+// "first" event, the additional-event fee for each one after.
 //
 // The "first" event is whichever picked event would have the
 // highest stand-alone fee — that ordering hands the player the
@@ -19,10 +26,13 @@
 
 import type { Database } from "../types/supabase";
 
-type Tournament = Pick<
-  Database["public"]["Tables"]["tournaments"]["Row"],
-  "entry_fee_cents" | "additional_event_fee_cents"
->;
+// The active-tier rates the pricing algorithm needs. Field names are
+// the algorithm's own — callers map the active pricing tier's
+// first_event_fee_cents / additional_event_fee_cents onto these.
+export type PricingRates = {
+  firstEventFeeCents: number;
+  additionalEventFeeCents: number;
+};
 type Event = Pick<
   Database["public"]["Tables"]["events"]["Row"],
   "id" | "event_fee_cents"
@@ -39,7 +49,7 @@ type Event = Pick<
  */
 export function priceTiers(
   ev: Event,
-  tournament: Tournament,
+  rates: PricingRates,
 ): { fullPrice: number; additionalPrice: number } {
   if (ev.event_fee_cents > 0) {
     return {
@@ -48,8 +58,8 @@ export function priceTiers(
     };
   }
   return {
-    fullPrice: tournament.entry_fee_cents,
-    additionalPrice: tournament.additional_event_fee_cents,
+    fullPrice: rates.firstEventFeeCents,
+    additionalPrice: rates.additionalEventFeeCents,
   };
 }
 
@@ -75,7 +85,7 @@ export type LineItem = {
  */
 export function computeLineItems(
   selectedEvents: Event[],
-  tournament: Tournament,
+  rates: PricingRates,
 ): { items: LineItem[]; totalCents: number } {
   if (selectedEvents.length === 0) {
     return { items: [], totalCents: 0 };
@@ -86,7 +96,7 @@ export function computeLineItems(
   // events gets the "first" label since the cents are identical).
   const tagged = selectedEvents.map((ev) => ({
     ev,
-    tiers: priceTiers(ev, tournament),
+    tiers: priceTiers(ev, rates),
   }));
   const sortedDesc = [...tagged].sort(
     (a, b) => b.tiers.fullPrice - a.tiers.fullPrice,

@@ -833,13 +833,11 @@ export type Database = {
       }
       tournaments: {
         Row: {
-          additional_event_fee_cents: number
           court_count: number
           created_at: string
           deleted_at: string | null
           description: string | null
           ends_at: string
-          entry_fee_cents: number
           id: string
           inter_event_buffer_minutes: number
           location_address: string | null
@@ -855,13 +853,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          additional_event_fee_cents?: number
           court_count?: number
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           ends_at: string
-          entry_fee_cents?: number
           id?: string
           inter_event_buffer_minutes?: number
           location_address?: string | null
@@ -877,13 +873,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          additional_event_fee_cents?: number
           court_count?: number
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           ends_at?: string
-          entry_fee_cents?: number
           id?: string
           inter_event_buffer_minutes?: number
           location_address?: string | null

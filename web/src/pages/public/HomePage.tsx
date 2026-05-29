@@ -58,7 +58,7 @@ export default function HomePage() {
       const { data, error: err } = await supabase
         .from("tournaments")
         .select(
-          "id, name, slug, starts_at, ends_at, location_name, location_address, entry_fee_cents, status, organization_id, court_count, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at)",
+          "id, name, slug, starts_at, ends_at, location_name, location_address, status, organization_id, court_count, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at)",
         )
         .eq("status", "published")
         .gte("ends_at", todayIso)
