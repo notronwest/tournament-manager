@@ -11,6 +11,7 @@ import AttendeesPage from "./pages/admin/AttendeesPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
+import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
 import TournamentWizardPage from "./pages/admin/TournamentWizardPage";
 import EventConsolePage from "./pages/admin/EventConsolePage";
@@ -131,6 +132,10 @@ export default function App() {
         }
       >
         <Route index element={<OrgOverviewPage />} />
+        <Route
+          path="settings/stripe"
+          element={<OrgStripeSettingsPage />}
+        />
         <Route
           path="tools/round-robin"
           element={<RoundRobinEstimatorPage />}

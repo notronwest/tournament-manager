@@ -96,6 +96,9 @@ export default function AdminLayout() {
           <SideLink to={`/admin/${org.slug}/tools/test-players`}>
             Test players
           </SideLink>
+          <SideLink to={`/admin/${org.slug}/settings/stripe`}>
+            Stripe Connect
+          </SideLink>
         </nav>
       </aside>
 

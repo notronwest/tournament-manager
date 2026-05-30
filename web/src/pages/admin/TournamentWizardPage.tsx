@@ -610,6 +610,7 @@ export default function TournamentWizardPage() {
           <PaymentStep
             stripeStatus={org.stripe_account_status}
             stripeAccountId={org.stripe_account_id}
+            orgSlug={org.slug}
           />
         )}
         {currentStep === "review" && (
@@ -1688,10 +1689,21 @@ type StripeStatus = Database["public"]["Enums"]["org_stripe_status"];
 function PaymentStep({
   stripeStatus,
   stripeAccountId,
+  orgSlug,
 }: {
   stripeStatus: StripeStatus;
   stripeAccountId: string | null;
+  orgSlug: string;
 }) {
+  const ctaLabel =
+    stripeStatus === "not_connected"
+      ? "Connect with Stripe →"
+      : stripeStatus === "pending"
+        ? "Continue Stripe onboarding →"
+        : stripeStatus === "restricted"
+          ? "Resolve in Stripe dashboard →"
+          : "Manage Stripe settings →";
+
   return (
     <div>
       <StepHeader
@@ -1704,23 +1716,47 @@ function PaymentStep({
       <div
         style={{
           marginTop: 18,
-          padding: "12px 14px",
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
-          borderRadius: 6,
-          fontSize: 12,
-          color: "#1e40af",
-          lineHeight: 1.55,
+          display: "flex",
+          gap: 10,
+          flexWrap: "wrap",
         }}
       >
-        <strong>The Stripe Connect onboarding flow lands next.</strong>{" "}
-        For now you can Skip and publish — registrations will save and
-        partner invites will fire as normal, but the "Pay" button on
-        the checkout page won't actually charge a card. That's fine
-        for testing; the moment Stripe Connect is wired, this step's
-        button will kick off the hosted onboarding flow on Stripe's
-        side and flip the status above when verification completes.
+        <Link
+          to={`/admin/${orgSlug}/settings/stripe`}
+          style={{
+            padding: "10px 18px",
+            background: "#2563eb",
+            color: "#fff",
+            textDecoration: "none",
+            borderRadius: 6,
+            fontSize: 14,
+            fontWeight: 500,
+          }}
+        >
+          {ctaLabel}
+        </Link>
       </div>
+
+      {stripeStatus !== "active" && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "10px 14px",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "#1e40af",
+            lineHeight: 1.55,
+          }}
+        >
+          Skipping is fine for now — registrations will save and partner
+          invites will fire as normal, but the "Pay" button on the
+          checkout page won't actually charge a card until Stripe is
+          connected. The PaymentIntent integration in the checkout flow
+          is a separate follow-on.
+        </div>
+      )}
     </div>
   );
 }
