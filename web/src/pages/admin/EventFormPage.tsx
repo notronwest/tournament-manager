@@ -69,7 +69,10 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   // Eligibility (all optional; blank = no bound)
   const [minRating, setMinRating] = useState("");
   const [maxRating, setMaxRating] = useState("");
-  const [ratingSource, setRatingSource] = useState<RatingSource | "">("");
+  // Default rating source = self-rating (matches the new column
+  // default in migration 20260530170000). Edit mode loads the saved
+  // value below and overrides this default.
+  const [ratingSource, setRatingSource] = useState<RatingSource | "">("self");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
 
