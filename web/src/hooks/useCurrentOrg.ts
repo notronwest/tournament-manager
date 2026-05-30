@@ -12,11 +12,23 @@ type State = {
   role: OrgRole | null;
   loading: boolean;
   error: string | null;
+  // True when the user reaches this org via platform-admin override
+  // (no explicit organization_members row). AdminLayout renders a
+  // subtle banner so the elevated access is visible. Note this is
+  // ALWAYS false when the user is also an explicit member of the
+  // org — a real member who happens to be a platform admin sees
+  // the normal admin UI without the override banner.
+  viaPlatformAdmin: boolean;
 };
 
 // Reads :orgSlug from the URL, fetches the org, and confirms the current
 // auth user is a member. Returns the org + the user's role on it. Used by
 // the AdminLayout to gate access and by inner pages to scope their queries.
+//
+// Platform admins (rows in public.platform_admins) have implicit owner-
+// level access to every org. When the user isn't an explicit member but
+// IS a platform admin, the hook returns role='owner' and
+// viaPlatformAdmin=true so the UI can render an override banner.
 export function useCurrentOrg(): State {
   const { orgSlug } = useParams<{ orgSlug: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -25,6 +37,7 @@ export function useCurrentOrg(): State {
     role: null,
     loading: true,
     error: null,
+    viaPlatformAdmin: false,
   });
 
   useEffect(() => {
@@ -35,6 +48,7 @@ export function useCurrentOrg(): State {
         role: null,
         loading: false,
         error: "Missing org slug in URL.",
+        viaPlatformAdmin: false,
       });
       return;
     }
@@ -44,6 +58,7 @@ export function useCurrentOrg(): State {
         role: null,
         loading: false,
         error: "Not signed in.",
+        viaPlatformAdmin: false,
       });
       return;
     }
@@ -66,6 +81,7 @@ export function useCurrentOrg(): State {
           role: null,
           loading: false,
           error: orgErr.message,
+          viaPlatformAdmin: false,
         });
         return;
       }
@@ -75,6 +91,7 @@ export function useCurrentOrg(): State {
           role: null,
           loading: false,
           error: "Organization not found.",
+          viaPlatformAdmin: false,
         });
         return;
       }
@@ -93,15 +110,36 @@ export function useCurrentOrg(): State {
           role: null,
           loading: false,
           error: memberErr.message,
+          viaPlatformAdmin: false,
         });
         return;
       }
       if (!memberData) {
+        // Not an explicit member. Platform admins still get implicit
+        // owner-level access; one extra round-trip rather than join
+        // the check up front since most users aren't platform admins.
+        const { data: padmin } = await supabase
+          .from("platform_admins")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (padmin) {
+          setState({
+            org: orgData,
+            role: "owner",
+            loading: false,
+            error: null,
+            viaPlatformAdmin: true,
+          });
+          return;
+        }
         setState({
           org: orgData,
           role: null,
           loading: false,
           error: "You are not a member of this organization.",
+          viaPlatformAdmin: false,
         });
         return;
       }
@@ -111,6 +149,7 @@ export function useCurrentOrg(): State {
         role: memberData.role,
         loading: false,
         error: null,
+        viaPlatformAdmin: false,
       });
     })();
 

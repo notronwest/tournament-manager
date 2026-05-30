@@ -11,7 +11,7 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 // rendered at the App level — this sidebar only owns *in-org*
 // navigation (Overview, Tournaments, Tools).
 export default function AdminLayout() {
-  const { org, role, loading, error } = useCurrentOrg();
+  const { org, role, loading, error, viaPlatformAdmin } = useCurrentOrg();
   const navigate = useNavigate();
 
   if (loading) {
@@ -103,6 +103,24 @@ export default function AdminLayout() {
         className="admin-main"
         style={{ flex: 1, padding: 32, overflowX: "auto" }}
       >
+        {viaPlatformAdmin && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: "10px 14px",
+              background: "#fef3c7",
+              border: "1px solid #fde68a",
+              borderRadius: 6,
+              fontSize: 13,
+              color: "#7a5d00",
+              lineHeight: 1.5,
+            }}
+          >
+            🛡 <strong>Viewing as platform admin.</strong> You aren't a
+            member of <strong>{org.name}</strong>, but you have implicit
+            owner-level access here.
+          </div>
+        )}
         <Outlet />
       </main>
     </div>
