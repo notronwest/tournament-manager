@@ -467,6 +467,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                 <option value="dupr">DUPR</option>
                 <option value="pbvision">PB Vision</option>
                 <option value="wmpc_rating_hub">WMPC Rating Hub</option>
+                <option value="self">Self-rating</option>
               </select>
             </Field>
           </FieldRow>

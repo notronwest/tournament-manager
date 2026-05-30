@@ -1047,7 +1047,7 @@ export type Database = {
         | "early_bird"
         | "early_bird_plus_late"
         | "custom"
-      rating_source: "dupr" | "pbvision" | "wmpc_rating_hub"
+      rating_source: "dupr" | "pbvision" | "wmpc_rating_hub" | "self"
       registration_status:
         | "pending_payment"
         | "paid"
@@ -1236,7 +1236,7 @@ export const Constants = {
         "early_bird_plus_late",
         "custom",
       ],
-      rating_source: ["dupr", "pbvision", "wmpc_rating_hub"],
+      rating_source: ["dupr", "pbvision", "wmpc_rating_hub", "self"],
       registration_status: [
         "pending_payment",
         "paid",

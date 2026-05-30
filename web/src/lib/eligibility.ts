@@ -52,5 +52,7 @@ function ratingSourceLabel(
       return "PB Vision";
     case "wmpc_rating_hub":
       return "WMPC";
+    case "self":
+      return "Self-rated";
   }
 }
