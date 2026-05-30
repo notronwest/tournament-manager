@@ -607,9 +607,9 @@ export default function TournamentWizardPage() {
           />
         )}
         {currentStep === "payment" && (
-          <ComingSoonStub
-            title="Accept payment"
-            blurb="Connect a Stripe account so players can pay during registration. Comes with the Stripe Connect onboarding work."
+          <PaymentStep
+            stripeStatus={org.stripe_account_status}
+            stripeAccountId={org.stripe_account_id}
           />
         )}
         {currentStep === "review" && (
@@ -619,6 +619,7 @@ export default function TournamentWizardPage() {
             pricingTiers={pricingTiers}
             pricingPattern={pricingPattern}
             cancellationPreset={cancellationPreset}
+            stripeStatus={org.stripe_account_status}
             blockers={publishBlockers}
             onPublish={() => void publish()}
             onJumpTo={goStep}
@@ -1679,29 +1680,149 @@ function MarkdownStep({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Generic "coming soon" stub for steps not yet integrated
+// Step 7: Accept payment — Stripe Connect status surface
 // ─────────────────────────────────────────────────────────────────────
 
-function ComingSoonStub({ title, blurb }: { title: string; blurb: string }) {
+type StripeStatus = Database["public"]["Enums"]["org_stripe_status"];
+
+function PaymentStep({
+  stripeStatus,
+  stripeAccountId,
+}: {
+  stripeStatus: StripeStatus;
+  stripeAccountId: string | null;
+}) {
   return (
     <div>
-      <StepHeader title={title} lede="This step is optional — Skip moves you forward." />
+      <StepHeader
+        title="Accept payment"
+        lede="Tournaments take real money via Stripe — each organization connects its own Stripe account, and players' registration fees flow into it directly (we take a small platform fee on top)."
+      />
+
+      <StripeStatusCard status={stripeStatus} accountId={stripeAccountId} />
+
       <div
         style={{
-          padding: 18,
-          background: "#fffbeb",
-          border: "1px solid #fde68a",
-          borderRadius: 8,
-          fontSize: 13,
-          color: "#7a5d00",
+          marginTop: 18,
+          padding: "12px 14px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: 6,
+          fontSize: 12,
+          color: "#1e40af",
           lineHeight: 1.55,
         }}
       >
-        <strong>Coming in a follow-up slice.</strong> {blurb}
+        <strong>The Stripe Connect onboarding flow lands next.</strong>{" "}
+        For now you can Skip and publish — registrations will save and
+        partner invites will fire as normal, but the "Pay" button on
+        the checkout page won't actually charge a card. That's fine
+        for testing; the moment Stripe Connect is wired, this step's
+        button will kick off the hosted onboarding flow on Stripe's
+        side and flip the status above when verification completes.
       </div>
     </div>
   );
 }
+
+function StripeStatusCard({
+  status,
+  accountId,
+}: {
+  status: StripeStatus;
+  accountId: string | null;
+}) {
+  const palette: Record<
+    StripeStatus,
+    { bg: string; border: string; fg: string; label: string; desc: string }
+  > = {
+    not_connected: {
+      bg: "#fffbeb",
+      border: "#fde68a",
+      fg: "#7a5d00",
+      label: "Not connected",
+      desc:
+        "No Stripe account is linked to this organization yet. Until one is connected, registrations save as 'paid' without actually charging — fine for testing, not for production.",
+    },
+    pending: {
+      bg: "#fef3c7",
+      border: "#fde68a",
+      fg: "#92400e",
+      label: "Onboarding in progress",
+      desc:
+        "Your Stripe account exists but verification isn't complete. Stripe usually finishes in a few minutes once you've submitted all required info.",
+    },
+    active: {
+      bg: "#dcfce7",
+      border: "#bbf7d0",
+      fg: "#166534",
+      label: "✓ Stripe connected",
+      desc:
+        "Your organization is ready to accept payments. Each registration moves money directly into your account (we take a platform fee on top).",
+    },
+    restricted: {
+      bg: "#fef2f2",
+      border: "#fecaca",
+      fg: "#991b1b",
+      label: "⚠ Account restricted",
+      desc:
+        "Stripe has restricted this account — usually because of missing verification documents or a compliance flag. Resolve from your Stripe dashboard.",
+    },
+  };
+  const p = palette[status];
+  return (
+    <div
+      style={{
+        padding: 14,
+        background: p.bg,
+        border: `1px solid ${p.border}`,
+        borderRadius: 8,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 600,
+          color: p.fg,
+          marginBottom: 6,
+        }}
+      >
+        {p.label}
+      </div>
+      <div style={{ fontSize: 13, color: p.fg, lineHeight: 1.55 }}>
+        {p.desc}
+      </div>
+      {accountId && (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 11,
+            color: p.fg,
+            opacity: 0.7,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          }}
+        >
+          Account: {accountId}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function prettyStripeStatus(s: StripeStatus): string {
+  switch (s) {
+    case "not_connected":
+      return "Not connected";
+    case "pending":
+      return "Onboarding in progress";
+    case "active":
+      return "Connected";
+    case "restricted":
+      return "Restricted";
+  }
+}
+
+// (All step stubs are now real components — ComingSoonStub retired.)
 
 // ─────────────────────────────────────────────────────────────────────
 // Step 8: Review & publish
@@ -1713,6 +1834,7 @@ function ReviewStep({
   pricingTiers,
   pricingPattern,
   cancellationPreset,
+  stripeStatus,
   blockers,
   onPublish,
   onJumpTo,
@@ -1723,6 +1845,7 @@ function ReviewStep({
   pricingTiers: TierDraft[];
   pricingPattern: PricingPattern;
   cancellationPreset: CancellationPolicyPreset | null;
+  stripeStatus: StripeStatus;
   blockers: string[];
   onPublish: () => void;
   onJumpTo: (id: StepId) => void;
@@ -1839,12 +1962,28 @@ function ReviewStep({
         </ReviewCard>
 
         <ReviewCard
+          title="Payment"
+          onEdit={() => onJumpTo("payment")}
+          done={stripeStatus === "active"}
+        >
+          <div>
+            <strong>{prettyStripeStatus(stripeStatus)}</strong>
+          </div>
+          {stripeStatus !== "active" && (
+            <div style={{ color: "#7a5d00", marginTop: 4 }}>
+              Registrations will save without charging until Stripe is
+              connected — fine for testing, not for production.
+            </div>
+          )}
+        </ReviewCard>
+
+        <ReviewCard
           title="Other optional steps"
           onEdit={() => onJumpTo("sponsors")}
           done={true}
         >
           <div style={{ color: "#666" }}>
-            Sponsors, FAQs, payment — fill in any of these now or after publish.
+            Sponsors, FAQs — fill in either now or after publish.
           </div>
         </ReviewCard>
       </div>
