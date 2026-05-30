@@ -848,6 +848,9 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          cancellation_policy_preset:
+            | Database["public"]["Enums"]["cancellation_policy_preset"]
+            | null
           court_count: number
           created_at: string
           deleted_at: string | null
@@ -868,6 +871,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancellation_policy_preset?:
+            | Database["public"]["Enums"]["cancellation_policy_preset"]
+            | null
           court_count?: number
           created_at?: string
           deleted_at?: string | null
@@ -888,6 +894,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cancellation_policy_preset?:
+            | Database["public"]["Enums"]["cancellation_policy_preset"]
+            | null
           court_count?: number
           created_at?: string
           deleted_at?: string | null
@@ -996,6 +1005,7 @@ export type Database = {
         | "single_elim"
         | "double_elim"
         | "pool_then_bracket"
+      cancellation_policy_preset: "generous" | "standard" | "strict" | "custom"
       event_format: "singles" | "doubles"
       event_gender: "men" | "women" | "mixed"
       event_status:
@@ -1180,6 +1190,7 @@ export const Constants = {
         "double_elim",
         "pool_then_bracket",
       ],
+      cancellation_policy_preset: ["generous", "standard", "strict", "custom"],
       event_format: ["singles", "doubles"],
       event_gender: ["men", "women", "mixed"],
       event_status: [

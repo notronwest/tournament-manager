@@ -19,6 +19,8 @@ import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
+type CancellationPolicyPreset =
+  Database["public"]["Enums"]["cancellation_policy_preset"];
 
 // ─────────────────────────────────────────────────────────────────────
 // Step model
@@ -105,6 +107,13 @@ export default function TournamentWizardPage() {
   ]);
   const [paidRegCount, setPaidRegCount] = useState(0);
 
+  // Step 4: Cancellation policy preset. Defaults to "standard" in the
+  // UI for first-time runs (organizer can change or skip). null in
+  // state = nothing chosen yet (resume mode for a tournament that
+  // skipped this step previously).
+  const [cancellationPreset, setCancellationPreset] =
+    useState<CancellationPolicyPreset | null>("standard");
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(isResume);
@@ -141,6 +150,9 @@ export default function TournamentWizardPage() {
       setRegistrationClosesAt(isoToLocal(t.registration_closes_at));
       setCourtCount(String(t.court_count));
       setPricingPattern(t.pricing_pattern);
+      // Preserve "not chosen" state when the org skipped Step 4
+      // previously — don't snap them to "standard" on resume.
+      setCancellationPreset(t.cancellation_policy_preset ?? null);
 
       // Pricing tiers
       const { data: tierRows } = await supabase
@@ -309,6 +321,25 @@ export default function TournamentWizardPage() {
     return true;
   };
 
+  const saveCancellationPolicy = async (): Promise<boolean> => {
+    if (!tournament) {
+      setError("Save Basics first.");
+      return false;
+    }
+    setError(null);
+    setBusy(true);
+    const { error: updErr } = await supabase
+      .from("tournaments")
+      .update({ cancellation_policy_preset: cancellationPreset })
+      .eq("id", tournament.id);
+    setBusy(false);
+    if (updErr) {
+      setError(updErr.message);
+      return false;
+    }
+    return true;
+  };
+
   const publish = async (): Promise<void> => {
     if (!tournament) return;
     setError(null);
@@ -389,6 +420,8 @@ export default function TournamentWizardPage() {
     let ok = true;
     if (currentStep === "basics") ok = await saveBasics();
     else if (currentStep === "pricing") ok = await savePricing();
+    else if (currentStep === "cancellation")
+      ok = await saveCancellationPolicy();
     if (ok && next) goStep(next.id);
   };
 
@@ -396,6 +429,8 @@ export default function TournamentWizardPage() {
     let ok = true;
     if (currentStep === "basics") ok = await saveBasics();
     else if (currentStep === "pricing") ok = await savePricing();
+    else if (currentStep === "cancellation")
+      ok = await saveCancellationPolicy();
     if (ok) {
       if (tournament) {
         navigate(`/admin/${org.slug}/tournaments/${tournament.slug}`);
@@ -478,9 +513,9 @@ export default function TournamentWizardPage() {
           />
         )}
         {currentStep === "cancellation" && (
-          <ComingSoonStub
-            title="Cancellation policy"
-            blurb="Pick a refund policy (full refund through date X / partial / no refunds) and show it to players before they pay. We'll add this in the next wizard slice."
+          <CancellationPolicyStep
+            preset={cancellationPreset}
+            onChange={setCancellationPreset}
           />
         )}
         {currentStep === "sponsors" && (
@@ -507,6 +542,7 @@ export default function TournamentWizardPage() {
             eventCount={eventCount}
             pricingTiers={pricingTiers}
             pricingPattern={pricingPattern}
+            cancellationPreset={cancellationPreset}
             blockers={publishBlockers}
             onPublish={() => void publish()}
             onJumpTo={goStep}
@@ -1281,6 +1317,201 @@ function PricingStep({
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Step 4: Cancellation policy preset picker
+// ─────────────────────────────────────────────────────────────────────
+
+type CancellationPresetMeta = {
+  id: Exclude<CancellationPolicyPreset, "custom">;
+  title: string;
+  bullets: string[];
+  goodFor: string;
+};
+
+const CANCELLATION_PRESETS: CancellationPresetMeta[] = [
+  {
+    id: "generous",
+    title: "Generous",
+    bullets: [
+      "Full refund up to 7 days before the tournament starts.",
+      "No refund within 7 days.",
+    ],
+    goodFor: "New tournaments building trust with players.",
+  },
+  {
+    id: "standard",
+    title: "Standard",
+    bullets: [
+      "Full refund within 7 days of registering.",
+      "Half refund more than 30 days before the tournament.",
+      "No refund within 7 days of the tournament.",
+    ],
+    goodFor: "Most tournaments. The default.",
+  },
+  {
+    id: "strict",
+    title: "Strict",
+    bullets: [
+      "No refunds after registration — your spot is locked in.",
+    ],
+    goodFor:
+      "High-demand events with waitlists where you don't want flake risk.",
+  },
+];
+
+function CancellationPolicyStep({
+  preset,
+  onChange,
+}: {
+  preset: CancellationPolicyPreset | null;
+  onChange: (p: CancellationPolicyPreset | null) => void;
+}) {
+  return (
+    <div>
+      <StepHeader
+        title="Cancellation policy"
+        lede="Pick a refund policy that fits how strict you want to be. We'll show this to players before they pay, and use it to process refunds automatically when someone withdraws or if you cancel the tournament."
+      />
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        {CANCELLATION_PRESETS.map((p) => {
+          const selected = preset === p.id;
+          return (
+            <button
+              type="button"
+              key={p.id}
+              onClick={() => onChange(p.id)}
+              style={cancellationCardStyle(selected)}
+              aria-pressed={selected}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: 14,
+                  marginBottom: 8,
+                  color: "#222",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span style={cancellationRadioStyle(selected)} />
+                {p.title}
+              </div>
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: 18,
+                  fontSize: 12,
+                  color: "#444",
+                  lineHeight: 1.55,
+                }}
+              >
+                {p.bullets.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 11,
+                  color: "#888",
+                  fontStyle: "italic",
+                }}
+              >
+                Good for: {p.goodFor}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <details
+        style={{
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: 6,
+          padding: "10px 12px",
+          fontSize: 12,
+          color: "#1e40af",
+          lineHeight: 1.55,
+        }}
+      >
+        <summary style={{ cursor: "pointer", fontWeight: 500 }}>
+          ⓘ Need something different? Custom is coming
+        </summary>
+        <div style={{ marginTop: 8, color: "#1e3a8a" }}>
+          A Custom preset (your own refund windows + percentages) will
+          land in a follow-up slice. For now, pick whichever of the three
+          presets is closest and we'll let you fine-tune later. Skipping
+          is also fine — the public page falls back to "Contact the
+          organizer for the refund policy."
+        </div>
+      </details>
+    </div>
+  );
+}
+
+function cancellationCardStyle(selected: boolean): CSSProperties {
+  return {
+    background: selected ? "#eff6ff" : "#fff",
+    border: `2px solid ${selected ? "#2563eb" : "#e5e7eb"}`,
+    borderRadius: 8,
+    padding: 14,
+    cursor: "pointer",
+    textAlign: "left",
+    fontFamily: "inherit",
+    display: "flex",
+    flexDirection: "column",
+  };
+}
+
+function cancellationRadioStyle(selected: boolean): CSSProperties {
+  return {
+    width: 14,
+    height: 14,
+    borderRadius: "50%",
+    border: `2px solid ${selected ? "#2563eb" : "#cbd5e1"}`,
+    background: selected ? "#2563eb" : "#fff",
+    boxShadow: selected ? "inset 0 0 0 3px #fff" : "none",
+    flexShrink: 0,
+    boxSizing: "border-box",
+  };
+}
+
+function prettyCancellationPreset(p: CancellationPolicyPreset): string {
+  switch (p) {
+    case "generous":
+      return "Generous";
+    case "standard":
+      return "Standard";
+    case "strict":
+      return "Strict";
+    case "custom":
+      return "Custom";
+  }
+}
+
+function cancellationPresetSummary(p: CancellationPolicyPreset): string {
+  switch (p) {
+    case "generous":
+      return "Full refund > 7 days before, none within 7 days.";
+    case "standard":
+      return "Full refund <7d after reg, half >30d before, none <7d before.";
+    case "strict":
+      return "No refunds after registration.";
+    case "custom":
+      return "Custom windows.";
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Generic "coming soon" stub for steps not yet integrated
 // ─────────────────────────────────────────────────────────────────────
 
@@ -1314,6 +1545,7 @@ function ReviewStep({
   eventCount,
   pricingTiers,
   pricingPattern,
+  cancellationPreset,
   blockers,
   onPublish,
   onJumpTo,
@@ -1323,6 +1555,7 @@ function ReviewStep({
   eventCount: number;
   pricingTiers: TierDraft[];
   pricingPattern: PricingPattern;
+  cancellationPreset: CancellationPolicyPreset | null;
   blockers: string[];
   onPublish: () => void;
   onJumpTo: (id: StepId) => void;
@@ -1418,13 +1651,33 @@ function ReviewStep({
         </ReviewCard>
 
         <ReviewCard
-          title="Optional steps"
+          title="Cancellation policy"
           onEdit={() => onJumpTo("cancellation")}
+          done={!!cancellationPreset}
+        >
+          {cancellationPreset ? (
+            <>
+              <div>
+                <strong>{prettyCancellationPreset(cancellationPreset)}</strong>
+              </div>
+              <div style={{ color: "#666", marginTop: 4 }}>
+                {cancellationPresetSummary(cancellationPreset)}
+              </div>
+            </>
+          ) : (
+            <div style={{ color: "#7a5d00" }}>
+              Not set — public page will show "Contact organizer for refunds."
+            </div>
+          )}
+        </ReviewCard>
+
+        <ReviewCard
+          title="Other optional steps"
+          onEdit={() => onJumpTo("sponsors")}
           done={true}
         >
           <div style={{ color: "#666" }}>
-            Cancellation, sponsors, FAQs, payment — fill in any of these now or
-            after publish.
+            Sponsors, FAQs, payment — fill in any of these now or after publish.
           </div>
         </ReviewCard>
       </div>
