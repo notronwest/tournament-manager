@@ -114,6 +114,11 @@ export default function TournamentWizardPage() {
   const [cancellationPreset, setCancellationPreset] =
     useState<CancellationPolicyPreset | null>("standard");
 
+  // Step 5 (Sponsors) + Step 6 (FAQs). Free-form markdown that
+  // renders as a section on the public tournament page.
+  const [sponsorsMd, setSponsorsMd] = useState("");
+  const [faqsMd, setFaqsMd] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(isResume);
@@ -153,6 +158,8 @@ export default function TournamentWizardPage() {
       // Preserve "not chosen" state when the org skipped Step 4
       // previously — don't snap them to "standard" on resume.
       setCancellationPreset(t.cancellation_policy_preset ?? null);
+      setSponsorsMd(t.sponsors_md ?? "");
+      setFaqsMd(t.faqs_md ?? "");
 
       // Pricing tiers
       const { data: tierRows } = await supabase
@@ -340,6 +347,37 @@ export default function TournamentWizardPage() {
     return true;
   };
 
+  // Generic markdown-column saver — used by Sponsors and FAQs.
+  // Empty string saves as NULL so the public page hides the section
+  // entirely (rather than rendering an empty heading). The dynamic
+  // column key needs a cast because the typed client refuses
+  // computed-property objects for its strict Update type.
+  const saveMarkdownColumn = async (
+    column: "sponsors_md" | "faqs_md",
+    value: string,
+  ): Promise<boolean> => {
+    if (!tournament) {
+      setError("Save Basics first.");
+      return false;
+    }
+    setError(null);
+    setBusy(true);
+    const trimmed = value.trim();
+    const payload = {
+      [column]: trimmed === "" ? null : trimmed,
+    } as Database["public"]["Tables"]["tournaments"]["Update"];
+    const { error: updErr } = await supabase
+      .from("tournaments")
+      .update(payload)
+      .eq("id", tournament.id);
+    setBusy(false);
+    if (updErr) {
+      setError(updErr.message);
+      return false;
+    }
+    return true;
+  };
+
   const publish = async (): Promise<void> => {
     if (!tournament) return;
     setError(null);
@@ -416,21 +454,23 @@ export default function TournamentWizardPage() {
 
   // On Save & continue: persist the current step (real steps only),
   // then advance.
+  const saveCurrentStep = async (): Promise<boolean> => {
+    if (currentStep === "basics") return saveBasics();
+    if (currentStep === "pricing") return savePricing();
+    if (currentStep === "cancellation") return saveCancellationPolicy();
+    if (currentStep === "sponsors")
+      return saveMarkdownColumn("sponsors_md", sponsorsMd);
+    if (currentStep === "faqs") return saveMarkdownColumn("faqs_md", faqsMd);
+    return true;
+  };
+
   const saveAndContinue = async () => {
-    let ok = true;
-    if (currentStep === "basics") ok = await saveBasics();
-    else if (currentStep === "pricing") ok = await savePricing();
-    else if (currentStep === "cancellation")
-      ok = await saveCancellationPolicy();
+    const ok = await saveCurrentStep();
     if (ok && next) goStep(next.id);
   };
 
   const saveAndExit = async () => {
-    let ok = true;
-    if (currentStep === "basics") ok = await saveBasics();
-    else if (currentStep === "pricing") ok = await savePricing();
-    else if (currentStep === "cancellation")
-      ok = await saveCancellationPolicy();
+    const ok = await saveCurrentStep();
     if (ok) {
       if (tournament) {
         navigate(`/admin/${org.slug}/tournaments/${tournament.slug}`);
@@ -449,6 +489,35 @@ export default function TournamentWizardPage() {
     if (eventCount === 0) publishBlockers.push("At least one event required");
   }
 
+  // ── Per-step rail-guard: if the current step has unmet REQUIRED
+  // fields, the rail disables forward jumps so the organizer can't
+  // wander into a later step on an unfinished foundation. Back
+  // jumps are always allowed; jumps to the current step are no-ops.
+  // ────────────────────────────────────────────────────────────────
+  let currentStepBlocker: string | null = null;
+  if (currentStep === "basics") {
+    const missing: string[] = [];
+    if (!name.trim()) missing.push("name");
+    if (!startsAt) missing.push("start date");
+    if (!endsAt) missing.push("end date");
+    if (missing.length > 0) {
+      currentStepBlocker = `Fill in ${missing.join(", ")} first.`;
+    } else if (!tournament) {
+      currentStepBlocker = 'Click "Save & continue" to save the draft first.';
+    }
+  } else if (currentStep === "events") {
+    if (eventCount === 0) {
+      currentStepBlocker = "Add at least one event before continuing.";
+    }
+  } else if (currentStep === "pricing") {
+    const tierCheck = tierDraftsToInserts(pricingTiers);
+    if (tierCheck.error !== null) {
+      currentStepBlocker = tierCheck.error;
+    }
+  }
+  // cancellation / sponsors / faqs / payment / review: optional or
+  // terminal — no blocker.
+
   // ── Render ──────────────────────────────────────────────────────
 
   return (
@@ -456,6 +525,7 @@ export default function TournamentWizardPage() {
       <Rail
         steps={STEPS}
         current={currentStep}
+        forwardBlocker={currentStepBlocker}
         tournamentName={tournament?.name || name || "Untitled tournament"}
         onPick={goStep}
         onPublish={() => goStep("review")}
@@ -519,15 +589,21 @@ export default function TournamentWizardPage() {
           />
         )}
         {currentStep === "sponsors" && (
-          <ComingSoonStub
+          <MarkdownStep
             title="Sponsors & branding"
-            blurb="Add a tournament logo, banner image, and sponsor strip that show on the public tournament page. Coming next."
+            lede="List your sponsors so they show on the public tournament page. Markdown supported — link out, list multiple tiers, whatever fits. Image upload (logos / banner) is a follow-up."
+            placeholder={`**Title sponsor:** [Acme Pickleball](https://example.com)\n\n**Court sponsors:**\n- Local Bagel Shop\n- Downtown Auto`}
+            value={sponsorsMd}
+            onChange={setSponsorsMd}
           />
         )}
         {currentStep === "faqs" && (
-          <ComingSoonStub
+          <MarkdownStep
             title="FAQs"
-            blurb="Add a short FAQ section to the public tournament page (parking, format details, lunch, etc.). Coming next."
+            lede="Short Q+A entries for the public tournament page — parking, format details, lunch, etc. Markdown supported."
+            placeholder={`**Where do I park?**\nThe main lot fills up fast — overflow on Main St.\n\n**What time do warm-ups start?**\n20 minutes before your first match.`}
+            value={faqsMd}
+            onChange={setFaqsMd}
           />
         )}
         {currentStep === "payment" && (
@@ -620,6 +696,7 @@ export default function TournamentWizardPage() {
 function Rail({
   steps,
   current,
+  forwardBlocker,
   tournamentName,
   onPick,
   onPublish,
@@ -628,6 +705,11 @@ function Rail({
 }: {
   steps: StepMeta[];
   current: StepId;
+  // Non-null = the current step has unmet required fields; forward
+  // step buttons in the rail are disabled and show this as a tooltip
+  // so the organizer can't jump past an incomplete required step.
+  // Back navigation is unaffected.
+  forwardBlocker: string | null;
   tournamentName: string;
   onPick: (id: StepId) => void;
   onPublish: () => void;
@@ -666,15 +748,23 @@ function Rail({
         {steps.map((s, i) => {
           const state =
             i < currentIdx ? "done" : i === currentIdx ? "active" : "todo";
+          const isForward = i > currentIdx;
+          const disabled = isForward && forwardBlocker !== null;
           return (
             <li key={s.id}>
               <button
                 type="button"
+                disabled={disabled}
+                title={disabled ? forwardBlocker ?? undefined : undefined}
                 onClick={() => onPick(s.id)}
-                style={stepBtnStyle(state)}
+                style={{
+                  ...stepBtnStyle(state),
+                  opacity: disabled ? 0.45 : 1,
+                  cursor: disabled ? "not-allowed" : "pointer",
+                }}
               >
                 <span style={indicatorStyle(state)}>
-                  {state === "done" ? "✓" : i + 1}
+                  {disabled ? "🔒" : state === "done" ? "✓" : i + 1}
                 </span>
                 <span style={{ flex: 1 }}>
                   <div
@@ -697,20 +787,42 @@ function Rail({
         })}
       </ol>
 
+      {forwardBlocker && (
+        <div
+          style={{
+            padding: "8px 10px",
+            background: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderRadius: 6,
+            fontSize: 11,
+            color: "#7a5d00",
+            lineHeight: 1.5,
+          }}
+        >
+          🔒 {forwardBlocker}
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <button
           type="button"
           onClick={onPublish}
-          disabled={!publishable}
+          // Publish navigates to Review (a forward step), so the
+          // rail-guard blocker applies here too: can't skip past an
+          // incomplete required step by clicking Publish.
+          disabled={!publishable || forwardBlocker !== null}
+          title={forwardBlocker ?? undefined}
           style={{
             padding: "10px 14px",
-            background: publishable ? "#16a34a" : "#e5e7eb",
-            color: publishable ? "#fff" : "#888",
+            background:
+              publishable && !forwardBlocker ? "#16a34a" : "#e5e7eb",
+            color: publishable && !forwardBlocker ? "#fff" : "#888",
             border: "none",
             borderRadius: 6,
             fontSize: 13,
             fontWeight: 600,
-            cursor: publishable ? "pointer" : "not-allowed",
+            cursor:
+              publishable && !forwardBlocker ? "pointer" : "not-allowed",
             fontFamily: "inherit",
           }}
         >
@@ -1509,6 +1621,61 @@ function cancellationPresetSummary(p: CancellationPolicyPreset): string {
     case "custom":
       return "Custom windows.";
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Steps 5 + 6: Sponsors & FAQs — markdown textarea steps
+// ─────────────────────────────────────────────────────────────────────
+
+function MarkdownStep({
+  title,
+  lede,
+  placeholder,
+  value,
+  onChange,
+}: {
+  title: string;
+  lede: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <StepHeader title={title} lede={lede} />
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={12}
+        style={{
+          width: "100%",
+          padding: "12px 14px",
+          border: "1px solid #e2e2e2",
+          borderRadius: 6,
+          fontSize: 14,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          lineHeight: 1.55,
+          resize: "vertical",
+          boxSizing: "border-box",
+          minHeight: 240,
+        }}
+      />
+      <div
+        style={{
+          marginTop: 8,
+          fontSize: 12,
+          color: "#888",
+          lineHeight: 1.55,
+        }}
+      >
+        Markdown supported: <code>**bold**</code>, <code>*italic*</code>,{" "}
+        <code>[link](url)</code>, <code>- bullet</code>, blank line for a
+        paragraph break. Leave empty to hide this section from the public
+        page entirely.
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────

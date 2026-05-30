@@ -856,6 +856,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           ends_at: string
+          faqs_md: string | null
           id: string
           inter_event_buffer_minutes: number
           location_address: string | null
@@ -866,6 +867,7 @@ export type Database = {
           registration_closes_at: string | null
           registration_opens_at: string | null
           slug: string
+          sponsors_md: string | null
           starts_at: string
           status: Database["public"]["Enums"]["tournament_status"]
           updated_at: string
@@ -879,6 +881,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           ends_at: string
+          faqs_md?: string | null
           id?: string
           inter_event_buffer_minutes?: number
           location_address?: string | null
@@ -889,6 +892,7 @@ export type Database = {
           registration_closes_at?: string | null
           registration_opens_at?: string | null
           slug: string
+          sponsors_md?: string | null
           starts_at: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
@@ -902,6 +906,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           ends_at?: string
+          faqs_md?: string | null
           id?: string
           inter_event_buffer_minutes?: number
           location_address?: string | null
@@ -912,6 +917,7 @@ export type Database = {
           registration_closes_at?: string | null
           registration_opens_at?: string | null
           slug?: string
+          sponsors_md?: string | null
           starts_at?: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
