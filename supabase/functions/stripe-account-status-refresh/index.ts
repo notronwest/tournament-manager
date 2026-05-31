@@ -118,14 +118,23 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Derive our status enum ────────────────────────────────────
+  //
+  // charges_enabled is the canonical "can this account take money?"
+  // signal — it's what Stripe themselves use to gate transactions.
+  // disabled_reason can be present for low-priority follow-ups
+  // (e.g. peripheral capabilities under review) even when the
+  // account is fully functional for charges, so checking
+  // charges_enabled FIRST avoids mis-flagging a working account
+  // as "restricted." We only treat it as restricted when the
+  // account can't actually charge AND Stripe gave a reason.
   const disabledReason: string | null =
     (stripeAccount.requirements?.disabled_reason as string | null) ?? null;
 
   let newStatus: StripeStatus;
-  if (disabledReason) {
-    newStatus = "restricted";
-  } else if (stripeAccount.charges_enabled) {
+  if (stripeAccount.charges_enabled) {
     newStatus = "active";
+  } else if (disabledReason) {
+    newStatus = "restricted";
   } else {
     newStatus = "pending";
   }
