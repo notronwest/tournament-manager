@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import type { Database } from "../../types/supabase";
 
@@ -20,6 +21,8 @@ export default function OrgStripeSettingsPage() {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cameFromStripe = searchParams.get("from") === "stripe";
 
@@ -59,6 +62,35 @@ export default function OrgStripeSettingsPage() {
       setSearchParams(next, { replace: true });
     });
   }, [cameFromStripe, org, refreshStatus, searchParams, setSearchParams]);
+
+  // Clears the org's Stripe link locally (resets stripe_account_id +
+  // status to not_connected). Does NOT delete the underlying Stripe
+  // account — that lives on Stripe's side and can be cleaned up from
+  // their dashboard if needed. After disconnect the picker reappears
+  // and the org can choose OAuth or Express afresh.
+  //
+  // RLS: org admins (and platform admins via has_org_role) can update
+  // the organizations row, so this works as a direct client write.
+  const onDisconnect = async () => {
+    if (!org) return;
+    setError(null);
+    setDisconnecting(true);
+    const { error: updErr } = await supabase
+      .from("organizations")
+      .update({
+        stripe_account_id: null,
+        stripe_account_status: "not_connected",
+      })
+      .eq("id", org.id);
+    setDisconnecting(false);
+    setConfirmDisconnect(false);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setStatus("not_connected");
+    setAccountId(null);
+  };
 
   const onConnect = async (mode: "oauth" | "express") => {
     if (!org) return;
@@ -223,6 +255,20 @@ export default function OrgStripeSettingsPage() {
             Open Stripe dashboard ↗
           </a>
         )}
+        {status !== "not_connected" && (
+          <button
+            type="button"
+            onClick={() => setConfirmDisconnect(true)}
+            disabled={disconnecting}
+            style={{
+              ...secondaryBtn,
+              color: "#b91c1c",
+              borderColor: "#fecaca",
+            }}
+          >
+            Disconnect Stripe
+          </button>
+        )}
       </div>
 
       <details
@@ -250,6 +296,25 @@ export default function OrgStripeSettingsPage() {
           you can try the whole flow without committing real money.
         </div>
       </details>
+
+      {confirmDisconnect && (
+        <ConfirmModal
+          title="Disconnect Stripe?"
+          body={
+            <>
+              This unlinks <strong>{org?.name}</strong> from its Stripe
+              account ({accountId ?? "—"}). After disconnect you can
+              reconnect with either OAuth (sign in) or a new Express
+              account. The Stripe account itself isn't deleted — it
+              still exists in your Stripe dashboard if you want to
+              clean it up separately.
+            </>
+          }
+          confirmLabel={disconnecting ? "Disconnecting…" : "Disconnect"}
+          onCancel={() => setConfirmDisconnect(false)}
+          onConfirm={onDisconnect}
+        />
+      )}
     </div>
   );
 }
