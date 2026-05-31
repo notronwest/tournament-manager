@@ -24,6 +24,15 @@ export default function OrgStripeSettingsPage() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Live Stripe-side diagnostics from the most recent refresh — so
+  // when status isn't active we can show the organizer WHY (which
+  // requirements are due, what Stripe's disabled_reason actually
+  // says, etc.) and link them to fix it.
+  const [diagnostics, setDiagnostics] = useState<{
+    chargesEnabled: boolean;
+    detailsSubmitted: boolean;
+    disabledReason: string | null;
+  } | null>(null);
   const cameFromStripe = searchParams.get("from") === "stripe";
 
   // Hydrate from the org row. useCurrentOrg already fetched it.
@@ -47,6 +56,13 @@ export default function OrgStripeSettingsPage() {
       return;
     }
     if (data?.status) setStatus(data.status as StripeStatus);
+    if (data && typeof data === "object" && "chargesEnabled" in data) {
+      setDiagnostics({
+        chargesEnabled: !!data.chargesEnabled,
+        detailsSubmitted: !!data.detailsSubmitted,
+        disabledReason: (data.disabledReason as string | null) ?? null,
+      });
+    }
   }, [org]);
 
   // When the user comes back from Stripe (return_url or refresh_url
@@ -229,30 +245,40 @@ export default function OrgStripeSettingsPage() {
               type="button"
               onClick={() => void refreshStatus()}
               disabled={refreshing}
-              style={secondaryBtn}
+              style={primaryBtn(refreshing)}
             >
               {refreshing ? "Refreshing…" : "Refresh status"}
             </button>
           </>
+        )}
+        {status === "restricted" && (
+          <button
+            type="button"
+            onClick={() => void onConnect("express")}
+            disabled={connecting}
+            style={primaryBtn(connecting)}
+          >
+            {connecting ? "Opening Stripe…" : "Continue Stripe onboarding →"}
+          </button>
         )}
         {(status === "active" || status === "restricted") && (
           <button
             type="button"
             onClick={() => void refreshStatus()}
             disabled={refreshing}
-            style={secondaryBtn}
+            style={primaryBtn(refreshing)}
           >
             {refreshing ? "Refreshing…" : "Refresh status"}
           </button>
         )}
-        {status === "restricted" && (
+        {status === "restricted" && accountId && (
           <a
-            href="https://dashboard.stripe.com/"
+            href={`https://dashboard.stripe.com/test/connect/accounts/${accountId}`}
             target="_blank"
             rel="noreferrer"
             style={{ ...secondaryBtn, textDecoration: "none" }}
           >
-            Open Stripe dashboard ↗
+            Open this account in Stripe ↗
           </a>
         )}
         {status !== "not_connected" && (
@@ -270,6 +296,44 @@ export default function OrgStripeSettingsPage() {
           </button>
         )}
       </div>
+
+      {diagnostics && status !== "active" && status !== "not_connected" && (
+        <div
+          style={{
+            marginTop: 14,
+            padding: 12,
+            background: "#fafafa",
+            border: "1px solid #e5e7eb",
+            borderRadius: 6,
+            fontSize: 12,
+            color: "#555",
+            lineHeight: 1.55,
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 4, color: "#333" }}>
+            Stripe says
+          </div>
+          <div>charges_enabled: {String(diagnostics.chargesEnabled)}</div>
+          <div>details_submitted: {String(diagnostics.detailsSubmitted)}</div>
+          {diagnostics.disabledReason && (
+            <div>disabled_reason: {diagnostics.disabledReason}</div>
+          )}
+          <div
+            style={{
+              marginTop: 8,
+              fontFamily: "inherit",
+              color: "#666",
+            }}
+          >
+            {diagnostics.chargesEnabled
+              ? "Charges are enabled — refresh again to flip status to active."
+              : diagnostics.detailsSubmitted
+                ? "All details submitted, but Stripe hasn't enabled charges yet. Usually means a verification step is still under review or a required field was missed — Continue onboarding above to fix."
+                : "Onboarding wasn't fully completed. Click Continue onboarding above to finish."}
+          </div>
+        </div>
+      )}
 
       <details
         style={{
