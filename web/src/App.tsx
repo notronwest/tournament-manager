@@ -12,6 +12,7 @@ import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
+import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
 import TournamentWizardPage from "./pages/admin/TournamentWizardPage";
 import EventConsolePage from "./pages/admin/EventConsolePage";
@@ -118,6 +119,19 @@ export default function App() {
         element={
           <RequireAuth>
             <CreateOrganizationPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Stripe Connect OAuth callback. Fixed path (no org slug) so a
+          single redirect_uri can be registered in Stripe Connect
+          platform settings. The org comes through the OAuth state
+          param. Also defined before the :orgSlug catch-all. */}
+      <Route
+        path="/admin/oauth/stripe-callback"
+        element={
+          <RequireAuth>
+            <StripeOauthCallbackPage />
           </RequireAuth>
         }
       />

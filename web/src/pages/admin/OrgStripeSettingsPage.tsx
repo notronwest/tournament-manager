@@ -60,7 +60,7 @@ export default function OrgStripeSettingsPage() {
     });
   }, [cameFromStripe, org, refreshStatus, searchParams, setSearchParams]);
 
-  const onConnect = async () => {
+  const onConnect = async (mode: "oauth" | "express") => {
     if (!org) return;
     setError(null);
     setConnecting(true);
@@ -70,6 +70,7 @@ export default function OrgStripeSettingsPage() {
         body: {
           orgSlug: org.slug,
           baseUrl: window.location.origin,
+          mode,
         },
       },
     );
@@ -86,9 +87,10 @@ export default function OrgStripeSettingsPage() {
       );
       return;
     }
-    // Redirect to Stripe's hosted onboarding. We stay in "connecting"
-    // state so the button is disabled during the brief gap before
-    // the browser actually navigates away.
+    // Redirect to Stripe — either their OAuth screen or the hosted
+    // onboarding flow. We stay in "connecting" state so the button
+    // is disabled during the brief gap before the browser actually
+    // navigates away.
     window.location.href = data.onboardingUrl as string;
   };
 
@@ -142,6 +144,33 @@ export default function OrgStripeSettingsPage() {
         </div>
       )}
 
+      {status === "not_connected" && (
+        <div
+          style={{
+            marginTop: 18,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: 12,
+          }}
+        >
+          <ConnectChoiceCard
+            title="Sign in with Stripe"
+            blurb="Quick if you already have a Stripe account. Authorize Tournament Manager, and your existing account becomes the destination for tournament payments — no re-entering business info."
+            cta={connecting ? "Opening Stripe…" : "Sign in with Stripe →"}
+            recommended
+            disabled={connecting}
+            onClick={() => void onConnect("oauth")}
+          />
+          <ConnectChoiceCard
+            title="Create a new Stripe account"
+            blurb="For organizations that don't have Stripe yet. We'll create one for you and walk through the basics (business name, bank info, identity verification) on Stripe's hosted onboarding."
+            cta={connecting ? "Opening Stripe…" : "Create a new account →"}
+            disabled={connecting}
+            onClick={() => void onConnect("express")}
+          />
+        </div>
+      )}
+
       <div
         style={{
           marginTop: 18,
@@ -150,21 +179,13 @@ export default function OrgStripeSettingsPage() {
           flexWrap: "wrap",
         }}
       >
-        {status === "not_connected" && (
-          <button
-            type="button"
-            onClick={() => void onConnect()}
-            disabled={connecting}
-            style={primaryBtn(connecting)}
-          >
-            {connecting ? "Opening Stripe…" : "Connect with Stripe →"}
-          </button>
-        )}
         {status === "pending" && (
           <>
+            {/* Continue an in-progress Express onboarding — re-issues
+                an AccountLink to the existing account. */}
             <button
               type="button"
-              onClick={() => void onConnect()}
+              onClick={() => void onConnect("express")}
               disabled={connecting}
               style={primaryBtn(connecting)}
             >
@@ -234,6 +255,84 @@ export default function OrgStripeSettingsPage() {
 }
 
 // ─── status card ─────────────────────────────────────────────────────
+
+// One of the two cards in the not-connected picker: "Sign in with
+// Stripe" vs. "Create a new Stripe account."
+function ConnectChoiceCard({
+  title,
+  blurb,
+  cta,
+  recommended,
+  disabled,
+  onClick,
+}: {
+  title: string;
+  blurb: string;
+  cta: string;
+  recommended?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        padding: 16,
+        background: "#fff",
+        border: `1px solid ${recommended ? "#2563eb" : "#e5e7eb"}`,
+        borderRadius: 8,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      {recommended && (
+        <span
+          style={{
+            position: "absolute",
+            top: -10,
+            left: 12,
+            background: "#2563eb",
+            color: "#fff",
+            fontSize: 10,
+            fontWeight: 600,
+            padding: "2px 8px",
+            borderRadius: 3,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+          }}
+        >
+          Recommended
+        </span>
+      )}
+      <div style={{ fontSize: 15, fontWeight: 600, color: "#222" }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 13, color: "#555", lineHeight: 1.55, flex: 1 }}>
+        {blurb}
+      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        style={{
+          padding: "9px 14px",
+          background: disabled ? "#9ca3af" : "#2563eb",
+          color: "#fff",
+          border: "none",
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: disabled ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          marginTop: 4,
+        }}
+      >
+        {cta}
+      </button>
+    </div>
+  );
+}
 
 function StripeStatusCard({
   status,

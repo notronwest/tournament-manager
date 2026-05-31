@@ -40,6 +40,15 @@ type Body = {
   // Browser origin so the return/refresh URLs work in any env
   // (localhost dev vs the deployed Pages site).
   baseUrl: string;
+  // 'oauth'   → "Sign in with existing Stripe" flow. The org admin
+  //             authorizes Tournament Manager against their existing
+  //             Stripe account; faster + no re-entering business info.
+  //             Returns a Stripe OAuth authorize URL.
+  // 'express' → "Create a new Stripe account" flow. We create a
+  //             Connect Express account on their behalf and return a
+  //             Stripe-hosted onboarding URL. Use when the org doesn't
+  //             have Stripe yet.
+  mode?: "oauth" | "express";
 };
 
 // @ts-expect-error Deno global in edge runtime
@@ -127,7 +136,53 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // ── Stripe: ensure Connect account exists ─────────────────────
+  const mode = body.mode ?? "express";
+
+  // ── OAuth mode: build a Stripe Connect OAuth authorize URL ────
+  //
+  // The org admin authorizes Tournament Manager against their
+  // existing Stripe account (or creates a new full Stripe account
+  // through Stripe's signup screen — Stripe branches on the OAuth
+  // page based on whether they're signed in). On success Stripe
+  // redirects to /admin/oauth/stripe-callback with ?code + ?state;
+  // StripeOauthCallbackPage hands those to the stripe-connect-
+  // oauth-callback edge function which exchanges the code for a
+  // stripe_user_id and saves it to the org.
+  //
+  // state encodes the org slug so the callback knows which org this
+  // is for; the callback's own has_org_role check is what actually
+  // gates the write (a forged callback can't connect Stripe to an
+  // org the caller doesn't administer).
+  if (mode === "oauth") {
+    // @ts-expect-error Deno global
+    const clientId = Deno.env.get("STRIPE_CONNECT_CLIENT_ID");
+    if (!clientId) {
+      return jsonResp(
+        {
+          error:
+            "STRIPE_CONNECT_CLIENT_ID isn't set on this Supabase project. Ron needs to enable OAuth on the Connect platform and run `supabase secrets set STRIPE_CONNECT_CLIENT_ID=ca_test_...`.",
+        },
+        500,
+      );
+    }
+    const state = b64UrlEncode(JSON.stringify({ orgSlug: org.slug }));
+    const redirectUri = `${baseUrl}/admin/oauth/stripe-callback`;
+    const params = new URLSearchParams({
+      response_type: "code",
+      client_id: clientId,
+      scope: "read_write",
+      redirect_uri: redirectUri,
+      state,
+      // Pre-fill the email so the Stripe sign-in screen is one click
+      // closer to done. Optional — Stripe's OAuth ignores it if not
+      // applicable.
+      "stripe_user[email]": callerUser.email ?? "",
+    });
+    const url = `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
+    return jsonResp({ ok: true, kind: "oauth", onboardingUrl: url });
+  }
+
+  // ── Express mode: ensure Connect account exists ───────────────
   const stripe = new Stripe(stripeKey, { apiVersion: "2024-06-20" });
 
   let accountId = org.stripe_account_id;
@@ -211,4 +266,10 @@ function jsonResp(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders },
   });
+}
+
+// URL-safe base64 (no padding) — used for the OAuth state param so it
+// survives query-string round-tripping without needing extra encoding.
+function b64UrlEncode(s: string): string {
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
