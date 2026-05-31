@@ -173,9 +173,16 @@ Deno.serve(async (req: Request) => {
       scope: "read_write",
       redirect_uri: redirectUri,
       state,
+      // stripe_landing=login forces the OAuth screen to lead with
+      // "Sign in to your existing Stripe account" rather than
+      // auto-detecting and (sometimes) dropping the user into the
+      // signup form. Users who don't yet have a Stripe account can
+      // still click "Sign up" from the login screen — but the
+      // default surface matches the "Sign in with Stripe" button
+      // they clicked.
+      stripe_landing: "login",
       // Pre-fill the email so the Stripe sign-in screen is one click
-      // closer to done. Optional — Stripe's OAuth ignores it if not
-      // applicable.
+      // closer to done.
       "stripe_user[email]": callerUser.email ?? "",
     });
     const url = `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
