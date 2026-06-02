@@ -4,9 +4,9 @@ Living list of what's next, organized by how soon we're likely to pull it. Each 
 
 Update as we go — move items between sections, drop them under "Recently shipped" when they land, prune that section when it gets long.
 
-Last updated: **2026-05-25**
+Last updated: **2026-05-31**
 
-> **In flight:** Register-then-Checkout flow (the mockup at `mockups/register-then-checkout-flow.html` is being implemented).
+> **In flight:** Tournament-creation wizard Slice 6 — polish (per-step deep-link URLs, refined publish-gate copy, resume-prompt from the tournament detail page). All earlier slices have landed.
 
 ### Personas
 - **Player** — registers and competes
@@ -20,16 +20,6 @@ Last updated: **2026-05-25**
 ## Next up
 
 Things actively queued — the next handful of commits.
-
-### F1. "I need a partner" registration option
-- **As a Player** who wants to play a doubles event but doesn't have a partner yet, I want to register as "seeking a partner," **so that** I can lock in my spot before someone else fills it and find a partner later.
-
-**Touches:** enum migration (add `'seeking'` to `partner_status`), `RegisterPage` event row, validation.
-
-### F3. Hide already-registered players from partner search
-- **As a Player**, I want the partner search to exclude anyone who's already registered for the same event (whether confirmed or pending), **so that** I don't waste a click on someone who can't accept anyway and so the invitee doesn't get a confusing "you've been invited" banner when they're already in.
-
-**Touches:** `PartnerSearch` — accept an `eventId` prop and filter results by a subquery joined to `event_registrations`. Easiest path: have the parent compute the registered-player-ids for the event and pass them in via the existing `excludePlayerIds` array (we already use it to keep the user from picking themselves). Applies to BOTH the existing `/register` page AND the new inline-expand register on the tournament page (PR #3) — both should plumb the same filter.
 
 ### Clarify partner-search rating label (richer format)
 - **As a Player** picking a partner, I want their rating to render as something like **"3.0 Men · Doubles (self-rated)"** or **"3.5 Women · Mixed (DUPR)"** — decimal forced, player's gender included, rating source called out — **so that** "3 doubles" doesn't read as "3 doubles events" and so I can tell at a glance whether the rating I'm trusting came from DUPR or the player's self-report.
@@ -149,15 +139,11 @@ The Review step renders a status banner — "Ready to publish ✓" when hard-req
 
 Known work that's not next-next but is on the radar.
 
-### Stripe Connect onboarding (organizer side)
-- **As an Organizer**, I want to connect my Stripe account through a guided onboarding flow, **so that** registration fees flow directly into my account minus the platform's cut, with no manual reconciliation.
+### Real payment flow on registration / checkout
+- **As a Player**, I want to actually pay for my registrations with a credit card at the checkout step, **so that** my spot is locked in immediately and the organizer doesn't have to chase me for money.
+- **As an Organizer**, I want the platform's cut taken automatically before money lands in my Stripe balance, **so that** I'm not reconciling payouts manually.
 
-**Touches:** `/admin/:org/settings/stripe` page, Stripe-hosted onboarding redirect, `supabase/functions/stripe-webhook/` Edge Function, `organizations.stripe_account_status` updates. Blocks paid registration; registrations currently save with `status='paid'` as a placeholder.
-
-### Real payment flow on registration
-- **As a Player**, I want to pay for my registrations with a credit card at the point of signup, **so that** my spot is locked in immediately and the organizer doesn't have to chase me for money.
-
-**Touches:** `RegisterPage` submit, Stripe `PaymentIntent` with `application_fee_amount` (platform cut) + `transfer_data.destination` (organizer's connected account). Depends on Stripe Connect onboarding landing first.
+**Touches:** `CheckoutPage` Pay button currently flips `event_registrations.status` from `pending_payment` to `paid` directly without charging. Wire it through a Stripe `PaymentIntent` with `application_fee_amount` (platform cut) + `transfer_data.destination` (organizer's connected Stripe account, already on `organizations.stripe_account_id` after the onboarding work). Status only flips on webhook confirmation of `payment_intent.succeeded`. Webhook handler lives in a new `supabase/functions/stripe-webhook/` Edge Function. The org-side Stripe Connect onboarding foundation has already shipped — this item is the remaining "actually charge cards" half.
 
 ### Roster view for organizers
 - **As an Organizer**, I want a complete roster per event showing all confirmed teams with contact info, partner pairings, and payment status, **so that** I can run the tournament without flipping between admin pages.
@@ -439,6 +425,22 @@ Use this section as a checklist when discussing what to promote into Soon / Next
 ## Recently shipped
 
 Trailing log of what landed, so the doc stays grounded. Prune entries older than ~4 weeks.
+
+### 2026-05-31 (sweep — Stripe org-side, wizard slices 3-5, rating polish, design tokens)
+- **Stripe Connect onboarding (organizer side).** `/admin/:org/settings/stripe` page surfaces `organizations.stripe_account_status` (`not_connected | pending | active | restricted`) with diagnostics + actionable buttons that adapt to the current state. Both onboarding paths offered: **OAuth ("Sign in")** for organizers who already have a Stripe account, and **Express ("Create new")** for first-timers. OAuth landing forced to the sign-in screen (not signup) so the existing-account path stays clean. Disconnect button so orgs can re-link without contacting support. Status checks prefer `charges_enabled` over the brittle `disabled_reason` field. Foundation only — the actual charge-on-checkout flow is still open ("Real payment flow on registration" in Soon).
+- **Tournament-creation wizard slices 3 + 4 + 5 + rail-guard.** Slice 3 = cancellation-policy presets (Generous / Standard / Strict) with migration `20260530120000_cancellation_policy.sql`. Slice 4 = Sponsors + FAQs as nullable markdown columns (migration `20260530140000_sponsors_and_faqs.sql`) with a shared `MarkdownStep` component. Slice 5 = Step 7 Accept payment surface that reads `stripe_account_status`. Rail-guard blocks forward jumps when current step is incomplete (Basics + Events + Pricing have hard blockers; Review/Publish gates on the same). Optional steps (Cancellation / Sponsors / FAQs / Payment) never block.
+- **Super-admin platform admins: implicit owner access.** Platform admins get implicit owner-level access to every organization — no manual `organization_members` row needed. Surfaces in `AdminIndexPage`'s picker as a separate "Other organizations (platform-admin access)" section with a `🛡 admin override` badge per row, and `AdminLayout` banners "Viewing as platform admin" when access is via the override. Pairs with the 2026-05-29 platform-admin foundation.
+- **Self-rating as an event rating source.** New `'self'` value in `rating_source` enum (migration `20260530160000`) + made the default (migration `20260530170000`). The previous default (`dupr`) was incorrect since we don't have DUPR sync yet; self-rating reflects what actually drives eligibility today.
+- **Backfill rating ranges from event-name conventions.** Migration `20260530180000` scans event names like "Men's 4.0 Doubles" / "Womens 3.5-4.0" and populates `min_rating` / `max_rating` columns where the name implies a range. Backfill-only; new events still set explicitly on the form.
+- **AdminLayout: stop flashing "Loading…" on tab refocus.** Supabase auto-refreshes the JWT when the tab becomes visible, firing `onAuthStateChange` (`TOKEN_REFRESHED`) and re-running `useCurrentOrg`'s effect. The effect was setting `loading=true` on every refetch, wiping the admin layout. Fixed to only show loading on first paint (same pattern as the per-page reload callbacks).
+- **Shared design tokens + Lucide icons (#5).** Adopts the cross-project design system at `wmpc-meta/design-system/`. `tokens.css` imported at the app root so the custom properties resolve everywhere. Inline-style call sites incrementally migrate to token references. Lucide React for icons app-wide.
+
+### 2026-05-25–26 (F1 + F3 partner-flow, pricing tiers, register-then-checkout)
+- **F1: "I need a partner" registration.** New `'seeking'` value in the `partner_status` enum (migration `20260525200000`). Doubles registrants who don't pick a partner can register as seekers — locks their spot, surfaces them to organizers and other seeking-players for matching. F2 (admin view of seekers in `AttendeesPage`) shipped 2026-05-29 as the natural pair.
+- **F3: hide already-registered players from partner search.** SECURITY DEFINER RPC `players_registered_for_events` (migration `20260525200001`) returns the set of player IDs already registered (excluding seekers, who remain visible by design) for a given event. `PartnerSearch` passes these in via `excludePlayerIds`. Applies to both `/register` and the inline-expand register on the tournament page.
+- **Pricing tiers — slices 4 through 7 (final).** Slice 4: `PricingTiersEditor` replaces the two-field admin form (migration `20260526180000` for the `replace_pricing_tiers` RPC). Slice 5: every read site (`PendingPaymentsContext`, `TournamentsListPage`, `TournamentDetailPage`, `HomePage`) pulls the active tier via `compactTierPriceLabel` / `pickActivePricingTier`. Slice 6: legacy `tournaments.entry_fee_cents` + `additional_event_fee_cents` columns dropped along with the sync triggers (migration `20260529160000`). Slice 7: public-page registration-status pill ("Early Bird Registration Open" / "Registration Open" / "Late Registration Open" / "Registration Closed"). Pricing tiers are now the sole source of truth; checkout snapshots the active tier price into `event_registrations.event_fee_cents` at pay-time.
+- **Pricing clarity sweep.** "Lead with the registration fee, retire per-event overrides" — the public + register pages now lead with the active tier's registration fee and treat per-event fee values as flat overrides instead of additions. Pairs with the pricing-tier work to reduce the "first vs additional" confusion in copy.
+- **Register-then-Checkout flow (PR #3).** Significant rewrite: register now creates `pending_payment` rows that surface in a persistent global `PendingPaymentsBar`; checkout lives at `/t/:org/:slug/checkout` and flips pending → paid (today still without charging; the real Stripe flow is the next item in Soon). Includes a stale-pending sweep Edge Function. Partner-invite emails fire at checkout instead of at register. Mockup at `mockups/register-then-checkout-flow.html`.
 
 ### 2026-05-29 (Super-admin: create new organizations)
 - **Super-admin: create new organizations from inside the app.** New `platform_admins` table (read-self RLS, writes via service_role) marks the cross-org super-admin. `find_user_by_email` SECURITY DEFINER helper (service_role only) lets the edge function decide between link-existing and invite-new for the new org's owner. `create-organization` edge function verifies the caller is a platform admin, inserts the org, looks up or invites the owner via `auth.admin.inviteUserByEmail`, links them as `owner` in `organization_members`, and rolls the org back if any later step fails. React: `usePlatformAdmin` hook, "+ Create organization" button on `/admin` (the picker no longer auto-redirects platform admins so the button stays reachable), new `CreateOrganizationPage` at `/admin/new-org` with success-state messaging that differentiates between an invited new owner and a linked existing user. Ron seeded as the first platform admin via a one-time data migration.

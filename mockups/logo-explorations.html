@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>erneandbert — logo explorations</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=DM+Serif+Display&family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,900&family=IBM+Plex+Mono:wght@400;500;700&family=Inter+Tight:wght@400;600;700;900&family=Inter:wght@400;500;700;900&family=Manrope:wght@500;700;800&family=Playfair+Display:wght@500;700;900&family=Roboto+Slab:wght@500;700;900&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      /* ───────────────────────────────────────────────────────────────
+         Brief
+         ─────────────────────────────────────────────────────────────── */
+      /* erne and bert — a tournament management platform for pickleball.
+         Brand name riffs on two pickleball shots (an "erne" — jumping
+         around the kitchen line to volley near the net; a "bert" — its
+         reverse-side cousin). Insider-knowing, friendly, sport-savvy.
+
+         Mostly type-driven. Graphic elements stay minimal — at most a
+         single accent, no literal pickleball iconography. Goal of this
+         set: 10 distinct typographic directions to react to before any
+         of them gets refined. */
+
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+        --rule-soft: #f1ede1;
+
+        /* Accent palettes — sparingly used per concept */
+        --court-clay: #c2461a; /* a clay-court terracotta */
+        --court-blue: #1d3a8a; /* deep tournament blue */
+        --kitchen-line: #d4a017; /* warm pickleball yellow */
+        --moss: #2d5a3d; /* understated outdoor green */
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family:
+          "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial,
+          sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 56px 32px 96px;
+      }
+
+      header.intro {
+        margin-bottom: 56px;
+      }
+      header.intro h1 {
+        font-family: "Fraunces", Georgia, serif;
+        font-weight: 700;
+        font-size: 40px;
+        line-height: 1.1;
+        margin: 0 0 12px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 620px;
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .card .stage {
+        height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+        position: relative;
+      }
+      .card .stage.dark {
+        background: var(--ink);
+        color: var(--bg);
+      }
+      .card .stage.dark .light-only {
+        display: none;
+      }
+      .card .stage:not(.dark) .dark-only {
+        display: none;
+      }
+
+      .card footer {
+        padding: 20px 24px 22px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", "Inter", sans-serif;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--court-clay);
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .card footer h2 {
+        margin: 0 0 8px;
+        font-size: 17px;
+        font-family: "Inter Tight", "Inter", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink-soft);
+        line-height: 1.55;
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         Logo styles — one per concept. Kept inline-near-its-card so
+         tweaks stay local.
+         ─────────────────────────────────────────────────────────────── */
+
+      /* 01 — lowercase wordmark, custom ampersand accent */
+      .logo-01 {
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        font-size: 56px;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.18em;
+      }
+      .logo-01 .amp {
+        font-family: "Fraunces", Georgia, serif;
+        font-weight: 500;
+        font-style: italic;
+        color: var(--kitchen-line);
+        font-size: 1.05em;
+        letter-spacing: -0.02em;
+      }
+
+      /* 02 — editorial serif uppercase */
+      .logo-02 {
+        font-family: "Playfair Display", serif;
+        font-weight: 900;
+        font-size: 44px;
+        letter-spacing: 0.18em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+      .logo-02 .amp {
+        font-weight: 500;
+        font-style: italic;
+        font-size: 1.1em;
+        margin: 0 0.08em;
+      }
+
+      /* 03 — monogram + url lockup */
+      .logo-03 {
+        text-align: center;
+        line-height: 1;
+      }
+      .logo-03 .mono {
+        font-family: "DM Serif Display", serif;
+        font-weight: 400;
+        font-size: 92px;
+        letter-spacing: -0.04em;
+        line-height: 0.95;
+      }
+      .logo-03 .mono .amp {
+        color: var(--court-clay);
+        font-style: italic;
+      }
+      .logo-03 .url {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+        margin-top: 14px;
+      }
+
+      /* 04 — bracket-framed wordmark */
+      .logo-04 {
+        font-family: "Space Grotesk", sans-serif;
+        font-weight: 500;
+        font-size: 36px;
+        letter-spacing: -0.01em;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4em;
+      }
+      .logo-04 .bracket {
+        font-family: "IBM Plex Mono", monospace;
+        font-weight: 400;
+        color: var(--court-blue);
+        font-size: 1.1em;
+      }
+
+      /* 05 — stacked block */
+      .logo-05 {
+        text-align: center;
+        font-family: "DM Serif Display", serif;
+        line-height: 0.95;
+        color: var(--ink);
+      }
+      .logo-05 .row {
+        font-size: 42px;
+        letter-spacing: 0.04em;
+      }
+      .logo-05 .row.amp {
+        font-size: 30px;
+        color: var(--court-clay);
+        font-style: italic;
+        margin: 4px 0;
+      }
+
+      /* 06 — handwritten with hand-drawn underline */
+      .logo-06 {
+        font-family: "Caveat", cursive;
+        font-weight: 700;
+        font-size: 64px;
+        line-height: 1;
+        position: relative;
+        padding-bottom: 12px;
+      }
+      .logo-06 .amp {
+        font-weight: 500;
+        margin: 0 0.08em;
+      }
+      .logo-06 svg.underline {
+        position: absolute;
+        left: 4%;
+        right: 4%;
+        bottom: -2px;
+        width: 92%;
+        height: 14px;
+        overflow: visible;
+      }
+      .logo-06 svg.underline path {
+        fill: none;
+        stroke: var(--court-clay);
+        stroke-width: 3;
+        stroke-linecap: round;
+      }
+
+      /* 07 — slab serif marquee */
+      .logo-07 {
+        font-family: "Roboto Slab", serif;
+        font-weight: 900;
+        font-size: 36px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        line-height: 1;
+      }
+      .logo-07 .amp {
+        font-weight: 500;
+        margin: 0 0.18em;
+        opacity: 0.85;
+      }
+
+      /* 08 — outline ghost */
+      .logo-08 {
+        font-family: "Inter", sans-serif;
+        font-weight: 900;
+        font-size: 60px;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        -webkit-text-stroke: 1.5px var(--ink);
+        color: transparent;
+      }
+      .logo-08 .amp {
+        font-weight: 700;
+        font-style: italic;
+        font-family: "Fraunces", Georgia, serif;
+        margin: 0 0.04em;
+      }
+      .stage.dark .logo-08 {
+        -webkit-text-stroke-color: var(--bg);
+      }
+
+      /* 09 — two-tone team */
+      .logo-09 {
+        font-family: "Manrope", sans-serif;
+        font-weight: 800;
+        font-size: 52px;
+        letter-spacing: -0.035em;
+        line-height: 1;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 0.18em;
+      }
+      .logo-09 .first {
+        color: var(--court-clay);
+      }
+      .logo-09 .amp {
+        color: var(--ink);
+        opacity: 0.55;
+        font-weight: 500;
+      }
+      .logo-09 .second {
+        color: var(--court-blue);
+      }
+      .stage.dark .logo-09 .first {
+        color: #ff7e4d;
+      }
+      .stage.dark .logo-09 .second {
+        color: #92b3ff;
+      }
+      .stage.dark .logo-09 .amp {
+        color: var(--bg);
+        opacity: 0.65;
+      }
+
+      /* 10 — geometric mark + wordmark */
+      .logo-10 {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .logo-10 .mark {
+        display: inline-block;
+        width: 44px;
+        height: 44px;
+        position: relative;
+      }
+      .logo-10 .mark::before,
+      .logo-10 .mark::after {
+        content: "";
+        position: absolute;
+        background: currentColor;
+        border-radius: 999px;
+      }
+      .logo-10 .mark::before {
+        width: 14px;
+        height: 14px;
+        top: 6px;
+        left: 6px;
+      }
+      .logo-10 .mark::after {
+        width: 14px;
+        height: 14px;
+        bottom: 6px;
+        right: 6px;
+      }
+      .logo-10 .mark .stroke {
+        position: absolute;
+        inset: 0;
+        border: 1.5px solid currentColor;
+        border-radius: 999px;
+      }
+      .logo-10 .word {
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        font-size: 30px;
+        letter-spacing: -0.02em;
+        line-height: 1;
+      }
+      .logo-10 .word .amp {
+        opacity: 0.55;
+        font-weight: 500;
+        margin: 0 0.04em;
+      }
+
+      /* Dark-stage hint for cards that look better with their accent
+         dialed back at small sizes */
+      .stage.dark.tint {
+        background: #0e151f;
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          padding: 32px 16px 64px;
+        }
+        header.intro h1 {
+          font-size: 30px;
+        }
+        .card .stage {
+          height: 180px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <h1>erne &amp; bert — 10 logo directions</h1>
+        <p>
+          First pass. All ten lean on typography rather than illustration —
+          the brand name is the joke and it should carry the mark. The
+          accent colour, when used, is one of clay terracotta, kitchen-line
+          yellow, deep court blue, or pulled-back charcoal. Read each
+          twice: once on the light stage, once on the dark. React to
+          shapes and weight, not finished polish.
+        </p>
+      </header>
+
+      <div class="grid">
+        <!-- 01 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-01">
+              erne<span class="amp">&amp;</span>bert
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-01">
+              erne<span class="amp">&amp;</span>bert
+            </span>
+          </div>
+          <footer>
+            <div class="label">01 — Lowercase wordmark</div>
+            <h2>Tight grotesque + italic serif ampersand</h2>
+            <p>
+              Modern lowercase wordmark in Inter Tight. The italic serif
+              ampersand (Fraunces) carries the personality and lifts the
+              piece without leaning on an illustration. Friendly, current,
+              works at any size.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 02 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-02">
+              ERNE<span class="amp">&amp;</span>BERT
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-02">
+              ERNE<span class="amp">&amp;</span>BERT
+            </span>
+          </div>
+          <footer>
+            <div class="label">02 — Editorial serif</div>
+            <h2>Playfair caps with wide tracking</h2>
+            <p>
+              High-contrast Didone serif, deliberately set wide.
+              Reads as "we take this seriously" — venue-program, printed
+              draw, awards plaque. Sport with a sense of occasion.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 03 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <div class="logo-03">
+              <div class="mono">e<span class="amp">&amp;</span>b</div>
+              <div class="url">erneandbert.com</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-03">
+              <div class="mono">e<span class="amp">&amp;</span>b</div>
+              <div class="url">erneandbert.com</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">03 — Monogram lockup</div>
+            <h2>e&amp;b stacked over the URL</h2>
+            <p>
+              The whole name compresses to three glyphs — favicon-ready,
+              avatar-ready, embroiderable. The lowercase mono URL beneath
+              works as a footer credit on a t-shirt; drop it on web /
+              app marks.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 04 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-04">
+              <span class="bracket">[</span>
+              erne &amp; bert
+              <span class="bracket">]</span>
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-04">
+              <span class="bracket">[</span>
+              erne &amp; bert
+              <span class="bracket">]</span>
+            </span>
+          </div>
+          <footer>
+            <div class="label">04 — Bracket frame</div>
+            <h2>Mono brackets, geometric wordmark</h2>
+            <p>
+              The brackets quietly reference tournament brackets without
+              drawing a literal one. Space Grotesk inside, IBM Plex Mono
+              outside — two voices, sport and software.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 05 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <div class="logo-05">
+              <div class="row">ERNE</div>
+              <div class="row amp">&amp;</div>
+              <div class="row">BERT</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-05">
+              <div class="row">ERNE</div>
+              <div class="row amp">&amp;</div>
+              <div class="row">BERT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">05 — Stacked block</div>
+            <h2>DM Serif Display, three-line cube</h2>
+            <p>
+              Brutalist three-line block. Same visual width on top and
+              bottom rows, italic ampersand sandwiched between. Works as
+              an avatar, a stamp, embroidery on a chest pocket.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 06 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-06">
+              erne <span class="amp">&amp;</span> bert
+              <svg class="underline" viewBox="0 0 200 14" preserveAspectRatio="none">
+                <path d="M2,9 C 40,2 110,12 198,4" />
+              </svg>
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-06">
+              erne <span class="amp">&amp;</span> bert
+              <svg class="underline" viewBox="0 0 200 14" preserveAspectRatio="none">
+                <path d="M2,9 C 40,2 110,12 198,4" />
+              </svg>
+            </span>
+          </div>
+          <footer>
+            <div class="label">06 — Hand-script</div>
+            <h2>Caveat with a paddle-swing underline</h2>
+            <p>
+              Reads "weekly group chat," not "venture brand." The
+              underline lifts at the end like a paddle finish.
+              Risky — feels casual for handling money. Worth seeing.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 07 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-07">
+              ERNE<span class="amp">&amp;</span>BERT
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-07">
+              ERNE<span class="amp">&amp;</span>BERT
+            </span>
+          </div>
+          <footer>
+            <div class="label">07 — Slab marquee</div>
+            <h2>Roboto Slab, venue-banner weight</h2>
+            <p>
+              Square, stocky, all-caps slab. The "marquee outside the
+              gym" voice. Loud without being shouty, and it survives
+              being printed three feet wide on a draw board.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 08 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-08">
+              erne<span class="amp">&amp;</span>bert
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-08">
+              erne<span class="amp">&amp;</span>bert
+            </span>
+          </div>
+          <footer>
+            <div class="label">08 — Outline ghost</div>
+            <h2>Hairline-stroked, no fill</h2>
+            <p>
+              Quiet, considered, gallery wall. The italic Fraunces
+              ampersand stays filled so the eye has somewhere to rest.
+              Pairs well with photography — sits over a court shot
+              without competing.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 09 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <article>
+            <div class="stage">
+              <span class="logo-09">
+                <span class="first">erne</span>
+                <span class="amp">&amp;</span>
+                <span class="second">bert</span>
+              </span>
+            </div>
+            <div class="stage dark tint">
+              <span class="logo-09">
+                <span class="first">erne</span>
+                <span class="amp">&amp;</span>
+                <span class="second">bert</span>
+              </span>
+            </div>
+          </article>
+          <footer>
+            <div class="label">09 — Two-tone team</div>
+            <h2>Clay + court-blue split</h2>
+            <p>
+              Each name in its own colour, joined by a muted ampersand.
+              Quiet nod to doubles — two players, one team. Risk: every
+              other team-colour treatment in sport looks like a sports
+              brand. Lean further into the typography if we keep it.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 10 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-10">
+              <span class="mark" style="color: var(--moss)">
+                <span class="stroke"></span>
+              </span>
+              <span class="word">
+                erne<span class="amp">&amp;</span>bert
+              </span>
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-10">
+              <span class="mark" style="color: #9bd0a8">
+                <span class="stroke"></span>
+              </span>
+              <span class="word">
+                erne<span class="amp">&amp;</span>bert
+              </span>
+            </span>
+          </div>
+          <footer>
+            <div class="label">10 — Mark + wordmark</div>
+            <h2>Two dots in a circle, Inter Tight wordmark</h2>
+            <p>
+              The mark is two dots inside a ring — two players on a
+              court — abstract enough to read as a logo first, a
+              metaphor second. Works as a standalone favicon; pairs
+              with the wordmark on the navbar.
+            </p>
+          </footer>
+        </article>
+      </div>
+    </div>
+  </body>
+</html>
