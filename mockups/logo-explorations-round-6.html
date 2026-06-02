@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — round 6: pickleball court blocks</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Bowlby+One&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+
+        /* Court palettes */
+        --court-green: #2c8a3d;
+        --court-green-deep: #1e6432;
+        --court-blue: #1e6cd6;
+        --court-blue-deep: #144a98;
+        --court-yellow: #f3d111;
+        --court-red: #d8341c;
+        --court-clay: #c2461a;
+        --court-clay-soft: #d96a3a;
+        --court-cream: #f6efd6;
+        --net-gray: #2a2a30;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 56px 32px 96px;
+      }
+
+      header.intro { margin-bottom: 48px; }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", serif;
+        font-weight: 400;
+        font-size: 44px;
+        line-height: 1.05;
+        margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 720px;
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0 0 8px;
+      }
+      header.intro p strong { color: var(--ink); }
+      header.intro .links {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      header.intro .links a {
+        color: var(--court-blue);
+        text-decoration: none;
+        border-bottom: 1px solid currentColor;
+        margin-right: 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .card .stage {
+        min-height: 240px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        position: relative;
+      }
+      .card .stage.dark { background: var(--ink); color: var(--bg); }
+      .card .stage.cream { background: var(--court-cream); }
+      .card footer {
+        padding: 16px 20px 18px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--court-red);
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .card footer h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+      }
+      .card footer .swatches {
+        margin-top: 8px;
+        display: flex;
+        gap: 4px;
+      }
+      .card footer .swatches span {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         COURT BLOCK SHARED ANATOMY
+         ─────────────────────────────────────────────────────────────── */
+
+      .court-lockup {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        display: inline-block;
+      }
+      .court-lockup .row {
+        display: flex;
+        align-items: stretch;
+        border: 4px solid var(--ink);
+        height: 90px;
+      }
+      .court-lockup .row .block {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .court-lockup .row .block + .block {
+        border-left: 4px solid var(--ink);
+      }
+      .court-lockup .side {
+        width: 130px;
+      }
+      .court-lockup .net {
+        width: 70px;
+      }
+      .court-lockup .court-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .court-lockup .word {
+        position: relative;
+        z-index: 2;
+        font-size: 32px;
+        letter-spacing: -0.01em;
+        color: var(--bg);
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+      }
+      .court-lockup .amp {
+        position: relative;
+        z-index: 2;
+        font-size: 38px;
+        color: var(--bg);
+      }
+      .court-lockup .tag-row {
+        padding: 6px 14px;
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        text-align: center;
+        border: 4px solid var(--ink);
+        border-top: 0;
+        background: var(--ink);
+        color: var(--bg);
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         NET FILL VARIANTS (the middle block)
+         ─────────────────────────────────────────────────────────────── */
+      .net-mesh {
+        background:
+          repeating-linear-gradient(
+            to right,
+            rgba(255, 255, 255, 0.35) 0 1px,
+            transparent 1px 5px
+          ),
+          var(--net-gray);
+      }
+      .net-mesh-light {
+        background:
+          repeating-linear-gradient(
+            to right,
+            rgba(20, 24, 31, 0.4) 0 1px,
+            transparent 1px 5px
+          ),
+          var(--court-cream);
+      }
+      .net-mesh-light .amp { color: var(--ink); text-shadow: none; }
+
+      /* ───────────────────────────────────────────────────────────────
+         COURT COLOR VARIANTS
+         ─────────────────────────────────────────────────────────────── */
+
+      /* C1 — Classic outdoor green */
+      .c1-green { background: var(--court-green); }
+
+      /* C2 — US Open blue */
+      .c2-blue { background: var(--court-blue); }
+
+      /* C3 — Green court with bright yellow kitchen */
+      .c3-green { background: var(--court-green); }
+      /* Yellow kitchen overlay is drawn via SVG inside this block */
+
+      /* C4 — Clay court */
+      .c4-clay { background: var(--court-clay); }
+
+      /* C5 — Doubles teams */
+      .c5-bert { background: var(--court-blue); }
+      .c5-erne { background: var(--court-green); }
+
+      /* C6 — Minimal schematic on cream */
+      .c6-cream { background: var(--court-cream); }
+      .c6-cream .word { color: var(--ink); text-shadow: none; }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { min-height: 200px; padding: 18px; }
+        .court-lockup .side { width: 105px; }
+        .court-lockup .net { width: 56px; }
+        .court-lockup .word { font-size: 26px; }
+        .court-lockup .amp { font-size: 30px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 6 — pickleball court blocks</div>
+        <h1>B5, made literal — Bert &amp; Erne, opposite sides of the net</h1>
+        <p>
+          Six takes on the three-block lockup with the blocks drawn as
+          a pickleball court: <strong>BERT</strong> on one side,
+          <strong>&amp;</strong> as the net, <strong>ERNE</strong> on
+          the other. Kitchen line (the dink-zone boundary) sits close
+          to the net on each side; centerline divides the two service
+          boxes on each half.
+        </p>
+        <p>
+          Different surface colors per variant — outdoor green, pro
+          blue, clay, two-team split, and a minimal cream schematic at
+          the end.
+        </p>
+        <div class="links">
+          <a href="logo-explorations-round-5.html">← round 5</a>
+        </div>
+      </header>
+
+      <div class="grid">
+
+        <!-- ════════════════════════════════════════════════════════
+             C1 — Classic outdoor green
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c1-green">
+                  <!-- Court lines: kitchen line vertical near right edge; centerline horizontal on left of kitchen -->
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh">
+                  <span class="amp">&amp;</span>
+                </div>
+                <div class="block side c1-green">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c1-green">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c1-green">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">C1 — Classic outdoor green</div>
+            <h3>Park-court green, white lines, mesh net</h3>
+            <p>Standard outdoor parks-and-rec surface. Most universally readable as "pickleball court." Warmest of the six.</p>
+            <div class="swatches">
+              <span style="background: var(--court-green)"></span>
+              <span style="background: #fff"></span>
+              <span style="background: var(--net-gray)"></span>
+            </div>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             C2 — US Open blue
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c2-blue">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c2-blue">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c2-blue">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c2-blue">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">C2 — US Open blue</div>
+            <h3>Pro tournament surface, white lines, mesh net</h3>
+            <p>The hardcourt blue you see at sanctioned tournaments. Cooler, more "we run real tournaments" than the green.</p>
+            <div class="swatches">
+              <span style="background: var(--court-blue)"></span>
+              <span style="background: #fff"></span>
+              <span style="background: var(--net-gray)"></span>
+            </div>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             C3 — Green court with bright yellow kitchen
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c3-green">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <!-- Yellow kitchen (no-volley zone) between kitchen line and net -->
+                    <rect x="92" y="0" width="38" height="90" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c3-green">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="90" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c3-green">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="90" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c3-green">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="90" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">C3 — Green court, yellow kitchen</div>
+            <h3>"Stay outta the kitchen" highlighted</h3>
+            <p>Green play surface with bright pickleball-yellow no-volley zone painted in. The yellow strip is the actual visual joke — every pickleball player knows what that zone is.</p>
+            <div class="swatches">
+              <span style="background: var(--court-green)"></span>
+              <span style="background: var(--court-yellow)"></span>
+              <span style="background: #fff"></span>
+              <span style="background: var(--net-gray)"></span>
+            </div>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             C4 — Clay court
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c4-clay">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c4-clay">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c4-clay">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c4-clay">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">C4 — Clay court</div>
+            <h3>Terracotta surface, European-tournament vibe</h3>
+            <p>Clay courts are rare in pickleball but exist (and they're starting to spread). Warmest palette — feels like a Mediterranean weekend tournament rather than a Florida senior league.</p>
+            <div class="swatches">
+              <span style="background: var(--court-clay)"></span>
+              <span style="background: #fff"></span>
+              <span style="background: var(--net-gray)"></span>
+            </div>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             C5 — Doubles teams (blue side / green side)
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c5-bert">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c5-erne">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c5-bert">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh"><span class="amp">&amp;</span></div>
+                <div class="block side c5-erne">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">C5 — Doubles teams (blue vs green)</div>
+            <h3>Two different surfaces, one net between</h3>
+            <p>BERT's side is hardcourt blue, ERNE's side is parks-and-rec green. Tells the "two teams" story most clearly, but breaks the visual symmetry of a real court. Risky — could read "two-team" or could read "incomplete renovation."</p>
+            <div class="swatches">
+              <span style="background: var(--court-blue)"></span>
+              <span style="background: var(--court-green)"></span>
+              <span style="background: var(--net-gray)"></span>
+            </div>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             C6 — Minimal cream schematic
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c6-cream">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#2c8a3d" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#2c8a3d" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh-light"><span class="amp">&amp;</span></div>
+                <div class="block side c6-cream">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#2c8a3d" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#2c8a3d" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="court-lockup">
+              <div class="row">
+                <div class="block side c6-cream">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="92" y1="0" x2="92" y2="90" stroke="#2c8a3d" stroke-width="3"/>
+                    <line x1="0" y1="45" x2="92" y2="45" stroke="#2c8a3d" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net net-mesh-light"><span class="amp">&amp;</span></div>
+                <div class="block side c6-cream">
+                  <svg class="court-svg" viewBox="0 0 130 90" preserveAspectRatio="none">
+                    <line x1="38" y1="0" x2="38" y2="90" stroke="#2c8a3d" stroke-width="3"/>
+                    <line x1="38" y1="45" x2="130" y2="45" stroke="#2c8a3d" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">C6 — Minimal schematic</div>
+            <h3>Cream surface, green lines, like a court diagram</h3>
+            <p>Strips out the color flood — reads like the dimensioned court diagram in a rulebook. Most "software brand," least "sports brand." Lines can be any single accent color.</p>
+            <div class="swatches">
+              <span style="background: var(--court-cream)"></span>
+              <span style="background: var(--court-green)"></span>
+              <span style="background: var(--ink)"></span>
+            </div>
+          </footer>
+        </article>
+
+      </div>
+    </div>
+  </body>
+</html>

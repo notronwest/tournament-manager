@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — round 3: variations on 3, 4, 9, 10</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Bowlby+One&family=Bungee&family=Caveat:wght@500;700&family=Permanent+Marker&family=Russo+One&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+        --court-yellow: #f3d111;
+        --court-blue: #1e6cd6;
+        --court-red: #d8341c;
+        --court-green: #2c8a3d;
+        --court-cream: #f6efd6;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 56px 32px 96px;
+      }
+
+      header.intro { margin-bottom: 48px; }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", serif;
+        font-weight: 400;
+        font-size: 44px;
+        line-height: 1.05;
+        margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 720px;
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0 0 8px;
+      }
+      header.intro p strong { color: var(--ink); }
+      header.intro .links {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      header.intro .links a {
+        color: var(--court-blue);
+        text-decoration: none;
+        border-bottom: 1px solid currentColor;
+        margin-right: 18px;
+      }
+
+      .section {
+        margin-top: 64px;
+        padding-top: 36px;
+        border-top: 3px solid var(--ink);
+      }
+      .section .section-eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 8px;
+      }
+      .section h2 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .section .section-sub {
+        margin: 0 0 28px;
+        font-size: 14px;
+        color: var(--ink-soft);
+        max-width: 640px;
+      }
+
+      .grid3 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .card .stage {
+        height: 200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        position: relative;
+      }
+      .card .stage.dark { background: var(--ink); color: var(--bg); }
+      .card .stage.cream { background: var(--court-cream); }
+      .card .stage.yellow { background: var(--court-yellow); }
+      .card footer {
+        padding: 16px 20px 18px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--court-red);
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .card footer h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         DIRECTION 3 — Hand-painted brush, variations
+         ─────────────────────────────────────────────────────────────── */
+
+      /* 3A — Tightened, level, with tagline */
+      .logo-3a {
+        font-family: "Permanent Marker", cursive;
+        text-transform: uppercase;
+        text-align: center;
+        line-height: 0.95;
+      }
+      .logo-3a .top { font-size: 44px; letter-spacing: 0.02em; }
+      .logo-3a .top .amp { color: var(--court-red); margin: 0 0.08em; }
+      .logo-3a .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        margin-top: 14px;
+        opacity: 0.8;
+      }
+      .stage.dark .logo-3a .amp { color: var(--court-yellow); }
+
+      /* 3B — Lowercase, single line, with paddle-finish underline */
+      .logo-3b {
+        font-family: "Permanent Marker", cursive;
+        font-size: 56px;
+        line-height: 1;
+        position: relative;
+        padding-bottom: 12px;
+        text-transform: lowercase;
+      }
+      .logo-3b .amp { color: var(--court-red); margin: 0 0.08em; }
+      .logo-3b svg.swing {
+        position: absolute;
+        left: 0;
+        right: -10px;
+        bottom: -10px;
+        width: 100%;
+        height: 22px;
+      }
+      .logo-3b svg.swing path {
+        fill: none;
+        stroke: var(--court-red);
+        stroke-width: 4;
+        stroke-linecap: round;
+      }
+      .stage.dark .logo-3b .amp { color: var(--court-yellow); }
+      .stage.dark .logo-3b svg.swing path { stroke: var(--court-yellow); }
+
+      /* 3C — Stacked sandwich: brush wordmark + small TM tag, brush slab */
+      .logo-3c {
+        text-align: center;
+        line-height: 0.95;
+      }
+      .logo-3c .top {
+        font-family: "Permanent Marker", cursive;
+        font-size: 48px;
+        text-transform: uppercase;
+        transform: rotate(-1.5deg);
+        display: inline-block;
+      }
+      .logo-3c .top .amp { color: var(--court-red); margin: 0 0.06em; }
+      .logo-3c .rule {
+        margin: 14px auto 10px;
+        width: 60%;
+        height: 4px;
+        background: var(--ink);
+      }
+      .logo-3c .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 13px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+      }
+      .stage.dark .logo-3c .amp { color: var(--court-yellow); }
+      .stage.dark .logo-3c .rule { background: var(--bg); }
+
+      /* ───────────────────────────────────────────────────────────────
+         DIRECTION 4 — Pennant cut, variations
+         ─────────────────────────────────────────────────────────────── */
+
+      .pennant-base {
+        position: relative;
+        width: 320px;
+        height: 130px;
+      }
+      .pennant-base svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .pennant-base .label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        color: var(--court-cream);
+        font-family: "Anton", sans-serif;
+        text-transform: uppercase;
+      }
+      .pennant-base .label .word {
+        font-size: 28px;
+        letter-spacing: 0.04em;
+        line-height: 0.95;
+      }
+      .pennant-base .label .tag {
+        font-size: 9px;
+        letter-spacing: 0.32em;
+        margin-top: 5px;
+        opacity: 0.85;
+      }
+
+      /* 4A — Swallowtail (V-cut on right) — refined */
+      .logo-4a .label {
+        padding-left: 24px;
+        padding-right: 70px;
+      }
+
+      /* 4B — Long thin race-flag pennant */
+      .logo-4b { width: 360px; height: 90px; }
+      .logo-4b .label {
+        padding-left: 24px;
+        padding-right: 100px;
+      }
+      .logo-4b .label .word { font-size: 22px; }
+      .logo-4b .label .tag { font-size: 8px; }
+
+      /* 4C — Triangular pennant (full triangle, pointing right) */
+      .logo-4c { width: 320px; height: 130px; }
+      .logo-4c .label {
+        padding-left: 22px;
+        padding-right: 130px;
+        align-items: flex-start;
+      }
+      .logo-4c .label .word { font-size: 26px; }
+
+      /* ───────────────────────────────────────────────────────────────
+         DIRECTION 9 — Wordmark + swing, variations
+         ─────────────────────────────────────────────────────────────── */
+
+      /* 9A — Original (Russo One) with cleaner arc */
+      .logo-9a {
+        font-family: "Russo One", sans-serif;
+        font-size: 60px;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        text-transform: lowercase;
+        position: relative;
+        padding-bottom: 16px;
+      }
+      .logo-9a .amp { color: var(--court-red); margin: 0 0.04em; }
+      .logo-9a svg.swing {
+        position: absolute;
+        left: 2%;
+        right: 2%;
+        bottom: -10px;
+        width: 96%;
+        height: 22px;
+      }
+      .logo-9a svg.swing path {
+        fill: none;
+        stroke: var(--court-red);
+        stroke-width: 4;
+        stroke-linecap: round;
+      }
+      .stage.dark .logo-9a .amp { color: var(--court-yellow); }
+      .stage.dark .logo-9a svg.swing path { stroke: var(--court-yellow); }
+
+      /* 9B — Anton (condensed) wordmark, cleaner arc */
+      .logo-9b {
+        font-family: "Anton", sans-serif;
+        font-size: 72px;
+        line-height: 0.9;
+        letter-spacing: 0.01em;
+        text-transform: uppercase;
+        position: relative;
+        padding-bottom: 16px;
+      }
+      .logo-9b .amp { color: var(--court-red); margin: 0 0.06em; }
+      .logo-9b svg.swing {
+        position: absolute;
+        left: 2%;
+        right: 2%;
+        bottom: -8px;
+        width: 96%;
+        height: 22px;
+      }
+      .logo-9b svg.swing path {
+        fill: none;
+        stroke: var(--court-red);
+        stroke-width: 5;
+        stroke-linecap: round;
+      }
+      .stage.dark .logo-9b .amp { color: var(--court-yellow); }
+      .stage.dark .logo-9b svg.swing path { stroke: var(--court-yellow); }
+
+      /* 9C — Russo One with a HARD slash underline (locked-in finish) */
+      .logo-9c {
+        font-family: "Russo One", sans-serif;
+        font-size: 60px;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        text-transform: lowercase;
+        position: relative;
+        padding-bottom: 16px;
+      }
+      .logo-9c .amp { color: var(--court-red); margin: 0 0.04em; }
+      .logo-9c::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 12%;
+        bottom: 0;
+        height: 8px;
+        background: var(--court-red);
+        transform: skewX(-18deg);
+      }
+      .stage.dark .logo-9c .amp { color: var(--court-yellow); }
+      .stage.dark .logo-9c::after { background: var(--court-yellow); }
+
+      /* ───────────────────────────────────────────────────────────────
+         DIRECTION 10 — Letterpress block, variations
+         ─────────────────────────────────────────────────────────────── */
+
+      .lp-base {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: -0.01em;
+        position: relative;
+      }
+
+      /* 10A — Yellow block, knockout rule, with TM tagline */
+      .logo-10a {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 14px 24px;
+        background: var(--court-yellow);
+        color: var(--ink);
+        border: 4px solid var(--ink);
+      }
+      .logo-10a .top {
+        font-size: 38px;
+        letter-spacing: -0.01em;
+      }
+      .logo-10a .rule {
+        height: 4px;
+        background: var(--ink);
+        margin: 10px auto;
+        width: 100%;
+      }
+      .logo-10a .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.32em;
+      }
+
+      /* 10B — Black block, yellow text */
+      .logo-10b {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 16px 26px;
+        background: var(--ink);
+        color: var(--court-yellow);
+        border: 4px solid var(--ink);
+      }
+      .logo-10b .top { font-size: 42px; }
+      .logo-10b .amp { color: var(--court-red); margin: 0 0.04em; }
+      .logo-10b .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        margin-top: 6px;
+        color: var(--bg);
+        opacity: 0.7;
+      }
+
+      /* 10C — Two-row stack with EST 2026 */
+      .logo-10c {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.88;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 12px 22px;
+        background: var(--court-red);
+        color: var(--bg);
+        border: 4px solid var(--bg);
+        box-shadow: 0 0 0 4px var(--ink);
+      }
+      .logo-10c .row1 { font-size: 36px; letter-spacing: 0.02em; }
+      .logo-10c .row2 {
+        font-size: 36px;
+        letter-spacing: 0.02em;
+      }
+      .logo-10c .row2 .amp { color: var(--court-yellow); }
+      .logo-10c .rule {
+        height: 3px;
+        width: 30%;
+        background: var(--bg);
+        margin: 6px auto;
+      }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { height: 170px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 3 — variations on the survivors</div>
+        <h1>03, 04, 09, 10 — three takes each</h1>
+        <p>
+          The four you liked, with three variations apiece. Brand
+          frame shifted to <strong>Tournament Management</strong>
+          specifically — so where there's room (pennant + letterpress),
+          "TOURNAMENT MANAGEMENT" lives in the lockup as a tagline.
+          Hand-painted and swing-wordmark stay tighter — they're
+          identity, not signage.
+        </p>
+        <p>
+          Each row holds one direction's three takes. Some show on a
+          cream / yellow / red stage so you can see how the mark sits
+          against the colors it'll actually live on.
+        </p>
+        <div class="links">
+          <a href="logo-explorations.html">← round 1</a>
+          <a href="logo-explorations-round-2.html">← round 2</a>
+        </div>
+      </header>
+
+      <!-- ════════════════════════════════════════════════════════════
+           DIRECTION 3 — Hand-painted brush
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">Direction 03</div>
+        <h2>Hand-painted brush — three takes</h2>
+        <p class="section-sub">
+          Original was rotated and casual. These variations stay
+          painted-by-hand but tighten composition: level &amp; tagged
+          (3A), one-line lowercase with a paddle-finish underline (3B),
+          and a stacked sandwich pairing brush type with a hard rule
+          and a TM tag (3C).
+        </p>
+
+        <div class="grid3">
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-3a">
+                <div class="top">BERT<span class="amp">&amp;</span>ERNE</div>
+                <div class="tag">TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">3A — Tight &amp; tagged</div>
+              <h3>Brush caps, level, with TM tagline</h3>
+              <p>
+                Same hand-painted feel, tightened: zero rotation,
+                slightly smaller, "TOURNAMENT MANAGEMENT" in
+                tracked-out Anton underneath. Reads in a navbar.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage">
+              <span class="logo-3b">
+                bert<span class="amp">&amp;</span>erne
+                <svg class="swing" viewBox="0 0 200 22" preserveAspectRatio="none">
+                  <path d="M2,16 C 40,4 110,4 198,14" />
+                </svg>
+              </span>
+            </div>
+            <footer>
+              <div class="label">3B — Lowercase swing</div>
+              <h3>One line, brush lowercase, paddle finish</h3>
+              <p>
+                Drops the all-caps tilt — same painted character but
+                in a one-liner. Hand-drawn underline ends in a paddle
+                lift. Quieter, more readable at small sizes.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-3c">
+                <div class="top">BERT<span class="amp">&amp;</span>ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">3C — Brush &amp; rule sandwich</div>
+              <h3>Wordmark + hard rule + TM tag</h3>
+              <p>
+                Brush wordmark stays loose; a hard horizontal rule
+                grounds it; the tracked tagline sits beneath. Two
+                voices — painted top, machined bottom — feels
+                organized without losing the warmth.
+              </p>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           DIRECTION 4 — Pennant cut
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">Direction 04</div>
+        <h2>Pennant cut — three silhouettes</h2>
+        <p class="section-sub">
+          Pennants are tournament-native, so this direction needs the
+          least excuse for a sport vocabulary. Three silhouettes —
+          swallowtail (4A), long race-flag (4B), and a clean triangle
+          (4C). Each carries "BERT &amp; ERNE TOURNAMENT MANAGEMENT"
+          as the lockup; color-swap shown across the row.
+        </p>
+
+        <div class="grid3">
+          <article class="card">
+            <div class="stage cream">
+              <div class="pennant-base logo-4a">
+                <svg viewBox="0 0 320 130" preserveAspectRatio="none">
+                  <polygon points="0,0 320,0 270,65 320,130 0,130" fill="#d8341c" />
+                </svg>
+                <div class="label">
+                  <div class="word">BERT&amp;ERNE</div>
+                  <div class="tag">TOURNAMENT MANAGEMENT</div>
+                </div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">4A — Swallowtail</div>
+              <h3>Classic V-cut, red felt</h3>
+              <p>
+                The pennant most clubs hang in the rafters. Cut on the
+                right side, name flush left, TM tag underneath. Reads
+                cleanly at favicon size; embroiderable.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="pennant-base logo-4b">
+                <svg viewBox="0 0 360 90" preserveAspectRatio="none">
+                  <polygon points="0,0 360,0 290,45 360,90 0,90" fill="#1e6cd6" />
+                </svg>
+                <div class="label">
+                  <div class="word">BERT&amp;ERNE</div>
+                  <div class="tag">TOURNAMENT MANAGEMENT</div>
+                </div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">4B — Long race-flag</div>
+              <h3>Thinner pennant, court-blue</h3>
+              <p>
+                Stretched out — fits in a horizontal navbar slot or as
+                a tournament-page header band. The wordmark stays
+                large; the proportions read like a race flag draped
+                across a finish line.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="pennant-base logo-4c">
+                <svg viewBox="0 0 320 130" preserveAspectRatio="none">
+                  <polygon points="0,0 320,65 0,130" fill="#2c8a3d" />
+                </svg>
+                <div class="label">
+                  <div class="word">BERT&amp;ERNE</div>
+                  <div class="tag">TOURNAMENT MANAGEMENT</div>
+                </div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">4C — Clean triangle</div>
+              <h3>Full-triangle pennant, turf green</h3>
+              <p>
+                Drops the V-notch for a flat-right triangle (full point
+                to the edge). More aggressive, more forward-motion.
+                Sits well as a corner badge on a tournament-detail
+                card.
+              </p>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           DIRECTION 9 — Wordmark + swing line
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">Direction 09</div>
+        <h2>Wordmark + paddle-swing — three takes</h2>
+        <p class="section-sub">
+          The original chunky Russo wordmark with a hand-drawn swing
+          line underneath. Variations: refine the original (9A), swap
+          to a condensed face (9B), or trade the wavy line for a hard
+          angled slash that reads as the swing locked in (9C).
+        </p>
+
+        <div class="grid3">
+          <article class="card">
+            <div class="stage">
+              <span class="logo-9a">
+                bert<span class="amp">&amp;</span>erne
+                <svg class="swing" viewBox="0 0 200 22" preserveAspectRatio="none">
+                  <path d="M2,16 C 30,4 90,4 130,12 S 180,4 198,14" />
+                </svg>
+              </span>
+            </div>
+            <footer>
+              <div class="label">9A — Refined Russo</div>
+              <h3>Chunky lowercase, cleaner S-curve</h3>
+              <p>
+                Original direction with the swing arc redrawn —
+                steadier sweep, no kink in the middle. Russo One stays
+                the wordmark; red ampersand carries the personality.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage">
+              <span class="logo-9b">
+                BERT<span class="amp">&amp;</span>ERNE
+                <svg class="swing" viewBox="0 0 200 22" preserveAspectRatio="none">
+                  <path d="M2,16 C 30,4 90,4 130,12 S 180,4 198,14" />
+                </svg>
+              </span>
+            </div>
+            <footer>
+              <div class="label">9B — Condensed Anton</div>
+              <h3>Tall caps, sport-ticker proportions</h3>
+              <p>
+                Same swing under different type. Anton's tall condensed
+                caps push toward tournament-banner energy — pairs
+                better with a print poster than the lowercase original.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage">
+              <span class="logo-9c">
+                bert<span class="amp">&amp;</span>erne
+              </span>
+            </div>
+            <footer>
+              <div class="label">9C — Hard slash</div>
+              <h3>Single angled bar, finish locked in</h3>
+              <p>
+                Trades the wavy swing for a single bold diagonal bar —
+                the finish position of a paddle stroke, frozen.
+                Sharper, more graphic, easier to reproduce at any
+                scale (no SVG hand-drawn line to redraw).
+              </p>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           DIRECTION 10 — Letterpress block
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">Direction 10</div>
+        <h2>Letterpress block — three takes</h2>
+        <p class="section-sub">
+          The 1930s sport-poster vibe holds up across color swaps and
+          arrangements. 10A keeps the original yellow block but adds
+          "TOURNAMENT MANAGEMENT" as a tagged sub-row. 10B inverts
+          (black block, court-yellow text) for navbar use. 10C stacks
+          on red felt with knockout borders — more emblem than wordmark.
+        </p>
+
+        <div class="grid3">
+          <article class="card">
+            <div class="stage">
+              <div class="logo-10a">
+                <div class="top">BERT&amp;ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10A — Yellow + TM tag</div>
+              <h3>Court-yellow block with rule and tagline</h3>
+              <p>
+                Original yellow letterpress block, now with a tagged
+                sub-row. The hard rule separates wordmark from
+                category; both read at a glance. Banner-ready, prints
+                in two colors.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-10b">
+                <div class="top">BERT<span class="amp">&amp;</span>ERNE</div>
+                <div class="tag">TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10B — Inverted (black + yellow)</div>
+              <h3>Black block, yellow text, red ampersand</h3>
+              <p>
+                Sits better on light backgrounds — the dark block
+                anchors any layout. Works in a navbar, on a sign-in
+                screen, as a header strip on a tournament-detail page.
+                The red ampersand keeps the accent without overpowering.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-10c">
+                <div class="row1">BERT</div>
+                <div class="rule"></div>
+                <div class="row2">&amp; ERNE</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10C — Stacked emblem</div>
+              <h3>Two-row block with knockout border ring</h3>
+              <p>
+                Stacks the name on two rows separated by a knockout
+                rule, framed by a double border. More emblem than
+                wordmark — works square (app icon, social avatar).
+                Red felt with court-yellow ampersand carries the
+                color story.
+              </p>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+    </div>
+  </body>
+</html>

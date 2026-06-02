@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — logo explorations, round 2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Archivo+Black&family=Bowlby+One&family=Bungee&family=Permanent+Marker&family=Press+Start+2P&family=Russo+One&family=Stardos+Stencil:wght@400;700&family=VT323&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Space+Grotesk:wght@400;500;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap"
+    />
+    <style>
+      /* ───────────────────────────────────────────────────────────────
+         Round 2 brief — react to round 1, swing harder.
+         ─────────────────────────────────────────────────────────────── */
+      /* Round 1 read as "high-end furniture / dress shop." For a sport
+         that's bright yellow balls, "DINK!" stickers, group-chat
+         banter and beer after the match, the mark needs more PLAY.
+
+         This round leans into the visual tradition of American sport
+         graphics — varsity, stadium, stencil, league badge, pennant,
+         hand-painted gym wall — at brighter, hotter colors than round
+         one. Still no literal paddles / balls / courts (per the
+         original brief). The brand name does the joke; the type
+         carries the energy.
+
+         The bar: a logo that looks at home on a tournament t-shirt
+         back, screen-printed in a single color, three feet wide on a
+         draw board, OR shrunk to a favicon — without losing its
+         personality. */
+
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+
+        /* Round-2 palette — brighter and bolder than round 1. */
+        --court-yellow: #f3d111; /* actual pickleball-ball yellow */
+        --court-blue: #1e6cd6;   /* electric sport blue */
+        --court-red: #d8341c;    /* league-jersey red */
+        --court-green: #2c8a3d;  /* outdoor turf */
+        --court-cream: #f6efd6;  /* old-paper / felt */
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 56px 32px 96px;
+      }
+
+      header.intro {
+        margin-bottom: 56px;
+      }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", "Fraunces", Georgia, serif;
+        font-weight: 400;
+        font-size: 48px;
+        line-height: 1.05;
+        margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 640px;
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0 0 8px;
+      }
+      header.intro p strong {
+        color: var(--ink);
+      }
+      header.intro .links {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      header.intro .links a {
+        color: var(--court-blue);
+        text-decoration: none;
+        border-bottom: 1px solid currentColor;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .card .stage {
+        height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        position: relative;
+      }
+      .card .stage.dark {
+        background: var(--ink);
+        color: var(--bg);
+      }
+      .card .stage.cream {
+        background: var(--court-cream);
+      }
+      .card .stage.yellow {
+        background: var(--court-yellow);
+      }
+      .card .stage.blue {
+        background: var(--court-blue);
+      }
+
+      .card footer {
+        padding: 20px 24px 22px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", "Inter", sans-serif;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--court-red);
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .card footer h2 {
+        margin: 0 0 8px;
+        font-size: 17px;
+        font-family: "Inter Tight", "Inter", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--ink-soft);
+        line-height: 1.55;
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         Per-concept logo styles
+         ─────────────────────────────────────────────────────────────── */
+
+      /* 01 — varsity college letters */
+      .logo-01 {
+        text-align: center;
+        line-height: 0.9;
+      }
+      .logo-01 .mark {
+        font-family: "Bungee", sans-serif;
+        font-size: 88px;
+        letter-spacing: -0.02em;
+        color: var(--court-blue);
+        text-shadow: 4px 4px 0 var(--court-red);
+        display: inline-block;
+      }
+      .logo-01 .word {
+        font-family: "Anton", sans-serif;
+        font-size: 16px;
+        letter-spacing: 0.32em;
+        margin-top: 12px;
+        text-transform: uppercase;
+      }
+      .stage.dark .logo-01 .mark { color: var(--court-yellow); text-shadow: 4px 4px 0 var(--court-red); }
+
+      /* 02 — italic action slant */
+      .logo-02 {
+        font-family: "Anton", sans-serif;
+        font-size: 64px;
+        line-height: 0.9;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+        font-style: italic;
+        transform: skewX(-12deg);
+        display: inline-block;
+        position: relative;
+      }
+      .logo-02 .amp {
+        color: var(--court-red);
+      }
+      .logo-02::after {
+        content: "";
+        position: absolute;
+        left: -4px;
+        right: -8px;
+        bottom: -4px;
+        height: 6px;
+        background: var(--court-red);
+      }
+      .stage.dark .logo-02 .amp { color: var(--court-yellow); }
+      .stage.dark .logo-02::after { background: var(--court-yellow); }
+
+      /* 03 — hand-painted brush caps */
+      .logo-03 {
+        font-family: "Permanent Marker", cursive;
+        font-size: 56px;
+        line-height: 0.95;
+        text-transform: uppercase;
+        text-align: center;
+        transform: rotate(-2deg);
+      }
+      .logo-03 .amp {
+        display: inline-block;
+        margin: 0 0.08em;
+        color: var(--court-red);
+        transform: rotate(8deg) translateY(-2px);
+      }
+
+      /* 04 — pennant felt cut */
+      .logo-04 {
+        position: relative;
+        width: 280px;
+        height: 120px;
+      }
+      .logo-04 svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .logo-04 .label {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding-left: 28px;
+        padding-right: 60px;
+        color: var(--court-cream);
+        font-family: "Anton", sans-serif;
+        text-transform: uppercase;
+      }
+      .logo-04 .label .word {
+        font-size: 30px;
+        letter-spacing: 0.06em;
+        line-height: 0.95;
+      }
+      .logo-04 .label .tag {
+        font-size: 10px;
+        letter-spacing: 0.32em;
+        margin-top: 4px;
+        opacity: 0.85;
+      }
+
+      /* 05 — stencil tournament banner */
+      .logo-05 {
+        font-family: "Stardos Stencil", sans-serif;
+        font-weight: 700;
+        font-size: 48px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        line-height: 1;
+        text-align: center;
+        border-top: 6px solid currentColor;
+        border-bottom: 6px solid currentColor;
+        padding: 12px 28px;
+      }
+      .logo-05 .amp {
+        color: var(--court-red);
+        margin: 0 0.08em;
+      }
+      .stage.dark .logo-05 .amp { color: var(--court-yellow); }
+
+      /* 06 — vintage circle club badge */
+      .logo-06 {
+        width: 200px;
+        height: 200px;
+        position: relative;
+      }
+      .logo-06 svg {
+        width: 100%;
+        height: 100%;
+      }
+      .logo-06 .center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-family: "Anton", sans-serif;
+        text-transform: uppercase;
+      }
+      .logo-06 .center .main {
+        font-size: 28px;
+        line-height: 0.95;
+        letter-spacing: 0.04em;
+      }
+      .logo-06 .center .amp {
+        font-size: 28px;
+        color: var(--court-red);
+      }
+      .logo-06 .center .est {
+        font-size: 10px;
+        letter-spacing: 0.32em;
+        margin-top: 6px;
+        opacity: 0.7;
+      }
+
+      /* 07 — scoreboard 7-segment */
+      .logo-07 {
+        background: #0a0e16;
+        color: var(--court-yellow);
+        padding: 24px 28px;
+        border-radius: 6px;
+        border: 2px solid #2a3344;
+        box-shadow: inset 0 0 24px rgba(243, 209, 17, 0.08);
+        font-family: "VT323", monospace;
+        font-size: 56px;
+        letter-spacing: 0.04em;
+        line-height: 1;
+        text-align: center;
+        text-shadow: 0 0 12px rgba(243, 209, 17, 0.6);
+      }
+      .logo-07 .amp { color: var(--court-red); text-shadow: 0 0 12px rgba(216, 52, 28, 0.5); }
+      .logo-07 .row2 {
+        font-size: 14px;
+        letter-spacing: 0.32em;
+        opacity: 0.8;
+        margin-top: 4px;
+        color: var(--court-yellow);
+      }
+
+      /* 08 — bumper sticker oval */
+      .logo-08 {
+        position: relative;
+        width: 200px;
+        height: 130px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .logo-08 .oval {
+        position: absolute;
+        inset: 0;
+        border: 3px solid var(--ink);
+        border-radius: 50%;
+        background: var(--bg);
+      }
+      .logo-08 .label {
+        position: relative;
+        font-family: "Bungee", sans-serif;
+        font-size: 56px;
+        line-height: 1;
+        color: var(--ink);
+        letter-spacing: -0.02em;
+      }
+      .logo-08 .label .amp {
+        font-size: 0.7em;
+        color: var(--court-red);
+      }
+      .stage.dark .logo-08 .oval { border-color: var(--bg); background: transparent; }
+      .stage.dark .logo-08 .label { color: var(--bg); }
+      .stage.dark .logo-08 .label .amp { color: var(--court-yellow); }
+
+      /* 09 — wordmark + paddle-swing line */
+      .logo-09 {
+        font-family: "Russo One", sans-serif;
+        font-size: 60px;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        text-transform: lowercase;
+        position: relative;
+        padding-bottom: 14px;
+      }
+      .logo-09 .amp {
+        color: var(--court-red);
+        margin: 0 0.04em;
+      }
+      .logo-09 svg.swing {
+        position: absolute;
+        left: 4%;
+        right: 4%;
+        bottom: -8px;
+        width: 92%;
+        height: 24px;
+      }
+      .logo-09 svg.swing path {
+        fill: none;
+        stroke: var(--court-red);
+        stroke-width: 4;
+        stroke-linecap: round;
+      }
+      .stage.dark .logo-09 .amp { color: var(--court-yellow); }
+      .stage.dark .logo-09 svg.swing path { stroke: var(--court-yellow); }
+
+      /* 10 — letterpress block poster */
+      .logo-10 {
+        font-family: "Alfa Slab One", serif;
+        font-size: 56px;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: -0.01em;
+        position: relative;
+        padding: 14px 28px;
+        background: var(--court-yellow);
+        color: var(--ink);
+        border: 4px solid var(--ink);
+      }
+      .logo-10::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        height: 6px;
+        background: var(--ink);
+        transform: translateY(-50%);
+      }
+      .logo-10 .row {
+        position: relative;
+        background: var(--court-yellow);
+        padding: 0 16px;
+        display: inline-block;
+      }
+      .stage.dark .logo-10 { background: var(--court-red); color: var(--bg); border-color: var(--bg); }
+      .stage.dark .logo-10::before { background: var(--bg); }
+      .stage.dark .logo-10 .row { background: var(--court-red); }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { height: 180px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 2 — sport, not boutique</div>
+        <h1>bert &amp; erne — 10 more directions</h1>
+        <p>
+          Round 1 read as <strong>high-end furniture / dress shop</strong>.
+          This round swings the other way: varsity, stadium, stencil,
+          league-pennant, bumper sticker — the visual tradition of
+          actual sport graphics. Brighter colors (court yellow, hot
+          court blue, league red) and chunkier type. The bar: looks at
+          home on a tournament t-shirt back, screen-printed in a single
+          color, three feet wide on a draw board.
+        </p>
+        <p>
+          Still no literal paddles / balls / courts (per the original
+          brief). The name does the joke; the typography carries the
+          energy.
+        </p>
+        <div class="links">
+          ← compare to <a href="logo-explorations.html">round 1</a>
+        </div>
+      </header>
+
+      <div class="grid">
+
+        <!-- 01 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <div class="logo-01">
+              <span class="mark">B&amp;E</span>
+              <div class="word">bert &amp; erne</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-01">
+              <span class="mark">B&amp;E</span>
+              <div class="word">bert &amp; erne</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">01 — Varsity letter block</div>
+            <h2>College-letter B&amp;E with drop shadow</h2>
+            <p>
+              Big collegiate Bungee monogram with a hard offset shadow —
+              the classic American varsity-jacket move. "BERT &amp; ERNE"
+              sits underneath in Anton like a team-name lockup. Reads as
+              high-school gym, rec-league, intramurals.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 02 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-02">
+              BERT<span class="amp">&amp;</span>ERNE
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-02">
+              BERT<span class="amp">&amp;</span>ERNE
+            </span>
+          </div>
+          <footer>
+            <div class="label">02 — Italic action slant</div>
+            <h2>Anton skewed, hot underline stripe</h2>
+            <p>
+              Tall, condensed, italicized hard. Leans forward like an
+              80s sports ticker or an NBA Jam intro. The hot stripe
+              underneath is the speed line — energy without literally
+              drawing motion.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 03 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="logo-03">
+              BERT<span class="amp">&amp;</span>ERNE
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-03">
+              BERT<span class="amp">&amp;</span>ERNE
+            </div>
+          </div>
+          <footer>
+            <div class="label">03 — Hand-painted brush</div>
+            <h2>Permanent Marker caps, slightly off-axis</h2>
+            <p>
+              Imperfect, painted, slightly tilted. Looks like the sign
+              outside a YMCA gym or above the door at a club. Friendly,
+              accessible, "come in, the game's already started." A real
+              human painted this.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 04 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="logo-04">
+              <svg viewBox="0 0 280 120" preserveAspectRatio="none">
+                <polygon points="0,0 280,0 240,60 280,120 0,120" fill="#d8341c" />
+              </svg>
+              <div class="label">
+                <div class="word">BERT&amp;ERNE</div>
+                <div class="tag">PICKLEBALL CLUB</div>
+              </div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-04">
+              <svg viewBox="0 0 280 120" preserveAspectRatio="none">
+                <polygon points="0,0 280,0 240,60 280,120 0,120" fill="#f3d111" />
+              </svg>
+              <div class="label" style="color: #14181f;">
+                <div class="word">BERT&amp;ERNE</div>
+                <div class="tag">PICKLEBALL CLUB</div>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">04 — Pennant cut</div>
+            <h2>Felt-banner pennant in club colors</h2>
+            <p>
+              Triangular pennant silhouette like the felt banners
+              hanging in a gym rafters. Wordmark sits inside the cut.
+              Works as a wall sign, a sticker, a profile-card badge.
+              "BERT &amp; ERNE PICKLEBALL CLUB" reads as a real club.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 05 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <div class="logo-05">
+              BERT<span class="amp">&amp;</span>ERNE
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-05">
+              BERT<span class="amp">&amp;</span>ERNE
+            </div>
+          </div>
+          <footer>
+            <div class="label">05 — Stencil banner</div>
+            <h2>Stardos Stencil, rule-framed</h2>
+            <p>
+              Tournament-banner energy — stencil-cut sans framed by two
+              hard rules above and below. Reads like a draw-board
+              header. Survives photocopying; prints in a single color
+              on a 3-foot vinyl banner without losing edge.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 06 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="logo-06">
+              <svg viewBox="0 0 200 200">
+                <circle cx="100" cy="100" r="92" fill="none" stroke="#14181f" stroke-width="3"/>
+                <circle cx="100" cy="100" r="82" fill="none" stroke="#14181f" stroke-width="1.5"/>
+                <defs>
+                  <path id="ring06" d="M 100,100 m -75,0 a 75,75 0 1,1 150,0 a 75,75 0 1,1 -150,0" />
+                </defs>
+                <text font-family="Anton, sans-serif" font-size="14" letter-spacing="4" fill="#14181f">
+                  <textPath href="#ring06" startOffset="0%">BERT &amp; ERNE • PICKLEBALL CLUB • EST 2026 •</textPath>
+                </text>
+              </svg>
+              <div class="center">
+                <div class="main">B<span class="amp">&amp;</span>E</div>
+                <div class="est">SINCE 2026</div>
+              </div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-06">
+              <svg viewBox="0 0 200 200">
+                <circle cx="100" cy="100" r="92" fill="none" stroke="#fafaf7" stroke-width="3"/>
+                <circle cx="100" cy="100" r="82" fill="none" stroke="#fafaf7" stroke-width="1.5"/>
+                <defs>
+                  <path id="ring06d" d="M 100,100 m -75,0 a 75,75 0 1,1 150,0 a 75,75 0 1,1 -150,0" />
+                </defs>
+                <text font-family="Anton, sans-serif" font-size="14" letter-spacing="4" fill="#fafaf7">
+                  <textPath href="#ring06d" startOffset="0%">BERT &amp; ERNE • PICKLEBALL CLUB • EST 2026 •</textPath>
+                </text>
+              </svg>
+              <div class="center" style="color: #fafaf7;">
+                <div class="main">B<span class="amp" style="color: #f3d111;">&amp;</span>E</div>
+                <div class="est">SINCE 2026</div>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">06 — Circle club badge</div>
+            <h2>Crest with text-on-path ring</h2>
+            <p>
+              A real club badge: name + tagline + EST year curving
+              around the edge, monogram in the middle. Embroiderable on
+              a polo, screen-printable on a baseball cap. Sells the
+              "we're a real club" feel without any literal sport
+              iconography.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 07 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage dark">
+            <div class="logo-07">
+              BERT<span class="amp">&amp;</span>ERNE
+              <div class="row2">11 — 9 // GAME ON</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-07">
+              BERT<span class="amp">&amp;</span>ERNE
+              <div class="row2">11 — 9 // GAME ON</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">07 — Scoreboard glow</div>
+            <h2>VT323 segmented display, court-yellow glow</h2>
+            <p>
+              The wall scoreboard reading at a tournament. Phosphor-
+              yellow on near-black with a subtle glow. The mock score
+              underneath sells the conceit. Risk: leans nostalgic, may
+              read "arcade game" before "sport tech."
+            </p>
+          </footer>
+        </article>
+
+        <!-- 08 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="logo-08">
+              <div class="oval"></div>
+              <div class="label">B<span class="amp">&amp;</span>E</div>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-08">
+              <div class="oval"></div>
+              <div class="label">B<span class="amp">&amp;</span>E</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">08 — Bumper sticker oval</div>
+            <h2>OBX-style sticker, monogram inside</h2>
+            <p>
+              The kind of oval country-club sticker you see on the back
+              of every Subaru in the parking lot at a Saturday
+              tournament. Recognizable across a parking lot. Maps
+              naturally to a favicon. Identity travels.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 09 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage">
+            <span class="logo-09">
+              bert<span class="amp">&amp;</span>erne
+              <svg class="swing" viewBox="0 0 200 24" preserveAspectRatio="none">
+                <path d="M2,18 C 30,4 90,8 130,14 S 180,4 198,16" />
+              </svg>
+            </span>
+          </div>
+          <div class="stage dark">
+            <span class="logo-09">
+              bert<span class="amp">&amp;</span>erne
+              <svg class="swing" viewBox="0 0 200 24" preserveAspectRatio="none">
+                <path d="M2,18 C 30,4 90,8 130,14 S 180,4 198,16" />
+              </svg>
+            </span>
+          </div>
+          <footer>
+            <div class="label">09 — Wordmark + swing</div>
+            <h2>Russo One lowercase, hand-drawn swing line</h2>
+            <p>
+              Chunky lowercase wordmark with a hand-drawn S-curve below
+              that reads as the arc of a paddle finish — without
+              drawing a paddle. Motion baked in. The line is the move.
+            </p>
+          </footer>
+        </article>
+
+        <!-- 10 ─────────────────────────────────────────────────────── -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="logo-10">
+              <span class="row">BERT&amp;ERNE</span>
+            </div>
+          </div>
+          <div class="stage dark">
+            <div class="logo-10">
+              <span class="row">BERT&amp;ERNE</span>
+            </div>
+          </div>
+          <footer>
+            <div class="label">10 — Letterpress poster</div>
+            <h2>Fat slab on color block, knockout rule</h2>
+            <p>
+              1930s sport-poster energy. Fat slab serif (Alfa Slab)
+              filling a hard-bordered color block, with a knockout rule
+              cutting through the middle. Screams "TONIGHT ONLY." Print
+              this on a flyer; staple it to a corkboard.
+            </p>
+          </footer>
+        </article>
+
+      </div>
+    </div>
+  </body>
+</html>

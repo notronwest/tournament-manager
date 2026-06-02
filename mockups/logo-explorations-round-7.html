@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — round 7: C3 refinements + trophy</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Bowlby+One&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+        --court-green: #2c8a3d;
+        --court-green-deep: #1e6432;
+        --court-blue: #1e6cd6;
+        --court-yellow: #f3d111;
+        --court-yellow-soft: #fff0a0;
+        --court-red: #d8341c;
+        --court-cream: #f6efd6;
+        --court-gold: #d4a017;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page { max-width: 1280px; margin: 0 auto; padding: 56px 32px 96px; }
+
+      header.intro { margin-bottom: 48px; }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.18em;
+        color: var(--court-red); margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", serif;
+        font-weight: 400; font-size: 44px;
+        line-height: 1.05; margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 720px; font-size: 15px;
+        color: var(--ink-soft); margin: 0 0 8px;
+      }
+      header.intro p strong { color: var(--ink); }
+      header.intro .links { margin-top: 14px; font-size: 13px; color: var(--ink-soft); }
+      header.intro .links a {
+        color: var(--court-blue); text-decoration: none;
+        border-bottom: 1px solid currentColor; margin-right: 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper); border: 1px solid var(--rule);
+        border-radius: 14px; overflow: hidden;
+        display: flex; flex-direction: column;
+      }
+      .card .stage {
+        min-height: 240px; display: flex;
+        align-items: center; justify-content: center;
+        padding: 28px; position: relative;
+      }
+      .card .stage.dark { background: var(--ink); color: var(--bg); }
+      .card .stage.cream { background: var(--court-cream); }
+      .card footer {
+        padding: 16px 20px 18px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+        color: var(--court-red); font-weight: 700; margin-bottom: 4px;
+      }
+      .card footer h3 {
+        margin: 0 0 4px; font-size: 14px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700; letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0; font-size: 12px;
+        color: var(--ink-soft); line-height: 1.5;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         COURT LOCKUP — shared anatomy across all 10 variations
+         ═══════════════════════════════════════════════════════════════ */
+
+      .lockup {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        display: inline-block;
+      }
+      .lockup .row {
+        display: flex;
+        align-items: stretch;
+        border: 4px solid var(--ink);
+        height: 100px;
+      }
+      .lockup .row .block {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .lockup .row .block + .block { border-left: 4px solid var(--ink); }
+      .lockup .side {
+        width: 130px;
+        background: var(--court-green);
+      }
+      .lockup .middle {
+        width: 80px;
+      }
+      .lockup .court-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%; height: 100%;
+      }
+      .lockup .word-layer {
+        position: relative;
+        z-index: 2;
+      }
+      .lockup .tag-row {
+        padding: 6px 14px;
+        font-family: "Anton", sans-serif;
+        font-size: 11px; letter-spacing: 0.32em;
+        text-transform: uppercase; text-align: center;
+        border: 4px solid var(--ink); border-top: 0;
+        background: var(--ink); color: var(--bg);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         LETTER TREATMENTS — one class per variation
+         ═══════════════════════════════════════════════════════════════ */
+
+      /* V1 — yellow pill badge, black text */
+      .l-v1 .word-layer {
+        background: var(--court-yellow);
+        color: var(--ink);
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 22px;
+        border: 2.5px solid var(--ink);
+      }
+
+      /* V2 — knockout: white letters with thick black stroke (works on green) */
+      .l-v2 .word-layer {
+        font-size: 30px;
+        color: var(--ink);
+        -webkit-text-stroke: 4px var(--court-cream);
+        paint-order: stroke fill;
+      }
+
+      /* V3 — cream card with black border */
+      .l-v3 .word-layer {
+        background: var(--court-cream);
+        color: var(--ink);
+        padding: 6px 14px;
+        font-size: 22px;
+        border: 3px solid var(--ink);
+      }
+
+      /* V4 — black horizontal bar with white text */
+      .l-v4 .word-layer {
+        background: var(--ink);
+        color: var(--court-yellow);
+        padding: 6px 12px;
+        font-size: 24px;
+        width: 100%;
+        border-top: 2px solid var(--ink);
+        border-bottom: 2px solid var(--ink);
+      }
+
+      /* V5 — colored chip per word: blue for BERT, red for ERNE */
+      .l-v5 .word-layer {
+        color: var(--bg);
+        padding: 6px 12px;
+        font-size: 22px;
+        border: 3px solid var(--ink);
+      }
+      .l-v5 .bert-chip { background: var(--court-blue); }
+      .l-v5 .erne-chip { background: var(--court-red); }
+
+      /* V6 — black letters with cream drop-shadow */
+      .l-v6 .word-layer {
+        font-size: 30px;
+        color: var(--ink);
+        text-shadow:
+          -2px -2px 0 var(--court-cream),
+          2px -2px 0 var(--court-cream),
+          -2px 2px 0 var(--court-cream),
+          2px 2px 0 var(--court-cream),
+          4px 4px 0 rgba(0,0,0,0.3);
+      }
+
+      /* V7 — black on yellow strip */
+      .l-v7 .word-layer {
+        background: var(--court-yellow);
+        color: var(--ink);
+        padding: 4px 12px;
+        font-size: 22px;
+        width: 100%;
+        border-top: 2.5px solid var(--ink);
+        border-bottom: 2.5px solid var(--ink);
+      }
+
+      /* V8 — outlined glyphs: yellow stroke + dark fill */
+      .l-v8 .word-layer {
+        font-size: 30px;
+        color: var(--ink);
+        -webkit-text-stroke: 3.5px var(--court-yellow);
+        paint-order: stroke fill;
+      }
+
+      /* V9 — cream pennant banner shape */
+      .l-v9 .pennant {
+        position: relative;
+        background: var(--court-cream);
+        color: var(--ink);
+        padding: 6px 24px 6px 14px;
+        font-size: 22px;
+        border: 3px solid var(--ink);
+        clip-path: polygon(0 0, 100% 0, 88% 50%, 100% 100%, 0 100%);
+      }
+      .l-v9.erne .pennant {
+        clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 12% 50%);
+        padding: 6px 14px 6px 24px;
+      }
+
+      /* V10 — scoreboard tiles (each letter in its own black square) */
+      .l-v10 .word-layer {
+        display: inline-flex;
+        gap: 3px;
+      }
+      .l-v10 .word-layer span {
+        background: var(--ink);
+        color: var(--court-yellow);
+        font-size: 18px;
+        width: 22px;
+        height: 26px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1.5px solid var(--court-yellow);
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         MIDDLE BLOCK — tournament icon backgrounds
+         ═══════════════════════════════════════════════════════════════ */
+
+      .m-cream { background: var(--court-cream); }
+      .m-yellow { background: var(--court-yellow); }
+      .m-ink { background: var(--ink); }
+      .m-green { background: var(--court-green); }
+
+      .icon {
+        width: 48px;
+        height: 60px;
+      }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { min-height: 200px; padding: 18px; }
+        .lockup .side { width: 105px; }
+        .lockup .middle { width: 64px; }
+        .lockup .row { height: 80px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 7 — C3 refinements + tournament icons</div>
+        <h1>10 takes on C3 — green court, yellow kitchen, trophy in the middle</h1>
+        <p>
+          C3 holds, with three fixes: <strong>letters and court lines
+          no longer share a color</strong>, the <strong>middle block
+          drops the net mesh</strong> for a tournament icon (trophy,
+          ribbon, bracket, medal, crown, "1ST"), and the names get
+          <strong>frames / pills / cards</strong> to separate them from
+          the court behind them. Court anatomy stays the same — green
+          surface, yellow no-volley zone, white kitchen and centerlines.
+        </p>
+        <div class="links">
+          <a href="logo-explorations-round-6.html">← round 6</a>
+        </div>
+      </header>
+
+      <div class="grid">
+
+        <!-- ════════════════════════════════════════════════════════
+             V1 — Yellow pills + gold trophy
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v1">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">BERT</span>
+                </div>
+                <div class="block middle m-cream">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <path d="M14 8 H34 V24 Q34 32 24 32 Q14 32 14 24 Z" fill="#d4a017" stroke="#14181f" stroke-width="2"/>
+                    <path d="M14 12 Q6 16 14 24" fill="none" stroke="#14181f" stroke-width="2"/>
+                    <path d="M34 12 Q42 16 34 24" fill="none" stroke="#14181f" stroke-width="2"/>
+                    <rect x="20" y="32" width="8" height="10" fill="#d4a017" stroke="#14181f" stroke-width="2"/>
+                    <rect x="14" y="42" width="20" height="5" fill="#d4a017" stroke="#14181f" stroke-width="2"/>
+                    <rect x="10" y="47" width="28" height="4" fill="#14181f"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V1 — Yellow pills + gold trophy</div>
+            <h3>Names in pill badges, classic loving cup in the middle</h3>
+            <p>Names sit in yellow pills floating over the court — pill colour echoes the kitchen yellow, so the brand colour story is consistent. Cream middle with a small gold trophy cup.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V2 — Cream knockout outline + champion ribbon
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v2">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">BERT</span>
+                </div>
+                <div class="block middle m-cream">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <circle cx="24" cy="20" r="14" fill="#f3d111" stroke="#14181f" stroke-width="2"/>
+                    <text x="24" y="26" text-anchor="middle" font-family="Anton, sans-serif" font-size="16" font-weight="700" fill="#14181f">1</text>
+                    <polygon points="14,34 24,46 34,34 34,58 24,50 14,58" fill="#d8341c" stroke="#14181f" stroke-width="2"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V2 — Knockout letters + 1st-place ribbon</div>
+            <h3>Cream-outlined dark letters, gold #1 medal with red ribbon</h3>
+            <p>Letters use a thick cream stroke as the separator from the green court (lines stay white, letters become dark with cream halo). Middle: gold "1" medal with a red ribbon tail.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V3 — Cream card + tournament bracket Y
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v3">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">BERT</span>
+                </div>
+                <div class="block middle m-cream">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <rect x="2" y="10" width="14" height="9" fill="none" stroke="#14181f" stroke-width="2"/>
+                    <rect x="32" y="10" width="14" height="9" fill="none" stroke="#14181f" stroke-width="2"/>
+                    <rect x="17" y="42" width="14" height="10" fill="#f3d111" stroke="#14181f" stroke-width="2"/>
+                    <line x1="9" y1="19" x2="9" y2="28" stroke="#14181f" stroke-width="2"/>
+                    <line x1="39" y1="19" x2="39" y2="28" stroke="#14181f" stroke-width="2"/>
+                    <line x1="9" y1="28" x2="39" y2="28" stroke="#14181f" stroke-width="2"/>
+                    <line x1="24" y1="28" x2="24" y2="42" stroke="#14181f" stroke-width="2"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V3 — Cream cards + bracket Y</div>
+            <h3>Bordered name cards, tournament bracket diagram</h3>
+            <p>Names sit in cream cards with hard black borders. Middle holds the tournament-bracket joinery — two seeds advancing to a yellow champion box. Reads "this is a brackets app" without naming it.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V4 — Black bar across + trophy
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v4">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">BERT</span>
+                </div>
+                <div class="block middle m-ink">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <path d="M14 8 H34 V24 Q34 32 24 32 Q14 32 14 24 Z" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                    <path d="M14 12 Q6 16 14 24" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                    <path d="M34 12 Q42 16 34 24" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                    <rect x="20" y="32" width="8" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                    <rect x="14" y="42" width="20" height="5" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                    <rect x="10" y="47" width="28" height="4" fill="#fafaf7"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V4 — Black bar wordmarks + trophy on ink</div>
+            <h3>Names on a horizontal ink bar, trophy on ink block</h3>
+            <p>Names live on a hard black bar through the middle of each block — the court shows above and below as a strip. Middle block ink-on-yellow trophy ties together with the bar.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V5 — Team colored chips + star medal
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v5">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer bert-chip">BERT</span>
+                </div>
+                <div class="block middle m-cream">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <circle cx="24" cy="30" r="20" fill="#f3d111" stroke="#14181f" stroke-width="2.5"/>
+                    <polygon points="24,16 28,26 39,26 30,33 33,44 24,38 15,44 18,33 9,26 20,26" fill="#14181f"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer erne-chip">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V5 — Team chips + star medal</div>
+            <h3>Blue chip BERT, red chip ERNE, gold star medal</h3>
+            <p>Each name sits in its own colored chip — doubles team metaphor in the chip colors. Middle: a gold star medal. Three colors active (blue, red, gold) — more carnival but tells a strong team story.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V6 — Cream-shadow letters + simple cup on yellow
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v6">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">BERT</span>
+                </div>
+                <div class="block middle m-yellow">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <path d="M14 12 H34 V26 Q34 36 24 36 Q14 36 14 26 Z" fill="#14181f"/>
+                    <path d="M14 16 Q6 20 14 26" fill="none" stroke="#14181f" stroke-width="2.5"/>
+                    <path d="M34 16 Q42 20 34 26" fill="none" stroke="#14181f" stroke-width="2.5"/>
+                    <rect x="21" y="36" width="6" height="10" fill="#14181f"/>
+                    <rect x="14" y="46" width="20" height="6" fill="#14181f"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V6 — Cream-shadow + ink trophy on yellow</div>
+            <h3>Black letters with cream halo, solid ink trophy</h3>
+            <p>Letters use a chunky cream "stencil halo" effect — feels like a stamped impression on the court. Middle: a strong ink trophy silhouette on full yellow (carrying the kitchen colour through).</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V7 — Yellow strip across + crown
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v7">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">BERT</span>
+                </div>
+                <div class="block middle m-cream">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <path d="M6 22 L14 38 L24 22 L34 38 L42 22 L42 46 L6 46 Z" fill="#d4a017" stroke="#14181f" stroke-width="2"/>
+                    <circle cx="6" cy="22" r="3" fill="#d8341c" stroke="#14181f" stroke-width="1.5"/>
+                    <circle cx="24" cy="22" r="3" fill="#d8341c" stroke="#14181f" stroke-width="1.5"/>
+                    <circle cx="42" cy="22" r="3" fill="#d8341c" stroke="#14181f" stroke-width="1.5"/>
+                    <rect x="6" y="46" width="36" height="4" fill="#14181f"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V7 — Yellow strip + crown</div>
+            <h3>Names on yellow horizontal strip, gold crown in middle</h3>
+            <p>Each block has a yellow strip across the middle (matching the kitchen color) where the names sit in black. Middle: a gold crown with red jewels. Reads "we crown a champion."</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V8 — Yellow-outlined dark letters + ribbon
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v8">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">BERT</span>
+                </div>
+                <div class="block middle m-cream">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <rect x="14" y="8" width="20" height="22" rx="2" fill="#d8341c" stroke="#14181f" stroke-width="2"/>
+                    <text x="24" y="25" text-anchor="middle" font-family="Anton, sans-serif" font-size="14" fill="#fafaf7" font-weight="700">1ST</text>
+                    <polygon points="14,30 24,42 34,30 34,54 24,46 14,54" fill="#1e6cd6" stroke="#14181f" stroke-width="2"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V8 — Yellow halo + 1ST badge</div>
+            <h3>Yellow stroke around dark letters, red "1ST" badge w/ blue ribbon</h3>
+            <p>Letter approach mirrors V2 but with a yellow halo instead of cream — pulls the kitchen color out into the brand name. Middle: a "1ST" red placard with a blue ribbon. Tournament-results visual.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V9 — Cream pennant flag + trophy with ribbon
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer l-v9">
+                    <span class="pennant">BERT</span>
+                  </span>
+                </div>
+                <div class="block middle m-cream">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <path d="M14 6 H34 V22 Q34 30 24 30 Q14 30 14 22 Z" fill="#d4a017" stroke="#14181f" stroke-width="2"/>
+                    <path d="M14 10 Q6 14 14 22" fill="none" stroke="#14181f" stroke-width="2"/>
+                    <path d="M34 10 Q42 14 34 22" fill="none" stroke="#14181f" stroke-width="2"/>
+                    <rect x="20" y="30" width="8" height="6" fill="#d4a017" stroke="#14181f" stroke-width="2"/>
+                    <polygon points="16,36 24,50 32,36 32,58 24,52 16,58" fill="#d8341c" stroke="#14181f" stroke-width="2"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer l-v9 erne">
+                    <span class="pennant">ERNE</span>
+                  </span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V9 — Cream pennants + trophy with ribbon</div>
+            <h3>Pennant-shaped name banners, trophy on red ribbon</h3>
+            <p>Names sit on small cream pennant silhouettes pointing in toward the net — like two teams' banners hanging in the rafters facing each other. Middle: gold trophy with a red ribbon tail.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V10 — Scoreboard tile letters + bracket
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup l-v10">
+              <div class="row">
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="92" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="92" y1="0" x2="92" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="0" y1="50" x2="92" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">
+                    <span>B</span><span>E</span><span>R</span><span>T</span>
+                  </span>
+                </div>
+                <div class="block middle m-ink">
+                  <svg class="icon" viewBox="0 0 48 60">
+                    <path d="M14 10 H34 V22 Q34 30 24 30 Q14 30 14 22 Z" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                    <path d="M14 14 Q6 18 14 22" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                    <path d="M34 14 Q42 18 34 22" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                    <rect x="20" y="30" width="8" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                    <rect x="14" y="40" width="20" height="6" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                    <rect x="10" y="46" width="28" height="4" fill="#fafaf7"/>
+                  </svg>
+                </div>
+                <div class="block side">
+                  <svg class="court-svg" viewBox="0 0 130 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="38" height="100" fill="#f3d111"/>
+                    <line x1="38" y1="0" x2="38" y2="100" stroke="#fff" stroke-width="3"/>
+                    <line x1="38" y1="50" x2="130" y2="50" stroke="#fff" stroke-width="2.5"/>
+                  </svg>
+                  <span class="word-layer">
+                    <span>E</span><span>R</span><span>N</span><span>E</span>
+                  </span>
+                </div>
+              </div>
+              <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V10 — Scoreboard tiles + trophy on ink</div>
+            <h3>Letter-per-tile, ink-on-ink trophy</h3>
+            <p>Each letter is a small scoreboard tile (yellow text on ink). Middle holds the trophy on ink — looks like a scoreboard / leaderboard graphic from courtside. Loudest of the set; reads tech / digital.</p>
+          </footer>
+        </article>
+
+      </div>
+    </div>
+  </body>
+</html>

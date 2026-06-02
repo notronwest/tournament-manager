@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410 175" width="820" height="350">
+  <title>bert &amp; erne — V5 (round 9): square ink stamp + cream bookends</title>
+  <desc>
+    ──────────────────────────────────────────────────────────────────
+    bert &amp; erne — logo lockup, round 9 / V5
+    "Geometric and dark" — square ink stamp + cream bookends.
+    ──────────────────────────────────────────────────────────────────
+
+    FONTS (free Google Fonts — install both locally before opening in
+    Adobe Illustrator / Affinity / Figma so the text renders correctly;
+    otherwise it'll substitute with a system fallback):
+
+      • Alfa Slab One  (wordmarks "BERT", "ERNE", "&amp;")
+        https://fonts.google.com/specimen/Alfa+Slab+One
+
+      • Anton          (tagline "PICKLEBALL TOURNAMENT MANAGEMENT")
+        https://fonts.google.com/specimen/Anton
+
+    Mac install: download from the links above, double-click the .ttf,
+    click "Install Font" in Font Book. Restart Illustrator after install.
+
+    To bake fonts INTO the file (no dependency): in Illustrator select
+    all text → Type → Create Outlines (Cmd+Shift+O). After this the text
+    is no longer editable as type but is fully portable.
+
+    ──────────────────────────────────────────────────────────────────
+    COLOR TOKENS
+      ink          #14181f
+      bg / off-white #fafaf7
+      cream        #f6efd6
+      court-green  #2c8a3d
+      court-yellow #f3d111
+      court-red    #d8341c
+    ──────────────────────────────────────────────────────────────────
+    LAYER MAP (top-to-bottom in source order = back-to-front in render)
+      1. Ink frame              (the black border/scaffolding)
+      2. BERT block             (green + kitchen + word)
+      3. Net block              (yellow + net line + ampersand)
+      4. ERNE block             (green + kitchen + word, mirror of BERT)
+      5. Tag row contents       (cream bookends + tagline)
+      6. Stamp                  (ink square + yellow bracket icon, +8°)
+    ──────────────────────────────────────────────────────────────────
+  </desc>
+
+  <defs>
+    <style type="text/css"><![CDATA[
+      @import url('https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&display=swap');
+
+      .word {
+        font-family: 'Alfa Slab One', 'Times New Roman', serif;
+        font-size: 32px;
+        font-weight: 400;
+        fill: #14181f;
+        stroke: #f6efd6;
+        stroke-width: 4px;
+        paint-order: stroke fill;
+        text-transform: uppercase;
+        letter-spacing: -0.32px;
+      }
+      .amp {
+        font-family: 'Alfa Slab One', 'Times New Roman', serif;
+        font-size: 44px;
+        font-weight: 400;
+        fill: #14181f;
+      }
+      .tag {
+        font-family: 'Anton', 'Impact', 'Arial Narrow', sans-serif;
+        font-size: 11px;
+        font-weight: 400;
+        fill: #fafaf7;
+        letter-spacing: 3.52px;
+        text-transform: uppercase;
+      }
+    ]]></style>
+  </defs>
+
+  <!-- ════════════════════════════════════════════════════════════
+       1. INK FRAME (single ink rect spanning lockup + tag-row)
+       ════════════════════════════════════════════════════════════ -->
+  <g id="ink-frame">
+    <rect x="10" y="22" width="366" height="142" fill="#14181f"/>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+       2. BERT BLOCK
+       ════════════════════════════════════════════════════════════ -->
+  <g id="bert-block">
+    <rect x="14" y="26" width="140" height="100" fill="#2c8a3d"/>
+    <rect x="114" y="26" width="40" height="100" fill="#f3d111"/>
+    <line x1="114" y1="26" x2="114" y2="126" stroke="#ffffff" stroke-width="3"/>
+    <text class="word" x="65" y="87" text-anchor="middle">BERT</text>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+       3. NET BLOCK
+       ════════════════════════════════════════════════════════════ -->
+  <g id="net-block">
+    <rect x="158" y="26" width="70" height="100" fill="#f3d111"/>
+    <line x1="193" y1="26" x2="193" y2="126" stroke="#14181f" stroke-width="2"/>
+    <rect x="178" y="56" width="30" height="40" fill="#f3d111"/>
+    <text class="amp" x="193" y="91" text-anchor="middle">&amp;</text>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+       4. ERNE BLOCK
+       ════════════════════════════════════════════════════════════ -->
+  <g id="erne-block">
+    <rect x="232" y="26" width="140" height="100" fill="#2c8a3d"/>
+    <rect x="232" y="26" width="40" height="100" fill="#f3d111"/>
+    <line x1="272" y1="26" x2="272" y2="126" stroke="#ffffff" stroke-width="3"/>
+    <text class="word" x="321" y="87" text-anchor="middle">ERNE</text>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+       5. TAG ROW — cream bookends (smaller, 14px) + cream tagline
+       ════════════════════════════════════════════════════════════ -->
+  <g id="tag-row">
+    <!-- Left bookend bracket (cream, 14px tall) -->
+    <g id="bookend-left" transform="translate(28, 140) scale(0.292)">
+      <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+      <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+      <rect x="17" y="32" width="14" height="10" fill="#f6efd6"/>
+      <line x1="10" y1="15" x2="10" y2="22" stroke="#f6efd6" stroke-width="2"/>
+      <line x1="38" y1="15" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+      <line x1="10" y1="22" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+      <line x1="24" y1="22" x2="24" y2="32" stroke="#f6efd6" stroke-width="2"/>
+    </g>
+
+    <text class="tag" x="193" y="151" text-anchor="middle">PICKLEBALL TOURNAMENT MANAGEMENT</text>
+
+    <!-- Right bookend bracket (mirrored) -->
+    <g id="bookend-right" transform="translate(358, 140) scale(-0.292, 0.292)">
+      <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+      <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+      <rect x="17" y="32" width="14" height="10" fill="#f6efd6"/>
+      <line x1="10" y1="15" x2="10" y2="22" stroke="#f6efd6" stroke-width="2"/>
+      <line x1="38" y1="15" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+      <line x1="10" y1="22" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+      <line x1="24" y1="22" x2="24" y2="32" stroke="#f6efd6" stroke-width="2"/>
+    </g>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════
+       6. STAMP — square ink badge, top-right, rotated +8°
+          (V5: 64px square with rounded corners, 36px yellow bracket)
+       ════════════════════════════════════════════════════════════ -->
+  <g id="stamp" transform="rotate(8 362 36)">
+    <rect x="330" y="4" width="64" height="64" rx="4" ry="4"
+          fill="#14181f" stroke="#14181f" stroke-width="3"/>
+    <!-- bracket icon, yellow-on-ink -->
+    <g transform="translate(344, 18) scale(0.75)">
+      <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+      <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+      <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+      <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+      <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+      <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+      <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+    </g>
+  </g>
+</svg>

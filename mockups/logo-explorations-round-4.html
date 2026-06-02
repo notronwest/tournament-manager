@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — round 4: friends-look + 10A studies</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Archivo+Black&family=Bowlby+One&family=Bungee&family=Russo+One&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+        --court-yellow: #f3d111;
+        --court-blue: #1e6cd6;
+        --court-red: #d8341c;
+        --court-green: #2c8a3d;
+        --court-cream: #f6efd6;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 56px 32px 96px;
+      }
+
+      header.intro { margin-bottom: 48px; }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", serif;
+        font-weight: 400;
+        font-size: 44px;
+        line-height: 1.05;
+        margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 720px;
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0 0 8px;
+      }
+      header.intro p strong { color: var(--ink); }
+      header.intro .links {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      header.intro .links a {
+        color: var(--court-blue);
+        text-decoration: none;
+        border-bottom: 1px solid currentColor;
+        margin-right: 18px;
+      }
+
+      .section {
+        margin-top: 56px;
+        padding-top: 32px;
+        border-top: 3px solid var(--ink);
+      }
+      .section .section-eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 8px;
+      }
+      .section h2 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .section .section-sub {
+        margin: 0 0 28px;
+        font-size: 14px;
+        color: var(--ink-soft);
+        max-width: 700px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .card .stage {
+        min-height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        position: relative;
+      }
+      .card .stage.dark { background: var(--ink); color: var(--bg); }
+      .card .stage.cream { background: var(--court-cream); }
+      .card .stage.yellow { background: var(--court-yellow); color: var(--ink); }
+      .card .stage.blue { background: var(--court-blue); color: var(--bg); }
+      .card footer {
+        padding: 16px 20px 18px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--court-red);
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .card footer h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         FRIENDS-LOOK shared building blocks
+         Dots between letters; rotating accent colors. Each variant
+         tweaks font, dot size, casing, monogram form, etc.
+         ─────────────────────────────────────────────────────────────── */
+
+      .fr-base {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.16em;
+      }
+      .fr-base .letter {
+        display: inline-block;
+      }
+      .fr-base .dot {
+        display: inline-block;
+        border-radius: 999px;
+        flex-shrink: 0;
+      }
+      .fr-base .amp {
+        display: inline-block;
+        margin: 0 0.16em;
+        font-weight: inherit;
+      }
+
+      /* Rotating dot palette */
+      .c-yellow { background: var(--court-yellow) !important; }
+      .c-blue { background: var(--court-blue) !important; }
+      .c-red { background: var(--court-red) !important; }
+      .c-green { background: var(--court-green) !important; }
+
+      /* F1 — pure Friends homage: bold caps, big multi-color dots between letters */
+      .logo-f1 {
+        font-family: "Archivo Black", "Inter", sans-serif;
+        font-size: 38px;
+        letter-spacing: -0.01em;
+        line-height: 0.95;
+        text-align: center;
+      }
+      .logo-f1 .fr-base { gap: 0.18em; }
+      .logo-f1 .dot { width: 14px; height: 14px; }
+      .logo-f1 .amp {
+        color: var(--court-red);
+        font-family: "Bowlby One", serif;
+        font-size: 1.05em;
+        margin: 0 0.18em;
+      }
+      .logo-f1 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        margin-top: 14px;
+        opacity: 0.85;
+      }
+      .stage.dark .logo-f1 .amp { color: var(--court-yellow); }
+
+      /* F2 — same idea but smaller dots, single accent color (yellow only) */
+      .logo-f2 {
+        font-family: "Archivo Black", "Inter", sans-serif;
+        font-size: 40px;
+        line-height: 0.95;
+        text-align: center;
+      }
+      .logo-f2 .fr-base { gap: 0.14em; }
+      .logo-f2 .dot { width: 9px; height: 9px; }
+      .logo-f2 .amp {
+        color: var(--court-red);
+        font-family: "Bowlby One", serif;
+        font-size: 1em;
+      }
+      .logo-f2 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        margin-top: 14px;
+        opacity: 0.85;
+      }
+      .stage.dark .logo-f2 .amp { color: var(--court-yellow); }
+
+      /* F3 — monogram only: B • & • E with big dots, embeddable */
+      .logo-f3 {
+        font-family: "Archivo Black", sans-serif;
+        font-size: 88px;
+        line-height: 0.9;
+        letter-spacing: -0.04em;
+        text-align: center;
+      }
+      .logo-f3 .fr-base { gap: 0.12em; }
+      .logo-f3 .dot { width: 22px; height: 22px; }
+      .logo-f3 .amp {
+        color: var(--court-red);
+        font-family: "Bowlby One", serif;
+        font-size: 0.85em;
+        margin: 0 0.12em;
+      }
+      .logo-f3 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        margin-top: 16px;
+        opacity: 0.85;
+      }
+      .stage.dark .logo-f3 .amp { color: var(--court-yellow); }
+
+      /* F4 — split palette: BERT dots in blue, ERNE dots in red */
+      .logo-f4 {
+        font-family: "Archivo Black", sans-serif;
+        font-size: 36px;
+        line-height: 0.95;
+        text-align: center;
+      }
+      .logo-f4 .fr-base { gap: 0.16em; }
+      .logo-f4 .dot { width: 12px; height: 12px; }
+      .logo-f4 .amp {
+        color: var(--ink);
+        font-family: "Bowlby One", serif;
+        opacity: 0.45;
+        font-size: 1.05em;
+        margin: 0 0.18em;
+      }
+      .logo-f4 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        margin-top: 14px;
+        opacity: 0.85;
+      }
+      .stage.dark .logo-f4 .amp { color: var(--bg); opacity: 0.55; }
+
+      /* F5 — lowercase variant of the dot-separated wordmark */
+      .logo-f5 {
+        font-family: "Archivo Black", sans-serif;
+        font-size: 38px;
+        line-height: 0.95;
+        text-align: center;
+        text-transform: lowercase;
+      }
+      .logo-f5 .fr-base { gap: 0.14em; }
+      .logo-f5 .dot { width: 11px; height: 11px; }
+      .logo-f5 .amp {
+        color: var(--court-red);
+        font-family: "Bowlby One", serif;
+        font-size: 1em;
+        text-transform: lowercase;
+      }
+      .logo-f5 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        margin-top: 14px;
+        opacity: 0.85;
+        text-transform: uppercase;
+      }
+      .stage.dark .logo-f5 .amp { color: var(--court-yellow); }
+
+      /* ───────────────────────────────────────────────────────────────
+         10A LETTERPRESS BLOCK — five takes
+         All keep the fat-slab + tagline anatomy from 10A; vary
+         color, layout, and decoration.
+         ─────────────────────────────────────────────────────────────── */
+
+      .lp-base {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: -0.01em;
+      }
+
+      /* 10A-1 — Original refined: yellow block, black knockout rule */
+      .logo-10a1 {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 14px 26px;
+        background: var(--court-yellow);
+        color: var(--ink);
+        border: 5px solid var(--ink);
+      }
+      .logo-10a1 .top { font-size: 36px; letter-spacing: -0.01em; }
+      .logo-10a1 .rule { height: 4px; background: var(--ink); margin: 10px auto; }
+      .logo-10a1 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+      }
+
+      /* 10A-2 — Striped: alternating yellow/cream stripes for the background */
+      .logo-10a2 {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 14px 26px;
+        background:
+          repeating-linear-gradient(
+            45deg,
+            var(--court-yellow) 0 16px,
+            #fff0a0 16px 32px
+          );
+        color: var(--ink);
+        border: 5px solid var(--ink);
+      }
+      .logo-10a2 .top {
+        font-size: 36px;
+        background: var(--court-yellow);
+        padding: 4px 12px;
+        display: inline-block;
+        border: 3px solid var(--ink);
+      }
+      .logo-10a2 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        background: var(--court-yellow);
+        padding: 4px 12px;
+        display: inline-block;
+        margin-top: 10px;
+        border: 2px solid var(--ink);
+      }
+
+      /* 10A-3 — Multi-color blocks: each word in its own colored block */
+      .logo-10a3 {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        display: inline-block;
+      }
+      .logo-10a3 .row {
+        display: flex;
+        align-items: stretch;
+        border: 4px solid var(--ink);
+        margin-bottom: 6px;
+      }
+      .logo-10a3 .row .block {
+        padding: 10px 18px;
+        font-size: 32px;
+        letter-spacing: -0.01em;
+      }
+      .logo-10a3 .row .block + .block { border-left: 4px solid var(--ink); }
+      .logo-10a3 .row .yellow { background: var(--court-yellow); color: var(--ink); }
+      .logo-10a3 .row .red { background: var(--court-red); color: var(--bg); }
+      .logo-10a3 .row .blue { background: var(--court-blue); color: var(--bg); }
+      .logo-10a3 .tag-row {
+        background: var(--ink);
+        color: var(--bg);
+        padding: 6px 14px;
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        text-align: center;
+      }
+
+      /* 10A-4 — Vertical letterpress strip: tall narrow block */
+      .logo-10a4 {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.95;
+        text-align: center;
+        text-transform: uppercase;
+        background: var(--court-yellow);
+        color: var(--ink);
+        border: 5px solid var(--ink);
+        padding: 16px 20px;
+        display: inline-block;
+        max-width: 180px;
+      }
+      .logo-10a4 .row1 { font-size: 30px; letter-spacing: 0.02em; }
+      .logo-10a4 .amp {
+        font-size: 36px;
+        color: var(--court-red);
+        line-height: 0.95;
+        margin: 4px 0;
+      }
+      .logo-10a4 .row2 { font-size: 30px; letter-spacing: 0.02em; }
+      .logo-10a4 .rule {
+        height: 4px;
+        background: var(--ink);
+        margin: 10px auto 8px;
+        width: 80%;
+      }
+      .logo-10a4 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 9px;
+        letter-spacing: 0.22em;
+        line-height: 1.3;
+      }
+
+      /* 10A-5 — With EST badge corner ribbon */
+      .logo-10a5 {
+        position: relative;
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 16px 26px;
+        background: var(--court-yellow);
+        color: var(--ink);
+        border: 5px solid var(--ink);
+        display: inline-block;
+      }
+      .logo-10a5 .top { font-size: 36px; letter-spacing: -0.01em; }
+      .logo-10a5 .rule { height: 4px; background: var(--ink); margin: 10px auto; }
+      .logo-10a5 .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+      }
+      .logo-10a5 .est {
+        position: absolute;
+        top: -16px;
+        right: -16px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: var(--court-red);
+        color: var(--bg);
+        font-family: "Anton", sans-serif;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        text-transform: uppercase;
+        border: 3px solid var(--ink);
+        transform: rotate(8deg);
+      }
+      .logo-10a5 .est .yr {
+        font-size: 14px;
+        margin-top: 2px;
+        letter-spacing: 0.04em;
+      }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { min-height: 180px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 4 — friends-look + 10A studies</div>
+        <h1>five takes on dotted, five on letterpress</h1>
+        <p>
+          Five variations on the <strong>F·R·I·E·N·D·S</strong>-style
+          dotted-letter wordmark (the colored dots between each
+          letter), plus five takes on the <strong>10A letterpress
+          block</strong>. Tagline updated everywhere to
+          <strong>Pickleball Tournament Management</strong>.
+        </p>
+        <div class="links">
+          <a href="logo-explorations.html">round 1</a>
+          <a href="logo-explorations-round-2.html">round 2</a>
+          <a href="logo-explorations-round-3.html">round 3</a>
+        </div>
+      </header>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FRIENDS-LOOK — 5 variants
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">Friends-look</div>
+        <h2>Dotted-letter wordmark — five variants</h2>
+        <p class="section-sub">
+          Five takes on the dot-separator pattern. Vary font, dot
+          size, casing, color rules, and whether the whole name or
+          just the monogram carries it.
+        </p>
+
+        <div class="grid">
+
+          <!-- F1 — pure homage, big multi-color dots -->
+          <article class="card">
+            <div class="stage">
+              <div class="logo-f1">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">E</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">T</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">E</span>
+                  <span class="dot c-green"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">N</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-f1">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">E</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">T</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">E</span>
+                  <span class="dot c-green"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">N</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">F1 — pure Friends homage</div>
+              <h3>Big multi-color dots between every letter</h3>
+              <p>
+                The direct riff. Each gap carries a different
+                court-colored dot, rotating through yellow / blue /
+                red / green. Loud, recognizable, sing-songy.
+              </p>
+            </footer>
+          </article>
+
+          <!-- F2 — same idea, dialed down -->
+          <article class="card">
+            <div class="stage">
+              <div class="logo-f2">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">E</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">T</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">E</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">N</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-f2">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">E</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">T</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">E</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">N</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">F2 — single-accent</div>
+              <h3>Smaller dots, one color only</h3>
+              <p>
+                Same skeleton, calmer voice. Single accent color
+                (court-red on light, court-yellow on dark). Less
+                circus, more wordmark. Easier on a navbar.
+              </p>
+            </footer>
+          </article>
+
+          <!-- F3 — monogram only B • & • E -->
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-f3">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="amp">&amp;</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-f3">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="amp">&amp;</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">F3 — B · &amp; · E monogram</div>
+              <h3>Big monogram with two oversized dots</h3>
+              <p>
+                Same rhythm, three glyphs. Favicon-ready, embroiderable
+                on a polo, stencil on a t-shirt back. The dots are
+                load-bearing — they're the recognition.
+              </p>
+            </footer>
+          </article>
+
+          <!-- F4 — split palette: blue dots for BERT, red dots for ERNE -->
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-f4">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">E</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">T</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">E</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">N</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-f4">
+                <span class="fr-base">
+                  <span class="letter">B</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">E</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">T</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">E</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">R</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">N</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">E</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">F4 — split palette</div>
+              <h3>Blue dots for BERT, red (or yellow) for ERNE</h3>
+              <p>
+                Two players, two colors — doubles-team metaphor baked
+                in. The muted ampersand sits between them as the net.
+                Subtler than F1, more meaning than F2.
+              </p>
+            </footer>
+          </article>
+
+          <!-- F5 — lowercase variant -->
+          <article class="card">
+            <div class="stage">
+              <div class="logo-f5">
+                <span class="fr-base">
+                  <span class="letter">b</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">e</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">r</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">t</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">e</span>
+                  <span class="dot c-green"></span>
+                  <span class="letter">r</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">n</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">e</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-f5">
+                <span class="fr-base">
+                  <span class="letter">b</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">e</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">r</span>
+                  <span class="dot c-red"></span>
+                  <span class="letter">t</span>
+                  <span class="amp">&amp;</span>
+                  <span class="letter">e</span>
+                  <span class="dot c-green"></span>
+                  <span class="letter">r</span>
+                  <span class="dot c-yellow"></span>
+                  <span class="letter">n</span>
+                  <span class="dot c-blue"></span>
+                  <span class="letter">e</span>
+                </span>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">F5 — lowercase</div>
+              <h3>Same rhythm, lowercase letters</h3>
+              <p>
+                Friendlier, more modern. Lowercase pulls the temperature
+                down a notch — less broadcast-TV, more software-brand.
+                Same dot rhythm carries the joke.
+              </p>
+            </footer>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           10A LETTERPRESS — 5 takes
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">10A letterpress block</div>
+        <h2>Letterpress block — five takes</h2>
+        <p class="section-sub">
+          The fat-slab + tagline anatomy from 10A, varied across
+          color, layout, and decoration. Each keeps the
+          1930s-sport-poster bones; the differences are in what color
+          carries it, whether the words live in one or multiple
+          blocks, and how the EST / tagline behaves.
+        </p>
+
+        <div class="grid">
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-10a1">
+                <div class="top">BERT&amp;ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-10a1">
+                <div class="top">BERT&amp;ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10A·1 — Original refined</div>
+              <h3>Yellow block, knockout rule, tighter type</h3>
+              <p>
+                Original 10A with tightened proportions. The full
+                tagline "PICKLEBALL TOURNAMENT MGMT" abbreviates to
+                fit — keeps the block square.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-10a2">
+                <div class="top">BERT&amp;ERNE</div>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-10a2">
+                <div class="top">BERT&amp;ERNE</div>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10A·2 — Striped backdrop</div>
+              <h3>Diagonal-striped field behind the wordmark</h3>
+              <p>
+                Background carries diagonal yellow stripes — caution-
+                tape / starting-block energy. Wordmark + tag sit in
+                solid yellow inset boxes for legibility.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-10a3">
+                <div class="row">
+                  <span class="block yellow">BERT</span>
+                  <span class="block red">&amp;</span>
+                  <span class="block blue">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-10a3">
+                <div class="row">
+                  <span class="block yellow">BERT</span>
+                  <span class="block red">&amp;</span>
+                  <span class="block blue">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10A·3 — Three-block color split</div>
+              <h3>Each word in its own colored block</h3>
+              <p>
+                BERT in yellow, &amp; in red, ERNE in blue — three hard
+                color cells. The doubles-team metaphor (two players,
+                joined by the &amp;) reads instantly. Full tagline fits
+                across the bottom strip.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-10a4">
+                <div class="row1">BERT</div>
+                <div class="amp">&amp;</div>
+                <div class="row2">ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-10a4">
+                <div class="row1">BERT</div>
+                <div class="amp">&amp;</div>
+                <div class="row2">ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10A·4 — Tall stacked block</div>
+              <h3>Vertical letterpress strip, three rows</h3>
+              <p>
+                BERT / &amp; / ERNE stacked on three rows. The
+                ampersand sized up as the visual anchor in the middle.
+                Fits a square avatar slot, an app icon, embroidered
+                chest patch.
+              </p>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="logo-10a5">
+                <div class="top">BERT&amp;ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+                <div class="est">EST<span class="yr">'26</span></div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="logo-10a5">
+                <div class="top">BERT&amp;ERNE</div>
+                <div class="rule"></div>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+                <div class="est">EST<span class="yr">'26</span></div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">10A·5 — With EST badge</div>
+              <h3>Original block + corner EST stamp</h3>
+              <p>
+                Original 10A with a "EST '26" red disc rotated into
+                the top-right corner. Slight cheekiness, more
+                heritage-feel. The badge breaks the rectangle so the
+                composition stops being too tidy.
+              </p>
+            </footer>
+          </article>
+
+        </div>
+      </section>
+
+    </div>
+  </body>
+</html>

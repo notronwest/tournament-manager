@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — round 5: color studies for 10A·2 and 10A·3</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Bowlby+One&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+        --court-yellow: #f3d111;
+        --court-yellow-soft: #fff0a0;
+        --court-blue: #1e6cd6;
+        --court-blue-soft: #c7dafc;
+        --court-red: #d8341c;
+        --court-red-soft: #f4c5be;
+        --court-green: #2c8a3d;
+        --court-green-soft: #b9d9be;
+        --court-cream: #f6efd6;
+        --court-navy: #0f1e3a;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 56px 32px 96px;
+      }
+
+      header.intro { margin-bottom: 48px; }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", serif;
+        font-weight: 400;
+        font-size: 44px;
+        line-height: 1.05;
+        margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 720px;
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0 0 8px;
+      }
+      header.intro p strong { color: var(--ink); }
+      header.intro .links {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      header.intro .links a {
+        color: var(--court-blue);
+        text-decoration: none;
+        border-bottom: 1px solid currentColor;
+        margin-right: 18px;
+      }
+
+      .section {
+        margin-top: 56px;
+        padding-top: 32px;
+        border-top: 3px solid var(--ink);
+      }
+      .section .section-eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-red);
+        margin-bottom: 8px;
+      }
+      .section h2 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .section .section-sub {
+        margin: 0 0 28px;
+        font-size: 14px;
+        color: var(--ink-soft);
+        max-width: 700px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .card .stage {
+        min-height: 220px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        position: relative;
+      }
+      .card .stage.dark { background: var(--ink); color: var(--bg); }
+      .card .stage.cream { background: var(--court-cream); }
+      .card .stage.bg { background: var(--bg); }
+      .card footer {
+        padding: 16px 20px 18px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--court-red);
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .card footer h3 {
+        margin: 0 0 4px;
+        font-size: 14px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+      }
+      .card footer .swatches {
+        margin-top: 8px;
+        display: flex;
+        gap: 4px;
+      }
+      .card footer .swatches span {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         10A·2 — STRIPED BACKDROP (shared base)
+         ─────────────────────────────────────────────────────────────── */
+
+      .striped-base {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        padding: 18px 26px;
+        border: 5px solid var(--ink);
+      }
+      .striped-base .top {
+        font-size: 36px;
+        padding: 4px 14px;
+        display: inline-block;
+        border: 3px solid var(--ink);
+      }
+      .striped-base .tag {
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        padding: 4px 12px;
+        display: inline-block;
+        margin-top: 10px;
+        border: 2px solid var(--ink);
+      }
+
+      /* S1 — Court-yellow stripes (refined original) */
+      .logo-s1 {
+        background: repeating-linear-gradient(
+          45deg,
+          var(--court-yellow) 0 16px,
+          var(--court-yellow-soft) 16px 32px
+        );
+      }
+      .logo-s1 .top, .logo-s1 .tag {
+        background: var(--court-yellow);
+      }
+
+      /* S2 — Court-blue stripes */
+      .logo-s2 {
+        background: repeating-linear-gradient(
+          45deg,
+          var(--court-blue) 0 16px,
+          var(--court-blue-soft) 16px 32px
+        );
+      }
+      .logo-s2 .top, .logo-s2 .tag {
+        background: var(--court-blue-soft);
+        color: var(--ink);
+      }
+
+      /* S3 — Court-red stripes */
+      .logo-s3 {
+        background: repeating-linear-gradient(
+          45deg,
+          var(--court-red) 0 16px,
+          var(--court-red-soft) 16px 32px
+        );
+      }
+      .logo-s3 .top, .logo-s3 .tag {
+        background: var(--court-red-soft);
+        color: var(--ink);
+      }
+
+      /* S4 — Black stripes on full yellow (inverted construction zone) */
+      .logo-s4 {
+        background: repeating-linear-gradient(
+          45deg,
+          var(--court-yellow) 0 14px,
+          var(--ink) 14px 22px
+        );
+      }
+      .logo-s4 .top {
+        background: var(--court-yellow);
+      }
+      .logo-s4 .tag {
+        background: var(--ink);
+        color: var(--court-yellow);
+        border-color: var(--court-yellow);
+      }
+
+      /* S5 — Multicolor festival stripes */
+      .logo-s5 {
+        background: repeating-linear-gradient(
+          45deg,
+          var(--court-yellow) 0 14px,
+          var(--court-red) 14px 28px,
+          var(--court-blue) 28px 42px
+        );
+      }
+      .logo-s5 .top {
+        background: var(--bg);
+      }
+      .logo-s5 .tag {
+        background: var(--ink);
+        color: var(--bg);
+        border-color: var(--bg);
+      }
+
+      /* ───────────────────────────────────────────────────────────────
+         10A·3 — THREE-BLOCK COLOR SPLIT (shared base)
+         ─────────────────────────────────────────────────────────────── */
+
+      .blocks-base {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        display: inline-block;
+      }
+      .blocks-base .row {
+        display: flex;
+        align-items: stretch;
+        border: 4px solid var(--ink);
+        margin-bottom: 6px;
+      }
+      .blocks-base .row .block {
+        padding: 10px 18px;
+        font-size: 32px;
+        letter-spacing: -0.01em;
+      }
+      .blocks-base .row .block + .block {
+        border-left: 4px solid var(--ink);
+      }
+      .blocks-base .tag-row {
+        padding: 6px 14px;
+        font-family: "Anton", sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        text-align: center;
+        border: 4px solid var(--ink);
+        border-top: 0;
+      }
+
+      /* Per-variant colors */
+      .logo-b1 .yellow { background: var(--court-yellow); color: var(--ink); }
+      .logo-b1 .red    { background: var(--court-red);    color: var(--bg); }
+      .logo-b1 .blue   { background: var(--court-blue);   color: var(--bg); }
+      .logo-b1 .tag-row { background: var(--ink); color: var(--bg); }
+
+      .logo-b2 .blue    { background: var(--court-blue);   color: var(--bg); }
+      .logo-b2 .yellow  { background: var(--court-yellow); color: var(--ink); }
+      .logo-b2 .red     { background: var(--court-red);    color: var(--bg); }
+      .logo-b2 .tag-row { background: var(--ink); color: var(--bg); }
+
+      .logo-b3 .cream   { background: var(--court-cream); color: var(--ink); }
+      .logo-b3 .red     { background: var(--court-red);   color: var(--bg); }
+      .logo-b3 .black   { background: var(--ink);         color: var(--court-yellow); }
+      .logo-b3 .tag-row { background: var(--court-red); color: var(--bg); border-color: var(--ink); }
+
+      .logo-b4 .black1  { background: var(--ink);          color: var(--court-yellow); }
+      .logo-b4 .yellow  { background: var(--court-yellow); color: var(--ink); }
+      .logo-b4 .black2  { background: var(--ink);          color: var(--court-yellow); }
+      .logo-b4 .tag-row { background: var(--court-yellow); color: var(--ink); }
+
+      .logo-b5 .green   { background: var(--court-green); color: var(--bg); }
+      .logo-b5 .cream   { background: var(--court-cream); color: var(--ink); }
+      .logo-b5 .blue    { background: var(--court-blue);  color: var(--bg); }
+      .logo-b5 .tag-row { background: var(--ink); color: var(--court-yellow); }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { min-height: 180px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 5 — color studies</div>
+        <h1>10A·2 and 10A·3, five color takes each</h1>
+        <p>
+          Two finalists from round 4: the <strong>diagonal-striped
+          backdrop</strong> and the <strong>three-block color
+          split</strong>. Same compositions; five color directions
+          apiece. Goal here is to nail down the palette — which
+          color carries the brand, which is an accent, what reads on
+          cream vs ink vs in-context.
+        </p>
+        <div class="links">
+          <a href="logo-explorations-round-4.html">← round 4</a>
+        </div>
+      </header>
+
+      <!-- ════════════════════════════════════════════════════════════
+           10A·2 — striped backdrop, five takes
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">10A·2 — striped backdrop</div>
+        <h2>Diagonal stripes — five colors</h2>
+        <p class="section-sub">
+          Same anatomy: striped field, wordmark in a hard-bordered inset
+          block, tagline in a smaller inset below. Color carries
+          everything.
+        </p>
+
+        <div class="grid">
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="striped-base logo-s1">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="striped-base logo-s1">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">S1 — Court yellow</div>
+              <h3>The original, refined</h3>
+              <p>Pickleball-ball yellow stripes on soft yellow. Loud and unmistakably a sport mark.</p>
+              <div class="swatches">
+                <span style="background: var(--court-yellow)"></span>
+                <span style="background: var(--court-yellow-soft)"></span>
+                <span style="background: var(--ink)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="striped-base logo-s2">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="striped-base logo-s2">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">S2 — Court blue</div>
+              <h3>Officials, scoreboards, draw sheets</h3>
+              <p>Electric court-blue stripes — feels like governing-body / officiating signage. Cooler tone, more "tournament-ops" than "rec-day."</p>
+              <div class="swatches">
+                <span style="background: var(--court-blue)"></span>
+                <span style="background: var(--court-blue-soft)"></span>
+                <span style="background: var(--ink)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="striped-base logo-s3">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="striped-base logo-s3">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">S3 — Court red</div>
+              <h3>Warm league energy</h3>
+              <p>League-jersey red stripes. Warmer than blue, more vibey than yellow. Reads "competitive, but a beer after."</p>
+              <div class="swatches">
+                <span style="background: var(--court-red)"></span>
+                <span style="background: var(--court-red-soft)"></span>
+                <span style="background: var(--ink)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="striped-base logo-s4">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="striped-base logo-s4">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">S4 — Caution tape</div>
+              <h3>Black-on-yellow construction-zone</h3>
+              <p>Inverted: black diagonal stripes through full court-yellow. Construction / hazard tape vibe. High visibility, hard to ignore — but maybe too aggressive for a software brand.</p>
+              <div class="swatches">
+                <span style="background: var(--court-yellow)"></span>
+                <span style="background: var(--ink)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="striped-base logo-s5">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="striped-base logo-s5">
+                <div class="top">BERT&amp;ERNE</div><br/>
+                <div class="tag">PICKLEBALL TOURNAMENT MGMT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">S5 — Festival</div>
+              <h3>Three-color rotating stripes</h3>
+              <p>Yellow / red / blue rotating diagonals. Loudest of the set — reads like a tournament-day banner string. Probably too much for everyday use; could be a one-off "tournament weekend" variant.</p>
+              <div class="swatches">
+                <span style="background: var(--court-yellow)"></span>
+                <span style="background: var(--court-red)"></span>
+                <span style="background: var(--court-blue)"></span>
+              </div>
+            </footer>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           10A·3 — three-block color split, five takes
+           ════════════════════════════════════════════════════════════ -->
+      <section class="section">
+        <div class="section-eyebrow">10A·3 — three-block split</div>
+        <h2>Three colored blocks — five palettes</h2>
+        <p class="section-sub">
+          Same anatomy: BERT / &amp; / ERNE in three hard-bordered
+          blocks with the tagline strip beneath. Five palettes that
+          tell different stories about the brand.
+        </p>
+
+        <div class="grid">
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="blocks-base logo-b1">
+                <div class="row">
+                  <span class="block yellow">BERT</span>
+                  <span class="block red">&amp;</span>
+                  <span class="block blue">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="blocks-base logo-b1">
+                <div class="row">
+                  <span class="block yellow">BERT</span>
+                  <span class="block red">&amp;</span>
+                  <span class="block blue">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">B1 — Court trio (original)</div>
+              <h3>Yellow / Red / Blue</h3>
+              <p>The three court colors at full saturation. Bert and Erne sit on opposite sides; the red ampersand is the net between them.</p>
+              <div class="swatches">
+                <span style="background: var(--court-yellow)"></span>
+                <span style="background: var(--court-red)"></span>
+                <span style="background: var(--court-blue)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="blocks-base logo-b2">
+                <div class="row">
+                  <span class="block blue">BERT</span>
+                  <span class="block yellow">&amp;</span>
+                  <span class="block red">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="blocks-base logo-b2">
+                <div class="row">
+                  <span class="block blue">BERT</span>
+                  <span class="block yellow">&amp;</span>
+                  <span class="block red">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">B2 — Yellow-pivot</div>
+              <h3>Blue / Yellow / Red</h3>
+              <p>Yellow in the middle, the pickleball-ball at the center of the lockup. Blue + red on the wings — same court palette, different rhythm.</p>
+              <div class="swatches">
+                <span style="background: var(--court-blue)"></span>
+                <span style="background: var(--court-yellow)"></span>
+                <span style="background: var(--court-red)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="blocks-base logo-b3">
+                <div class="row">
+                  <span class="block cream">BERT</span>
+                  <span class="block red">&amp;</span>
+                  <span class="block black">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="blocks-base logo-b3">
+                <div class="row">
+                  <span class="block cream">BERT</span>
+                  <span class="block red">&amp;</span>
+                  <span class="block black">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">B3 — Vintage diner</div>
+              <h3>Cream / Red / Black</h3>
+              <p>Old-school sport-shop palette. Less circus, more "established 1953." The yellow ampersand inside the black block adds a quiet pickleball wink.</p>
+              <div class="swatches">
+                <span style="background: var(--court-cream)"></span>
+                <span style="background: var(--court-red)"></span>
+                <span style="background: var(--ink)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="blocks-base logo-b4">
+                <div class="row">
+                  <span class="block black1">BERT</span>
+                  <span class="block yellow">&amp;</span>
+                  <span class="block black2">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="blocks-base logo-b4">
+                <div class="row">
+                  <span class="block black1">BERT</span>
+                  <span class="block yellow">&amp;</span>
+                  <span class="block black2">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">B4 — Sandwich</div>
+              <h3>Black / Yellow / Black</h3>
+              <p>Matched-bookend palette: black, court-yellow, black. The most modern / restrained of the five — yellow ampersand pops as the only color. Reads "software brand that happens to do sports."</p>
+              <div class="swatches">
+                <span style="background: var(--ink)"></span>
+                <span style="background: var(--court-yellow)"></span>
+                <span style="background: var(--ink)"></span>
+              </div>
+            </footer>
+          </article>
+
+          <article class="card">
+            <div class="stage cream">
+              <div class="blocks-base logo-b5">
+                <div class="row">
+                  <span class="block green">BERT</span>
+                  <span class="block cream">&amp;</span>
+                  <span class="block blue">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <div class="stage dark">
+              <div class="blocks-base logo-b5">
+                <div class="row">
+                  <span class="block green">BERT</span>
+                  <span class="block cream">&amp;</span>
+                  <span class="block blue">ERNE</span>
+                </div>
+                <div class="tag-row">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              </div>
+            </div>
+            <footer>
+              <div class="label">B5 — Outdoor courts</div>
+              <h3>Green / Cream / Blue</h3>
+              <p>Turf green and court blue with cream in the middle. Reads "outdoor weekend tournament" rather than indoor league — softer, more daytime. Risk: drops the warmth that yellow/red bring.</p>
+              <div class="swatches">
+                <span style="background: var(--court-green)"></span>
+                <span style="background: var(--court-cream)"></span>
+                <span style="background: var(--court-blue)"></span>
+              </div>
+            </footer>
+          </article>
+
+        </div>
+      </section>
+
+    </div>
+  </body>
+</html>

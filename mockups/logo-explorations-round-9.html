@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — round 9: stamp + bookends</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=Bowlby+One&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+        --court-green: #2c8a3d;
+        --court-blue: #1e6cd6;
+        --court-yellow: #f3d111;
+        --court-red: #d8341c;
+        --court-cream: #f6efd6;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page { max-width: 1280px; margin: 0 auto; padding: 56px 32px 96px; }
+
+      header.intro { margin-bottom: 48px; }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.18em;
+        color: var(--court-red); margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", serif;
+        font-weight: 400; font-size: 40px;
+        line-height: 1.05; margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 720px; font-size: 15px;
+        color: var(--ink-soft); margin: 0 0 8px;
+      }
+      header.intro p strong { color: var(--ink); }
+      header.intro .links { margin-top: 14px; font-size: 13px; color: var(--ink-soft); }
+      header.intro .links a {
+        color: var(--court-blue); text-decoration: none;
+        border-bottom: 1px solid currentColor; margin-right: 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper); border: 1px solid var(--rule);
+        border-radius: 14px; overflow: hidden;
+        display: flex; flex-direction: column;
+      }
+      .card .stage {
+        min-height: 280px; display: flex;
+        align-items: center; justify-content: center;
+        padding: 40px 32px; position: relative;
+      }
+      .card .stage.dark { background: var(--ink); color: var(--bg); }
+      .card .stage.cream { background: var(--court-cream); }
+      .card footer {
+        padding: 16px 20px 18px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+        color: var(--court-red); font-weight: 700; margin-bottom: 4px;
+      }
+      .card footer h3 {
+        margin: 0 0 4px; font-size: 14px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700; letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0; font-size: 12px;
+        color: var(--ink-soft); line-height: 1.5;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         LOCKUP — shared anatomy (simplified court: no centerlines)
+         ═══════════════════════════════════════════════════════════════ */
+
+      .lockup {
+        font-family: "Alfa Slab One", serif;
+        line-height: 0.92;
+        text-align: center;
+        text-transform: uppercase;
+        display: inline-block;
+        position: relative;
+      }
+      .lockup .row {
+        display: flex;
+        align-items: stretch;
+        border: 4px solid var(--ink);
+        height: 100px;
+      }
+      .lockup .row .block {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .lockup .row .block + .block { border-left: 4px solid var(--ink); }
+
+      .lockup .side {
+        width: 140px;
+        background: var(--court-green);
+      }
+
+      /* Middle = continuous kitchen yellow, with a thin net line. */
+      .lockup .net {
+        width: 70px;
+        background: var(--court-yellow);
+        position: relative;
+      }
+      .lockup .net::before {
+        content: "";
+        position: absolute;
+        top: 0; bottom: 0;
+        left: 50%;
+        width: 2px;
+        background: var(--ink);
+        transform: translateX(-50%);
+      }
+      .lockup .net .amp {
+        position: relative;
+        z-index: 2;
+        font-size: 44px;
+        color: var(--ink);
+        background: var(--court-yellow);
+        padding: 0 6px;
+        line-height: 1;
+      }
+
+      .lockup .court-svg {
+        position: absolute;
+        inset: 0;
+        width: 100%; height: 100%;
+      }
+      .lockup .word {
+        position: relative;
+        z-index: 2;
+        font-size: 32px;
+        color: var(--ink);
+        -webkit-text-stroke: 4px var(--court-cream);
+        paint-order: stroke fill;
+        letter-spacing: -0.01em;
+      }
+      /* Letters pushed to outer side so they sit on green, not yellow. */
+      .lockup .side.bert .word { margin-right: 38px; }
+      .lockup .side.erne .word { margin-left: 38px; }
+
+      .lockup .tag-row {
+        padding: 8px 14px;
+        font-family: "Anton", sans-serif;
+        font-size: 11px; letter-spacing: 0.32em;
+        text-transform: uppercase; text-align: center;
+        border: 4px solid var(--ink); border-top: 0;
+        background: var(--ink); color: var(--bg);
+        display: flex; align-items: center; justify-content: center;
+        gap: 14px;
+      }
+      .lockup .tag-row.tag-cream {
+        background: var(--court-cream); color: var(--ink);
+      }
+      .lockup .tag-row.tag-yellow {
+        background: var(--court-yellow); color: var(--ink);
+      }
+      .lockup .tag-row .br-mini {
+        height: 16px; flex: none;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         STAMP positions (all kept clear of BERT / ERNE words)
+         ═══════════════════════════════════════════════════════════════ */
+
+      /* Disc stamps — circular, like a wax seal */
+      .stamp {
+        position: absolute;
+        width: 64px; height: 64px;
+        border: 3px solid var(--ink);
+        display: flex; align-items: center; justify-content: center;
+        z-index: 3;
+      }
+      .stamp.disc { border-radius: 50%; }
+      .stamp.square { border-radius: 4px; }
+      .stamp.tr { top: -18px; right: -18px; transform: rotate(8deg); }
+      .stamp.tl { top: -18px; left: -18px; transform: rotate(-8deg); }
+      .stamp.red { background: var(--court-red); }
+      .stamp.yellow { background: var(--court-yellow); }
+      .stamp.cream { background: var(--court-cream); }
+      .stamp.ink { background: var(--ink); }
+      .stamp.lg { width: 78px; height: 78px; }
+      .stamp.sm { width: 52px; height: 52px; }
+
+      /* Banner — rectangular hanging from top */
+      .banner {
+        position: absolute;
+        top: -22px; right: 30px;
+        background: var(--court-red);
+        border: 3px solid var(--ink);
+        padding: 6px 14px;
+        z-index: 3;
+        display: flex; align-items: center; gap: 8px;
+        clip-path: polygon(
+          0 0, 100% 0, 100% 100%,
+          88% 78%, 50% 100%, 12% 78%, 0 100%
+        );
+        padding-bottom: 14px;
+      }
+
+      /* "EST 2026" micro-text inside stamps */
+      .stamp .est {
+        position: absolute;
+        bottom: 6px;
+        font-family: "Anton", sans-serif;
+        font-size: 7px;
+        letter-spacing: 0.2em;
+        color: var(--bg);
+      }
+      .stamp.yellow .est, .stamp.cream .est { color: var(--ink); }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { min-height: 220px; padding: 24px 16px; }
+        .lockup .side { width: 110px; }
+        .lockup .net { width: 56px; }
+        .lockup .row { height: 80px; }
+        .lockup .word { font-size: 26px; }
+        .lockup .net .amp { font-size: 36px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 9 — stamp + bookends</div>
+        <h1>10 takes on V1 × V4</h1>
+        <p>
+          You loved V1 (corner stamp) and V4 (bookend brackets in
+          tag row). Every variant below carries <strong>both</strong>
+          ideas — a stamp somewhere up top, and brackets flanking the
+          tagline. The variable is which stamp, what colour, and how
+          the bookends respond.
+        </p>
+        <p>
+          Court cleanup: <strong>centerlines removed</strong> — just
+          kitchen yellow + net + the black bones. No bracket sits on
+          a letter. The bookends stay inside the tag row; the stamps
+          hang off corners or the top edge.
+        </p>
+        <div class="links">
+          <a href="logo-explorations-round-8.html">← round 8</a>
+          <a href="logo-explorations-round-7.html">← round 7</a>
+        </div>
+      </header>
+
+      <div class="grid">
+
+        <!-- ════════════════════════════════════════════════════════
+             V1 — The baseline: V1 red stamp + V4 yellow bookends
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr red">
+                <svg viewBox="0 0 48 48" width="36" height="36">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V1 — Baseline marriage</div>
+            <h3>Red disc top-right + yellow bookends</h3>
+            <p>Straight crossbreed of round-8 V1 and V4. Red disc carries the icon; yellow bookends do the secondary punctuation in the tag row. Both pieces talk to each other through the warm/red contrast.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V2 — Both upper corners stamped + bookends
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tl sm red">
+                <svg viewBox="0 0 48 48" width="28" height="28">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr sm red">
+                <svg viewBox="0 0 48 48" width="28" height="28" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V2 — Twin corner stamps</div>
+            <h3>Mirrored red discs on both top corners</h3>
+            <p>Two smaller red discs hang off both top corners, mirroring each other. Combined with the tag-row bookends, the whole lockup is now flanked on four points — reads "tournament certificate."</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V3 — Yellow stamp + red bookends (color swap)
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#d8341c" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#d8341c" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#d8341c"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#d8341c" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#d8341c" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#d8341c" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#d8341c" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#d8341c" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#d8341c" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#d8341c"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#d8341c" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#d8341c" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#d8341c" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#d8341c" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr yellow">
+                <svg viewBox="0 0 48 48" width="36" height="36">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#14181f" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#14181f" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#d8341c" stroke="#14181f" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#14181f" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#14181f" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#14181f" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#14181f" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V3 — Color swap</div>
+            <h3>Yellow stamp on top, red bookends below</h3>
+            <p>Inverted from V1: the disc goes yellow (matches kitchen), the bookends go red (matches the disc-stroke energy). Brighter; the icon shifts from "official red stamp" to "warm sun badge."</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V4 — Large red stamp + larger bookends
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="20" height="20">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2.5"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2.5"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2.5"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2.5"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2.5"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2.5"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="20" height="20" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2.5"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2.5"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2.5"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2.5"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2.5"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2.5"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr lg red">
+                <svg viewBox="0 0 48 48" width="48" height="48">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V4 — Bolder, louder</div>
+            <h3>Larger red stamp + larger yellow bookends</h3>
+            <p>Same arrangement as V1 but both pieces sized up. The stamp commands more presence; the bookends become a clear flanking duo rather than punctuation. More confident, more "championship medal."</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V5 — Square ink stamp + cream bookends
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f6efd6"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f6efd6" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f6efd6" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f6efd6" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f6efd6"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f6efd6" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f6efd6" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f6efd6" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp square tr ink">
+                <svg viewBox="0 0 48 48" width="36" height="36">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V5 — Geometric and dark</div>
+            <h3>Square ink stamp + cream bookends</h3>
+            <p>The disc becomes a black square — sharper, more architectural. Tag-row bookends drop to cream so they don't compete. Reads like a press credential rather than a wax seal.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V6 — Cream stamp (subtle) + yellow bookends
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr cream">
+                <svg viewBox="0 0 48 48" width="36" height="36">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#14181f" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#14181f" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#14181f"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#14181f" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#14181f" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#14181f" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#14181f" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V6 — Quiet credential</div>
+            <h3>Cream disc + yellow bookends</h3>
+            <p>The disc disappears almost into the background; only the ink bracket icon reads. Quieter than V1 — the icon presents itself without shouting. Bookends carry the colour.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V7 — Red banner across the top + bookends
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="banner">
+                <svg viewBox="0 0 48 48" width="22" height="22">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2.5"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2.5"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2.5"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2.5"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2.5"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2.5"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2.5"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V7 — Banner instead of disc</div>
+            <h3>Red ribbon-banner + yellow bookends</h3>
+            <p>Same idea as V1 but the disc becomes a small red banner with notched bottom, hanging off the top edge. More "tournament banner" / award ribbon. Bookends still anchor the tagline.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V8 — V1 stamp with EST 2026 text + bookends
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr lg red">
+                <svg viewBox="0 0 48 48" width="36" height="36" style="margin-top: -6px;">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2"/>
+                </svg>
+                <span class="est">EST 2026</span>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V8 — With EST date</div>
+            <h3>Large red disc with "EST 2026" + yellow bookends</h3>
+            <p>Bigger stamp gives room for an "EST 2026" tag along the bottom curve — adds founders-mark provenance. Says "this is a real thing" without saying it. Bookends keep the V4 anchor at the bottom.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V9 — V1 + V4 bookends pointing INWARD (champions in middle)
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="16" height="16" style="transform: rotate(180deg);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="16" height="16" style="transform: rotate(180deg) scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr red">
+                <svg viewBox="0 0 48 48" width="36" height="36">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V9 — Bookends flipped</div>
+            <h3>Bookend champions pointing inward at the tagline</h3>
+            <p>Same V1 stamp, but the bookends are flipped 180° so the champion box (yellow rect) sits at the top, with seeds funneling inward toward the tagline — like the tagline is the "winner" of the bracket. Subtle but conceptually fun.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V10 — Dark stage version (how it looks on ink background)
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage dark">
+            <div class="lockup">
+              <div class="row">
+                <div class="block side bert">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="100" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="100" y1="0" x2="100" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">BERT</span>
+                </div>
+                <div class="block net"><span class="amp">&amp;</span></div>
+                <div class="block side erne">
+                  <svg class="court-svg" viewBox="0 0 140 100" preserveAspectRatio="none">
+                    <rect x="0" y="0" width="40" height="100" fill="#f3d111"/>
+                    <line x1="40" y1="0" x2="40" y2="100" stroke="#fff" stroke-width="3"/>
+                  </svg>
+                  <span class="word">ERNE</span>
+                </div>
+              </div>
+              <div class="tag-row">
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+                PICKLEBALL TOURNAMENT MANAGEMENT
+                <svg class="br-mini" viewBox="0 0 48 48" width="14" height="14" style="transform: scaleX(-1);">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#f3d111" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#f3d111" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#f3d111" stroke-width="2"/>
+                </svg>
+              </div>
+              <div class="stamp disc tr red">
+                <svg viewBox="0 0 48 48" width="36" height="36">
+                  <rect x="3" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="31" y="6" width="14" height="9" fill="none" stroke="#fafaf7" stroke-width="2"/>
+                  <rect x="17" y="32" width="14" height="10" fill="#f3d111" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="15" x2="10" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="38" y1="15" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="10" y1="22" x2="38" y2="22" stroke="#fafaf7" stroke-width="2"/>
+                  <line x1="24" y1="22" x2="24" y2="32" stroke="#fafaf7" stroke-width="2"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V10 — Dark background sanity check</div>
+            <h3>V1 baseline on ink — does it survive?</h3>
+            <p>Identical to V1 but on the dark ink stage instead of cream. The whole mark needs to read in both light and dark contexts — t-shirts, dark hero banners, terminal-style admin. The cream-haloed letters still pop; the red stamp punches harder.</p>
+          </footer>
+        </article>
+
+      </div>
+    </div>
+  </body>
+</html>
