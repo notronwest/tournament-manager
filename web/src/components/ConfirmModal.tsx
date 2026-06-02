@@ -111,7 +111,7 @@ export function ConfirmModal({
 const overlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0, 0, 0, 0.5)",
+  background: "var(--overlay)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -120,7 +120,7 @@ const overlayStyle: CSSProperties = {
 };
 
 const modalStyle: CSSProperties = {
-  background: "#fff",
+  background: "var(--surface)",
   borderRadius: 8,
   padding: 24,
   maxWidth: 480,
@@ -131,8 +131,8 @@ const modalStyle: CSSProperties = {
 function primaryBtn(busy: boolean): CSSProperties {
   return {
     padding: "8px 16px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: busy ? "var(--text-subtle)" : "var(--primary)",
+    color: "var(--primary-contrast)",
     border: "none",
     borderRadius: 6,
     fontSize: 13,
@@ -145,8 +145,8 @@ function primaryBtn(busy: boolean): CSSProperties {
 function destructiveBtn(busy: boolean): CSSProperties {
   return {
     padding: "8px 16px",
-    background: busy ? "#9ca3af" : "#dc2626",
-    color: "#fff",
+    background: busy ? "var(--text-subtle)" : "var(--danger)",
+    color: "var(--primary-contrast)",
     border: "none",
     borderRadius: 6,
     fontSize: 13,
@@ -159,9 +159,9 @@ function destructiveBtn(busy: boolean): CSSProperties {
 function secondaryBtn(busy: boolean): CSSProperties {
   return {
     padding: "8px 16px",
-    background: "#fff",
-    color: "#555",
-    border: "1px solid #e2e2e2",
+    background: "var(--surface)",
+    color: "var(--text-muted)",
+    border: "1px solid var(--border)",
     borderRadius: 6,
     fontSize: 13,
     cursor: busy ? "not-allowed" : "pointer",

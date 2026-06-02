@@ -7,11 +7,10 @@
  */
 
 :root {
-  font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial,
-    sans-serif;
-  line-height: 1.5;
-  color: #222;
-  background-color: #fff;
+  font-family: var(--font-sans);
+  line-height: var(--line-height);
+  color: var(--text);
+  background-color: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -36,8 +35,8 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: #fff;
-  color: #222;
+  background: var(--bg);
+  color: var(--text);
   /* Last-line defence against any one wide element (a long URL, a
      misaligned chart) triggering a horizontal scroll that mobile
      Safari then translates into "zoom the whole page out so it
