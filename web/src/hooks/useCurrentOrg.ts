@@ -64,7 +64,14 @@ export function useCurrentOrg(): State {
     }
 
     let cancelled = false;
-    setState((s) => ({ ...s, loading: true, error: null }));
+    // Don't flip loading=true on subsequent refetches — the initial
+    // useState(loading: true) covers the first paint. Without this,
+    // every silent JWT refresh (which happens when the tab regains
+    // focus) bumps useCurrentOrg's state, AdminLayout sees
+    // loading=true, and flashes "Loading…" over the whole admin
+    // view. Just clear the error and let the stale org stay visible
+    // until the refetch settles.
+    setState((s) => ({ ...s, error: null }));
 
     (async () => {
       const { data: orgData, error: orgErr } = await supabase
