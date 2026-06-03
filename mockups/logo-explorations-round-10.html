@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert &amp; erne — round 10: revisiting 3A</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Bowlby+One&family=Inter:wght@400;500;700;900&family=Inter+Tight:wght@400;600;700;900&family=Permanent+Marker&family=Space+Grotesk:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #fafaf7;
+        --paper: #fff;
+        --ink: #14181f;
+        --ink-soft: #4b5563;
+        --rule: #e6e3da;
+        --court-green: #2c8a3d;
+        --court-blue: #1e6cd6;
+        --court-yellow: #f3d111;
+        --court-red: #d8341c;
+        --court-cream: #f6efd6;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Inter", system-ui, -apple-system, "Segoe UI",
+          Helvetica, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.45;
+      }
+
+      .page { max-width: 1280px; margin: 0 auto; padding: 56px 32px 96px; }
+
+      header.intro { margin-bottom: 48px; }
+      header.intro .eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 12px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.18em;
+        color: var(--court-red); margin-bottom: 12px;
+      }
+      header.intro h1 {
+        font-family: "Bowlby One", serif;
+        font-weight: 400; font-size: 40px;
+        line-height: 1.05; margin: 0 0 14px;
+        letter-spacing: -0.01em;
+      }
+      header.intro p {
+        max-width: 720px; font-size: 15px;
+        color: var(--ink-soft); margin: 0 0 8px;
+      }
+      header.intro p strong { color: var(--ink); }
+      header.intro .links { margin-top: 14px; font-size: 13px; color: var(--ink-soft); }
+      header.intro .links a {
+        color: var(--court-blue); text-decoration: none;
+        border-bottom: 1px solid currentColor; margin-right: 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 24px;
+      }
+
+      .card {
+        background: var(--paper); border: 1px solid var(--rule);
+        border-radius: 14px; overflow: hidden;
+        display: flex; flex-direction: column;
+      }
+      .card .stage {
+        min-height: 240px; display: flex;
+        align-items: center; justify-content: center;
+        padding: 40px 32px; position: relative;
+      }
+      .card .stage.dark { background: var(--ink); color: var(--bg); }
+      .card .stage.cream { background: var(--court-cream); }
+      .card .stage.yellow { background: var(--court-yellow); }
+      .card footer {
+        padding: 16px 20px 18px;
+        border-top: 1px solid var(--rule);
+        background: linear-gradient(180deg, #fcfbf6 0%, #fff 100%);
+      }
+      .card footer .label {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+        color: var(--court-red); font-weight: 700; margin-bottom: 4px;
+      }
+      .card footer h3 {
+        margin: 0 0 4px; font-size: 14px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700; letter-spacing: -0.01em;
+      }
+      .card footer p {
+        margin: 0; font-size: 12px;
+        color: var(--ink-soft); line-height: 1.5;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         Shared 3A primitives — Permanent Marker wordmark, Anton tag
+         ═══════════════════════════════════════════════════════════════ */
+
+      .pm {
+        font-family: "Permanent Marker", cursive;
+        text-transform: uppercase;
+        line-height: 0.95;
+      }
+      .tag {
+        font-family: "Anton", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.32em;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         V1 — Refined classic 3A with the live tagline
+         ═══════════════════════════════════════════════════════════════ */
+
+      .v1 { text-align: center; }
+      .v1 .word { font-size: 56px; letter-spacing: 0.02em; }
+      .v1 .word .amp { color: var(--court-red); margin: 0 0.08em; }
+      .v1 .tag {
+        font-size: 11px; margin-top: 14px;
+        color: var(--ink); opacity: 0.85;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         V2 — With hand-drawn red paddle-swing under the wordmark
+         ═══════════════════════════════════════════════════════════════ */
+
+      .v2 { text-align: center; position: relative; }
+      .v2 .word-wrap {
+        position: relative; display: inline-block;
+        padding-bottom: 18px;
+      }
+      .v2 .word { font-size: 56px; letter-spacing: 0.02em; }
+      .v2 .word .amp { color: var(--court-red); margin: 0 0.08em; }
+      .v2 svg.swing {
+        position: absolute;
+        left: 4%; right: 4%; bottom: -4px;
+        width: 92%; height: 24px;
+      }
+      .v2 svg.swing path {
+        fill: none;
+        stroke: var(--court-red);
+        stroke-width: 5;
+        stroke-linecap: round;
+      }
+      .v2 .tag {
+        font-size: 11px; margin-top: 18px;
+        color: var(--ink); opacity: 0.85;
+        display: block;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         V3 — Masthead reversal: tracked tagline + ink rule ABOVE wordmark
+         ═══════════════════════════════════════════════════════════════ */
+
+      .v3 { text-align: center; }
+      .v3 .top-tag {
+        font-family: "Anton", sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.42em;
+        font-size: 11px;
+        color: var(--ink);
+      }
+      .v3 .rule {
+        height: 3px; background: var(--ink);
+        margin: 10px auto 14px; width: 70%;
+      }
+      .v3 .word { font-size: 60px; letter-spacing: 0.02em; }
+      .v3 .word .amp { color: var(--court-red); margin: 0 0.08em; }
+
+      /* ═══════════════════════════════════════════════════════════════
+         V4 — Navbar inline lockup (wordmark + rule + tagline, one row)
+         ═══════════════════════════════════════════════════════════════ */
+
+      .v4 {
+        display: inline-flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .v4 .word { font-size: 32px; letter-spacing: 0.02em; }
+      .v4 .word .amp { color: var(--court-red); margin: 0 0.06em; }
+      .v4 .v-rule {
+        width: 2px; height: 28px;
+        background: var(--ink); opacity: 0.7;
+      }
+      .v4 .tag {
+        font-size: 9px;
+        color: var(--ink); opacity: 0.85;
+        line-height: 1.2;
+        max-width: 130px;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         V5 — Dark knockout (cream wordmark, yellow amp, on ink)
+         ═══════════════════════════════════════════════════════════════ */
+
+      .v5 { text-align: center; }
+      .v5 .word { font-size: 56px; letter-spacing: 0.02em; color: var(--bg); }
+      .v5 .word .amp { color: var(--court-yellow); margin: 0 0.08em; }
+      .v5 .tag {
+        font-size: 11px; margin-top: 14px;
+        color: var(--bg); opacity: 0.7;
+        display: block;
+      }
+
+      /* ═══════════════════════════════════════════════════════════════
+         "In context" — preview each at navbar scale, side by side
+         ═══════════════════════════════════════════════════════════════ */
+
+      .context-section {
+        margin-top: 72px;
+        padding-top: 32px;
+        border-top: 3px solid var(--ink);
+      }
+      .context-section .section-eyebrow {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.18em;
+        color: var(--court-red); margin-bottom: 8px;
+      }
+      .context-section h2 {
+        margin: 0 0 8px; font-size: 22px;
+        font-family: "Inter Tight", sans-serif;
+        font-weight: 700; letter-spacing: -0.01em;
+      }
+      .context-section .section-sub {
+        margin: 0 0 28px; font-size: 14px;
+        color: var(--ink-soft); max-width: 640px;
+      }
+      .navbar-mock {
+        background: var(--bg);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .navbar-mock.dark {
+        background: var(--ink);
+        color: var(--bg);
+        border-color: var(--ink);
+      }
+      .navbar-mock .label-chip {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--court-red);
+        font-weight: 700;
+      }
+      .navbar-mock .nav-links {
+        display: flex; gap: 22px;
+        font-family: "Inter", sans-serif;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+      .navbar-mock.dark .nav-links { color: rgba(250, 250, 247, 0.6); }
+      .navbar-mock .word-nav {
+        font-family: "Permanent Marker", cursive;
+        text-transform: uppercase;
+        font-size: 26px;
+        letter-spacing: 0.02em;
+        line-height: 1;
+      }
+      .navbar-mock .word-nav .amp { color: var(--court-red); margin: 0 0.06em; }
+      .navbar-mock.dark .word-nav { color: var(--bg); }
+      .navbar-mock.dark .word-nav .amp { color: var(--court-yellow); }
+
+      @media (max-width: 720px) {
+        .page { padding: 32px 16px 64px; }
+        header.intro h1 { font-size: 30px; }
+        .card .stage { min-height: 200px; padding: 24px 16px; }
+        .v1 .word, .v2 .word, .v5 .word { font-size: 42px; }
+        .v3 .word { font-size: 44px; }
+        .v4 .word { font-size: 24px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="intro">
+        <div class="eyebrow">round 10 — revisiting 3A</div>
+        <h1>5 takes on the hand-painted brush direction</h1>
+        <p>
+          Stepped back from the court-block direction to revisit 3A —
+          Permanent Marker wordmark with a tracked Anton tagline. The
+          original was a quick exploration; these five iterations
+          tighten the type, vary the supporting elements, and try the
+          mark at navbar scale.
+        </p>
+        <p>
+          <strong>The constants</strong>: Permanent Marker for the
+          wordmark, Anton for the tagline, court-red ampersand (yellow
+          on dark stages). <strong>The variables</strong>: supporting
+          marks (swing, rule, none), tagline placement, and density.
+        </p>
+        <div class="links">
+          <a href="logo-explorations-round-9.html">← round 9</a>
+          <a href="logo-explorations-round-3.html">← round 3 (origin)</a>
+        </div>
+      </header>
+
+      <div class="grid">
+
+        <!-- ════════════════════════════════════════════════════════
+             V1 — Refined classic 3A
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="v1">
+              <div class="pm word">BERT<span class="amp">&amp;</span>ERNE</div>
+              <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V1 — Refined classic</div>
+            <h3>3A, level and tagged with the live tagline</h3>
+            <p>The straight refresh — bigger wordmark, the new "PICKLEBALL TOURNAMENT MANAGEMENT" tagline, cleaner tracking. No supporting marks; lets the brush do all the talking.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V2 — With paddle-swing underline
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="v2">
+              <span class="word-wrap">
+                <span class="pm word">BERT<span class="amp">&amp;</span>ERNE</span>
+                <svg class="swing" viewBox="0 0 200 22" preserveAspectRatio="none">
+                  <path d="M2,16 C 30,4 90,4 130,12 S 180,4 198,14" />
+                </svg>
+              </span>
+              <span class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</span>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V2 — Paddle-swing finish</div>
+            <h3>Hand-drawn red swing under the wordmark</h3>
+            <p>Borrows the swing line from 3B / 9A and tucks it under the brush wordmark. Adds movement — like a paddle finish caught mid-arc — without overpowering the type.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V3 — Masthead reversal
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="v3">
+              <div class="top-tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+              <div class="rule"></div>
+              <div class="pm word">BERT<span class="amp">&amp;</span>ERNE</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V3 — Magazine masthead</div>
+            <h3>Tagline + rule on top, wordmark below</h3>
+            <p>Flips the hierarchy: category first (tracked Anton + ink rule), name big underneath. Reads like a magazine masthead or a tournament-poster header. Wordmark gets to breathe at 60px.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V4 — Navbar inline
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage cream">
+            <div class="v4">
+              <span class="pm word">BERT<span class="amp">&amp;</span>ERNE</span>
+              <span class="v-rule"></span>
+              <span class="tag">PICKLEBALL<br/>TOURNAMENT MANAGEMENT</span>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V4 — Navbar inline</div>
+            <h3>One-row lockup with vertical rule</h3>
+            <p>Compact horizontal layout designed for the SiteHeader. Wordmark left, thin vertical rule, tagline broken to two lines on the right. Same total height as a normal nav row.</p>
+          </footer>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             V5 — Dark knockout
+             ════════════════════════════════════════════════════════ -->
+        <article class="card">
+          <div class="stage dark">
+            <div class="v5">
+              <div class="pm word">BERT<span class="amp">&amp;</span>ERNE</div>
+              <div class="tag">PICKLEBALL TOURNAMENT MANAGEMENT</div>
+            </div>
+          </div>
+          <footer>
+            <div class="label">V5 — Dark knockout</div>
+            <h3>Cream wordmark + yellow amp on ink</h3>
+            <p>The dark-stage version. Cream replaces ink for the letters; the ampersand jumps to court-yellow so it stays the accent. For dark heroes, footer blocks, sign-in screens.</p>
+          </footer>
+        </article>
+
+      </div>
+
+      <!-- ════════════════════════════════════════════════════════════
+           In-context preview — what each looks like at navbar scale
+           ════════════════════════════════════════════════════════════ -->
+      <section class="context-section">
+        <div class="section-eyebrow">In context</div>
+        <h2>How the brush wordmark sits in the SiteHeader</h2>
+        <p class="section-sub">
+          A quick navbar preview at production scale, light and dark.
+          The current V5 logo lives here today; these are what 3A would
+          look like in the same slot.
+        </p>
+
+        <div class="navbar-mock">
+          <span class="word-nav">bert<span class="amp">&amp;</span>erne</span>
+          <span class="nav-links">
+            <span>Tournaments</span>
+            <span>About</span>
+            <span>Sign in</span>
+          </span>
+        </div>
+        <div class="label-chip" style="margin: -6px 0 18px;">Light navbar — lowercase brush, red ampersand</div>
+
+        <div class="navbar-mock">
+          <span class="word-nav">BERT<span class="amp">&amp;</span>ERNE</span>
+          <span class="nav-links">
+            <span>Tournaments</span>
+            <span>About</span>
+            <span>Sign in</span>
+          </span>
+        </div>
+        <div class="label-chip" style="margin: -6px 0 18px;">Light navbar — uppercase brush, red ampersand</div>
+
+        <div class="navbar-mock dark">
+          <span class="word-nav">BERT<span class="amp">&amp;</span>ERNE</span>
+          <span class="nav-links">
+            <span>Tournaments</span>
+            <span>About</span>
+            <span>Sign in</span>
+          </span>
+        </div>
+        <div class="label-chip" style="margin: -6px 0 0;">Dark navbar — uppercase brush, yellow ampersand</div>
+      </section>
+
+    </div>
+  </body>
+</html>

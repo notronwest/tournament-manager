@@ -18,6 +18,25 @@ import {
   pickActivePricingTier,
   type PricingTier,
 } from "../../lib/pricingTiers";
+import {
+  contentColStyle,
+  courtBlue,
+  courtGreen,
+  courtRed,
+  cream,
+  ctaPrimaryStyle,
+  ctaPrimaryDisabledStyle,
+  ctaSecondaryStyle,
+  displayFontStack,
+  headingFontStack,
+  ink,
+  inkSoft,
+  pageH1Style,
+  pageWrapStyle,
+  rule,
+  ruleSoft,
+  statusPanelStyle,
+} from "../../lib/publicTheme";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -355,17 +374,15 @@ export default function CheckoutPage() {
   if (loading) {
     return (
       <Shell>
-        <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: inkSoft, fontSize: 14, margin: 0 }}>Loading…</p>
       </Shell>
     );
   }
   if (error) {
     return (
       <Shell>
-        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>
-          Can't load checkout
-        </h1>
-        <p style={{ color: "#666", fontSize: 14 }}>{error}</p>
+        <h1 style={pageH1Style}>Can't load checkout</h1>
+        <p style={{ color: inkSoft, fontSize: 14 }}>{error}</p>
         <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={backLinkStyle}>
           ← Back to tournament
         </Link>
@@ -379,23 +396,28 @@ export default function CheckoutPage() {
       <Shell>
         <div
           style={{
-            padding: 20,
-            background: "#dcfce7",
-            border: "1px solid #86efac",
-            borderRadius: 8,
+            ...statusPanelStyle("success"),
+            padding: "20px 22px",
             marginBottom: 24,
           }}
         >
-          <h1 style={{ margin: "0 0 8px", fontSize: 22, color: "#166534" }}>
+          <h1
+            style={{
+              ...pageH1Style,
+              margin: "0 0 8px",
+              fontSize: "clamp(24px, 3.6vw, 30px)",
+              color: "inherit",
+            }}
+          >
             🎉 You're paid up!
           </h1>
-          <p style={{ margin: 0, color: "#166534", fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>
             Confirmed for {fmtList(doneEventNames)} in{" "}
             <strong>{tournament.name}</strong>. Doubles partners have been
             emailed their invites.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={secondaryLinkBtn}>
             ← Back to tournament
           </Link>
@@ -411,10 +433,8 @@ export default function CheckoutPage() {
   if (rows.length === 0) {
     return (
       <Shell>
-        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>
-          Nothing to pay for here
-        </h1>
-        <p style={{ color: "#666", fontSize: 14 }}>
+        <h1 style={pageH1Style}>Nothing to pay for here</h1>
+        <p style={{ color: inkSoft, fontSize: 14, marginBottom: 20 }}>
           You don't have any pending registrations for{" "}
           <strong>{tournament?.name}</strong>. Register for an event from
           the tournament page first.
@@ -431,8 +451,8 @@ export default function CheckoutPage() {
       <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={backLinkStyle}>
         ← Back to {tournament?.name}
       </Link>
-      <h1 style={{ margin: "12px 0 4px", fontSize: 24 }}>Checkout</h1>
-      <p style={{ color: "#666", margin: "0 0 24px", fontSize: 14 }}>
+      <h1 style={{ ...pageH1Style, margin: "12px 0 8px" }}>Checkout</h1>
+      <p style={{ color: inkSoft, margin: "0 0 24px", fontSize: 14, lineHeight: 1.55 }}>
         Pay to finalize your registrations. Partners will be notified
         and your spots will be confirmed once payment goes through.
       </p>
@@ -441,16 +461,34 @@ export default function CheckoutPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {rows.map((r) => (
             <div key={r.regId} style={checkoutCard}>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>{r.eventName}</div>
-              <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
+              <div
+                style={{
+                  fontFamily: displayFontStack,
+                  fontSize: 18,
+                  lineHeight: 1.15,
+                  letterSpacing: "-0.2px",
+                }}
+              >
+                {r.eventName}
+              </div>
+              <div
+                style={{
+                  fontFamily: headingFontStack,
+                  fontSize: 11,
+                  color: courtRed,
+                  marginTop: 6,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.14em",
+                }}
+              >
                 {r.format === "doubles" ? "Doubles" : "Singles"}
               </div>
               {r.format === "doubles" && r.partnerLabel && (
                 <div
                   style={{
                     fontSize: 12,
-                    color: "#166534",
-                    marginTop: 6,
+                    color: courtGreen,
+                    marginTop: 10,
                   }}
                 >
                   ✓ Partner: <strong>{r.partnerLabel}</strong> — will be
@@ -461,8 +499,8 @@ export default function CheckoutPage() {
                 <div
                   style={{
                     fontSize: 12,
-                    color: "#991b1b",
-                    marginTop: 6,
+                    color: courtRed,
+                    marginTop: 10,
                   }}
                 >
                   ⚠ No partner picked. Go back to the tournament page
@@ -474,7 +512,7 @@ export default function CheckoutPage() {
           <div
             style={{
               fontSize: 12,
-              color: "#888",
+              color: inkSoft,
               textAlign: "center",
               padding: 8,
             }}
@@ -486,10 +524,12 @@ export default function CheckoutPage() {
         <div style={summaryCard}>
           <div
             style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#444",
-              marginBottom: 10,
+              fontFamily: headingFontStack,
+              fontSize: 12,
+              color: ink,
+              marginBottom: 12,
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
             }}
           >
             Order summary
@@ -500,7 +540,7 @@ export default function CheckoutPage() {
               <div key={it.event.id} style={summaryRow}>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   {row?.eventName ?? "Event"}{" "}
-                  <span style={{ color: "#888" }}>
+                  <span style={{ color: inkSoft }}>
                     (
                     {it.tier === "first"
                       ? "registration · incl. 1 event"
@@ -523,19 +563,13 @@ export default function CheckoutPage() {
             onClick={() => void onPay()}
             disabled={paying || !!blockingError}
             style={{
-              padding: "12px 24px",
-              background:
-                paying || blockingError ? "#9ca3af" : "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              fontSize: 15,
-              fontWeight: 500,
-              cursor:
-                paying || blockingError ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
+              ...(paying || blockingError
+                ? ctaPrimaryDisabledStyle
+                : ctaPrimaryStyle),
+              padding: "14px 22px",
               width: "100%",
               marginTop: 14,
+              textAlign: "center",
             }}
           >
             {paying
@@ -551,13 +585,13 @@ export default function CheckoutPage() {
             style={{
               background: "none",
               border: "none",
-              color: "#666",
+              color: inkSoft,
               cursor: paying ? "not-allowed" : "pointer",
               fontFamily: "inherit",
               fontSize: 13,
               textDecoration: "underline",
               width: "100%",
-              padding: "8px 0 0",
+              padding: "10px 0 0",
               textAlign: "center",
             }}
           >
@@ -566,7 +600,7 @@ export default function CheckoutPage() {
           <div
             style={{
               fontSize: 11,
-              color: "#888",
+              color: inkSoft,
               textAlign: "center",
               marginTop: 10,
             }}
@@ -592,15 +626,9 @@ function Shell({
   wide?: boolean;
 }) {
   return (
-    <main
-      style={{
-        padding: "32px 24px",
-        maxWidth: wide ? 900 : 600,
-        margin: "0 auto",
-      }}
-    >
-      {children}
-    </main>
+    <div style={pageWrapStyle}>
+      <main style={contentColStyle(wide ? 900 : 600)}>{children}</main>
+    </div>
   );
 }
 
@@ -612,9 +640,10 @@ function fmtList(items: string[]): string {
 }
 
 const backLinkStyle: CSSProperties = {
-  color: "#2563eb",
+  color: courtBlue,
   textDecoration: "none",
   fontSize: 13,
+  fontWeight: 500,
 };
 
 const checkoutGrid: CSSProperties = {
@@ -624,17 +653,17 @@ const checkoutGrid: CSSProperties = {
 };
 
 const checkoutCard: CSSProperties = {
-  padding: 16,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 8,
+  padding: 18,
+  background: cream,
+  border: `1px solid ${ruleSoft}`,
+  borderRadius: 10,
 };
 
 const summaryCard: CSSProperties = {
-  padding: 18,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 8,
+  padding: 20,
+  background: "#ffffff",
+  border: `1px solid ${rule}`,
+  borderRadius: 10,
   alignSelf: "flex-start",
   position: "sticky",
   top: 16,
@@ -644,7 +673,7 @@ const summaryRow: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   fontSize: 13,
-  color: "#444",
+  color: inkSoft,
   marginBottom: 8,
   gap: 12,
 };
@@ -653,32 +682,20 @@ const summaryTotal: CSSProperties = {
   ...summaryRow,
   marginTop: 12,
   paddingTop: 12,
-  borderTop: "1px solid #e5e7eb",
+  borderTop: `1px solid ${rule}`,
   fontSize: 16,
   fontWeight: 600,
-  color: "#111",
+  color: ink,
 };
 
 const primaryLinkBtn: CSSProperties = {
-  padding: "10px 18px",
-  background: "#2563eb",
-  color: "#fff",
-  textDecoration: "none",
-  borderRadius: 6,
-  fontSize: 14,
-  fontWeight: 500,
+  ...ctaPrimaryStyle,
+  padding: "12px 20px",
   marginTop: 12,
-  display: "inline-block",
 };
 
 const secondaryLinkBtn: CSSProperties = {
-  padding: "10px 18px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 14,
-  textDecoration: "none",
+  ...ctaSecondaryStyle,
+  padding: "12px 20px",
   marginTop: 12,
-  display: "inline-block",
 };

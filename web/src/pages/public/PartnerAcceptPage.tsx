@@ -7,6 +7,24 @@ import {
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import {
+  contentColStyle,
+  courtBlue,
+  courtRed,
+  cream,
+  ctaPrimaryStyle,
+  ctaPrimaryDisabledStyle,
+  ctaSecondaryStyle,
+  displayFontStack,
+  headingFontStack,
+  ink,
+  inkSoft,
+  pageH1Style,
+  pageWrapStyle,
+  rule,
+  ruleSoft,
+  statusPanelStyle,
+} from "../../lib/publicTheme";
 import type { Database } from "../../types/supabase";
 
 type PartnerInviteStatus =
@@ -145,7 +163,7 @@ export default function PartnerAcceptPage() {
   if (loading || authLoading || !meChecked) {
     return (
       <Shell>
-        <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: inkSoft, fontSize: 14, margin: 0 }}>Loading…</p>
       </Shell>
     );
   }
@@ -153,10 +171,10 @@ export default function PartnerAcceptPage() {
   if (error || !context) {
     return (
       <Shell>
-        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>
-          Invite unavailable
-        </h1>
-        <p style={{ color: "#666", fontSize: 14 }}>{error ?? "Unknown error."}</p>
+        <h1 style={pageH1Style}>Invite unavailable</h1>
+        <p style={{ color: inkSoft, fontSize: 14, margin: 0 }}>
+          {error ?? "Unknown error."}
+        </p>
       </Shell>
     );
   }
@@ -168,10 +186,7 @@ export default function PartnerAcceptPage() {
         <InviteContextHeader context={context} />
         <div
           style={{
-            ...alertStyle,
-            background: "#f3f4f6",
-            border: "1px solid #e5e7eb",
-            color: "#555",
+            ...statusPanelStyle("info"),
             marginTop: 16,
           }}
         >
@@ -195,18 +210,13 @@ export default function PartnerAcceptPage() {
         <InviteContextHeader context={context} highlight />
         <div
           style={{
-            ...alertStyle,
-            background: "#eff6ff",
-            border: "1px solid #bfdbfe",
-            color: "#1e40af",
+            ...statusPanelStyle("info"),
             marginTop: 16,
           }}
         >
           <strong>Sign in to confirm you'll play with them.</strong>
           {context.invitee_email && (
-            <p
-              style={{ margin: "6px 0 0", fontSize: 13, color: "#1e40af" }}
-            >
+            <p style={{ margin: "6px 0 0", fontSize: 13 }}>
               Use the email we sent this invite to:{" "}
               <strong>{context.invitee_email}</strong>
             </p>
@@ -216,7 +226,12 @@ export default function PartnerAcceptPage() {
           onClick={() =>
             navigate("/login", { state: { from: location } })
           }
-          style={{ ...primaryBtnLarge, marginTop: 20, width: "100%" }}
+          style={{
+            ...primaryBtnLarge,
+            marginTop: 20,
+            width: "100%",
+            textAlign: "center",
+          }}
         >
           Sign in to accept →
         </button>
@@ -304,10 +319,17 @@ export default function PartnerAcceptPage() {
     return (
       <Shell>
         <div style={successStyle}>
-          <h1 style={{ margin: "0 0 6px", fontSize: 20, color: "#166534" }}>
+          <h1
+            style={{
+              ...pageH1Style,
+              margin: "0 0 6px",
+              fontSize: "clamp(22px, 3.4vw, 28px)",
+              color: "inherit",
+            }}
+          >
             🎉 You're in!
           </h1>
-          <p style={{ margin: 0, fontSize: 14, color: "#166534" }}>
+          <p style={{ margin: 0, fontSize: 14 }}>
             You're confirmed for <strong>{context.event_name}</strong> with{" "}
             <strong>
               {context.inviter_first_name} {context.inviter_last_name}
@@ -316,13 +338,23 @@ export default function PartnerAcceptPage() {
           </p>
         </div>
         <div style={whatsNextCard}>
-          <h3 style={{ margin: "0 0 8px", fontSize: 14 }}>What's next</h3>
+          <h3
+            style={{
+              margin: "0 0 10px",
+              fontFamily: headingFontStack,
+              fontSize: 13,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+            }}
+          >
+            What's next
+          </h3>
           <ul
             style={{
               margin: 0,
               paddingLeft: 18,
               fontSize: 13,
-              color: "#444",
+              color: inkSoft,
               lineHeight: 1.7,
             }}
           >
@@ -342,14 +374,7 @@ export default function PartnerAcceptPage() {
   if (phase === "declined") {
     return (
       <Shell>
-        <div
-          style={{
-            ...alertStyle,
-            background: "#f3f4f6",
-            border: "1px solid #e5e7eb",
-            color: "#444",
-          }}
-        >
+        <div style={statusPanelStyle("info")}>
           <strong>Declined.</strong>
           <p style={{ margin: "6px 0 0", fontSize: 13 }}>
             We let {context.inviter_first_name} know. They'll need to find
@@ -366,7 +391,7 @@ export default function PartnerAcceptPage() {
   const isBusy = phase === "accepting" || phase === "declining";
   return (
     <Shell>
-      <h1 style={{ margin: "0 0 16px", fontSize: 24 }}>
+      <h1 style={pageH1Style}>
         Join {context.inviter_first_name}'s team?
       </h1>
 
@@ -381,15 +406,17 @@ export default function PartnerAcceptPage() {
             />
           )}
         </div>
-        <div style={{ height: 1, background: "#e5e7eb", margin: "16px 0" }} />
+        <div style={{ height: 1, background: ruleSoft, margin: "16px 0" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Avatar
             first={context.inviter_first_name}
             last={context.inviter_last_name}
           />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontWeight: 500, fontSize: 14 }}>{inviterFull}</div>
-            <div style={{ fontSize: 12, color: "#666" }}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: ink }}>
+              {inviterFull}
+            </div>
+            <div style={{ fontSize: 12, color: inkSoft }}>
               invited you to be their partner
             </div>
             {/* Contact info — surfaced so the invitee can verify it's
@@ -404,7 +431,7 @@ export default function PartnerAcceptPage() {
                   display: "flex",
                   gap: 12,
                   fontSize: 12,
-                  color: "#444",
+                  color: inkSoft,
                   flexWrap: "wrap",
                 }}
               >
@@ -431,17 +458,7 @@ export default function PartnerAcceptPage() {
       </div>
 
       {error && (
-        <div
-          style={{
-            marginTop: 16,
-            padding: 12,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderRadius: 6,
-            color: "#991b1b",
-            fontSize: 13,
-          }}
-        >
+        <div style={{ ...statusPanelStyle("danger"), marginTop: 16 }}>
           {error}
         </div>
       )}
@@ -451,10 +468,9 @@ export default function PartnerAcceptPage() {
           onClick={() => void onAccept()}
           disabled={isBusy}
           style={{
-            ...primaryBtnLarge,
+            ...(isBusy ? primaryBtnLargeDisabled : primaryBtnLarge),
             flex: 1,
-            background: isBusy ? "#9ca3af" : "#2563eb",
-            cursor: isBusy ? "not-allowed" : "pointer",
+            textAlign: "center",
           }}
         >
           {phase === "accepting"
@@ -466,8 +482,8 @@ export default function PartnerAcceptPage() {
           disabled={isBusy}
           style={{
             ...secondaryBtn,
-            padding: "12px 16px",
             cursor: isBusy ? "not-allowed" : "pointer",
+            opacity: isBusy ? 0.6 : 1,
           }}
         >
           {phase === "declining" ? "…" : "Decline"}
@@ -483,11 +499,9 @@ export default function PartnerAcceptPage() {
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main
-      style={{ padding: "32px 24px", maxWidth: 560, margin: "0 auto" }}
-    >
-      {children}
-    </main>
+    <div style={pageWrapStyle}>
+      <main style={contentColStyle(560)}>{children}</main>
+    </div>
   );
 }
 
@@ -501,27 +515,35 @@ function InviteContextHeader({
   return (
     <div
       style={{
-        padding: 16,
-        borderRadius: 8,
-        background: highlight ? "#eff6ff" : "#fafafa",
-        border: `1px solid ${highlight ? "#bfdbfe" : "#e5e7eb"}`,
+        padding: 18,
+        borderRadius: 10,
+        background: highlight ? cream : "#ffffff",
+        border: `1px solid ${highlight ? ruleSoft : rule}`,
       }}
     >
       <div
         style={{
+          fontFamily: headingFontStack,
           fontSize: 11,
-          color: "#888",
+          color: courtRed,
           textTransform: "uppercase",
-          letterSpacing: 0.5,
+          letterSpacing: "0.14em",
         }}
       >
         You've been invited
       </div>
-      <div style={{ fontSize: 18, fontWeight: 600, marginTop: 6 }}>
+      <div
+        style={{
+          fontFamily: displayFontStack,
+          fontSize: 20,
+          marginTop: 8,
+          lineHeight: 1.2,
+        }}
+      >
         {context.inviter_first_name} {context.inviter_last_name} wants you
         as their partner
       </div>
-      <div style={{ fontSize: 14, color: "#444", marginTop: 4 }}>
+      <div style={{ fontSize: 14, color: inkSoft, marginTop: 6 }}>
         In <strong>{context.event_name}</strong> at{" "}
         <strong>{context.tournament_name}</strong>.
       </div>
@@ -559,15 +581,23 @@ function Meta({
     <div>
       <div
         style={{
-          fontSize: 11,
-          color: "#888",
+          fontFamily: headingFontStack,
+          fontSize: 10,
+          color: courtRed,
           textTransform: "uppercase",
-          letterSpacing: 0.5,
+          letterSpacing: "0.16em",
         }}
       >
         {label}
       </div>
-      <div style={{ fontSize: 14, marginTop: 2, fontWeight: bold ? 600 : 400 }}>
+      <div
+        style={{
+          fontSize: 14,
+          marginTop: 4,
+          fontWeight: bold ? 600 : 400,
+          color: ink,
+        }}
+      >
         {value}
       </div>
     </div>
@@ -581,14 +611,16 @@ function Avatar({ first, last }: { first: string; last: string }) {
       style={{
         width: 40,
         height: 40,
-        background: "#2563eb",
-        color: "#fff",
+        background: ink,
+        color: cream,
         borderRadius: "50%",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        fontFamily: headingFontStack,
         fontWeight: 600,
         fontSize: 14,
+        letterSpacing: "0.04em",
         flexShrink: 0,
       }}
       aria-hidden="true"
@@ -598,58 +630,48 @@ function Avatar({ first, last }: { first: string; last: string }) {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────
+// ─── Styles — V5 palette ──────────────────────────────────────────────
+// All sourced from publicTheme.ts. Only page-specific layout
+// adjustments live here; colors / typography / button shape come from
+// the shared module so this page stays in sync with the rest of the
+// public flow.
 
 const primaryBtnLarge: CSSProperties = {
-  padding: "14px 24px",
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  fontSize: 15,
-  fontWeight: 500,
-  cursor: "pointer",
-  fontFamily: "inherit",
+  ...ctaPrimaryStyle,
+  padding: "14px 22px",
+  fontSize: 13,
+};
+
+const primaryBtnLargeDisabled: CSSProperties = {
+  ...ctaPrimaryDisabledStyle,
+  padding: "14px 22px",
+  fontSize: 13,
 };
 
 const secondaryBtn: CSSProperties = {
-  padding: "10px 18px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 14,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const alertStyle: CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: 8,
-  fontSize: 14,
-  lineHeight: 1.5,
+  ...ctaSecondaryStyle,
+  padding: "12px 18px",
+  fontSize: 13,
 };
 
 const successStyle: CSSProperties = {
-  ...alertStyle,
-  background: "#dcfce7",
-  border: "1px solid #86efac",
-  color: "#166534",
+  ...statusPanelStyle("success"),
+  padding: "16px 18px",
 };
 
 const whatsNextCard: CSSProperties = {
   marginTop: 16,
-  padding: 16,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 8,
+  padding: 18,
+  background: cream,
+  border: `1px solid ${ruleSoft}`,
+  borderRadius: 10,
 };
 
 const contextCard: CSSProperties = {
-  padding: 16,
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 8,
+  padding: 18,
+  background: cream,
+  border: `1px solid ${ruleSoft}`,
+  borderRadius: 10,
 };
 
 const metaGrid: CSSProperties = {
@@ -659,6 +681,7 @@ const metaGrid: CSSProperties = {
 };
 
 const contactLinkStyle: CSSProperties = {
-  color: "#2563eb",
+  color: courtBlue,
   textDecoration: "none",
+  fontWeight: 500,
 };

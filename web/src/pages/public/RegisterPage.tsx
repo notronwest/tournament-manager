@@ -23,6 +23,23 @@ import {
   pickActivePricingTier,
   type PricingTier,
 } from "../../lib/pricingTiers";
+import {
+  contentColStyle,
+  courtBlue,
+  cream,
+  creamDeep,
+  ctaPrimaryStyle,
+  ctaPrimaryDisabledStyle,
+  ctaSecondaryStyle,
+  headingFontStack,
+  ink,
+  inkSoft,
+  pageH1Style,
+  pageWrapStyle,
+  ruleSoft,
+  sectionH2Style,
+  statusPanelStyle,
+} from "../../lib/publicTheme";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -1042,15 +1059,15 @@ export default function RegisterPage() {
   if (loading) {
     return (
       <Shell>
-        <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: inkSoft, fontSize: 14, margin: 0 }}>Loading…</p>
       </Shell>
     );
   }
   if (error && phase === "form" && !tournament) {
     return (
       <Shell>
-        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Not available</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>{error}</p>
+        <h1 style={pageH1Style}>Not available</h1>
+        <p style={{ color: inkSoft, fontSize: 14 }}>{error}</p>
       </Shell>
     );
   }
@@ -1078,20 +1095,23 @@ export default function RegisterPage() {
       <Shell>
         <div
           style={{
-            padding: 20,
-            background: "#dcfce7",
-            border: "1px solid #86efac",
-            borderRadius: 8,
+            ...statusPanelStyle("success"),
+            padding: "20px 22px",
             marginBottom: 24,
           }}
         >
           <h1
-            style={{ margin: "0 0 8px", fontSize: 20, color: "#166534" }}
+            style={{
+              ...pageH1Style,
+              margin: "0 0 8px",
+              fontSize: "clamp(22px, 3.4vw, 28px)",
+              color: "inherit",
+            }}
           >
             {heading}
           </h1>
           {addedCount > 0 && (
-            <p style={{ margin: 0, color: "#166534", fontSize: 14 }}>
+            <p style={{ margin: 0, fontSize: 14 }}>
               Confirmed for {fmtList(doneResult.registeredEventNames)} in{" "}
               <strong>{tournament.name}</strong>.
             </p>
@@ -1100,7 +1120,6 @@ export default function RegisterPage() {
             <p
               style={{
                 margin: addedCount > 0 ? "8px 0 0" : "0",
-                color: "#166534",
                 fontSize: 14,
               }}
             >
@@ -1110,11 +1129,11 @@ export default function RegisterPage() {
         </div>
 
         {doneResult.partnerChanges.length > 0 && (
-          <section style={{ marginBottom: 24 }}>
-            <h2 style={{ margin: "0 0 8px", fontSize: 16 }}>
+          <section style={{ marginBottom: 28 }}>
+            <h2 style={sectionH2Style}>
               Partner change{doneResult.partnerChanges.length === 1 ? "" : "s"}
             </h2>
-            <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
+            <p style={{ margin: "0 0 12px", color: inkSoft, fontSize: 13 }}>
               {doneResult.partnerChanges.every(
                 (c) => c.cancelEmailSent || c.cancelEmailSkipped,
               )
@@ -1164,11 +1183,9 @@ export default function RegisterPage() {
         )}
 
         {doneResult.autoPairs.length > 0 && (
-          <section style={{ marginBottom: 24 }}>
-            <h2 style={{ margin: "0 0 8px", fontSize: 16 }}>
-              Auto-paired
-            </h2>
-            <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
+          <section style={{ marginBottom: 28 }}>
+            <h2 style={sectionH2Style}>Auto-paired</h2>
+            <p style={{ margin: "0 0 12px", color: inkSoft, fontSize: 13 }}>
               These partners had already invited you, so picking them
               here counted as accepting their invite. Both registrations
               are now linked — no extra email needed.
@@ -1185,11 +1202,11 @@ export default function RegisterPage() {
         )}
 
         {doneResult.partnerInvites.length > 0 && (
-          <section style={{ marginBottom: 24 }}>
-            <h2 style={{ margin: "0 0 8px", fontSize: 16 }}>
+          <section style={{ marginBottom: 28 }}>
+            <h2 style={sectionH2Style}>
               Partner invite{doneResult.partnerInvites.length === 1 ? "" : "s"}
             </h2>
-            <p style={{ margin: "0 0 12px", color: "#666", fontSize: 13 }}>
+            <p style={{ margin: "0 0 12px", color: inkSoft, fontSize: 13 }}>
               {(() => {
                 const all = doneResult.partnerInvites;
                 const allSent = all.every((i) => i.emailSent);
@@ -1224,19 +1241,10 @@ export default function RegisterPage() {
           </section>
         )}
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link
             to={`/t/${orgSlug}/${tournamentSlug}`}
-            style={{
-              padding: "8px 16px",
-              background: "#fff",
-              color: "#2563eb",
-              textDecoration: "none",
-              borderRadius: 6,
-              border: "1px solid #2563eb",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
+            style={{ ...ctaSecondaryStyle, padding: "10px 18px", fontSize: 12 }}
           >
             ← Back to tournament
           </Link>
@@ -1246,17 +1254,7 @@ export default function RegisterPage() {
               // we just inserted / withdrew.
               navigate(0);
             }}
-            style={{
-              padding: "8px 16px",
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
+            style={{ ...ctaPrimaryStyle, padding: "10px 18px", fontSize: 12 }}
           >
             Register for more events
           </button>
@@ -1271,14 +1269,14 @@ export default function RegisterPage() {
     <Shell>
       <Link
         to={`/t/${orgSlug}/${tournamentSlug}`}
-        style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}
+        style={{ color: courtBlue, textDecoration: "none", fontSize: 13, fontWeight: 500 }}
       >
         ← {tournament.name}
       </Link>
-      <h1 style={{ margin: "12px 0 4px", fontSize: 24 }}>
+      <h1 style={{ ...pageH1Style, margin: "12px 0 8px" }}>
         Register for {tournament.name}
       </h1>
-      <p style={{ color: "#666", margin: "0 0 24px", fontSize: 14 }}>
+      <p style={{ color: inkSoft, margin: "0 0 24px", fontSize: 14, lineHeight: 1.55 }}>
         {me?.first_name ? (
           <>
             Welcome back, <strong>{me.first_name}</strong>.{" "}
@@ -1384,17 +1382,7 @@ export default function RegisterPage() {
         </Section>
 
         {error && (
-          <div
-            style={{
-              padding: 12,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: 6,
-              color: "#991b1b",
-              fontSize: 13,
-              marginBottom: 16,
-            }}
-          >
+          <div style={{ ...statusPanelStyle("danger"), marginBottom: 16, fontSize: 13 }}>
             {error}
           </div>
         )}
@@ -1406,10 +1394,10 @@ export default function RegisterPage() {
         {lineItems.length > 0 && (
           <div
             style={{
-              padding: 14,
-              background: "#fafafa",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
+              padding: 16,
+              background: cream,
+              border: `1px solid ${ruleSoft}`,
+              borderRadius: 10,
               marginBottom: 16,
               display: "flex",
               justifyContent: "space-between",
@@ -1418,7 +1406,7 @@ export default function RegisterPage() {
               flexWrap: "wrap",
             }}
           >
-            <div style={{ fontSize: 13, color: "#444" }}>
+            <div style={{ fontSize: 13, color: ink }}>
               {lineItems.length} event{lineItems.length === 1 ? "" : "s"}
               {(() => {
                 // Tier breakdown — e.g. "1 first + 2 additional + 1 flat".
@@ -1435,36 +1423,35 @@ export default function RegisterPage() {
                 if (override > 0)
                   parts.push(`${override} flat-fee`);
                 return parts.length > 0 ? (
-                  <span style={{ color: "#888" }}>
+                  <span style={{ color: inkSoft }}>
                     {" "}
                     ({parts.join(" + ")})
                   </span>
                 ) : null;
               })()}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>
+            <div
+              style={{
+                fontFamily: headingFontStack,
+                fontSize: 20,
+                letterSpacing: "0.02em",
+                color: ink,
+              }}
+            >
               {formatUsd(totalCents)}
             </div>
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
             type="submit"
             disabled={submitting || !hasChanges}
-            style={{
-              padding: "12px 24px",
-              background:
-                submitting || !hasChanges ? "#9ca3af" : "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              fontSize: 15,
-              fontWeight: 500,
-              cursor:
-                submitting || !hasChanges ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-            }}
+            style={
+              submitting || !hasChanges
+                ? { ...ctaPrimaryDisabledStyle, padding: "14px 22px" }
+                : { ...ctaPrimaryStyle, padding: "14px 22px" }
+            }
           >
             {submitting
               ? "Saving…"
@@ -1485,14 +1472,10 @@ export default function RegisterPage() {
             onClick={() => navigate(`/t/${orgSlug}/${tournamentSlug}`)}
             disabled={submitting}
             style={{
-              padding: "12px 20px",
-              background: "#fff",
-              color: "#555",
-              border: "1px solid #e2e2e2",
-              borderRadius: 6,
-              fontSize: 14,
+              ...ctaSecondaryStyle,
+              padding: "14px 22px",
               cursor: submitting ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
+              opacity: submitting ? 0.6 : 1,
             }}
           >
             Cancel
@@ -2041,11 +2024,9 @@ function PartnerInviteCard({
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main
-      style={{ padding: "32px 24px", maxWidth: 760, margin: "0 auto" }}
-    >
-      {children}
-    </main>
+    <div style={pageWrapStyle}>
+      <main style={contentColStyle(760)}>{children}</main>
+    </div>
   );
 }
 
@@ -2057,8 +2038,8 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section style={{ marginBottom: 24 }}>
-      <h2 style={{ margin: "0 0 12px", fontSize: 16 }}>{title}</h2>
+    <section style={{ marginBottom: 28 }}>
+      <h2 style={sectionH2Style}>{title}</h2>
       {children}
     </section>
   );
@@ -2070,10 +2051,10 @@ function Empty({ children }: { children: ReactNode }) {
       style={{
         padding: 24,
         textAlign: "center",
-        background: "#fafafa",
-        border: "1px dashed #d1d5db",
-        borderRadius: 6,
-        color: "#666",
+        background: cream,
+        border: `1px dashed ${creamDeep}`,
+        borderRadius: 8,
+        color: inkSoft,
         fontSize: 13,
       }}
     >

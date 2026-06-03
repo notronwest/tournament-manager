@@ -2,10 +2,10 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import { useAuth } from "../auth/AuthProvider";
-// V5 logo — outlined SVG, no font dependency. Vite fingerprints +
-// inlines small enough or serves as URL; either way the import gives
-// us a stable asset path.
-import logoUrl from "../assets/bert-and-erne-logo.svg";
+// V5 brush wordmark — outlined SVG, no font dependency. Cream BERT &
+// ERNE with a court-yellow ampersand, transparent background so it
+// drops onto the dark navbar (or any ink surface) without a panel.
+import logoUrl from "../assets/bert-and-erne-brush-mark.svg";
 
 // sessionStorage key the test-players tool writes to before signing
 // in as a test user. Same constant used here for the "Switch back"
@@ -194,8 +194,8 @@ export default function SiteHeader() {
       )}
       <header
       style={{
-        background: "#fff",
-        borderBottom: "1px solid #e5e7eb",
+        background: INK,
+        borderBottom: `1px solid ${INK}`,
         // sticky keeps the bar visible as the user scrolls long
         // tournament / register pages. When the impersonation banner
         // is showing, both bars stack at the top.
@@ -208,7 +208,7 @@ export default function SiteHeader() {
         style={{
           maxWidth: 1080,
           margin: "0 auto",
-          padding: "10px 24px",
+          padding: "12px 24px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -222,20 +222,16 @@ export default function SiteHeader() {
             textDecoration: "none",
             display: "inline-flex",
             alignItems: "center",
-            // Negative left margin nudges the logo's cream-bookend
-            // edge flush with the page's left padding; the V5 mark
-            // has its own internal breathing room.
-            marginLeft: -4,
           }}
         >
           <img
             src={logoUrl}
             alt="bert & erne"
-            // viewBox is 410×175 (~2.34:1). 168px wide → ~72px tall —
-            // tall enough that the BERT / & / ERNE triptych remains
-            // legible in a navbar.
-            width="168"
-            height="72"
+            // Brush wordmark viewBox is 395×61 (~6.5:1). 240px wide →
+            // ~37px tall — keeps the Permanent Marker letters legible
+            // and reads as a wordmark, not a chip, in the dark navbar.
+            width="240"
+            height="37"
             style={{ display: "block" }}
           />
         </Link>
@@ -261,7 +257,7 @@ export default function SiteHeader() {
               {firstName && (
                 <span
                   style={{
-                    color: "#666",
+                    color: CREAM_DIM,
                     marginRight: 8,
                     fontSize: 13,
                   }}
@@ -295,21 +291,31 @@ export default function SiteHeader() {
 
 // ─────────────────────────────────────────────────────────────────────
 // Styles — kept inline to match project conventions (no Tailwind).
+// V5 dark navbar palette: ink background, cream nav links, court-yellow
+// for the primary "Sign in" CTA so it pops without competing with the
+// brush logo's yellow ampersand.
 // ─────────────────────────────────────────────────────────────────────
+
+const INK = "#14181f";
+const CREAM = "#fafaf7";
+const CREAM_DIM = "rgba(250, 250, 247, 0.7)";
+const CREAM_BORDER = "rgba(250, 250, 247, 0.16)";
+const COURT_YELLOW = "#f3d111";
 
 const ghostLinkStyle: CSSProperties = {
   padding: "6px 12px",
-  color: "#444",
+  color: CREAM,
   textDecoration: "none",
   borderRadius: 6,
   fontFamily: "inherit",
+  fontSize: 13,
 };
 
 const ghostButtonStyle: CSSProperties = {
   padding: "6px 12px",
   background: "transparent",
-  color: "#444",
-  border: "1px solid #e2e2e2",
+  color: CREAM,
+  border: `1px solid ${CREAM_BORDER}`,
   borderRadius: 6,
   cursor: "pointer",
   fontFamily: "inherit",
@@ -318,10 +324,11 @@ const ghostButtonStyle: CSSProperties = {
 
 const primaryLinkStyle: CSSProperties = {
   padding: "6px 14px",
-  background: "#2563eb",
-  color: "#fff",
+  background: COURT_YELLOW,
+  color: INK,
   textDecoration: "none",
   borderRadius: 6,
-  fontWeight: 500,
+  fontWeight: 600,
   fontFamily: "inherit",
+  fontSize: 13,
 };
