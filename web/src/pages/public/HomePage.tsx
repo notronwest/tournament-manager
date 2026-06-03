@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import {
   compactTierPriceLabel,
+  pickActivePricingTier,
   type PricingTier,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
@@ -10,30 +11,48 @@ import type { Database } from "../../types/supabase";
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Organization = Database["public"]["Tables"]["organizations"]["Row"];
 
-// A tournament joined to its org + its pricing tiers. Supabase's
-// PostgREST returns the related org as a single object (not an array)
-// for to-one relations, but the generated types insist on
-// `Organization | null` so we have to be defensive on read. Pricing
-// tiers are a to-many embed.
+// A tournament joined to its org + its pricing tiers. PostgREST returns
+// the related org as a single object on to-one relations, but the
+// generated TS thinks it could be an array — cast through unknown on
+// receipt.
 type TournamentWithOrg = Tournament & {
   organizations: Pick<Organization, "name" | "slug"> | null;
   tournament_pricing_tiers: PricingTier[] | null;
 };
 
-// Public landing page at /. Lists every published tournament across
-// every org, sorted by start date, with a name/org search box on
-// top. Anon-readable thanks to existing RLS (tournaments + orgs in
-// statuses published/closed/completed). Each card links to the
-// existing /t/:orgSlug/:tournamentSlug detail page.
+// ─────────────────────────────────────────────────────────────────────
+// V5 palette — same tokens used in mockups/layouts-v5.html. Kept inline
+// (project convention is no CSS framework) but centralized at the top
+// of the file so swapping accents is one edit.
+// ─────────────────────────────────────────────────────────────────────
+const ink = "#14181f";
+const inkSoft = "#4a5159";
+const bg = "#fafaf7";
+const cream = "#f6efd6";
+const creamDeep = "#ead9a3";
+const courtGreen = "#2c8a3d";
+const courtYellow = "#f3d111";
+const courtRed = "#d8341c";
+const rule = "#e3dec8";
+
+// Public homepage at `/`. Built to mockup 01 (mockups/layouts-v5.html):
 //
-// "Upcoming" is defined as `ends_at >= today` — that way a tournament
-// that's currently underway still shows up; it only disappears the
-// day after it wraps.
+//   ┌──────────────────────────────────────────────────────────────┐
+//   │  Hero — cream bg w/ court-yellow radial glow, Alfa Slab      │
+//   │  headline (red accent line), two CTAs.                       │
+//   ├──────────────────────────────────────────────────────────────┤
+//   │  Section head: "Upcoming Tournaments" (Anton) + search box.  │
+//   │  3-up card grid, colored top stripes cycle G/Y/R, each card  │
+//   │  surfaces pill + Alfa Slab title + meta + price.             │
+//   └──────────────────────────────────────────────────────────────┘
 //
-// We load all matching tournaments in one shot and filter in-memory.
-// Volumes will stay small (probably double digits of published
-// tournaments at any moment), and server-side joined-table search
-// via PostgREST is awkward. Revisit if we ever break a few hundred.
+// SiteHeader renders the global logo + auth nav above. This page only
+// owns the hero downward.
+//
+// Data: same query as the prior list-style homepage — every published
+// tournament whose ends_at hasn't passed, RLS-anon-readable. Volumes
+// stay small (low-double-digit published tournaments at any moment)
+// so we filter in-memory.
 export default function HomePage() {
   const [tournaments, setTournaments] = useState<TournamentWithOrg[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,9 +65,8 @@ export default function HomePage() {
       setLoading(true);
       setError(null);
 
-      // today-at-midnight so the filter is stable across the day —
-      // a tournament ending today is "upcoming" all the way until
-      // tomorrow morning.
+      // today-at-midnight so the filter is stable across the day — a
+      // tournament ending today stays "upcoming" until tomorrow morning.
       const todayIso = new Date(
         new Date().getFullYear(),
         new Date().getMonth(),
@@ -70,9 +88,6 @@ export default function HomePage() {
         setLoading(false);
         return;
       }
-      // The PostgREST embed gives us `organizations` as a single
-      // object on to-one relations, but the generated TS thinks it
-      // could be an array. Cast through unknown to flatten.
       setTournaments(
         (data ?? []) as unknown as TournamentWithOrg[],
       );
@@ -99,80 +114,68 @@ export default function HomePage() {
   }, [tournaments, query]);
 
   return (
-    <Shell>
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 28 }}>
-          Find a pickleball tournament
-        </h1>
-        <p
-          style={{
-            color: "#555",
-            margin: "8px 0 0",
-            fontSize: 15,
-            lineHeight: 1.5,
-          }}
-        >
-          Upcoming events from every organizer on Tournament Manager.
-          Pick one to see the details and register.
-        </p>
-      </header>
-
-      <div style={{ marginBottom: 20 }}>
-        <input
-          type="search"
-          placeholder="Search by tournament, organizer, or location…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "12px 14px",
-            border: "1px solid #e2e2e2",
-            borderRadius: 8,
-            fontSize: 15,
-            fontFamily: "inherit",
-            background: "#fff",
-          }}
-        />
-      </div>
-
-      {loading ? (
-        <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
-      ) : error ? (
-        <ErrorPanel>{error}</ErrorPanel>
-      ) : filtered.length === 0 ? (
-        <Empty>
-          {query
-            ? (
-              <>
-                No tournaments match <strong>"{query}"</strong>.{" "}
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  style={clearBtnStyle}
-                >
-                  Clear search
-                </button>
-              </>
-            )
-            : tournaments.length === 0
-              ? "No upcoming tournaments yet. Check back soon."
-              : "No matches."}
-        </Empty>
-      ) : (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          {filtered.map((t) => (
-            <TournamentCard key={t.id} tournament={t} />
-          ))}
+    <main style={{ background: bg, color: ink, fontFamily: bodyFontStack }}>
+      {/* ─── Hero ──────────────────────────────────────────────── */}
+      <section style={heroStyle}>
+        <div style={heroInnerStyle}>
+          <h1 style={heroH1Style}>
+            Run a pickleball tournament.<br />
+            <span style={{ color: courtRed }}>Skip the spreadsheets.</span>
+          </h1>
+          <p style={heroPStyle}>
+            Bracket generation, court dispatch, partner search,
+            pay-with-Stripe checkout. Built by clubs, for clubs.
+          </p>
+          <div style={heroCtaRowStyle}>
+            <a href="#tournaments" style={ctaPrimaryStyle}>
+              Browse tournaments
+            </a>
+            <Link to="/admin" style={ctaSecondaryStyle}>
+              For organizers
+            </Link>
+          </div>
         </div>
-      )}
+      </section>
 
-    </Shell>
+      {/* ─── Tournaments grid ───────────────────────────────────── */}
+      <section id="tournaments" style={tournamentsSectionStyle}>
+        <div style={sectionHeadStyle}>
+          <h2 style={sectionH2Style}>Upcoming Tournaments</h2>
+          <div style={searchWrapStyle}>
+            <input
+              type="search"
+              placeholder="Search tournaments…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={searchInputStyle}
+              aria-label="Search tournaments"
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <p style={statusTextStyle}>Loading tournaments…</p>
+        ) : error ? (
+          <ErrorPanel>{error}</ErrorPanel>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            queryText={query}
+            hasAny={tournaments.length > 0}
+            onClear={() => setQuery("")}
+          />
+        ) : (
+          <div style={gridStyle}>
+            {filtered.map((t, i) => (
+              <TournamentCard
+                key={t.id}
+                tournament={t}
+                stripeIdx={i % 3 as 0 | 1 | 2}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
   );
 }
 
@@ -180,73 +183,62 @@ export default function HomePage() {
 // Card
 // ─────────────────────────────────────────────────────────────────────
 
-function TournamentCard({ tournament }: { tournament: TournamentWithOrg }) {
+function TournamentCard({
+  tournament,
+  stripeIdx,
+}: {
+  tournament: TournamentWithOrg;
+  stripeIdx: 0 | 1 | 2;
+}) {
   const org = tournament.organizations;
-  // Defensive: if RLS hid the org row somehow, we can't link safely.
-  // In practice this shouldn't happen — RLS lets us see published
-  // tournament rows AND their org row — but skipping the card beats
-  // rendering a broken link.
+  // Defensive: if RLS hid the org row somehow we can't link safely.
   if (!org) return null;
 
   const dateRange = fmtDateRange(tournament.starts_at, tournament.ends_at);
+  const tiers = tournament.tournament_pricing_tiers ?? [];
+  const activeTier = pickActivePricingTier(tiers);
+  const priceLabel = compactTierPriceLabel(tiers);
+  const stripeColor =
+    stripeIdx === 0 ? courtGreen : stripeIdx === 1 ? courtYellow : courtRed;
+
+  // Pill copy — prefer the active tier label (e.g. "Early bird") so
+  // the chip describes *why* this card is interesting. Falls back to
+  // "Registration open" when tiers aren't loaded or the active tier
+  // is unnamed.
+  const pillText = activeTier?.label?.trim()
+    ? activeTier.label
+    : "Registration open";
 
   return (
     <Link
       to={`/t/${org.slug}/${tournament.slug}`}
-      style={{
-        display: "block",
-        padding: 16,
-        background: "#fff",
-        border: "1px solid #e5e7eb",
-        borderRadius: 8,
-        textDecoration: "none",
-        color: "inherit",
-        transition: "border-color 120ms, box-shadow 120ms",
-      }}
+      style={cardStyle}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "#bfdbfe";
-        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)";
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = "0 4px 16px rgba(20,24,31,0.10)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "#e5e7eb";
-        e.currentTarget.style.boxShadow = "none";
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = "0 1px 0 rgba(20,24,31,0.04)";
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 600 }}>
-          {tournament.name}
-        </h2>
-        <span style={{ color: "#666", fontSize: 13 }}>{dateRange}</span>
-      </div>
-      <div
-        style={{
-          marginTop: 6,
-          color: "#666",
-          fontSize: 13,
-          display: "flex",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <span>{org.name}</span>
-        {tournament.location_name && (
-          <span style={{ color: "#888" }}>· {tournament.location_name}</span>
+      <div style={{ ...cardStripeStyle, background: stripeColor }} />
+      <div style={cardBodyStyle}>
+        <span style={cardPillStyle}>{pillText}</span>
+        <h3 style={cardH3Style}>{tournament.name}</h3>
+        <p style={cardMetaStyle}>
+          {[org.name, dateRange, tournament.location_name]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+        {priceLabel !== "—" && (
+          <div style={cardPriceRowStyle}>
+            {priceLabel !== "Free" && (
+              <span style={cardPriceFromStyle}>From</span>
+            )}
+            <span style={cardPriceValStyle}>{priceLabel}</span>
+          </div>
         )}
-        {(() => {
-          const tiers = tournament.tournament_pricing_tiers ?? [];
-          const label = compactTierPriceLabel(tiers);
-          // Hide the chip for free tournaments / when no tiers loaded.
-          if (label === "Free" || label === "—") return null;
-          return <span style={{ color: "#888" }}>· {label} entry</span>;
-        })()}
       </div>
     </Link>
   );
@@ -256,34 +248,29 @@ function TournamentCard({ tournament }: { tournament: TournamentWithOrg }) {
 // Bits
 // ─────────────────────────────────────────────────────────────────────
 
-function Shell({ children }: { children: ReactNode }) {
+function EmptyState({
+  queryText,
+  hasAny,
+  onClear,
+}: {
+  queryText: string;
+  hasAny: boolean;
+  onClear: () => void;
+}) {
   return (
-    <main
-      style={{
-        padding: "32px 24px",
-        maxWidth: 760,
-        margin: "0 auto",
-      }}
-    >
-      {children}
-    </main>
-  );
-}
-
-function Empty({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: 32,
-        textAlign: "center",
-        background: "#fafafa",
-        border: "1px dashed #d1d5db",
-        borderRadius: 8,
-        color: "#666",
-        fontSize: 14,
-      }}
-    >
-      {children}
+    <div style={emptyStyle}>
+      {queryText ? (
+        <>
+          No tournaments match <strong>"{queryText}"</strong>.{" "}
+          <button type="button" onClick={onClear} style={clearBtnStyle}>
+            Clear search
+          </button>
+        </>
+      ) : hasAny ? (
+        "No matches."
+      ) : (
+        "No upcoming tournaments yet. Check back soon."
+      )}
     </div>
   );
 }
@@ -294,8 +281,8 @@ function ErrorPanel({ children }: { children: ReactNode }) {
       style={{
         padding: 14,
         background: "#fef2f2",
-        border: "1px solid #fecaca",
-        borderRadius: 6,
+        border: `1px solid ${courtRed}`,
+        borderRadius: 8,
         color: "#991b1b",
         fontSize: 13,
       }}
@@ -305,47 +292,237 @@ function ErrorPanel({ children }: { children: ReactNode }) {
   );
 }
 
-const clearBtnStyle = {
-  background: "none",
-  border: "none",
-  color: "#2563eb",
-  cursor: "pointer",
-  fontSize: 13,
-  textDecoration: "underline",
-  fontFamily: "inherit",
-  padding: 0,
-};
-
-// "Mon Jun 1, 2026" or "Jun 1–3, 2026" when the range is short and in
-// the same month, etc. Tries to be compact without losing precision.
+// "Jun 14–15" or "Jun 28 – Jul 2" — short form for the card meta line.
+// Year omitted because every card already implies the same season (we
+// only show "upcoming" tournaments).
 function fmtDateRange(startsIso: string, endsIso: string): string {
   const s = new Date(startsIso);
   const e = new Date(endsIso);
   const sameDay = s.toDateString() === e.toDateString();
   const sameMonth =
     s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth();
-  const sameYear = s.getFullYear() === e.getFullYear();
 
   if (sameDay) {
     return s.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
-      year: "numeric",
     });
   }
   if (sameMonth) {
-    // Jun 1–3, 2026
-    return `${s.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${e.getDate()}, ${e.getFullYear()}`;
+    return `${s.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${e.getDate()}`;
   }
-  if (sameYear) {
-    // Jun 28 – Jul 2, 2026
-    return `${s.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${e.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${e.getFullYear()}`;
-  }
-  // Dec 30, 2026 – Jan 2, 2027
-  const opts: Intl.DateTimeFormatOptions = {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  };
-  return `${s.toLocaleDateString(undefined, opts)} – ${e.toLocaleDateString(undefined, opts)}`;
+  return `${s.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${e.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Styles — V5 palette + Alfa Slab / Anton / IBM Plex Mono / Inter.
+// Inline per project convention. Grouped at the bottom so the JSX
+// upstairs reads as page structure.
+// ─────────────────────────────────────────────────────────────────────
+
+const bodyFontStack = `"Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`;
+const displayFontStack = `"Alfa Slab One", "Times New Roman", serif`;
+const headingFontStack = `"Anton", "Impact", "Arial Narrow", sans-serif`;
+const monoFontStack = `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace`;
+
+const heroStyle: CSSProperties = {
+  padding: "clamp(56px, 9vw, 96px) clamp(20px, 5vw, 48px) clamp(48px, 7vw, 72px)",
+  // Court-yellow radial bloom over cream — the V5 signature.
+  background: `radial-gradient(ellipse 50% 70% at 80% 20%, ${courtYellow} 0%, transparent 70%), ${cream}`,
+};
+
+const heroInnerStyle: CSSProperties = {
+  maxWidth: 1080,
+  margin: "0 auto",
+};
+
+const heroH1Style: CSSProperties = {
+  fontFamily: displayFontStack,
+  // clamp so the headline scales on phones without going microscopic
+  // or banging into the viewport edge.
+  fontSize: "clamp(36px, 7vw, 64px)",
+  lineHeight: 0.95,
+  margin: "0 0 16px",
+  maxWidth: 720,
+  letterSpacing: "-0.5px",
+};
+
+const heroPStyle: CSSProperties = {
+  fontSize: "clamp(15px, 1.8vw, 18px)",
+  maxWidth: 540,
+  margin: "0 0 28px",
+  color: inkSoft,
+  lineHeight: 1.5,
+};
+
+const heroCtaRowStyle: CSSProperties = {
+  display: "inline-flex",
+  gap: 12,
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const ctaPrimaryStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "14px 22px",
+  background: ink,
+  color: bg,
+  textDecoration: "none",
+  borderRadius: 8,
+  fontWeight: 600,
+  fontSize: 15,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+};
+
+const ctaSecondaryStyle: CSSProperties = {
+  ...ctaPrimaryStyle,
+  background: "transparent",
+  color: ink,
+  boxShadow: `inset 0 0 0 2px ${ink}`,
+};
+
+const tournamentsSectionStyle: CSSProperties = {
+  padding: "clamp(36px, 6vw, 56px) clamp(20px, 5vw, 48px) clamp(48px, 8vw, 80px)",
+  maxWidth: 1080,
+  margin: "0 auto",
+};
+
+const sectionHeadStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap",
+  gap: 12,
+  marginBottom: 22,
+};
+
+const sectionH2Style: CSSProperties = {
+  fontFamily: headingFontStack,
+  fontSize: "clamp(22px, 3vw, 28px)",
+  textTransform: "uppercase",
+  letterSpacing: "0.02em",
+  margin: 0,
+};
+
+const searchWrapStyle: CSSProperties = {
+  flex: "0 1 280px",
+  minWidth: 200,
+};
+
+const searchInputStyle: CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  fontSize: 14,
+  fontFamily: bodyFontStack,
+  background: "#fff",
+  color: ink,
+};
+
+const gridStyle: CSSProperties = {
+  display: "grid",
+  // auto-fill keeps the grid pleasant at every width: 3-up on
+  // desktop, 2-up on tablet, 1-up on phone. minmax floors at 280px
+  // so each card stays comfortable.
+  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+  gap: 16,
+};
+
+const cardStyle: CSSProperties = {
+  background: cream,
+  border: `1px solid ${rule}`,
+  borderRadius: 10,
+  overflow: "hidden",
+  textDecoration: "none",
+  color: "inherit",
+  display: "block",
+  transition: "transform 160ms ease, box-shadow 160ms ease",
+  boxShadow: "0 1px 0 rgba(20,24,31,0.04)",
+};
+
+const cardStripeStyle: CSSProperties = {
+  height: 10,
+};
+
+const cardBodyStyle: CSSProperties = {
+  padding: "18px 20px 20px",
+};
+
+const cardPillStyle: CSSProperties = {
+  display: "inline-block",
+  background: ink,
+  color: courtYellow,
+  fontFamily: monoFontStack,
+  fontSize: 10,
+  fontWeight: 700,
+  letterSpacing: "0.16em",
+  textTransform: "uppercase",
+  padding: "3px 8px",
+  borderRadius: 3,
+  marginBottom: 12,
+};
+
+const cardH3Style: CSSProperties = {
+  fontFamily: displayFontStack,
+  fontSize: 22,
+  lineHeight: 1.15,
+  margin: "0 0 10px",
+  letterSpacing: "-0.2px",
+};
+
+const cardMetaStyle: CSSProperties = {
+  fontSize: 13,
+  color: inkSoft,
+  margin: "0 0 16px",
+  lineHeight: 1.45,
+};
+
+const cardPriceRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  gap: 6,
+};
+
+const cardPriceFromStyle: CSSProperties = {
+  fontFamily: bodyFontStack,
+  fontSize: 11,
+  color: inkSoft,
+  fontWeight: 500,
+};
+
+const cardPriceValStyle: CSSProperties = {
+  fontFamily: headingFontStack,
+  fontSize: 22,
+  letterSpacing: "0.02em",
+};
+
+const statusTextStyle: CSSProperties = {
+  color: inkSoft,
+  fontSize: 14,
+  margin: 0,
+};
+
+const emptyStyle: CSSProperties = {
+  padding: 32,
+  textAlign: "center",
+  background: cream,
+  border: `1px dashed ${creamDeep}`,
+  borderRadius: 8,
+  color: inkSoft,
+  fontSize: 14,
+};
+
+const clearBtnStyle: CSSProperties = {
+  background: "none",
+  border: "none",
+  color: courtRed,
+  cursor: "pointer",
+  fontSize: 13,
+  textDecoration: "underline",
+  fontFamily: "inherit",
+  padding: 0,
+  fontWeight: 600,
+};

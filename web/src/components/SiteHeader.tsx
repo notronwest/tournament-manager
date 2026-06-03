@@ -2,6 +2,10 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
 import { useAuth } from "../auth/AuthProvider";
+// V5 logo — outlined SVG, no font dependency. Vite fingerprints +
+// inlines small enough or serves as URL; either way the import gives
+// us a stable asset path.
+import logoUrl from "../assets/bert-and-erne-logo.svg";
 
 // sessionStorage key the test-players tool writes to before signing
 // in as a test user. Same constant used here for the "Switch back"
@@ -213,14 +217,27 @@ export default function SiteHeader() {
       >
         <Link
           to="/"
+          aria-label="bert & erne — pickleball tournaments"
           style={{
             textDecoration: "none",
-            color: "#111",
-            fontWeight: 600,
-            fontSize: 16,
+            display: "inline-flex",
+            alignItems: "center",
+            // Negative left margin nudges the logo's cream-bookend
+            // edge flush with the page's left padding; the V5 mark
+            // has its own internal breathing room.
+            marginLeft: -4,
           }}
         >
-          Tournament Manager
+          <img
+            src={logoUrl}
+            alt="bert & erne"
+            // viewBox is 410×175 (~2.34:1). 168px wide → ~72px tall —
+            // tall enough that the BERT / & / ERNE triptych remains
+            // legible in a navbar.
+            width="168"
+            height="72"
+            style={{ display: "block" }}
+          />
         </Link>
 
         <nav

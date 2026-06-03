@@ -1,0 +1,1318 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>bert & erne — V5 layout mockups</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Anton&family=IBM+Plex+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <style>
+      /* ─────────────────────────────────────────────────────────────
+         V5 token palette (lifted from bert-and-erne-v5.svg header)
+         ─────────────────────────────────────────────────────────── */
+      :root {
+        --ink: #14181f;
+        --ink-soft: #4a5159;
+        --bg: #fafaf7;
+        --cream: #f6efd6;
+        --cream-deep: #ead9a3;
+        --court-green: #2c8a3d;
+        --court-green-deep: #226c2f;
+        --court-yellow: #f3d111;
+        --court-red: #d8341c;
+        --court-red-deep: #b62815;
+        --rule: #e3dec8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial,
+          sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.5;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         Gallery shell — five mockups stacked, each labeled with a
+         caption strip so the gallery is navigable.
+         ─────────────────────────────────────────────────────────── */
+      .gallery {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 56px 24px 96px;
+      }
+      .gallery-intro h1 {
+        font-family: "Alfa Slab One", serif;
+        font-size: 44px;
+        line-height: 1;
+        margin: 0 0 14px;
+        color: var(--ink);
+      }
+      .gallery-intro p {
+        max-width: 720px;
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0 0 12px;
+      }
+      .gallery-intro .swatches {
+        display: inline-flex;
+        gap: 6px;
+        margin-top: 18px;
+      }
+      .gallery-intro .swatch {
+        width: 36px;
+        height: 36px;
+        border-radius: 6px;
+        border: 1px solid var(--rule);
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+      }
+
+      .mockup {
+        margin-top: 56px;
+        border: 1px solid var(--rule);
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      .mockup .caption {
+        background: var(--ink);
+        color: var(--bg);
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .mockup .caption .num {
+        font-family: "Alfa Slab One", serif;
+        font-size: 18px;
+        color: var(--court-yellow);
+      }
+      .mockup .caption .title {
+        font-family: "Anton", sans-serif;
+        font-size: 18px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .mockup .caption .sub {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        color: rgba(250, 250, 247, 0.7);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        margin-left: auto;
+      }
+      .mockup .frame {
+        padding: 0;
+        background: var(--bg);
+      }
+
+      /* Shared logo helper. Inlines the file from the same directory
+         (it's already at mockups/bert-and-erne-v5-outlined.svg). */
+      .logo {
+        display: block;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         01 — Public homepage
+         ─────────────────────────────────────────────────────────── */
+      .m01 {
+        background: var(--bg);
+      }
+      .m01 .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 32px;
+        background: #fff;
+        border-bottom: 1px solid var(--rule);
+      }
+      .m01 .nav-links {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-size: 14px;
+      }
+      .m01 .nav-links a {
+        padding: 8px 14px;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .m01 .nav-links .signin {
+        background: var(--court-green);
+        color: var(--bg);
+        border-radius: 6px;
+        font-weight: 600;
+      }
+      .m01 .hero {
+        padding: 80px 48px 64px;
+        background:
+          radial-gradient(
+            ellipse 50% 70% at 80% 20%,
+            var(--court-yellow) 0%,
+            transparent 70%
+          ),
+          var(--cream);
+      }
+      .m01 .hero h1 {
+        font-family: "Alfa Slab One", serif;
+        font-size: 64px;
+        line-height: 0.95;
+        margin: 0 0 16px;
+        max-width: 720px;
+      }
+      .m01 .hero h1 .accent {
+        color: var(--court-red);
+      }
+      .m01 .hero p {
+        font-size: 18px;
+        max-width: 540px;
+        margin: 0 0 28px;
+        color: var(--ink-soft);
+      }
+      .m01 .hero .cta-row {
+        display: inline-flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .m01 .cta {
+        display: inline-block;
+        padding: 14px 22px;
+        background: var(--ink);
+        color: var(--bg);
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 15px;
+        font-family: "Anton", sans-serif;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .m01 .cta.secondary {
+        background: transparent;
+        color: var(--ink);
+        box-shadow: inset 0 0 0 2px var(--ink);
+      }
+
+      .m01 .tournaments {
+        padding: 48px 48px 56px;
+      }
+      .m01 .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 22px;
+      }
+      .m01 .section-head h2 {
+        font-family: "Anton", sans-serif;
+        font-size: 28px;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        margin: 0;
+      }
+      .m01 .section-head a {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--court-red);
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .m01 .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .m01 .card {
+        background: var(--cream);
+        border: 1px solid var(--rule);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .m01 .card .stripe {
+        height: 10px;
+      }
+      .m01 .card .stripe.g {
+        background: var(--court-green);
+      }
+      .m01 .card .stripe.y {
+        background: var(--court-yellow);
+      }
+      .m01 .card .stripe.r {
+        background: var(--court-red);
+      }
+      .m01 .card .body {
+        padding: 18px 20px 20px;
+      }
+      .m01 .card .pill {
+        display: inline-block;
+        background: var(--ink);
+        color: var(--court-yellow);
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: 3px;
+        margin-bottom: 12px;
+      }
+      .m01 .card h3 {
+        font-family: "Alfa Slab One", serif;
+        font-size: 22px;
+        line-height: 1.15;
+        margin: 0 0 10px;
+      }
+      .m01 .card .meta {
+        font-size: 13px;
+        color: var(--ink-soft);
+        margin: 0 0 16px;
+      }
+      .m01 .card .price {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        font-family: "Anton", sans-serif;
+        font-size: 22px;
+      }
+      .m01 .card .price .from {
+        font-family: "Inter", sans-serif;
+        font-size: 11px;
+        color: var(--ink-soft);
+        font-weight: 500;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         02 — Public tournament detail
+         ─────────────────────────────────────────────────────────── */
+      .m02 {
+        background: var(--bg);
+      }
+      .m02 .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 32px;
+        background: var(--ink);
+        color: var(--bg);
+      }
+      .m02 .nav .right {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        font-size: 13px;
+      }
+      .m02 .nav .right a {
+        color: var(--bg);
+        text-decoration: none;
+        opacity: 0.85;
+      }
+      .m02 .nav .right .register {
+        background: var(--court-yellow);
+        color: var(--ink);
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-family: "Anton", sans-serif;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 1;
+      }
+      .m02 .banner {
+        background:
+          linear-gradient(180deg, var(--cream) 0%, var(--cream-deep) 100%);
+        padding: 56px 48px 48px;
+        position: relative;
+      }
+      .m02 .banner .crumb {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--court-red);
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      .m02 .banner h1 {
+        font-family: "Alfa Slab One", serif;
+        font-size: 56px;
+        line-height: 0.95;
+        margin: 0 0 14px;
+      }
+      .m02 .banner .meta {
+        display: flex;
+        gap: 24px;
+        font-size: 14px;
+        color: var(--ink-soft);
+        flex-wrap: wrap;
+      }
+      .m02 .banner .meta strong {
+        color: var(--ink);
+      }
+      .m02 .banner .status-pill {
+        position: absolute;
+        top: 32px;
+        right: 48px;
+        background: var(--court-green);
+        color: var(--bg);
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-family: "Anton", sans-serif;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .m02 .banner .status-pill::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--court-yellow);
+      }
+
+      .m02 .events {
+        padding: 32px 48px 48px;
+      }
+      .m02 .events h2 {
+        font-family: "Anton", sans-serif;
+        font-size: 22px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0 0 16px;
+      }
+      .m02 .event-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 16px;
+        align-items: center;
+        padding: 16px 20px;
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-left: 6px solid var(--court-green);
+        border-radius: 8px;
+        margin-bottom: 10px;
+      }
+      .m02 .event-row .name {
+        font-family: "Alfa Slab One", serif;
+        font-size: 18px;
+        line-height: 1.1;
+      }
+      .m02 .event-row .sub {
+        font-size: 12px;
+        color: var(--ink-soft);
+        margin-top: 4px;
+      }
+      .m02 .event-row .filled {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--ink-soft);
+        text-align: right;
+      }
+      .m02 .event-row .filled .count {
+        color: var(--ink);
+        font-size: 16px;
+        display: block;
+      }
+      .m02 .event-row .register-btn {
+        background: var(--court-red);
+        color: var(--bg);
+        font-family: "Anton", sans-serif;
+        padding: 10px 18px;
+        border-radius: 6px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        text-decoration: none;
+      }
+      .m02 .event-row.almost {
+        border-left-color: var(--court-yellow);
+      }
+      .m02 .event-row.full {
+        border-left-color: var(--ink-soft);
+        opacity: 0.7;
+      }
+      .m02 .event-row.full .register-btn {
+        background: var(--ink-soft);
+        cursor: not-allowed;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         03 — Admin event console
+         ─────────────────────────────────────────────────────────── */
+      .m03 {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        min-height: 720px;
+        background: var(--bg);
+      }
+      .m03 .sidebar {
+        background: var(--ink);
+        color: var(--bg);
+        padding: 24px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .m03 .sidebar .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(250, 250, 247, 0.1);
+      }
+      .m03 .sidebar .brand .mark {
+        width: 32px;
+        height: 32px;
+        background: var(--court-yellow);
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Alfa Slab One", serif;
+        color: var(--ink);
+        font-size: 16px;
+      }
+      .m03 .sidebar .brand .text {
+        font-family: "Anton", sans-serif;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .m03 .sidebar .org-chip {
+        background: rgba(250, 250, 247, 0.08);
+        padding: 10px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+      .m03 .sidebar .org-chip .label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--court-yellow);
+        margin-bottom: 4px;
+      }
+      .m03 .sidebar .nav-link {
+        display: block;
+        padding: 8px 12px;
+        font-size: 13px;
+        color: var(--bg);
+        text-decoration: none;
+        border-radius: 4px;
+        opacity: 0.75;
+      }
+      .m03 .sidebar .nav-link.active {
+        background: var(--court-green);
+        opacity: 1;
+        font-weight: 600;
+      }
+      .m03 .main {
+        padding: 32px 36px 48px;
+      }
+      .m03 .crumb {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--court-red);
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
+      .m03 .page-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+      .m03 .page-head h1 {
+        font-family: "Alfa Slab One", serif;
+        font-size: 32px;
+        line-height: 1;
+        margin: 0;
+      }
+      .m03 .page-head .actions {
+        display: flex;
+        gap: 8px;
+      }
+      .m03 .action {
+        padding: 8px 14px;
+        border-radius: 6px;
+        font-family: "Anton", sans-serif;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        text-decoration: none;
+      }
+      .m03 .action.primary {
+        background: var(--court-red);
+        color: var(--bg);
+      }
+      .m03 .action.ghost {
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--rule);
+      }
+      .m03 .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin: 18px 0 24px;
+      }
+      .m03 .stat {
+        background: var(--cream);
+        border: 1px solid var(--rule);
+        padding: 12px 14px;
+        border-radius: 8px;
+      }
+      .m03 .stat .label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--ink-soft);
+        margin-bottom: 4px;
+      }
+      .m03 .stat .value {
+        font-family: "Alfa Slab One", serif;
+        font-size: 24px;
+        line-height: 1;
+      }
+      .m03 .stat .value .unit {
+        font-family: "Inter", sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--ink-soft);
+        margin-left: 4px;
+      }
+      .m03 .tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid var(--rule);
+        margin-bottom: 16px;
+      }
+      .m03 .tab {
+        padding: 10px 16px;
+        font-family: "Anton", sans-serif;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--ink-soft);
+        text-decoration: none;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -1px;
+      }
+      .m03 .tab.active {
+        color: var(--court-red);
+        border-bottom-color: var(--court-red);
+      }
+      .m03 .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .m03 .table th {
+        text-align: left;
+        background: var(--cream);
+        padding: 10px 12px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--ink-soft);
+        font-weight: 700;
+      }
+      .m03 .table td {
+        padding: 12px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .m03 .table td.rank {
+        font-family: "Alfa Slab One", serif;
+        font-size: 16px;
+        width: 40px;
+      }
+      .m03 .table tr:nth-child(1) td.rank {
+        color: var(--court-yellow);
+      }
+      .m03 .table tr:nth-child(2) td.rank {
+        color: var(--court-green);
+      }
+      .m03 .table tr:nth-child(3) td.rank {
+        color: var(--court-red);
+      }
+      .m03 .table .pts {
+        font-family: "IBM Plex Mono", monospace;
+        font-weight: 700;
+        text-align: right;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         04 — Tournament program (print poster)
+         ─────────────────────────────────────────────────────────── */
+      .m04 {
+        background: var(--cream);
+        padding: 56px;
+        display: flex;
+        justify-content: center;
+      }
+      .m04 .poster {
+        width: 600px;
+        background: var(--bg);
+        border: 8px solid var(--ink);
+        padding: 36px 36px 28px;
+        font-family: "Inter", sans-serif;
+      }
+      .m04 .poster .topbar {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 18px;
+      }
+      .m04 .poster .topbar .logo {
+        width: 280px;
+      }
+      .m04 .poster .ribbon {
+        display: flex;
+      }
+      .m04 .poster .ribbon span {
+        height: 8px;
+        flex: 1;
+      }
+      .m04 .poster .ribbon span.g {
+        background: var(--court-green);
+      }
+      .m04 .poster .ribbon span.y {
+        background: var(--court-yellow);
+      }
+      .m04 .poster .ribbon span.r {
+        background: var(--court-red);
+      }
+      .m04 .poster .title {
+        font-family: "Alfa Slab One", serif;
+        font-size: 44px;
+        line-height: 1;
+        margin: 24px 0 8px;
+        text-align: center;
+      }
+      .m04 .poster .subtitle {
+        font-family: "Anton", sans-serif;
+        font-size: 18px;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--court-red);
+        margin-bottom: 24px;
+      }
+      .m04 .poster .info {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 18px;
+        background: var(--cream);
+        padding: 16px 20px;
+        border-radius: 6px;
+        margin-bottom: 22px;
+      }
+      .m04 .poster .info dt {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--ink-soft);
+        font-weight: 700;
+        margin-top: 6px;
+      }
+      .m04 .poster .info dd {
+        margin: 0;
+        font-family: "Anton", sans-serif;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .m04 .poster .events {
+        font-size: 13px;
+      }
+      .m04 .poster .events h3 {
+        font-family: "Anton", sans-serif;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin: 0 0 8px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid var(--ink);
+      }
+      .m04 .poster .events .ev {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 6px 0;
+        border-bottom: 1px dashed var(--rule);
+      }
+      .m04 .poster .events .ev .label {
+        font-weight: 600;
+      }
+      .m04 .poster .events .ev .time {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+      .m04 .poster .sponsors {
+        margin-top: 22px;
+        padding-top: 14px;
+        border-top: 1px solid var(--rule);
+        text-align: center;
+      }
+      .m04 .poster .sponsors .label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--ink-soft);
+        margin-bottom: 8px;
+      }
+      .m04 .poster .sponsors .row {
+        display: flex;
+        justify-content: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .m04 .poster .sponsors .row .slot {
+        background: var(--cream);
+        padding: 8px 14px;
+        border-radius: 4px;
+        font-family: "Alfa Slab One", serif;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         05 — Email confirmation
+         ─────────────────────────────────────────────────────────── */
+      .m05 {
+        background: #ece6cf;
+        padding: 48px;
+        display: flex;
+        justify-content: center;
+      }
+      .m05 .email {
+        width: 600px;
+        background: var(--bg);
+        border-radius: 6px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        font-family: "Inter", sans-serif;
+      }
+      .m05 .email .header {
+        background: var(--ink);
+        padding: 24px;
+        display: flex;
+        justify-content: center;
+      }
+      .m05 .email .header img {
+        width: 200px;
+        display: block;
+        filter: brightness(1.05) saturate(1.05);
+      }
+      .m05 .email .ribbon {
+        display: flex;
+      }
+      .m05 .email .ribbon span {
+        height: 6px;
+        flex: 1;
+      }
+      .m05 .email .ribbon span:nth-child(1) {
+        background: var(--court-green);
+      }
+      .m05 .email .ribbon span:nth-child(2) {
+        background: var(--court-yellow);
+      }
+      .m05 .email .ribbon span:nth-child(3) {
+        background: var(--court-red);
+      }
+      .m05 .email .body {
+        padding: 32px 36px;
+      }
+      .m05 .email h1 {
+        font-family: "Alfa Slab One", serif;
+        font-size: 32px;
+        line-height: 1;
+        margin: 0 0 14px;
+      }
+      .m05 .email p {
+        font-size: 15px;
+        color: var(--ink-soft);
+        margin: 0 0 16px;
+      }
+      .m05 .email .order {
+        background: var(--cream);
+        border-radius: 6px;
+        padding: 18px 20px;
+        margin: 20px 0 8px;
+      }
+      .m05 .email .order .label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--ink-soft);
+        margin-bottom: 10px;
+        font-weight: 700;
+      }
+      .m05 .email .order .line {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        font-size: 14px;
+      }
+      .m05 .email .order .line.total {
+        border-top: 1px solid var(--rule);
+        padding-top: 12px;
+        margin-top: 8px;
+        font-family: "Alfa Slab One", serif;
+        font-size: 18px;
+      }
+      .m05 .email .cta {
+        display: inline-block;
+        background: var(--court-red);
+        color: var(--bg);
+        padding: 12px 22px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-family: "Anton", sans-serif;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-top: 12px;
+      }
+      .m05 .email .footer {
+        background: var(--cream);
+        padding: 18px 36px 22px;
+        font-size: 12px;
+        color: var(--ink-soft);
+        text-align: center;
+      }
+      .m05 .email .footer .meta {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="gallery">
+      <header class="gallery-intro">
+        <h1>V5 Layout Mockups</h1>
+        <p>
+          Five surfaces — public homepage, public tournament page,
+          organizer dashboard, printed program, transactional email —
+          all using the V5 logo and the tokens lifted from
+          <code>bert-and-erne-v5.svg</code>: ink, cream, court-green,
+          court-yellow, court-red. Same palette across web and print so
+          the brand carries cleanly between surfaces.
+        </p>
+        <div class="swatches">
+          <span class="swatch" style="background: #14181f" title="ink"></span>
+          <span class="swatch" style="background: #fafaf7" title="off-white"></span>
+          <span class="swatch" style="background: #f6efd6" title="cream"></span>
+          <span class="swatch" style="background: #2c8a3d" title="court-green"></span>
+          <span class="swatch" style="background: #f3d111" title="court-yellow"></span>
+          <span class="swatch" style="background: #d8341c" title="court-red"></span>
+        </div>
+      </header>
+
+      <!-- 01 — Public homepage ─────────────────────────────────── -->
+      <section class="mockup">
+        <div class="caption">
+          <span class="num">01</span>
+          <span class="title">Public Homepage</span>
+          <span class="sub">/ — anonymous visitor</span>
+        </div>
+        <div class="frame">
+          <div class="m01">
+            <nav class="nav">
+              <img class="logo" src="./bert-and-erne-v5-outlined.svg" width="180" alt="bert & erne" />
+              <div class="nav-links">
+                <a href="#">Browse</a>
+                <a href="#">Organizers</a>
+                <a href="#">About</a>
+                <a href="#" class="signin">Sign in</a>
+              </div>
+            </nav>
+            <section class="hero">
+              <h1>
+                Run a pickleball tournament.<br />
+                <span class="accent">Skip the spreadsheets.</span>
+              </h1>
+              <p>
+                Bracket generation, court dispatch, partner search,
+                pay-with-Stripe checkout. Built by clubs, for clubs.
+              </p>
+              <div class="cta-row">
+                <a href="#" class="cta">Browse tournaments</a>
+                <a href="#" class="cta secondary">For organizers</a>
+              </div>
+            </section>
+            <section class="tournaments">
+              <div class="section-head">
+                <h2>Upcoming Tournaments</h2>
+                <a href="#">See all →</a>
+              </div>
+              <div class="grid">
+                <article class="card">
+                  <div class="stripe g"></div>
+                  <div class="body">
+                    <span class="pill">Registration open</span>
+                    <h3>White Mountain Summer Open</h3>
+                    <p class="meta">North Conway · Jun 14–15 · 64 teams</p>
+                    <div class="price">
+                      <span class="from">From</span> $45
+                    </div>
+                  </div>
+                </article>
+                <article class="card">
+                  <div class="stripe y"></div>
+                  <div class="body">
+                    <span class="pill">Early bird</span>
+                    <h3>Lakes Region Slam</h3>
+                    <p class="meta">Meredith · Jul 22 · 32 teams</p>
+                    <div class="price">
+                      <span class="from">From</span> $35
+                    </div>
+                  </div>
+                </article>
+                <article class="card">
+                  <div class="stripe r"></div>
+                  <div class="body">
+                    <span class="pill">3 spots left</span>
+                    <h3>Granite State Championship</h3>
+                    <p class="meta">Concord · Aug 9–10 · 48 teams</p>
+                    <div class="price">
+                      <span class="from">From</span> $60
+                    </div>
+                  </div>
+                </article>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- 02 — Public tournament detail ─────────────────────────── -->
+      <section class="mockup">
+        <div class="caption">
+          <span class="num">02</span>
+          <span class="title">Public Tournament Detail</span>
+          <span class="sub">/t/wmpc/summer-open — visitor browsing events</span>
+        </div>
+        <div class="frame">
+          <div class="m02">
+            <nav class="nav">
+              <img class="logo" src="./bert-and-erne-v5-outlined.svg" width="160" alt="bert & erne" />
+              <div class="right">
+                <a href="#">All tournaments</a>
+                <a href="#">Sign in</a>
+                <a href="#" class="register">Register</a>
+              </div>
+            </nav>
+            <section class="banner">
+              <div class="status-pill">Registration open</div>
+              <div class="crumb">White Mountain Pickleball Club</div>
+              <h1>White Mountain Summer Open 2026</h1>
+              <div class="meta">
+                <span><strong>Jun 14–15, 2026</strong></span>
+                <span><strong>North Conway, NH</strong></span>
+                <span><strong>64 teams · 6 events</strong></span>
+                <span>Early bird ends in <strong>4 days</strong></span>
+              </div>
+            </section>
+            <section class="events">
+              <h2>Events</h2>
+              <div class="event-row">
+                <div>
+                  <div class="name">Men's 3.5 Doubles</div>
+                  <div class="sub">3.0–3.5 · Pool play → bracket · $45</div>
+                </div>
+                <div class="filled">
+                  <span class="count">12 / 16</span>
+                  teams
+                </div>
+                <a href="#" class="register-btn">Register</a>
+              </div>
+              <div class="event-row almost">
+                <div>
+                  <div class="name">Women's 4.0 Doubles</div>
+                  <div class="sub">3.75–4.25 · Pool play → bracket · $45</div>
+                </div>
+                <div class="filled">
+                  <span class="count">14 / 16</span>
+                  teams
+                </div>
+                <a href="#" class="register-btn">Register</a>
+              </div>
+              <div class="event-row full">
+                <div>
+                  <div class="name">Mixed 3.5 Doubles</div>
+                  <div class="sub">3.0–3.5 · Pool play → bracket · $45</div>
+                </div>
+                <div class="filled">
+                  <span class="count">16 / 16</span>
+                  teams
+                </div>
+                <a href="#" class="register-btn">Waitlist</a>
+              </div>
+              <div class="event-row">
+                <div>
+                  <div class="name">Men's 4.0 Doubles</div>
+                  <div class="sub">3.75–4.25 · Pool play → bracket · $45</div>
+                </div>
+                <div class="filled">
+                  <span class="count">8 / 16</span>
+                  teams
+                </div>
+                <a href="#" class="register-btn">Register</a>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- 03 — Admin event console ───────────────────────────────── -->
+      <section class="mockup">
+        <div class="caption">
+          <span class="num">03</span>
+          <span class="title">Organizer Dashboard</span>
+          <span class="sub">/admin/wmpc/tournaments/summer-open/events/men-35</span>
+        </div>
+        <div class="frame">
+          <div class="m03">
+            <aside class="sidebar">
+              <div class="brand">
+                <div class="mark">b</div>
+                <div class="text">bert & erne</div>
+              </div>
+              <div class="org-chip">
+                <div class="label">Organization</div>
+                <div>White Mountain PC</div>
+              </div>
+              <nav>
+                <a href="#" class="nav-link">Overview</a>
+                <a href="#" class="nav-link active">Tournaments</a>
+                <a href="#" class="nav-link">Schedule</a>
+                <a href="#" class="nav-link">Tools</a>
+              </nav>
+            </aside>
+            <main class="main">
+              <div class="crumb">Summer Open · Men's 3.5 Doubles</div>
+              <div class="page-head">
+                <h1>Men's 3.5 Doubles</h1>
+                <div class="actions">
+                  <a href="#" class="action ghost">Print scorecards</a>
+                  <a href="#" class="action primary">Start event</a>
+                </div>
+              </div>
+              <div class="stats">
+                <div class="stat">
+                  <div class="label">Teams</div>
+                  <div class="value">12<span class="unit">/ 16</span></div>
+                </div>
+                <div class="stat">
+                  <div class="label">Matches</div>
+                  <div class="value">66</div>
+                </div>
+                <div class="stat">
+                  <div class="label">Courts</div>
+                  <div class="value">4</div>
+                </div>
+                <div class="stat">
+                  <div class="label">Est. duration</div>
+                  <div class="value">5<span class="unit">hr</span></div>
+                </div>
+              </div>
+              <div class="tabs">
+                <a href="#" class="tab active">Standings</a>
+                <a href="#" class="tab">Teams</a>
+                <a href="#" class="tab">Games</a>
+                <a href="#" class="tab">Settings</a>
+              </div>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Team</th>
+                    <th>W–L</th>
+                    <th>+/–</th>
+                    <th class="pts">Pts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="rank">1</td>
+                    <td>Smith / Jones</td>
+                    <td>5–1</td>
+                    <td>+27</td>
+                    <td class="pts">15</td>
+                  </tr>
+                  <tr>
+                    <td class="rank">2</td>
+                    <td>Davis / Wilson</td>
+                    <td>5–1</td>
+                    <td>+18</td>
+                    <td class="pts">15</td>
+                  </tr>
+                  <tr>
+                    <td class="rank">3</td>
+                    <td>O'Connor / Perkins</td>
+                    <td>4–2</td>
+                    <td>+11</td>
+                    <td class="pts">12</td>
+                  </tr>
+                  <tr>
+                    <td class="rank">4</td>
+                    <td>Rowell / Eaton</td>
+                    <td>3–3</td>
+                    <td>+2</td>
+                    <td class="pts">9</td>
+                  </tr>
+                </tbody>
+              </table>
+            </main>
+          </div>
+        </div>
+      </section>
+
+      <!-- 04 — Tournament program (print) ────────────────────────── -->
+      <section class="mockup">
+        <div class="caption">
+          <span class="num">04</span>
+          <span class="title">Printed Program</span>
+          <span class="sub">half-page handout · letter-press feel</span>
+        </div>
+        <div class="frame">
+          <div class="m04">
+            <div class="poster">
+              <div class="topbar">
+                <img class="logo" src="./bert-and-erne-v5-outlined.svg" alt="bert & erne" />
+              </div>
+              <div class="ribbon">
+                <span class="g"></span>
+                <span class="y"></span>
+                <span class="r"></span>
+              </div>
+              <h2 class="title">White Mountain Summer Open</h2>
+              <div class="subtitle">Pickleball Tournament · 2026</div>
+              <dl class="info">
+                <dt>Dates</dt>
+                <dd>June 14 – 15</dd>
+                <dt>Venue</dt>
+                <dd>Cranmore Sports Complex</dd>
+                <dt>City</dt>
+                <dd>North Conway, NH</dd>
+                <dt>Courts</dt>
+                <dd>8 outdoor</dd>
+              </dl>
+              <div class="events">
+                <h3>Schedule</h3>
+                <div class="ev">
+                  <span class="label">Saturday · Men's 3.5 + 4.0 Doubles</span>
+                  <span class="time">8:00 AM</span>
+                </div>
+                <div class="ev">
+                  <span class="label">Saturday · Women's 3.5 + 4.0 Doubles</span>
+                  <span class="time">12:00 PM</span>
+                </div>
+                <div class="ev">
+                  <span class="label">Sunday · Mixed 3.5 + 4.0 Doubles</span>
+                  <span class="time">9:00 AM</span>
+                </div>
+                <div class="ev">
+                  <span class="label">Sunday · Medal matches (all events)</span>
+                  <span class="time">2:00 PM</span>
+                </div>
+              </div>
+              <div class="sponsors">
+                <div class="label">Presented in partnership with</div>
+                <div class="row">
+                  <div class="slot">Cranmore</div>
+                  <div class="slot">WMPC</div>
+                  <div class="slot">PaddleHouse</div>
+                  <div class="slot">North Country Co-op</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 05 — Email confirmation ────────────────────────────────── -->
+      <section class="mockup">
+        <div class="caption">
+          <span class="num">05</span>
+          <span class="title">Registration Confirmation Email</span>
+          <span class="sub">600px column · transactional</span>
+        </div>
+        <div class="frame">
+          <div class="m05">
+            <div class="email">
+              <div class="header">
+                <img src="./bert-and-erne-v5-outlined.svg" alt="bert & erne" />
+              </div>
+              <div class="ribbon">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <div class="body">
+                <h1>You're in, Sam.</h1>
+                <p>
+                  Your registration for <strong>White Mountain Summer Open</strong>
+                  is confirmed and paid. We've held a spot for your partner —
+                  they'll get their own invite by email.
+                </p>
+                <div class="order">
+                  <div class="label">Order summary</div>
+                  <div class="line">
+                    <span>Tournament entry fee</span>
+                    <span>$45.00</span>
+                  </div>
+                  <div class="line">
+                    <span>Men's 3.5 Doubles · partner Tom Davis</span>
+                    <span>included</span>
+                  </div>
+                  <div class="line total">
+                    <span>Total charged</span>
+                    <span>$45.00</span>
+                  </div>
+                </div>
+                <a href="#" class="cta">View your registration →</a>
+              </div>
+              <div class="footer">
+                <div>bert &amp; erne · pickleball tournament management</div>
+                <div class="meta">bertanderne.com</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
