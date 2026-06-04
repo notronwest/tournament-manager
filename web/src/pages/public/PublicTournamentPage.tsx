@@ -8,6 +8,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import { eligibilityChips } from "../../lib/eligibility";
 import {
@@ -753,6 +754,8 @@ function EventCard({
   const [seekingPartner, setSeekingPartner] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  // #9: gate the partner-dropping Cancel behind a confirm step.
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   // ─── Derived state for visual treatment ──────────────────────────
@@ -1138,6 +1141,16 @@ function EventCard({
     await onChanged();
   };
 
+  // #9: a pending reg with a *picked* partner gets an "are you sure?"
+  // step before Cancel drops the partner. Seeker / no-partner regs
+  // cancel directly — the action is less consequential (issue #9).
+  const hasPickedPartner =
+    !!myStatus?.partnerLabel && !myStatus?.isSeekingPartner;
+  const requestCancel = () => {
+    if (hasPickedPartner) setConfirmCancel(true);
+    else void onCancelPending();
+  };
+
   // ─── Right-side action button — depends on current state ─────────
   const renderAction = () => {
     if (!registrationOpen) return null;
@@ -1193,7 +1206,7 @@ function EventCard({
           )}
           <button
             type="button"
-            onClick={() => void onCancelPending()}
+            onClick={requestCancel}
             disabled={cancelling}
             style={{
               padding: "8px 14px",
@@ -1272,6 +1285,25 @@ function EventCard({
         borderRadius: 8,
       }}
     >
+      {confirmCancel && (
+        <ConfirmModal
+          title="Cancel registration?"
+          body={
+            <>
+              This cancels your registration and drops{" "}
+              <strong>{myStatus?.partnerLabel}</strong> as your partner.
+              Your partner pick will be removed.
+            </>
+          }
+          confirmLabel="Cancel registration"
+          cancelLabel="Keep registration"
+          onCancel={() => setConfirmCancel(false)}
+          onConfirm={async () => {
+            await onCancelPending();
+            setConfirmCancel(false);
+          }}
+        />
+      )}
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Title + status pill */}
