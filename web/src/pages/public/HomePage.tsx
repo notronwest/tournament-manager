@@ -6,6 +6,26 @@ import {
   pickActivePricingTier,
   type PricingTier,
 } from "../../lib/pricingTiers";
+import {
+  bodyFontStack,
+  bg,
+  cream,
+  creamDeep,
+  ctaPrimaryStyle,
+  ctaSecondaryStyle,
+  courtGreen,
+  courtRed,
+  courtYellow,
+  displayFontStack,
+  ghostButtonStyle,
+  headingFontStack,
+  ink,
+  inkSoft,
+  inputStyle,
+  pillStyle,
+  rule,
+  statusPanelStyle,
+} from "../../lib/publicTheme";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -20,21 +40,6 @@ type TournamentWithOrg = Tournament & {
   tournament_pricing_tiers: PricingTier[] | null;
 };
 
-// ─────────────────────────────────────────────────────────────────────
-// V5 palette — same tokens used in mockups/layouts-v5.html. Kept inline
-// (project convention is no CSS framework) but centralized at the top
-// of the file so swapping accents is one edit.
-// ─────────────────────────────────────────────────────────────────────
-const ink = "#14181f";
-const inkSoft = "#4a5159";
-const bg = "#fafaf7";
-const cream = "#f6efd6";
-const creamDeep = "#ead9a3";
-const courtGreen = "#2c8a3d";
-const courtYellow = "#f3d111";
-const courtRed = "#d8341c";
-const rule = "#e3dec8";
-
 // Public homepage at `/`. Built to mockup 01 (mockups/layouts-v5.html):
 //
 //   ┌──────────────────────────────────────────────────────────────┐
@@ -48,6 +53,11 @@ const rule = "#e3dec8";
 //
 // SiteHeader renders the global logo + auth nav above. This page only
 // owns the hero downward.
+//
+// Tokens (colors, fonts, primitive styles) come from src/lib/publicTheme
+// so the homepage stays in lockstep with the rest of the public flow.
+// Hero-specific styles (oversized H1, hero CTAs) are built locally by
+// spreading the theme bases.
 //
 // Data: same query as the prior list-style homepage — every published
 // tournament whose ends_at hasn't passed, RLS-anon-readable. Volumes
@@ -127,10 +137,10 @@ export default function HomePage() {
             pay-with-Stripe checkout. Built by clubs, for clubs.
           </p>
           <div style={heroCtaRowStyle}>
-            <a href="#tournaments" style={ctaPrimaryStyle}>
+            <a href="#tournaments" style={heroCtaPrimaryStyle}>
               Browse tournaments
             </a>
-            <Link to="/admin" style={ctaSecondaryStyle}>
+            <Link to="/admin" style={heroCtaSecondaryStyle}>
               For organizers
             </Link>
           </div>
@@ -262,7 +272,7 @@ function EmptyState({
       {queryText ? (
         <>
           No tournaments match <strong>"{queryText}"</strong>.{" "}
-          <button type="button" onClick={onClear} style={clearBtnStyle}>
+          <button type="button" onClick={onClear} style={ghostButtonStyle}>
             Clear search
           </button>
         </>
@@ -276,20 +286,9 @@ function EmptyState({
 }
 
 function ErrorPanel({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: 14,
-        background: "#fef2f2",
-        border: `1px solid ${courtRed}`,
-        borderRadius: 8,
-        color: "#991b1b",
-        fontSize: 13,
-      }}
-    >
-      {children}
-    </div>
-  );
+  // Lean on the shared danger surface so errors here read the same as
+  // errors on every other public page.
+  return <div style={statusPanelStyle("danger")}>{children}</div>;
 }
 
 // "Jun 14–15" or "Jun 28 – Jul 2" — short form for the card meta line.
@@ -315,15 +314,11 @@ function fmtDateRange(startsIso: string, endsIso: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Styles — V5 palette + Alfa Slab / Anton / IBM Plex Mono / Inter.
-// Inline per project convention. Grouped at the bottom so the JSX
-// upstairs reads as page structure.
+// Styles — homepage-local. Tokens / fonts / shared primitives come
+// from publicTheme.ts; the styles below are the hero-and-grid pieces
+// that only the homepage uses (oversized H1, big CTAs, card layout).
+// Inline per project convention.
 // ─────────────────────────────────────────────────────────────────────
-
-const bodyFontStack = `"Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif`;
-const displayFontStack = `"Alfa Slab One", "Times New Roman", serif`;
-const headingFontStack = `"Anton", "Impact", "Arial Narrow", sans-serif`;
-const monoFontStack = `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace`;
 
 const heroStyle: CSSProperties = {
   padding: "clamp(56px, 9vw, 96px) clamp(20px, 5vw, 48px) clamp(48px, 7vw, 72px)",
@@ -339,7 +334,8 @@ const heroInnerStyle: CSSProperties = {
 const heroH1Style: CSSProperties = {
   fontFamily: displayFontStack,
   // clamp so the headline scales on phones without going microscopic
-  // or banging into the viewport edge.
+  // or banging into the viewport edge. Bigger than the shared
+  // pageH1Style because this is the marketing hero, not a form title.
   fontSize: "clamp(36px, 7vw, 64px)",
   lineHeight: 0.95,
   margin: "0 0 16px",
@@ -362,25 +358,20 @@ const heroCtaRowStyle: CSSProperties = {
   flexWrap: "wrap",
 };
 
-const ctaPrimaryStyle: CSSProperties = {
-  display: "inline-block",
+// Hero CTAs are bigger than the standard form CTAs — same shape and
+// type stack, just larger padding + fontSize. Spread the theme bases
+// so any future tweak to ctaPrimaryStyle / ctaSecondaryStyle still
+// propagates here.
+const heroCtaPrimaryStyle: CSSProperties = {
+  ...ctaPrimaryStyle,
   padding: "14px 22px",
-  background: ink,
-  color: bg,
-  textDecoration: "none",
-  borderRadius: 8,
-  fontWeight: 600,
   fontSize: 15,
-  fontFamily: headingFontStack,
-  letterSpacing: "0.04em",
-  textTransform: "uppercase",
 };
 
-const ctaSecondaryStyle: CSSProperties = {
-  ...ctaPrimaryStyle,
-  background: "transparent",
-  color: ink,
-  boxShadow: `inset 0 0 0 2px ${ink}`,
+const heroCtaSecondaryStyle: CSSProperties = {
+  ...ctaSecondaryStyle,
+  padding: "14px 22px",
+  fontSize: 15,
 };
 
 const tournamentsSectionStyle: CSSProperties = {
@@ -398,6 +389,9 @@ const sectionHeadStyle: CSSProperties = {
   marginBottom: 22,
 };
 
+// Bigger than the shared sectionH2Style — that one is sized for inline
+// form sections, this one anchors the "Upcoming Tournaments" billboard
+// on the homepage.
 const sectionH2Style: CSSProperties = {
   fontFamily: headingFontStack,
   fontSize: "clamp(22px, 3vw, 28px)",
@@ -411,15 +405,12 @@ const searchWrapStyle: CSSProperties = {
   minWidth: 200,
 };
 
+// Spread the shared inputStyle base, then override radius/padding so
+// the search field reads as a chip rather than a form field.
 const searchInputStyle: CSSProperties = {
-  width: "100%",
+  ...inputStyle,
   padding: "10px 14px",
-  border: `1px solid ${rule}`,
   borderRadius: 8,
-  fontSize: 14,
-  fontFamily: bodyFontStack,
-  background: "#fff",
-  color: ink,
 };
 
 const gridStyle: CSSProperties = {
@@ -451,17 +442,10 @@ const cardBodyStyle: CSSProperties = {
   padding: "18px 20px 20px",
 };
 
+// Reuse the shared status pill; just add the margin we need below it
+// inside the card.
 const cardPillStyle: CSSProperties = {
-  display: "inline-block",
-  background: ink,
-  color: courtYellow,
-  fontFamily: monoFontStack,
-  fontSize: 10,
-  fontWeight: 700,
-  letterSpacing: "0.16em",
-  textTransform: "uppercase",
-  padding: "3px 8px",
-  borderRadius: 3,
+  ...pillStyle,
   marginBottom: 12,
 };
 
@@ -505,6 +489,8 @@ const statusTextStyle: CSSProperties = {
   margin: 0,
 };
 
+// Quieter than statusPanelStyle("info") — dashed border + larger
+// padding signals "you've drilled into an empty slot, not an error".
 const emptyStyle: CSSProperties = {
   padding: 32,
   textAlign: "center",
@@ -513,16 +499,4 @@ const emptyStyle: CSSProperties = {
   borderRadius: 8,
   color: inkSoft,
   fontSize: 14,
-};
-
-const clearBtnStyle: CSSProperties = {
-  background: "none",
-  border: "none",
-  color: courtRed,
-  cursor: "pointer",
-  fontSize: 13,
-  textDecoration: "underline",
-  fontFamily: "inherit",
-  padding: 0,
-  fontWeight: 600,
 };
