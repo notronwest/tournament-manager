@@ -276,7 +276,7 @@ export default function PartnerAcceptPage() {
           event_id: context.event_id,
           player_id: me.id,
           event_fee_cents: context.event_fee_cents,
-          status: "paid",
+          status: "pending_payment",
           partner_status: "solo",
         });
       if (insErr) {
@@ -327,14 +327,15 @@ export default function PartnerAcceptPage() {
               color: "inherit",
             }}
           >
-            🎉 You're in!
+            Partner confirmed!
           </h1>
           <p style={{ margin: 0, fontSize: 14 }}>
-            You're confirmed for <strong>{context.event_name}</strong> with{" "}
+            You're paired with{" "}
             <strong>
               {context.inviter_first_name} {context.inviter_last_name}
-            </strong>
-            .
+            </strong>{" "}
+            for <strong>{context.event_name}</strong>. Complete checkout to lock
+            in your spot.
           </p>
         </div>
         <div style={whatsNextCard}>
@@ -358,6 +359,11 @@ export default function PartnerAcceptPage() {
               lineHeight: 1.7,
             }}
           >
+            <li>
+              <strong>Complete checkout</strong> to pay and confirm your
+              registration — the banner at the bottom of the tournament page
+              will guide you.
+            </li>
             <li>Schedule will be posted closer to the event.</li>
             <li>
               You can register for more events in{" "}
