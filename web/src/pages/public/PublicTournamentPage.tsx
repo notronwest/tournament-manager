@@ -756,6 +756,9 @@ function EventCard({
   const [cancelling, setCancelling] = useState(false);
   // #9: gate the partner-dropping Cancel behind a confirm step.
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // #9: same guard for backing out of the register FORM after a
+  // partner is picked (discards the in-progress pick).
+  const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   // ─── Derived state for visual treatment ──────────────────────────
@@ -1272,6 +1275,19 @@ function EventCard({
   };
 
   const partnerPicked = partner.mode !== "empty";
+  // #9: name of the picked partner, for the discard-confirm copy.
+  const pickedPartnerName =
+    partner.mode === "existing"
+      ? `${partner.player.first_name} ${partner.player.last_name}`.trim()
+      : partner.mode === "new"
+        ? `${partner.firstName} ${partner.lastName}`.trim()
+        : null;
+  // #9: backing out of the form warns first when a partner is picked;
+  // otherwise it cancels directly (nothing consequential to drop).
+  const requestDiscardForm = () => {
+    if (partnerPicked) setConfirmDiscardForm(true);
+    else cancelExpand();
+  };
   // Submit gate: singles always submit-able. Doubles need EITHER a
   // partner picked OR the "I need a partner" toggle on.
   const canSubmit = !isDoubles || partnerPicked || seekingPartner;
@@ -1301,6 +1317,25 @@ function EventCard({
           onConfirm={async () => {
             await onCancelPending();
             setConfirmCancel(false);
+          }}
+        />
+      )}
+      {confirmDiscardForm && (
+        <ConfirmModal
+          title="Discard your partner pick?"
+          body={
+            <>
+              You've selected{" "}
+              <strong>{pickedPartnerName ?? "a partner"}</strong>. Cancelling
+              the form will clear that pick.
+            </>
+          }
+          confirmLabel="Discard"
+          cancelLabel="Keep editing"
+          onCancel={() => setConfirmDiscardForm(false)}
+          onConfirm={() => {
+            setConfirmDiscardForm(false);
+            cancelExpand();
           }}
         />
       )}
@@ -1576,7 +1611,7 @@ function EventCard({
             </button>
             <button
               type="button"
-              onClick={cancelExpand}
+              onClick={requestDiscardForm}
               disabled={submitting}
               style={{
                 padding: "10px 18px",
