@@ -1415,10 +1415,11 @@ function EventCard({
                 role="radiogroup"
                 aria-label="Partner mode"
                 style={{
-                  display: "flex",
-                  gap: 8,
+                  display: "inline-flex",
                   marginBottom: 10,
-                  flexWrap: "wrap",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 6,
+                  overflow: "hidden",
                 }}
               >
                 <button
@@ -1438,7 +1439,10 @@ function EventCard({
                     setSeekingPartner(true);
                     setPartner(emptySelection);
                   }}
-                  style={partnerModeBtnStyle(seekingPartner)}
+                  style={{
+                    ...partnerModeBtnStyle(seekingPartner),
+                    borderLeft: "1px solid #d1d5db",
+                  }}
                 >
                   I need a partner
                 </button>
@@ -1600,16 +1604,16 @@ function Pill({
   );
 }
 
-// Two-mode toggle button used in EventCard's F1 partner-mode picker.
-// Same visual treatment as a segmented control — active mode gets a
-// filled blue background, inactive stays white with a thin border.
+// Segment button for the partner-mode segmented control. The container
+// owns the outer border and borderRadius; segments have no individual
+// border or radius so they appear fused.
 function partnerModeBtnStyle(active: boolean) {
   return {
     padding: "8px 14px",
     background: active ? "#2563eb" : "#fff",
     color: active ? "#fff" : "#444",
-    border: `1px solid ${active ? "#2563eb" : "#e2e2e2"}`,
-    borderRadius: 6,
+    border: "none",
+    borderRadius: 0,
     fontSize: 13,
     fontWeight: 500 as const,
     cursor: "pointer",
