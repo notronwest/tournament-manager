@@ -8,6 +8,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import { eligibilityChips } from "../../lib/eligibility";
 import {
@@ -753,6 +754,11 @@ function EventCard({
   const [seekingPartner, setSeekingPartner] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  // #9: gate the partner-dropping Cancel behind a confirm step.
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  // #9: same guard for backing out of the register FORM after a
+  // partner is picked (discards the in-progress pick).
+  const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   // ─── Derived state for visual treatment ──────────────────────────
@@ -1138,6 +1144,16 @@ function EventCard({
     await onChanged();
   };
 
+  // #9: a pending reg with a *picked* partner gets an "are you sure?"
+  // step before Cancel drops the partner. Seeker / no-partner regs
+  // cancel directly — the action is less consequential (issue #9).
+  const hasPickedPartner =
+    !!myStatus?.partnerLabel && !myStatus?.isSeekingPartner;
+  const requestCancel = () => {
+    if (hasPickedPartner) setConfirmCancel(true);
+    else void onCancelPending();
+  };
+
   // ─── Right-side action button — depends on current state ─────────
   const renderAction = () => {
     if (!registrationOpen) return null;
@@ -1193,7 +1209,7 @@ function EventCard({
           )}
           <button
             type="button"
-            onClick={() => void onCancelPending()}
+            onClick={requestCancel}
             disabled={cancelling}
             style={{
               padding: "8px 14px",
@@ -1259,6 +1275,19 @@ function EventCard({
   };
 
   const partnerPicked = partner.mode !== "empty";
+  // #9: name of the picked partner, for the discard-confirm copy.
+  const pickedPartnerName =
+    partner.mode === "existing"
+      ? `${partner.player.first_name} ${partner.player.last_name}`.trim()
+      : partner.mode === "new"
+        ? `${partner.firstName} ${partner.lastName}`.trim()
+        : null;
+  // #9: backing out of the form warns first when a partner is picked;
+  // otherwise it cancels directly (nothing consequential to drop).
+  const requestDiscardForm = () => {
+    if (partnerPicked) setConfirmDiscardForm(true);
+    else cancelExpand();
+  };
   // Submit gate: singles always submit-able. Doubles need EITHER a
   // partner picked OR the "I need a partner" toggle on.
   const canSubmit = !isDoubles || partnerPicked || seekingPartner;
@@ -1272,6 +1301,44 @@ function EventCard({
         borderRadius: 8,
       }}
     >
+      {confirmCancel && (
+        <ConfirmModal
+          title="Cancel registration?"
+          body={
+            <>
+              This cancels your registration and drops{" "}
+              <strong>{myStatus?.partnerLabel}</strong> as your partner.
+              Your partner pick will be removed.
+            </>
+          }
+          confirmLabel="Cancel registration"
+          cancelLabel="Keep registration"
+          onCancel={() => setConfirmCancel(false)}
+          onConfirm={async () => {
+            await onCancelPending();
+            setConfirmCancel(false);
+          }}
+        />
+      )}
+      {confirmDiscardForm && (
+        <ConfirmModal
+          title="Discard your partner pick?"
+          body={
+            <>
+              You've selected{" "}
+              <strong>{pickedPartnerName ?? "a partner"}</strong>. Cancelling
+              the form will clear that pick.
+            </>
+          }
+          confirmLabel="Discard"
+          cancelLabel="Keep editing"
+          onCancel={() => setConfirmDiscardForm(false)}
+          onConfirm={() => {
+            setConfirmDiscardForm(false);
+            cancelExpand();
+          }}
+        />
+      )}
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Title + status pill */}
@@ -1544,7 +1611,7 @@ function EventCard({
             </button>
             <button
               type="button"
-              onClick={cancelExpand}
+              onClick={requestDiscardForm}
               disabled={submitting}
               style={{
                 padding: "10px 18px",
