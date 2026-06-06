@@ -9,27 +9,32 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-03**
 
-## 2026-06-05 — Partner-mode picker UX direction picked (PR #58)
+## 2026-06-05 — Partner-mode picker shipped to PR #58 (choice tiles)
 
-- PR #58 turned the "Pick a partner / I need a partner" toggle into a
-  connected segmented control. Visually it still reads as two buttons,
-  which isn't the intent — selections that swap form content shouldn't
-  look like actions.
-- Wrote `mockups/partner-mode-options.html` — seven alternatives, each
-  shown with both states (picker-active and need-active) inside a mock
-  register card.
-- **Decision: option 5 — compact choice tiles** (icon + label, 1px
-  border, blue-wash when active). Refined the mockup with: smaller
-  one-line tiles, and 🙋 for "I need a partner" (the prior 🔎 was
-  wrong — that user isn't searching, they're raising a hand to be
-  matched).
-- **Next**: implement on the PR's branch
-  (`feature/issue-15-segmented-control`) against
-  `web/src/pages/public/PublicTournamentPage.tsx` (~L1481 container,
-  ~L1670 `partnerModeBtnStyle`). Use Lucide icons (`Handshake` +
-  `HandHelping`) instead of emojis for cross-platform consistency.
-  Update the segmented-control note in `docs/DESIGN_PREFERENCES.md`
-  that PR #58 added — replace with the choice-tile pattern.
+- PR #58 originally turned the "Pick a partner / I need a partner"
+  toggle into a connected segmented control; even with shared borders
+  the segments still read as action buttons.
+- Wrote `mockups/partner-mode-options.html` — seven UX alternatives.
+  Picked option 5 (compact icon + label choice tiles), refined down
+  to one-line tiles with the seeker icon swapped to 🙋 (the seeker
+  isn't searching, they're raising a hand to be matched).
+- **Implemented on `feature/issue-15-segmented-control`**
+  (commit `f845cb4`): `partnerModeBtnStyle` → `partnerModeTileStyle`
+  in `web/src/pages/public/PublicTournamentPage.tsx` (~L1410 container,
+  ~L1610 style fn). Lucide `Handshake` + `HandHelping` icons (no
+  `Search` — that user isn't searching). ARIA semantics preserved
+  (`role="radiogroup"`/`role="radio"`/`aria-checked`). Typecheck +
+  build green; lint footprint clean (26 pre-existing errors on this
+  branch unchanged).
+- `docs/DESIGN_PREFERENCES.md`: replaced the segmented-control rule
+  the PR's first commit added with the choice-tile pattern, including
+  the "consider semantic accuracy when picking the icon" guardrail.
+- PR title + description updated to reflect the new direction
+  (`gh pr edit 58`).
+- **Next**: verify the Cloudflare Pages preview on PR #58 renders as
+  expected, then merge if it looks right. After merge, the V5
+  treatment of `PublicTournamentPage` (mockup 02) is still the
+  bigger outstanding public-pages job.
 
 ## 2026-06-03 — V5 homepage + publicTheme refactor
 
