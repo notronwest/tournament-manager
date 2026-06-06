@@ -37,6 +37,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [format, setFormat] = useState<EventFormat>("doubles");
   const [gender, setGender] = useState<EventGender>("mixed");
   const [maxTeams, setMaxTeams] = useState("10");
+  // Per-event fee override. $0 means "use the tournament's pricing tiers".
+  // Any positive value is a flat charge for this event that ignores tiers.
+  const [eventFeeDollars, setEventFeeDollars] = useState("0");
   // Format config
   const [poolCount, setPoolCount] = useState("1");
   const [playEachTeamTimes, setPlayEachTeamTimes] = useState("1");
@@ -166,6 +169,11 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setRatingSource(ev.rating_source ?? "");
         setMinAge(ev.min_age != null ? String(ev.min_age) : "");
         setMaxAge(ev.max_age != null ? String(ev.max_age) : "");
+        setEventFeeDollars(
+          ev.event_fee_cents > 0
+            ? (ev.event_fee_cents / 100).toFixed(2)
+            : "0",
+        );
 
         // Pull match counts so we know whether to warn on save.
         // Also pull every playoff match — we surface per-match
@@ -234,7 +242,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       gender,
       max_teams: max,
       bracket_type: "round_robin" as const,
-      event_fee_cents: 0,
+      event_fee_cents: Math.round(parseFloat(eventFeeDollars || "0") * 100),
       pool_count: clampInt(poolCount, 1, 1, 16),
       play_each_team_times: clampInt(playEachTeamTimes, 1, 1, 5),
       points_to_win: clampInt(pointsToWin, 11, 1, 99),
@@ -423,6 +431,38 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
               />
             </Field>
           </FieldRow>
+          <Field
+            label="Event fee override (USD)"
+            hint="Leave at $0.00 to use the tournament's first-event / additional-event pricing tiers. Set a value to charge every player a flat fee for this event — this overrides the tournament pricing tiers entirely and the same amount is charged regardless of how many events the player registers for."
+          >
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={eventFeeDollars}
+              onChange={(e) => setEventFeeDollars(e.target.value)}
+              style={{ ...inputStyle, maxWidth: 160 }}
+            />
+          </Field>
+          {parseFloat(eventFeeDollars || "0") > 0 && (
+            <div
+              style={{
+                padding: "10px 12px",
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: 6,
+                fontSize: 12,
+                color: "#7a5d00",
+                lineHeight: 1.55,
+              }}
+            >
+              <strong>Flat override active.</strong> Every player pays{" "}
+              <strong>${parseFloat(eventFeeDollars || "0").toFixed(2)}</strong>{" "}
+              for this event regardless of the tournament's first-event or
+              additional-event tiers. The tournament-level preview math does
+              not include this override — check the total manually if needed.
+            </div>
+          )}
         </FieldGroup>
 
         {/* Eligibility */}
