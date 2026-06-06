@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import {
@@ -1477,15 +1478,19 @@ function EventCard({
           {isDoubles && (
             <>
               {/* F1: two-mode picker — pick a partner OR sign up
-                  needing one. Defaults to "Pick a partner." */}
+                  needing one. Defaults to "I have a partner."
+                  Renders as compact choice tiles (icon + label) so
+                  the affordance reads as "selection, not action."
+                  Handshake = picker mode; HandHelping = the user
+                  raising their hand to be matched. */}
               <div
                 role="radiogroup"
                 aria-label="Partner mode"
                 style={{
-                  display: "flex",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
                   gap: 8,
                   marginBottom: 10,
-                  flexWrap: "wrap",
                 }}
               >
                 <button
@@ -1493,9 +1498,10 @@ function EventCard({
                   role="radio"
                   aria-checked={!seekingPartner}
                   onClick={() => setSeekingPartner(false)}
-                  style={partnerModeBtnStyle(!seekingPartner)}
+                  style={partnerModeTileStyle(!seekingPartner)}
                 >
-                  Pick a partner
+                  <Handshake size={18} aria-hidden="true" />
+                  <span>I have a partner</span>
                 </button>
                 <button
                   type="button"
@@ -1505,9 +1511,10 @@ function EventCard({
                     setSeekingPartner(true);
                     setPartner(emptySelection);
                   }}
-                  style={partnerModeBtnStyle(seekingPartner)}
+                  style={partnerModeTileStyle(seekingPartner)}
                 >
-                  I need a partner
+                  <HandHelping size={18} aria-hidden="true" />
+                  <span>I need a partner</span>
                 </button>
               </div>
               {seekingPartner ? (
@@ -1667,20 +1674,28 @@ function Pill({
   );
 }
 
-// Two-mode toggle button used in EventCard's F1 partner-mode picker.
-// Same visual treatment as a segmented control — active mode gets a
-// filled blue background, inactive stays white with a thin border.
-function partnerModeBtnStyle(active: boolean) {
+// Tile for the partner-mode choice picker. Icon + label arranged
+// horizontally inside a compact bordered card. Active tile gets the
+// app's blue-wash background + blue border so the selection reads
+// from across the form; inactive stays white with a neutral border.
+// The whole tile is the click target — both the icon and the label
+// inherit `currentColor` so hover/active states flow through.
+function partnerModeTileStyle(active: boolean): CSSProperties {
   return {
-    padding: "8px 14px",
-    background: active ? "#2563eb" : "#fff",
-    color: active ? "#fff" : "#444",
-    border: `1px solid ${active ? "#2563eb" : "#e2e2e2"}`,
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 10px",
+    background: active ? "#eff6ff" : "#fff",
+    color: active ? "#1e40af" : "#444",
+    border: `1px solid ${active ? "#2563eb" : "#d1d5db"}`,
     borderRadius: 6,
     fontSize: 13,
-    fontWeight: 500 as const,
-    cursor: "pointer",
+    fontWeight: 600,
     fontFamily: "inherit",
+    cursor: "pointer",
+    textAlign: "left",
+    transition: "border-color 120ms, background 120ms, color 120ms",
   };
 }
 
