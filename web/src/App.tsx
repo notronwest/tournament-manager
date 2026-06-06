@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
+import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
 import PendingPaymentsBar from "./components/PendingPaymentsBar";
 import { PendingPaymentsProvider } from "./components/PendingPaymentsContext";
 import SiteHeader from "./components/SiteHeader";
@@ -35,11 +37,16 @@ import TournamentsListPage from "./pages/admin/TournamentsListPage";
 
 export default function App() {
   return (
+    <PartnerInvitesProvider>
     <PendingPaymentsProvider>
       {/* Global top banner — rendered once for the whole app.
           SiteHeader hides itself on /login so the only "Sign in"
           surface there is the page itself. */}
       <SiteHeader />
+      {/* Global partner-invite banner — appears below the header
+          when the signed-in player has pending partner invites
+          anywhere, regardless of the current route. */}
+      <PartnerInvitesBanner />
       <Routes>
         <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -225,5 +232,6 @@ export default function App() {
           the checkout page where its CTA would be redundant). */}
       <PendingPaymentsBar />
     </PendingPaymentsProvider>
+    </PartnerInvitesProvider>
   );
 }
