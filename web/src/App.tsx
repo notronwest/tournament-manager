@@ -168,6 +168,10 @@ export default function App() {
           element={<TournamentWizardPage />}
         />
         <Route
+          path="tournaments/new/:stepId"
+          element={<TournamentWizardPage />}
+        />
+        <Route
           path="tournaments/:tournamentSlug"
           element={<TournamentDetailPage />}
         />
@@ -177,6 +181,10 @@ export default function App() {
         />
         <Route
           path="tournaments/:tournamentSlug/wizard"
+          element={<TournamentWizardPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/wizard/:stepId"
           element={<TournamentWizardPage />}
         />
         <Route

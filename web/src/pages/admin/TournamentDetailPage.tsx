@@ -360,6 +360,21 @@ export default function TournamentDetailPage() {
           >
             Edit
           </Link>
+          {/* Resume wizard — only surfaced for draft tournaments so
+              the organizer has a clear path back into the setup flow. */}
+          {t.status === "draft" && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/wizard`}
+              style={{
+                ...primaryLinkBtn,
+                background: "#2563eb",
+                color: "#fff",
+                border: "1px solid #2563eb",
+              }}
+            >
+              Continue setup →
+            </Link>
+          )}
           {/* Public-facing tournament page. Available once the
               tournament is in a publicly-readable status (published,
               closed, or completed) — drafts have nothing to show on

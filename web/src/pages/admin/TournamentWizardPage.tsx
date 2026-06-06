@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useState,
   type CSSProperties,
@@ -7,6 +8,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { PricingTiersEditor } from "../../components/PricingTiersEditor";
 import {
   makeEmptyTierDraft,
@@ -73,15 +75,23 @@ const STEPS: StepMeta[] = [
 // Follow-up slices replace each stub with its full step. The mockup
 // (mockups/tournament-creation-flow.html) is the design source of
 // truth for layout + copy.
+const VALID_STEP_IDS: string[] = STEPS.map((s) => s.id);
+
 export default function TournamentWizardPage() {
   const { org } = useCurrentOrg();
   const navigate = useNavigate();
-  const { tournamentSlug: routeSlug } = useParams<{
+  const { tournamentSlug: routeSlug, stepId: routeStepId } = useParams<{
     tournamentSlug?: string;
+    stepId?: string;
   }>();
   const isResume = !!routeSlug;
 
-  const [currentStep, setCurrentStep] = useState<StepId>("basics");
+  // Step is URL-driven — the `:stepId` param is the source of truth.
+  // Defaults to "basics" when the legacy stepless URL is used.
+  const currentStep: StepId = VALID_STEP_IDS.includes(routeStepId ?? "")
+    ? (routeStepId as StepId)
+    : "basics";
+
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const eventCount = events.length;
@@ -122,6 +132,21 @@ export default function TournamentWizardPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingDraft, setLoadingDraft] = useState(isResume);
+  // Soft-required publish warning modal (cancellation policy, Stripe).
+  const [showPublishWarning, setShowPublishWarning] = useState(false);
+
+  // Redirect legacy step-less URLs to the per-step URL so bookmarks
+  // and refreshes land on the right step going forward.
+  useEffect(() => {
+    if (routeStepId || !org) return;
+    if (isResume && routeSlug) {
+      navigate(`/admin/${org.slug}/tournaments/${routeSlug}/wizard/basics`, {
+        replace: true,
+      });
+    } else {
+      navigate(`/admin/${org.slug}/tournaments/new/basics`, { replace: true });
+    }
+  }, [routeStepId, org, isResume, routeSlug, navigate]);
 
   // Resume mode: hydrate every step's state from the existing draft.
   useEffect(() => {
@@ -266,11 +291,12 @@ export default function TournamentWizardPage() {
         return false;
       }
       setTournament(data);
-      // Move URL to the resume form so reloads + the rail's progress
-      // pick up the draft.
-      navigate(`/admin/${org.slug}/tournaments/${data.slug}/wizard`, {
-        replace: true,
-      });
+      // Transition from /new/basics to the resume URL at the basics
+      // step — the caller (saveAndContinue) will then advance to events.
+      navigate(
+        `/admin/${org.slug}/tournaments/${data.slug}/wizard/basics`,
+        { replace: true }
+      );
       return true;
     }
     // Resume mode → UPDATE existing draft.
@@ -286,11 +312,12 @@ export default function TournamentWizardPage() {
       return false;
     }
     setTournament(data);
-    // Slug may have changed — update URL.
+    // Slug may have changed — keep URL in sync with same step.
     if (data.slug !== routeSlug) {
-      navigate(`/admin/${org.slug}/tournaments/${data.slug}/wizard`, {
-        replace: true,
-      });
+      navigate(
+        `/admin/${org.slug}/tournaments/${data.slug}/wizard/${currentStep}`,
+        { replace: true }
+      );
     }
     return true;
   };
@@ -448,9 +475,22 @@ export default function TournamentWizardPage() {
   // ── Navigation ──────────────────────────────────────────────────
 
   const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
-  const goStep = (id: StepId) => setCurrentStep(id);
   const next = STEPS[stepIndex + 1];
   const prev = STEPS[stepIndex - 1];
+
+  // Navigate to a wizard step, updating the URL for deep-linking and
+  // browser back/forward. Uses the resume URL once we have a slug.
+  const goStep = useCallback(
+    (id: StepId) => {
+      const slug = tournament?.slug ?? routeSlug;
+      if (slug) {
+        navigate(`/admin/${org!.slug}/tournaments/${slug}/wizard/${id}`);
+      } else {
+        navigate(`/admin/${org!.slug}/tournaments/new/${id}`);
+      }
+    },
+    [tournament, routeSlug, org, navigate]
+  );
 
   // On Save & continue: persist the current step (real steps only),
   // then advance.
@@ -481,13 +521,24 @@ export default function TournamentWizardPage() {
   };
 
   // ── Minimum-to-publish gate ─────────────────────────────────────
-
+  // Hard-required: must be met before Publish is enabled.
   const publishBlockers: string[] = [];
-  if (!tournament) publishBlockers.push("Basics not saved");
-  else {
-    if (!tournament.starts_at) publishBlockers.push("Start date missing");
-    if (eventCount === 0) publishBlockers.push("At least one event required");
+  if (!tournament) {
+    publishBlockers.push("Complete the Basics step and save the draft first");
+  } else {
+    if (!tournament.location_name?.trim())
+      publishBlockers.push("Add a venue location (Basics step)");
+    if (eventCount === 0)
+      publishBlockers.push("Add at least one event (Events step)");
   }
+
+  // Soft-required: publish is allowed but the organizer sees a warning
+  // modal calling out the gap before the publish goes through.
+  const softBlockers: string[] = [];
+  if (tournament && !cancellationPreset)
+    softBlockers.push("No cancellation policy set");
+  if (org?.stripe_account_status === "not_connected")
+    softBlockers.push("Stripe payments not connected — registrations won't charge");
 
   // ── Per-step rail-guard: if the current step has unmet REQUIRED
   // fields, the rail disables forward jumps so the organizer can't
@@ -622,6 +673,7 @@ export default function TournamentWizardPage() {
             cancellationPreset={cancellationPreset}
             stripeStatus={org.stripe_account_status}
             blockers={publishBlockers}
+            softBlockers={softBlockers}
             onPublish={() => void publish()}
             onJumpTo={goStep}
             busy={busy}
@@ -670,7 +722,13 @@ export default function TournamentWizardPage() {
             <button
               type="button"
               style={btnPrimary(busy || publishBlockers.length > 0)}
-              onClick={() => void publish()}
+              onClick={() => {
+                if (softBlockers.length > 0) {
+                  setShowPublishWarning(true);
+                } else {
+                  void publish();
+                }
+              }}
               disabled={busy || publishBlockers.length > 0}
             >
               {busy ? "Publishing…" : "Publish tournament"}
@@ -687,6 +745,33 @@ export default function TournamentWizardPage() {
           )}
         </div>
       </main>
+
+      {showPublishWarning && (
+        <ConfirmModal
+          title="Publish with gaps?"
+          body={
+            <div>
+              <p style={{ margin: "0 0 8px" }}>
+                The tournament will go live, but a few optional items are missing:
+              </p>
+              <ul style={{ margin: "0 0 8px 18px", padding: 0 }}>
+                {softBlockers.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+              <p style={{ margin: 0 }}>Publish anyway?</p>
+            </div>
+          }
+          confirmLabel="Yes, publish"
+          cancelLabel="Go back"
+          destructive={false}
+          onCancel={() => setShowPublishWarning(false)}
+          onConfirm={() => {
+            setShowPublishWarning(false);
+            void publish();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1872,6 +1957,7 @@ function ReviewStep({
   cancellationPreset,
   stripeStatus,
   blockers,
+  softBlockers,
   onPublish,
   onJumpTo,
   busy,
@@ -1883,6 +1969,7 @@ function ReviewStep({
   cancellationPreset: CancellationPolicyPreset | null;
   stripeStatus: StripeStatus;
   blockers: string[];
+  softBlockers: string[];
   onPublish: () => void;
   onJumpTo: (id: StepId) => void;
   busy: boolean;
@@ -1894,7 +1981,7 @@ function ReviewStep({
         lede="Final check before this goes live and players can register."
       />
 
-      {blockers.length > 0 && (
+      {blockers.length > 0 ? (
         <div
           style={{
             marginBottom: 16,
@@ -1906,12 +1993,35 @@ function ReviewStep({
             color: "#991b1b",
           }}
         >
-          <strong>Can't publish yet:</strong>
+          <strong>Not ready to publish yet — {blockers.length} item{blockers.length === 1 ? "" : "s"} required:</strong>
           <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
             {blockers.map((b) => (
               <li key={b}>{b}</li>
             ))}
           </ul>
+        </div>
+      ) : (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 14,
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            borderRadius: 8,
+            fontSize: 13,
+            color: "#15803d",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span style={{ fontSize: 16 }}>✓</span>
+          <strong>Ready to publish</strong>
+          {softBlockers.length > 0 && (
+            <span style={{ color: "#854d0e", marginLeft: 8 }}>
+              — {softBlockers.length} optional item{softBlockers.length === 1 ? "" : "s"} worth reviewing before you go live
+            </span>
+          )}
         </div>
       )}
 
