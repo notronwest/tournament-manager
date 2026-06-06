@@ -80,13 +80,13 @@ the archive) should come back as the favicon.
 
 ## 🔜 Next
 
-- Living roadmap is [`docs/BACKLOG.md`](./docs/BACKLOG.md) — the source of
-  truth for what's next / coming / shipped. Spirit: smallest end-to-end loop
-  first.
+- Living roadmap is the **WMPC Roadmap board** (Project #1, owner
+  `notronwest`) — this repo's `story` issues. See the **Backlog** section
+  in [`CLAUDE.md`](./CLAUDE.md). Spirit: smallest end-to-end loop first.
 
 ## Deeper references
 
 - [`CLAUDE.md`](./CLAUDE.md) — six locked decisions, schema, routes, deploy.
-- [`docs/BACKLOG.md`](./docs/BACKLOG.md) ·
-  [`docs/DESIGN_PREFERENCES.md`](./docs/DESIGN_PREFERENCES.md).
+- [`docs/DESIGN_PREFERENCES.md`](./docs/DESIGN_PREFERENCES.md). Backlog →
+  the WMPC Roadmap board (see the Backlog section in `CLAUDE.md`).
 - [`../wmpc-meta/strategy.md`](../wmpc-meta/strategy.md).
