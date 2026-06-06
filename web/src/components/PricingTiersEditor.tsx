@@ -50,26 +50,28 @@ const PATTERNS: PatternMeta[] = [
 export function PricingTiersEditor({
   pattern,
   tiers,
-  paidRegistrationCount = 0,
+  activeRegCount = 0,
   onChange,
 }: {
   pattern: PricingPattern;
   tiers: TierDraft[];
-  // How many registrations have already PAID. When > 0, the editor
-  // reassures the organizer that those locked-in prices won't change.
-  // 0 in create mode (and edit mode with no paid regs yet).
-  paidRegistrationCount?: number;
+  // Paid + pending_payment registrations for this tournament. When > 0
+  // the editor is locked — no pricing changes are allowed until those
+  // registrations are cancelled/refunded.
+  activeRegCount?: number;
   onChange: (pattern: PricingPattern, tiers: TierDraft[]) => void;
 }) {
+  const locked = activeRegCount > 0;
   const isCustom = pattern === "custom";
   const isSingle = pattern === "single";
 
   const pickPattern = (next: PricingPattern) => {
-    if (next === pattern) return;
+    if (locked || next === pattern) return;
     onChange(next, defaultTiersForPattern(next, tiers));
   };
 
   const updateTier = (key: string, patch: Partial<TierDraft>) => {
+    if (locked) return;
     onChange(
       pattern,
       tiers.map((t) => (t.key === key ? { ...t, ...patch } : t)),
@@ -77,6 +79,7 @@ export function PricingTiersEditor({
   };
 
   const addTier = () => {
+    if (locked) return;
     onChange(pattern, [
       ...tiers,
       makeEmptyTierDraft(`Tier ${tiers.length + 1}`),
@@ -84,6 +87,7 @@ export function PricingTiersEditor({
   };
 
   const removeTier = (key: string) => {
+    if (locked) return;
     const remaining = tiers.filter((t) => t.key !== key);
     // Removing down to a single tier collapses to the Single-price
     // pattern rather than leaving "Custom with one tier" — there's
@@ -100,23 +104,24 @@ export function PricingTiersEditor({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
         <div style={labelStyle}>Pricing</div>
-        <p style={ledeStyle}>
-          Pick how pricing should change as the tournament gets closer.
-          Most organizers either use a single price or offer an
-          early-bird discount to reward people who commit early.
-        </p>
+        {!locked && (
+          <p style={ledeStyle}>
+            Pick how pricing should change as the tournament gets closer.
+            Most organizers either use a single price or offer an
+            early-bird discount to reward people who commit early.
+          </p>
+        )}
       </div>
 
-      {paidRegistrationCount > 0 && (
-        <div style={paidNoticeStyle}>
+      {locked && (
+        <div style={lockedNoticeStyle}>
           <strong>
-            {paidRegistrationCount === 1
-              ? "1 registration has already paid."
-              : `${paidRegistrationCount} registrations have already paid.`}
+            {activeRegCount === 1
+              ? "1 player registered"
+              : `${activeRegCount} players registered`}
+            {" — pricing is locked."}
           </strong>{" "}
-          Changing prices here won't affect anyone who's already paid —
-          their price was locked in at checkout. New pricing applies
-          only to registrations made from now on.
+          Cancel + refund affected players from the attendees view first.
         </div>
       )}
 
@@ -129,7 +134,8 @@ export function PricingTiersEditor({
               type="button"
               key={p.value}
               onClick={() => pickPattern(p.value)}
-              style={patternCardStyle(selected)}
+              disabled={locked}
+              style={patternCardStyle(selected, locked)}
               aria-pressed={selected}
             >
               <span style={patternTitleStyle}>
@@ -142,7 +148,7 @@ export function PricingTiersEditor({
         })}
       </div>
 
-      {isCustom && (
+      {isCustom && !locked && (
         <div style={warnHintStyle}>
           <strong>Heads-up: most organizers don't need Custom.</strong>{" "}
           It's the escape hatch for unusual cases — members-only
@@ -163,11 +169,12 @@ export function PricingTiersEditor({
                   <input
                     type="text"
                     value={tier.label}
+                    readOnly={locked}
                     onChange={(e) =>
                       updateTier(tier.key, { label: e.target.value })
                     }
                     placeholder={`Tier ${i + 1}`}
-                    style={tierLabelInputStyle}
+                    style={locked ? { ...tierLabelInputStyle, ...lockedInputStyle } : tierLabelInputStyle}
                   />
                 ) : (
                   <div style={tierLabelStyle}>
@@ -183,10 +190,11 @@ export function PricingTiersEditor({
                     <input
                       type="date"
                       value={tier.endsOn}
+                      readOnly={locked}
                       onChange={(e) =>
                         updateTier(tier.key, { endsOn: e.target.value })
                       }
-                      style={dateInputStyle}
+                      style={locked ? { ...dateInputStyle, ...lockedInputStyle } : dateInputStyle}
                     />
                   </div>
                 )}
@@ -196,7 +204,7 @@ export function PricingTiersEditor({
                   </div>
                 )}
 
-                {isCustom && tiers.length > 1 && (
+                {isCustom && tiers.length > 1 && !locked && (
                   <button
                     type="button"
                     onClick={() => removeTier(tier.key)}
@@ -215,12 +223,13 @@ export function PricingTiersEditor({
                     min="0"
                     step="0.01"
                     value={tier.firstEventFeeDollars}
+                    readOnly={locked}
                     onChange={(e) =>
                       updateTier(tier.key, {
                         firstEventFeeDollars: e.target.value,
                       })
                     }
-                    style={feeInputStyle}
+                    style={locked ? { ...feeInputStyle, ...lockedInputStyle } : feeInputStyle}
                   />
                 </label>
                 <label style={feeFieldStyle}>
@@ -230,12 +239,13 @@ export function PricingTiersEditor({
                     min="0"
                     step="0.01"
                     value={tier.additionalEventFeeDollars}
+                    readOnly={locked}
                     onChange={(e) =>
                       updateTier(tier.key, {
                         additionalEventFeeDollars: e.target.value,
                       })
                     }
-                    style={feeInputStyle}
+                    style={locked ? { ...feeInputStyle, ...lockedInputStyle } : feeInputStyle}
                   />
                 </label>
               </div>
@@ -244,7 +254,7 @@ export function PricingTiersEditor({
         })}
       </div>
 
-      {isCustom && (
+      {isCustom && !locked && (
         <button type="button" onClick={addTier} style={addTierBtnStyle}>
           + Add another tier
         </button>
@@ -335,18 +345,19 @@ const patternGridStyle: CSSProperties = {
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: 10,
 };
-function patternCardStyle(selected: boolean): CSSProperties {
+function patternCardStyle(selected: boolean, locked: boolean): CSSProperties {
   return {
-    background: selected ? "#eff6ff" : "#fff",
-    border: `2px solid ${selected ? "#2563eb" : "#e5e7eb"}`,
+    background: locked ? "#f9fafb" : selected ? "#eff6ff" : "#fff",
+    border: `2px solid ${locked ? "#e5e7eb" : selected ? "#2563eb" : "#e5e7eb"}`,
     borderRadius: 8,
     padding: 12,
-    cursor: "pointer",
+    cursor: locked ? "not-allowed" : "pointer",
     display: "flex",
     flexDirection: "column",
     gap: 6,
     textAlign: "left",
     fontFamily: "inherit",
+    opacity: locked ? 0.7 : 1,
   };
 }
 const patternTitleStyle: CSSProperties = {
@@ -385,16 +396,20 @@ const warnHintStyle: CSSProperties = {
   lineHeight: 1.55,
 };
 
-// Informational (not a warning) — paid registrations are protected,
-// so this is reassurance, hence the calm blue rather than amber.
-const paidNoticeStyle: CSSProperties = {
-  background: "#eff6ff",
-  border: "1px solid #bfdbfe",
+const lockedNoticeStyle: CSSProperties = {
+  background: "#fef9c3",
+  border: "1px solid #fde047",
   borderRadius: 6,
   padding: "10px 12px",
   fontSize: 13,
-  color: "#1e40af",
+  color: "#713f12",
   lineHeight: 1.55,
+};
+
+const lockedInputStyle: CSSProperties = {
+  background: "#f9fafb",
+  color: "#6b7280",
+  cursor: "not-allowed",
 };
 
 const tierRowStyle: CSSProperties = {
