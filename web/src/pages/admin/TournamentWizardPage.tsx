@@ -105,7 +105,7 @@ export default function TournamentWizardPage() {
   const [pricingTiers, setPricingTiers] = useState<TierDraft[]>(() => [
     makeEmptyTierDraft("Standard"),
   ]);
-  const [paidRegCount, setPaidRegCount] = useState(0);
+  const [activeRegCount, setActiveRegCount] = useState(0);
 
   // Step 4: Cancellation policy preset. Defaults to "standard" in the
   // UI for first-time runs (organizer can change or skip). null in
@@ -182,17 +182,17 @@ export default function TournamentWizardPage() {
       if (cancelled) return;
       setEvents(evRows ?? []);
 
-      // Paid registration count (for the Pricing editor's reassurance)
+      // Active reg count — locks pricing editor if any paid/pending regs exist
       const eventIds = (evRows ?? []).map((e) => e.id);
       if (eventIds.length > 0) {
         const { count } = await supabase
           .from("event_registrations")
           .select("id", { count: "exact", head: true })
           .in("event_id", eventIds)
-          .eq("status", "paid")
+          .in("status", ["paid", "pending_payment"])
           .is("deleted_at", null);
         if (cancelled) return;
-        setPaidRegCount(count ?? 0);
+        setActiveRegCount(count ?? 0);
       }
       setLoadingDraft(false);
     })();
@@ -575,7 +575,7 @@ export default function TournamentWizardPage() {
           <PricingStep
             pattern={pricingPattern}
             tiers={pricingTiers}
-            paidRegistrationCount={paidRegCount}
+            activeRegCount={activeRegCount}
             onChange={(p, t) => {
               setPricingPattern(p);
               setPricingTiers(t);
@@ -1406,12 +1406,12 @@ const templateThStyle: CSSProperties = {
 function PricingStep({
   pattern,
   tiers,
-  paidRegistrationCount,
+  activeRegCount,
   onChange,
 }: {
   pattern: PricingPattern;
   tiers: TierDraft[];
-  paidRegistrationCount: number;
+  activeRegCount: number;
   onChange: (p: PricingPattern, t: TierDraft[]) => void;
 }) {
   return (
@@ -1423,7 +1423,7 @@ function PricingStep({
       <PricingTiersEditor
         pattern={pattern}
         tiers={tiers}
-        paidRegistrationCount={paidRegistrationCount}
+        activeRegCount={activeRegCount}
         onChange={onChange}
       />
     </div>
