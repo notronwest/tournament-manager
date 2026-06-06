@@ -1390,6 +1390,22 @@ function EventCard({
               <strong>{myStatus.partnerLabel}</strong>
             </div>
           ) : null}
+          {isPending && myStatus?.partnerLabel && (
+            <div
+              style={{
+                marginTop: 5,
+                padding: "5px 10px",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: 5,
+                fontSize: 11,
+                color: "#7a5d00",
+                display: "inline-block",
+              }}
+            >
+              Your partner won't be notified until you check out.
+            </div>
+          )}
           {/* Meta line */}
           <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
             {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
@@ -1547,8 +1563,7 @@ function EventCard({
                   >
                     Your doubles partner. Search by name, email, or
                     phone — if they're not in the list yet, add them
-                    as a new player. We won't email them until you
-                    check out.
+                    as a new player.
                   </div>
                   <PartnerSearch
                     selection={partner}
@@ -1558,6 +1573,22 @@ function EventCard({
                       ...Array.from(alreadyRegisteredPlayerIds),
                     ]}
                   />
+                  {partnerPicked && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: "8px 12px",
+                        background: "#fef3c7",
+                        border: "1px solid #fde68a",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        color: "#7a5d00",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      Your partner won't be notified until you check out.
+                    </div>
+                  )}
                 </>
               )}
             </>
