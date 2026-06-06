@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Partner-mode picker — UX options for PR #58</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap"
+    />
+    <style>
+      :root {
+        --ink: #111827;
+        --ink-soft: #4b5563;
+        --muted: #6b7280;
+        --rule: #e5e7eb;
+        --rule-soft: #f3f4f6;
+        --bg: #fafafa;
+        --panel: #ffffff;
+        --blue: #2563eb;
+        --blue-deep: #1e40af;
+        --blue-wash: #eff6ff;
+        --blue-border: #bfdbfe;
+        --amber-bg: #fffbeb;
+        --amber-border: #fde68a;
+        --amber-fg: #92400e;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family:
+          "Inter", system-ui, -apple-system, "Segoe UI", Helvetica, Arial,
+          sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.5;
+      }
+
+      .page {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 48px 24px 96px;
+      }
+
+      .intro h1 {
+        font-size: 28px;
+        margin: 0 0 8px;
+      }
+      .intro p {
+        color: var(--ink-soft);
+        max-width: 720px;
+        margin: 0 0 6px;
+      }
+      .intro code {
+        background: var(--rule-soft);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+      }
+      .intro .problem {
+        margin-top: 18px;
+        padding: 14px 18px;
+        background: var(--amber-bg);
+        border: 1px solid var(--amber-border);
+        border-radius: 8px;
+        color: var(--amber-fg);
+        font-size: 14px;
+        max-width: 760px;
+      }
+
+      .grid {
+        margin-top: 40px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+        gap: 20px;
+      }
+
+      .opt {
+        background: var(--panel);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .opt .head {
+        padding: 14px 18px 12px;
+        border-bottom: 1px solid var(--rule-soft);
+        background: #fcfcfc;
+      }
+      .opt .head .num {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        color: var(--blue);
+        text-transform: uppercase;
+      }
+      .opt .head h2 {
+        margin: 4px 0 2px;
+        font-size: 17px;
+      }
+      .opt .head .why {
+        margin: 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .opt .body {
+        padding: 18px;
+        background: var(--bg);
+        flex: 1;
+      }
+      .opt .notes {
+        border-top: 1px solid var(--rule-soft);
+        padding: 12px 18px;
+        background: #fcfcfc;
+        font-size: 12px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+      }
+      .opt .notes .tag {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        font-weight: 700;
+        color: var(--ink);
+        margin-right: 6px;
+      }
+      .opt .notes .tag.pro { color: #15803d; }
+      .opt .notes .tag.con { color: #b91c1c; }
+      .opt .notes p { margin: 0 0 4px; }
+
+      /* ─────────────────────────────────────────────────────────────
+         Event-card mock — context wrapper for each option so the
+         picker reads in situ. Mirrors the structure of EventCard in
+         PublicTournamentPage.tsx (event header, register form below).
+         ─────────────────────────────────────────────────────────── */
+      .card {
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 8px;
+        padding: 16px;
+      }
+      .card .ev-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 4px;
+      }
+      .card .ev-head h3 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .card .ev-head .price {
+        font-size: 13px;
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .card .ev-sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 0 14px;
+      }
+      .card .form-label {
+        font-size: 12px;
+        color: var(--ink);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0 0 6px;
+      }
+      .card .helper {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 6px 0 8px;
+        line-height: 1.5;
+      }
+
+      /* Shared subform (partner search) — used by most options when
+         "pick a partner" is the active branch. */
+      .search-shell {
+        position: relative;
+        margin-bottom: 12px;
+      }
+      .search-shell input {
+        width: 100%;
+        padding: 9px 12px 9px 32px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+        background: #fff;
+      }
+      .search-shell::before {
+        content: "🔍";
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        opacity: 0.55;
+      }
+      .seek-panel {
+        padding: 10px 12px;
+        background: var(--blue-wash);
+        border: 1px solid var(--blue-border);
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--blue-deep);
+        line-height: 1.55;
+        margin-bottom: 12px;
+      }
+      .register-btn {
+        padding: 9px 16px;
+        background: var(--blue);
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         OPTION 1 — Stacked radio cards
+         ─────────────────────────────────────────────────────────── */
+      .o1 .radio-row {
+        display: flex;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        align-items: flex-start;
+      }
+      .o1 .radio-row.active {
+        border-color: var(--blue);
+        background: var(--blue-wash);
+      }
+      .o1 .dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid var(--rule);
+        margin-top: 2px;
+        flex-shrink: 0;
+        position: relative;
+        background: #fff;
+      }
+      .o1 .radio-row.active .dot {
+        border-color: var(--blue);
+      }
+      .o1 .radio-row.active .dot::after {
+        content: "";
+        position: absolute;
+        inset: 3px;
+        background: var(--blue);
+        border-radius: 50%;
+      }
+      .o1 .label .title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .o1 .label .sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         OPTION 2 — Inline natural-language
+         ─────────────────────────────────────────────────────────── */
+      .o2 .row {
+        margin-bottom: 12px;
+      }
+      .o2 .row label {
+        font-size: 13px;
+        color: var(--ink);
+        font-weight: 500;
+        margin-right: 6px;
+      }
+      .o2 .row .escape {
+        display: block;
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--blue);
+        text-decoration: none;
+      }
+      .o2 .row .escape:hover {
+        text-decoration: underline;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         OPTION 3 — Native select
+         ─────────────────────────────────────────────────────────── */
+      .o3 select {
+        width: 100%;
+        padding: 9px 12px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        font-size: 14px;
+        background: #fff;
+        font-family: inherit;
+        appearance: none;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        margin-bottom: 12px;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         OPTION 4 — Conversational question
+         ─────────────────────────────────────────────────────────── */
+      .o4 .question {
+        font-size: 14px;
+        color: var(--ink);
+        margin: 0 0 8px;
+      }
+      .o4 .answers {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 12px;
+      }
+      .o4 .answers a {
+        font-size: 13px;
+        color: var(--blue);
+        text-decoration: none;
+        font-weight: 500;
+        padding: 4px 0;
+        border-bottom: 2px solid transparent;
+      }
+      .o4 .answers a.active {
+        color: var(--ink);
+        border-bottom-color: var(--blue);
+        font-weight: 600;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         OPTION 5 — Choice tiles (refined: smaller, icon-left layout,
+         right icon for "I need a partner" — no magnifying glass; the
+         "needing a partner" user isn't searching, they're raising
+         their hand to be matched).
+         ─────────────────────────────────────────────────────────── */
+      .o5 .tiles {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .o5 .tile {
+        padding: 8px 10px;
+        border: 1px solid var(--rule);
+        border-radius: 6px;
+        cursor: pointer;
+        background: #fff;
+        transition: border-color 120ms, background 120ms;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .o5 .tile.active {
+        border-color: var(--blue);
+        background: var(--blue-wash);
+      }
+      .o5 .tile .icon {
+        font-size: 18px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .o5 .tile .title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         OPTION 6 — Toggle switch
+         ─────────────────────────────────────────────────────────── */
+      .o6 .switch-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        background: var(--rule-soft);
+        border-radius: 6px;
+        margin-bottom: 12px;
+      }
+      .o6 .switch-row .label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .o6 .switch-row .sub {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 1px;
+      }
+      .o6 .switch {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        border-radius: 999px;
+        background: #cbd5e1;
+        cursor: pointer;
+        transition: background 120ms;
+        flex-shrink: 0;
+      }
+      .o6 .switch::after {
+        content: "";
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        border-radius: 50%;
+        top: 2px;
+        left: 2px;
+        transition: left 120ms;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+      }
+      .o6 .switch.on {
+        background: var(--blue);
+      }
+      .o6 .switch.on::after {
+        left: 20px;
+      }
+
+      /* ─────────────────────────────────────────────────────────────
+         OPTION 7 — Picker-first w/ escape link
+         ─────────────────────────────────────────────────────────── */
+      .o7 .escape-link {
+        display: block;
+        font-size: 12px;
+        color: var(--blue);
+        text-decoration: none;
+        margin: -6px 0 14px;
+      }
+      .o7 .escape-link:hover {
+        text-decoration: underline;
+      }
+
+      /* Show the alternate state in a second card below the primary,
+         dimmer, so the reviewer can see both states of each option in
+         one glance without toggling anything. */
+      .alt-state {
+        margin-top: 14px;
+        opacity: 0.92;
+      }
+      .alt-state-label {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--muted);
+        margin: 18px 0 6px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="intro">
+        <h1>Partner-mode picker — seven alternatives</h1>
+        <p>
+          The "Pick a partner / I need a partner" toggle in
+          <code>PublicTournamentPage.tsx</code> sits inside an expanded
+          register form on every doubles event. Either choice swaps the
+          subform below — picker shows a search field, "need a partner"
+          shows a blue info panel.
+        </p>
+        <p>
+          PR #58 turned the two buttons into a connected segmented control.
+          They still read as buttons. Seven directions below to consider —
+          each option shows both states (picker-active above, need-active
+          below) inside a mock register form.
+        </p>
+        <div class="problem">
+          <strong>The job to be done:</strong> tell the system "I'm
+          registering with X" or "find me a partner." Once you've answered
+          that, the form below should obviously change. Today the answer
+          space looks like two action buttons; we want it to look like a
+          choice that's been made.
+        </div>
+      </header>
+
+      <div class="grid">
+        <!-- ════════════════════════════════════════════════════════
+             01 — Stacked radio cards
+             ════════════════════════════════════════════════════════ -->
+        <article class="opt o1">
+          <div class="head">
+            <div class="num">01 · Radio cards</div>
+            <h2>Stacked radio rows with descriptions</h2>
+            <p class="why">Classic "choose one" semantics — the dots make
+              "this is a selection, not an action" unambiguous.</p>
+          </div>
+          <div class="body">
+            <div class="card">
+              <div class="ev-head">
+                <h3>Men's 3.5 Doubles</h3>
+                <span class="price">$45</span>
+              </div>
+              <p class="ev-sub">Pool play → bracket · 12 / 16 teams</p>
+              <div class="form-label">Your partner</div>
+              <div class="radio-row active">
+                <div class="dot"></div>
+                <div class="label">
+                  <div class="title">I have a partner</div>
+                  <div class="sub">Search for them by name, email, or phone.</div>
+                </div>
+              </div>
+              <div class="radio-row">
+                <div class="dot"></div>
+                <div class="label">
+                  <div class="title">I need a partner</div>
+                  <div class="sub">We'll list you and the organizer can help match.</div>
+                </div>
+              </div>
+              <div class="search-shell">
+                <input placeholder="Search players…" />
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+
+            <div class="alt-state-label">↓ state: "I need a partner" selected</div>
+            <div class="card alt-state">
+              <div class="form-label">Your partner</div>
+              <div class="radio-row">
+                <div class="dot"></div>
+                <div class="label">
+                  <div class="title">I have a partner</div>
+                </div>
+              </div>
+              <div class="radio-row active">
+                <div class="dot"></div>
+                <div class="label">
+                  <div class="title">I need a partner</div>
+                </div>
+              </div>
+              <div class="seek-panel">
+                We'll register you without a partner. Others can find you
+                in the partner search, and the organizer will see you in
+                their "looking" list.
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+          </div>
+          <div class="notes">
+            <p><span class="tag pro">+</span>Strongest "this is a choice" signal of any option.</p>
+            <p><span class="tag pro">+</span>Descriptions explain consequences before you commit.</p>
+            <p><span class="tag con">−</span>Largest vertical footprint.</p>
+          </div>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             02 — Inline natural-language
+             ════════════════════════════════════════════════════════ -->
+        <article class="opt o2">
+          <div class="head">
+            <div class="num">02 · Natural language</div>
+            <h2>Picker is the form; alt is a quiet link</h2>
+            <p class="why">No toggle at all. Treat "find me a partner" as
+              an opt-out from the default rather than a coequal choice.</p>
+          </div>
+          <div class="body">
+            <div class="card">
+              <div class="ev-head">
+                <h3>Men's 3.5 Doubles</h3>
+                <span class="price">$45</span>
+              </div>
+              <p class="ev-sub">Pool play → bracket · 12 / 16 teams</p>
+              <div class="row">
+                <label>Your partner</label>
+                <div class="search-shell">
+                  <input placeholder="Search by name, email, or phone…" />
+                </div>
+                <a class="escape" href="#">I don't have a partner — find me one →</a>
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+
+            <div class="alt-state-label">↓ state: after clicking "find me one"</div>
+            <div class="card alt-state">
+              <div class="form-label">Your partner</div>
+              <div class="seek-panel">
+                We'll register you without a partner. Others can find you
+                in the partner search, and the organizer will see you in
+                their "looking" list.
+                <br /><br />
+                <a href="#" style="color: var(--blue-deep); font-weight: 500;">↩ Actually, I have a partner</a>
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+          </div>
+          <div class="notes">
+            <p><span class="tag pro">+</span>Smallest UI; happy-path users see only the search.</p>
+            <p><span class="tag pro">+</span>No toggle = no "buttons" problem at all.</p>
+            <p><span class="tag con">−</span>Asymmetric — biases toward "have a partner." Fine if that's the common case.</p>
+          </div>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             03 — Native select
+             ════════════════════════════════════════════════════════ -->
+        <article class="opt o3">
+          <div class="head">
+            <div class="num">03 · Dropdown</div>
+            <h2>Plain &lt;select&gt; — form-field semantics</h2>
+            <p class="why">Looks like every other field in the form.
+              Maximally utilitarian; minimally interesting.</p>
+          </div>
+          <div class="body">
+            <div class="card">
+              <div class="ev-head">
+                <h3>Men's 3.5 Doubles</h3>
+                <span class="price">$45</span>
+              </div>
+              <p class="ev-sub">Pool play → bracket · 12 / 16 teams</p>
+              <div class="form-label">Partner</div>
+              <select>
+                <option>I have a partner — let me pick them</option>
+                <option>I need a partner — find me one</option>
+              </select>
+              <div class="search-shell">
+                <input placeholder="Search players…" />
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+
+            <div class="alt-state-label">↓ state: "find me one" selected</div>
+            <div class="card alt-state">
+              <div class="form-label">Partner</div>
+              <select>
+                <option>I have a partner — let me pick them</option>
+                <option selected>I need a partner — find me one</option>
+              </select>
+              <div class="seek-panel">
+                We'll register you without a partner. Others can find you
+                in the partner search, and the organizer will see you in
+                their "looking" list.
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+          </div>
+          <div class="notes">
+            <p><span class="tag pro">+</span>Reads as a form field, not a button. Zero ambiguity about its job.</p>
+            <p><span class="tag pro">+</span>Same control mobile users see everywhere.</p>
+            <p><span class="tag con">−</span>Hides the alternate option behind a click. Less scannable.</p>
+          </div>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             04 — Conversational question
+             ════════════════════════════════════════════════════════ -->
+        <article class="opt o4">
+          <div class="head">
+            <div class="num">04 · Conversational</div>
+            <h2>"Do you have a partner?" — Yes / No</h2>
+            <p class="why">Lead with the question. Answers are text-links
+              with an underline marking the active one — like nav tabs.</p>
+          </div>
+          <div class="body">
+            <div class="card">
+              <div class="ev-head">
+                <h3>Men's 3.5 Doubles</h3>
+                <span class="price">$45</span>
+              </div>
+              <p class="ev-sub">Pool play → bracket · 12 / 16 teams</p>
+              <p class="question"><strong>Do you have a partner picked out?</strong></p>
+              <div class="answers">
+                <a href="#" class="active">Yes — pick them</a>
+                <a href="#">No — find me one</a>
+              </div>
+              <div class="search-shell">
+                <input placeholder="Search players…" />
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+
+            <div class="alt-state-label">↓ state: "No" selected</div>
+            <div class="card alt-state">
+              <p class="question"><strong>Do you have a partner picked out?</strong></p>
+              <div class="answers">
+                <a href="#">Yes — pick them</a>
+                <a href="#" class="active">No — find me one</a>
+              </div>
+              <div class="seek-panel">
+                We'll register you without a partner. Others can find you
+                in the partner search, and the organizer will see you in
+                their "looking" list.
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+          </div>
+          <div class="notes">
+            <p><span class="tag pro">+</span>Conversational; the question makes the choice feel natural.</p>
+            <p><span class="tag pro">+</span>Text-link answers read as "navigation," not action buttons.</p>
+            <p><span class="tag con">−</span>Two links side-by-side can still feel button-ish to some users.</p>
+          </div>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             05 — Choice tiles
+             ════════════════════════════════════════════════════════ -->
+        <article class="opt o5">
+          <div class="head">
+            <div class="num">05 · Choice tiles (refined)</div>
+            <h2>Compact icon + label tiles — selection, not action</h2>
+            <p class="why">Smaller than the original (one-line tiles, 1px
+              border) so they don't dominate. 🤝 for "I have a partner";
+              🙋 for "I need a partner" — that user isn't searching, so
+              the magnifying glass was wrong.</p>
+          </div>
+          <div class="body">
+            <div class="card">
+              <div class="ev-head">
+                <h3>Men's 3.5 Doubles</h3>
+                <span class="price">$45</span>
+              </div>
+              <p class="ev-sub">Pool play → bracket · 12 / 16 teams</p>
+              <div class="form-label">Your partner</div>
+              <div class="tiles">
+                <div class="tile active">
+                  <div class="icon">🤝</div>
+                  <div class="title">I have a partner</div>
+                </div>
+                <div class="tile">
+                  <div class="icon">🙋</div>
+                  <div class="title">I need a partner</div>
+                </div>
+              </div>
+              <div class="search-shell">
+                <input placeholder="Search players…" />
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+
+            <div class="alt-state-label">↓ state: "I need a partner" selected</div>
+            <div class="card alt-state">
+              <div class="form-label">Your partner</div>
+              <div class="tiles">
+                <div class="tile">
+                  <div class="icon">🤝</div>
+                  <div class="title">I have a partner</div>
+                </div>
+                <div class="tile active">
+                  <div class="icon">🙋</div>
+                  <div class="title">I need a partner</div>
+                </div>
+              </div>
+              <div class="seek-panel">
+                We'll register you without a partner. Others can find you
+                in the partner search, and the organizer will see you in
+                their "looking" list.
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+          </div>
+          <div class="notes">
+            <p><span class="tag pro">+</span>Icon + label reads as "mode," not "action button."</p>
+            <p><span class="tag pro">+</span>Compact — same vertical footprint as the segmented control.</p>
+            <p><span class="tag pro">+</span>🙋 correctly frames the seeker as raising a hand, not searching.</p>
+            <p><span class="tag con">−</span>Slight icon-rendering variance across platforms; consider Lucide (<code>Handshake</code> + <code>HandHelping</code>) when wiring up.</p>
+          </div>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             06 — Toggle switch
+             ════════════════════════════════════════════════════════ -->
+        <article class="opt o6">
+          <div class="head">
+            <div class="num">06 · Toggle switch</div>
+            <h2>"I need a partner" with an iOS-style switch</h2>
+            <p class="why">One control, one statement. The default state
+              (off) is "I have a partner," shown by the picker below.</p>
+          </div>
+          <div class="body">
+            <div class="card">
+              <div class="ev-head">
+                <h3>Men's 3.5 Doubles</h3>
+                <span class="price">$45</span>
+              </div>
+              <p class="ev-sub">Pool play → bracket · 12 / 16 teams</p>
+              <div class="form-label">Your partner</div>
+              <div class="switch-row">
+                <div>
+                  <div class="label">I need a partner</div>
+                  <div class="sub">Have the organizer match you with someone.</div>
+                </div>
+                <div class="switch"></div>
+              </div>
+              <div class="search-shell">
+                <input placeholder="Search players…" />
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+
+            <div class="alt-state-label">↓ state: switch on</div>
+            <div class="card alt-state">
+              <div class="form-label">Your partner</div>
+              <div class="switch-row">
+                <div>
+                  <div class="label">I need a partner</div>
+                  <div class="sub">Have the organizer match you with someone.</div>
+                </div>
+                <div class="switch on"></div>
+              </div>
+              <div class="seek-panel">
+                We'll register you without a partner. Others can find you
+                in the partner search, and the organizer will see you in
+                their "looking" list.
+              </div>
+              <button class="register-btn">Add to registration</button>
+            </div>
+          </div>
+          <div class="notes">
+            <p><span class="tag pro">+</span>Single control. Smallest possible "selector."</p>
+            <p><span class="tag pro">+</span>Switches universally read as state, not action.</p>
+            <p><span class="tag con">−</span>Frames it as "default" vs "opt-in" — same asymmetry as #02.</p>
+          </div>
+        </article>
+
+        <!-- ════════════════════════════════════════════════════════
+             07 — Picker-first w/ tiny escape
+             ════════════════════════════════════════════════════════ -->
+        <article class="opt o7">
+          <div class="head">
+            <div class="num">07 · Picker-first + escape</div>
+            <h2>Just show the search; an inline link toggles modes</h2>
+            <p class="why">Like #02 but the escape link looks more like a
+              utility action ("can't find them?") than a route.</p>
+          </div>
+          <div class="body">
+            <div class="card">
+              <div class="ev-head">
+                <h3>Men's 3.5 Doubles</h3>
+                <span class="price">$45</span>
+              </div>
+              <p class="ev-sub">Pool play → bracket · 12 / 16 teams</p>
+              <div class="form-label">Your partner</div>
+              <div class="search-shell">
+                <input placeholder="Search players by name or email…" />
+              </div>
+              <a class="escape-link" href="#">Don't have one? Sign up needing a partner →</a>
+              <button class="register-btn">Add to registration</button>
+            </div>
+
+            <div class="alt-state-label">↓ state: escape link clicked</div>
+            <div class="card alt-state">
+              <div class="form-label">Your partner</div>
+              <div class="seek-panel">
+                <strong>Signed up needing a partner.</strong>
+                Others can find you in the partner search, and the
+                organizer will see you in their "looking" list.
+              </div>
+              <a class="escape-link" href="#" style="margin-top: -2px;">↩ Pick a partner instead</a>
+              <button class="register-btn">Add to registration</button>
+            </div>
+          </div>
+          <div class="notes">
+            <p><span class="tag pro">+</span>Picker is the default — happiest path, zero clicks.</p>
+            <p><span class="tag pro">+</span>The link reads as utility ("can't find?") not as a coequal mode.</p>
+            <p><span class="tag con">−</span>Two utility-link variants for two states adds a tiny bit of mental load.</p>
+          </div>
+        </article>
+      </div>
+    </main>
+  </body>
+</html>
