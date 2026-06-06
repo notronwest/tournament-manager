@@ -7,6 +7,7 @@ import {
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import {
   contentColStyle,
   courtBlue,
@@ -90,6 +91,7 @@ type InviteContext = {
 // registrations atomically.
 export default function PartnerAcceptPage() {
   const { user, loading: authLoading } = useAuth();
+  const { refresh: refreshPending } = usePendingPayments();
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -298,6 +300,9 @@ export default function PartnerAcceptPage() {
     }
 
     setPhase("accepted");
+    // Refresh the global bar so it's populated when the user navigates
+    // back to the tournament page without a hard reload.
+    void refreshPending();
   };
 
   const onDecline = async () => {
