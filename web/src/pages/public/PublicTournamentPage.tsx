@@ -12,7 +12,7 @@ import { PartnerSearch } from "../../components/PartnerSearch";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
 import { formatUsd } from "../../lib/pricing";
-import { eligibilityChips } from "../../lib/eligibility";
+import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   deriveRegistrationStatus,
   pickActivePricingTier,
@@ -977,6 +977,12 @@ function EventCard({
           return;
         }
       }
+    }
+
+    const { eligible, reasons } = checkEligibility(me, event);
+    if (!eligible) {
+      setFormError(`Not eligible: ${reasons.join("; ")}.`);
+      return;
     }
 
     setSubmitting(true);

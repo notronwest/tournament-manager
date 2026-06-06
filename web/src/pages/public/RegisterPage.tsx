@@ -13,7 +13,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
-import { eligibilityChips } from "../../lib/eligibility";
+import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   computeLineItems,
   formatUsd,
@@ -615,6 +615,14 @@ export default function RegisterPage() {
           );
           return;
         }
+      }
+    }
+
+    for (const ev of addedEvents) {
+      const { eligible, reasons } = checkEligibility(me, ev);
+      if (!eligible) {
+        setError(`"${ev.name}": not eligible — ${reasons.join("; ")}.`);
+        return;
       }
     }
 
