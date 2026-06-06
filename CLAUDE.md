@@ -261,9 +261,22 @@ These aren't in code — Supabase CLI doesn't manage them yet:
 
 ---
 
-## Next milestones
+## Backlog
 
-See **[`docs/BACKLOG.md`](docs/BACKLOG.md)** for the living list of what's next, what's coming, and what just shipped. The backlog is the source of truth; update it as priorities shift. The roadmap spirit hasn't changed — "smallest end-to-end loop first" — but the original numbered list lived in this file got out of date as work landed, so it now lives in one place that's easier to keep accurate.
+This repo's backlog lives on the **WMPC Roadmap** GitHub Project board
+(Project **#1**, owner `notronwest`) — **not** in a file (the old
+`docs/BACKLOG.md` was migrated to the board and removed). This repo's
+stories are its `story`-labeled GitHub Issues, added to the board.
+
+- **Read:** `gh issue list --repo notronwest/tournament-manager --label story`
+  (whole board: `gh project item-list 1 --owner notronwest`).
+- **Write:** create a GitHub Issue with a user story + a scripted,
+  code-free `## Acceptance criteria`, label it `story`, add it to the
+  board, set **Priority**.
+- The Builder agent works the board's **Agent Ready** column into PRs;
+  Ron reviews + merges. Don't reintroduce a `BACKLOG.md` file.
+- **Full convention** (fields, Builder workflow, examples):
+  [`../wmpc-meta/conventions/backlog.md`](../wmpc-meta/conventions/backlog.md).
 
 ---
 

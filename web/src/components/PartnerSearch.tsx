@@ -344,10 +344,9 @@ function Avatar({
   );
 }
 
-// Compact "email · phone · 3.5 mixed" line. Skips anything blank.
-// Ratings stored as numeric in Postgres come back as 3 (not 3.0) when
-// the trailing zero is "dropped" — format with toFixed(1) so "3
-// doubles" doesn't look like "3 doubles events."
+// Compact "email · phone · 3.5 Women · Doubles (self-rated)" line.
+// Gender is shown when set (M → Men, F → Women, X → Other). Source is
+// always "self-rated" until DUPR wiring lands (separate item).
 function formatPlayerMeta(p: Player): string {
   const bits: string[] = [];
   if (p.email) bits.push(p.email);
@@ -357,13 +356,16 @@ function formatPlayerMeta(p: Player): string {
     p.self_rating_mixed ??
     p.self_rating_singles;
   if (r != null) {
-    const which =
+    const category =
       p.self_rating_doubles != null
-        ? "doubles"
+        ? "Doubles"
         : p.self_rating_mixed != null
-          ? "mixed"
-          : "singles";
-    bits.push(`${r.toFixed(1)} ${which}`);
+          ? "Mixed"
+          : "Singles";
+    const genderLabel =
+      p.gender === "M" ? "Men" : p.gender === "F" ? "Women" : p.gender === "X" ? "Other" : null;
+    const ratingValue = `${r.toFixed(1)}${genderLabel ? ` ${genderLabel}` : ""}`;
+    bits.push(`${ratingValue} · ${category} (self-rated)`);
   }
   return bits.join(" · ");
 }

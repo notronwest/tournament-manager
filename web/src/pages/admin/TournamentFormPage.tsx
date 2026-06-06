@@ -61,12 +61,11 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
   const [pricingTiers, setPricingTiers] = useState<TierDraft[]>(() => [
     makeEmptyTierDraft("Standard"),
   ]);
-  // Edit mode: how many registrations have already PAID for this
-  // tournament. Drives a reassurance banner in the pricing editor —
-  // those registrations have their price locked (snapshotted onto
-  // event_registrations.event_fee_cents at checkout) and a tier
-  // change here won't re-bill them.
-  const [paidRegCount, setPaidRegCount] = useState(0);
+  // Edit mode: paid + pending_payment registrations for this tournament.
+  // When > 0, the pricing editor is locked — any active registration
+  // means the organizer has committed to those prices and cannot change
+  // them without first cancelling/refunding.
+  const [activeRegCount, setActiveRegCount] = useState(0);
   const [courtCount, setCourtCount] = useState("0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,11 +133,12 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
         setPricingTiers([makeEmptyTierDraft("Standard")]);
       }
 
-      // Count paid registrations so the pricing editor can reassure
-      // the organizer that those locked-in prices won't change. Two
-      // steps: event ids for this tournament, then a head-count of
-      // paid event_registrations in them. Org members can read these
-      // rows via the "event_regs read by player or org" RLS policy.
+      // Count active (paid + pending_payment) registrations. When > 0
+      // the pricing editor locks — the organizer can't change prices
+      // after anyone has committed. Two steps: event ids for this
+      // tournament, then a head-count of active event_registrations.
+      // Org members can read these rows via the "event_regs read by
+      // player or org" RLS policy.
       const { data: evIdRows } = await supabase
         .from("events")
         .select("id")
@@ -151,10 +151,10 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
           .from("event_registrations")
           .select("id", { count: "exact", head: true })
           .in("event_id", eventIds)
-          .eq("status", "paid")
+          .in("status", ["paid", "pending_payment"])
           .is("deleted_at", null);
         if (cancelled) return;
-        setPaidRegCount(count ?? 0);
+        setActiveRegCount(count ?? 0);
       }
       setLoading(false);
     })();
@@ -259,15 +259,20 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
         setError(updErr?.message ?? "Failed to save tournament.");
         return;
       }
-      const { error: tierErr } = await supabase.rpc("replace_pricing_tiers", {
-        p_tournament_id: existing.id,
-        p_tiers: tierRows,
-      });
-      setBusy(false);
-      if (tierErr) {
-        setError(`Saved details, but pricing failed to save: ${tierErr.message}`);
-        return;
+      // Skip the pricing RPC when locked — the editor was read-only,
+      // so the tiers are unchanged and the RPC would reject anyway.
+      if (activeRegCount === 0) {
+        const { error: tierErr } = await supabase.rpc("replace_pricing_tiers", {
+          p_tournament_id: existing.id,
+          p_tiers: tierRows,
+        });
+        if (tierErr) {
+          setBusy(false);
+          setError(`Saved details, but pricing failed to save: ${tierErr.message}`);
+          return;
+        }
       }
+      setBusy(false);
       // The slug may have changed; navigate to the (possibly new) URL.
       navigate(`/admin/${org.slug}/tournaments/${data.slug}`);
     }
@@ -428,7 +433,7 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
         <PricingTiersEditor
           pattern={pricingPattern}
           tiers={pricingTiers}
-          paidRegistrationCount={paidRegCount}
+          activeRegCount={activeRegCount}
           onChange={(nextPattern, nextTiers) => {
             setPricingPattern(nextPattern);
             setPricingTiers(nextTiers);
