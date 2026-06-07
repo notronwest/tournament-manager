@@ -80,6 +80,44 @@ export type Database = {
           },
         ]
       }
+      contact_form_submissions: {
+        Row: {
+          created_at: string
+          id: string
+          ip_hash: string | null
+          message: string
+          sender_email: string
+          sender_name: string
+          tournament_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          message: string
+          sender_email: string
+          sender_name: string
+          tournament_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          message?: string
+          sender_email?: string
+          sender_name?: string
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_form_submissions_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_courts: {
         Row: {
           court_number: number
@@ -291,6 +329,47 @@ export type Database = {
             columns: ["tournament_id"]
             isOneToOne: false
             referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      locations: {
+        Row: {
+          address: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_default: boolean
+          name: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -799,6 +878,116 @@ export type Database = {
           },
         ]
       }
+      tournament_change_requests: {
+        Row: {
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["change_request_kind"]
+          organizer_resolution: string | null
+          payload: Json
+          player_id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: Database["public"]["Enums"]["change_request_status"]
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: Database["public"]["Enums"]["change_request_kind"]
+          organizer_resolution?: string | null
+          payload?: Json
+          player_id: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["change_request_status"]
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["change_request_kind"]
+          organizer_resolution?: string | null
+          payload?: Json
+          player_id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: Database["public"]["Enums"]["change_request_status"]
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_change_requests_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_change_requests_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournament_contacts: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          email: string | null
+          id: string
+          is_public: boolean
+          name: string
+          phone: string | null
+          receives_form_messages: boolean
+          role: string | null
+          sort_order: number
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          id?: string
+          is_public?: boolean
+          name: string
+          phone?: string | null
+          receives_form_messages?: boolean
+          role?: string | null
+          sort_order?: number
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          id?: string
+          is_public?: boolean
+          name?: string
+          phone?: string | null
+          receives_form_messages?: boolean
+          role?: string | null
+          sort_order?: number
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_contacts_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tournament_pricing_tiers: {
         Row: {
           additional_event_fee_cents: number
@@ -848,6 +1037,7 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          additional_info_md: string | null
           cancellation_policy_preset:
             | Database["public"]["Enums"]["cancellation_policy_preset"]
             | null
@@ -856,14 +1046,17 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           ends_at: string
+          facility_info_md: string | null
           faqs_md: string | null
           id: string
           inter_event_buffer_minutes: number
           location_address: string | null
+          location_id: string | null
           location_name: string | null
           name: string
           organization_id: string
           pricing_pattern: Database["public"]["Enums"]["pricing_pattern"]
+          refund_policy_md: string | null
           registration_closes_at: string | null
           registration_opens_at: string | null
           slug: string
@@ -871,8 +1064,10 @@ export type Database = {
           starts_at: string
           status: Database["public"]["Enums"]["tournament_status"]
           updated_at: string
+          weather_md: string | null
         }
         Insert: {
+          additional_info_md?: string | null
           cancellation_policy_preset?:
             | Database["public"]["Enums"]["cancellation_policy_preset"]
             | null
@@ -881,14 +1076,17 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           ends_at: string
+          facility_info_md?: string | null
           faqs_md?: string | null
           id?: string
           inter_event_buffer_minutes?: number
           location_address?: string | null
+          location_id?: string | null
           location_name?: string | null
           name: string
           organization_id: string
           pricing_pattern?: Database["public"]["Enums"]["pricing_pattern"]
+          refund_policy_md?: string | null
           registration_closes_at?: string | null
           registration_opens_at?: string | null
           slug: string
@@ -896,8 +1094,10 @@ export type Database = {
           starts_at: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
+          weather_md?: string | null
         }
         Update: {
+          additional_info_md?: string | null
           cancellation_policy_preset?:
             | Database["public"]["Enums"]["cancellation_policy_preset"]
             | null
@@ -906,14 +1106,17 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           ends_at?: string
+          facility_info_md?: string | null
           faqs_md?: string | null
           id?: string
           inter_event_buffer_minutes?: number
           location_address?: string | null
+          location_id?: string | null
           location_name?: string | null
           name?: string
           organization_id?: string
           pricing_pattern?: Database["public"]["Enums"]["pricing_pattern"]
+          refund_policy_md?: string | null
           registration_closes_at?: string | null
           registration_opens_at?: string | null
           slug?: string
@@ -921,8 +1124,16 @@ export type Database = {
           starts_at?: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
+          weather_md?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tournaments_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tournaments_organization_id_fkey"
             columns: ["organization_id"]
@@ -1030,6 +1241,12 @@ export type Database = {
         | "double_elim"
         | "pool_then_bracket"
       cancellation_policy_preset: "generous" | "standard" | "strict" | "custom"
+      change_request_kind:
+        | "division_change"
+        | "partner_change"
+        | "withdrawal"
+        | "other"
+      change_request_status: "open" | "approved" | "denied" | "cancelled"
       event_format: "singles" | "doubles"
       event_gender: "men" | "women" | "mixed"
       event_status:
@@ -1215,6 +1432,13 @@ export const Constants = {
         "pool_then_bracket",
       ],
       cancellation_policy_preset: ["generous", "standard", "strict", "custom"],
+      change_request_kind: [
+        "division_change",
+        "partner_change",
+        "withdrawal",
+        "other",
+      ],
+      change_request_status: ["open", "approved", "denied", "cancelled"],
       event_format: ["singles", "doubles"],
       event_gender: ["men", "women", "mixed"],
       event_status: [
