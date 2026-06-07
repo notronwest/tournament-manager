@@ -10,6 +10,7 @@ import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
+import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
@@ -193,6 +194,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/attendees"
           element={<AttendeesPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/change-requests"
+          element={<ChangeRequestsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/schedule"

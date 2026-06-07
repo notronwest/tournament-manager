@@ -45,6 +45,7 @@ import type { Database } from "../../types/supabase";
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
+type ChangeRequestKind = Database["public"]["Enums"]["change_request_kind"];
 
 // Per-event snapshot of what the user is *currently* registered for —
 // loaded once on mount, then compared against the live selections
@@ -198,6 +199,36 @@ export default function RegisterPage() {
       cancelEmailError?: string;
     }[];
   } | null>(null);
+
+  // Change-request form: player asks organizer for help with edge
+  // cases that can't be self-served (division swap, post-accept partner
+  // change, special-circumstance withdrawal).
+  const [showChangeRequest, setShowChangeRequest] = useState(false);
+  const [crKind, setCrKind] = useState<ChangeRequestKind>("other");
+  const [crNote, setCrNote] = useState("");
+  const [crSubmitting, setCrSubmitting] = useState(false);
+  const [crSuccess, setCrSuccess] = useState(false);
+  const [crError, setCrError] = useState<string | null>(null);
+
+  const submitChangeRequest = async () => {
+    if (!me || !tournament) return;
+    setCrSubmitting(true);
+    setCrError(null);
+    const { error } = await supabase
+      .from("tournament_change_requests")
+      .insert({
+        tournament_id: tournament.id,
+        player_id: me.id,
+        kind: crKind,
+        payload: crNote.trim() ? { note: crNote.trim() } : {},
+      });
+    setCrSubmitting(false);
+    if (error) { setCrError(error.message); return; }
+    setCrSuccess(true);
+    setShowChangeRequest(false);
+    setCrNote("");
+    setCrKind("other");
+  };
 
   useEffect(() => {
     if (!orgSlug || !tournamentSlug || !user) return;
@@ -1482,6 +1513,186 @@ export default function RegisterPage() {
           </button>
         </div>
       </form>
+
+      {/* Change-request section — shown when the player already has at
+          least one registration (paid or pending) for this tournament.
+          Cases the normal save-flow can't handle: division swap after
+          paying, partner change post-accept, special withdrawal. */}
+      {existingRegs.size > 0 && (
+        <div
+          style={{
+            marginTop: 32,
+            paddingTop: 24,
+            borderTop: "1px solid #e5e7eb",
+          }}
+        >
+          <div
+            style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 4 }}
+          >
+            Need organizer help?
+          </div>
+          <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 12px", lineHeight: 1.5 }}>
+            For changes that can't be done here — switching divisions, swapping
+            a partner who already accepted, or a special-circumstance withdrawal
+            — send a request to the organizer.
+          </p>
+
+          {crSuccess && (
+            <div
+              style={{
+                padding: "10px 14px",
+                background: "#dcfce7",
+                border: "1px solid #86efac",
+                borderRadius: 6,
+                fontSize: 13,
+                color: "#166534",
+                marginBottom: 12,
+              }}
+            >
+              Your request was sent. The organizer will follow up.
+            </div>
+          )}
+
+          {!crSuccess && !showChangeRequest && (
+            <button
+              type="button"
+              onClick={() => setShowChangeRequest(true)}
+              style={{
+                padding: "8px 18px",
+                border: "1px solid #d1d5db",
+                background: "#fff",
+                color: "#374151",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Request a change
+            </button>
+          )}
+
+          {showChangeRequest && (
+            <div
+              style={{
+                padding: 16,
+                border: "1px solid #e5e7eb",
+                borderRadius: 8,
+                background: "#f9fafb",
+              }}
+            >
+              <div style={{ marginBottom: 14 }}>
+                <label
+                  htmlFor="cr-kind"
+                  style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}
+                >
+                  Type of request
+                </label>
+                <select
+                  id="cr-kind"
+                  value={crKind}
+                  onChange={(e) => setCrKind(e.target.value as ChangeRequestKind)}
+                  style={{
+                    padding: "8px 10px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontFamily: "inherit",
+                    background: "#fff",
+                    color: "#111827",
+                    width: "100%",
+                    maxWidth: 280,
+                  }}
+                >
+                  <option value="division_change">Division change</option>
+                  <option value="partner_change">Partner change</option>
+                  <option value="withdrawal">Withdrawal</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label
+                  htmlFor="cr-note"
+                  style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}
+                >
+                  Details
+                </label>
+                <textarea
+                  id="cr-note"
+                  value={crNote}
+                  onChange={(e) => setCrNote(e.target.value)}
+                  rows={3}
+                  placeholder="Describe what you need…"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "8px 10px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontFamily: "inherit",
+                    resize: "vertical",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              {crError && (
+                <div style={{ fontSize: 13, color: "#991b1b", marginBottom: 10 }}>
+                  {crError}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  disabled={crSubmitting}
+                  onClick={() => void submitChangeRequest()}
+                  style={{
+                    padding: "8px 20px",
+                    border: "1px solid #2563eb",
+                    background: crSubmitting ? "#eff6ff" : "#2563eb",
+                    color: crSubmitting ? "#1d4ed8" : "#fff",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: crSubmitting ? "not-allowed" : "pointer",
+                    fontFamily: "inherit",
+                    opacity: crSubmitting ? 0.7 : 1,
+                  }}
+                >
+                  {crSubmitting ? "Sending…" : "Send request"}
+                </button>
+                <button
+                  type="button"
+                  disabled={crSubmitting}
+                  onClick={() => {
+                    setShowChangeRequest(false);
+                    setCrNote("");
+                    setCrKind("other");
+                    setCrError(null);
+                  }}
+                  style={{
+                    padding: "8px 18px",
+                    border: "1px solid #d1d5db",
+                    background: "#fff",
+                    color: "#374151",
+                    borderRadius: 6,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: crSubmitting ? "not-allowed" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </Shell>
   );
 }

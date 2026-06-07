@@ -415,6 +415,11 @@ export default function TournamentDetailPage() {
           }
         />
         <Stat label="Events" value={events.length} />
+        <Stat
+          label="Change requests"
+          value="View queue"
+          to={`/admin/${org.slug}/tournaments/${t.slug}/change-requests`}
+        />
         {/* Status moved out of the stats grid into the header
             badge, next to the action buttons that mutate it. */}
         <Stat
