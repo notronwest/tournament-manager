@@ -48,6 +48,15 @@ prod migration-drift blocker along the way.
   written rule in CLAUDE.md / `supabase/migrations/README.md`. Kept
   entirely separate from this reconcile work (no migration files in #76).
 
+- **Traceability:** every PR from this work now closes a tracked issue —
+  **#78→#56** (eligibility), **#77→#79** (reconcile, new tracking issue),
+  **#76→#80** (guardrails, new tracking issue). The guardrails issue
+  notes the through-line: a machine-applied, drift-free migration path is
+  a prerequisite for trustworthy **automated regression testing (#66)**.
+  New issues #79/#80 may still need adding to the WMPC Roadmap board
+  (project write-scope wasn't granted this session). Temp recovery token
+  has been revoked by Ron.
+
 - **🔜 Next / merge order (clean baseline first):**
   1. Merge **`fix/reconcile-event-roster-drift`** → `main` (main now
      matches prod exactly).
