@@ -11,9 +11,9 @@ Last updated: **2026-06-07**
 
 ## 2026-06-07 — Backlog additions: bug #81, mockups #98/#100, bug #102, page #103
 
-Two new backlog items captured (both on the WMPC Roadmap board, Priority
-**"Next up"** = the board's high-urgency bucket; project write-scope now
-granted):
+Backlog items captured this session (all on the WMPC Roadmap board,
+Priority **"Next up"** = the board's high-urgency bucket; project
+write-scope now granted):
 
 - **#81 (bug) — returning-player overcharge.** Already detailed in the
   06-06 entry below. Board: Backlog · Next up.
