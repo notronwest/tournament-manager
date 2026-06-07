@@ -53,9 +53,8 @@ prod migration-drift blocker along the way.
   **#76→#80** (guardrails, new tracking issue). The guardrails issue
   notes the through-line: a machine-applied, drift-free migration path is
   a prerequisite for trustworthy **automated regression testing (#66)**.
-  New issues #79/#80 may still need adding to the WMPC Roadmap board
-  (project write-scope wasn't granted this session). Temp recovery token
-  has been revoked by Ron.
+  #79/#80 are on the WMPC Roadmap board, both **In Review** (alongside
+  #56). Temp recovery token has been revoked by Ron.
 
 - **New bug filed: #81 (High).** Found while reviewing the #64 fix —
   a returning player who already paid then registers for a new event in a
@@ -64,8 +63,8 @@ prod migration-drift blocker along the way.
   tournament). Root cause traced: `computeLineItems` in
   `web/src/lib/pricing.ts` only sees the current session's pick-set and
   has no knowledge of already-paid events, so the lone new pick is priced
-  as "first." Fix direction in the issue. Labelled `bug`+`story`; still to
-  be added to the board + set Priority=High (needs project write-scope).
+  as "first." Fix direction in the issue. Labelled `bug`+`story`, on the
+  board at **Backlog · Priority "Next up"** (the board's top urgency bucket).
 
 - **🔜 Next / merge order (clean baseline first):**
   1. Merge **`fix/reconcile-event-roster-drift`** → `main` (main now
