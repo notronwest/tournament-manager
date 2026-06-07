@@ -25,8 +25,19 @@ granted):
   spec + a11y notes (focus trap, `inert` siblings, reduced-motion).
   Touches `PublicTournamentPage` `EventCard` only; no schema/pricing.
   Board: Backlog · Next up.
+  - **Fix:** event cards were JS-injected, so no-JS previewers (macOS
+    Quick Look / sandboxed panes) showed a blank page. Rewrote them as
+    **static HTML** (JS now only drives the focus interaction). Pushed to
+    PR #99.
+- **#100 (story) — rebrand the login screen on the V5 brand.** `LoginPage`
+  is still the old "Tournament Manager" card + `#2563eb` blue; never got
+  the V5 treatment. Built mockup `mockups/login-screen.html` (split ink
+  brand-panel + cream/ink form, segmented mode control, static-first)
+  shipped as **PR #101** (Closes #100). Touches `web/src/auth/LoginPage.tsx`
+  → `publicTheme` tokens; presentation only. Board: Backlog · Next up.
 
 Board write-access is now set, so future board updates need no re-auth.
+All mockups are static-HTML-first so they render in any previewer.
 
 ## 2026-06-06 — Drift reconciled (event_roster) + eligibility enforcement (#56) validated
 
