@@ -9,7 +9,7 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-07**
 
-## 2026-06-07 — Backlog additions: pricing bug #81 + register-focus mockup #98
+## 2026-06-07 — Backlog additions: bug #81, mockups #98/#100, bug #102, page #103
 
 Two new backlog items captured (both on the WMPC Roadmap board, Priority
 **"Next up"** = the board's high-urgency bucket; project write-scope now
@@ -35,6 +35,19 @@ granted):
   brand-panel + cream/ink form, segmented mode control, static-first)
   shipped as **PR #101** (Closes #100). Touches `web/src/auth/LoginPage.tsx`
   → `publicTheme` tokens; presentation only. Board: Backlog · Next up.
+- **#102 (bug) — partner-seeker blocked at checkout.** A player who
+  registers as "I need a partner" (`partner_status='seeking'`) can't pay —
+  checkout shows "Fix the partner issue above." Root cause traced:
+  `CheckoutPage.tsx` (~L312) `blockingError = rows.find(r => r.format==='doubles' && !r.partnerLabel)`
+  doesn't fetch or exempt `partner_status='seeking'`. Fix = carry
+  partner_status into the pending row + exempt seekers + calm note.
+  Checkout-only (no parallel guard in PendingPaymentsContext). Board:
+  Backlog · Next up.
+- **#103 (story) — "My Tournaments" page for players.** Prominent
+  player-facing page listing registered tournaments (Upcoming/Running +
+  Past history), reachable from `SiteHeader`. Reads `event_registrations`
+  for `current_player_id()` → events → tournaments (RLS already scopes to
+  self). New route + page; no schema change. Board: Backlog · Next up.
 
 Board write-access is now set, so future board updates need no re-auth.
 All mockups are static-HTML-first so they render in any previewer.
