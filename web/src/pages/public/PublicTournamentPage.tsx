@@ -1566,7 +1566,7 @@ function EventCard({
             >
               {isAdditionalEvent ? (
                 <>
-                  Additional event:{" "}
+                  Extra event:{" "}
                   <strong>+${(additionalFeeCents / 100).toFixed(0)}</strong>{" "}
                   <span style={{ color: "#888" }}>
                     (added to your registration)
@@ -1575,7 +1575,7 @@ function EventCard({
               ) : (
                 <>
                   <strong>${(regFeeCents / 100).toFixed(0)}</strong>{" "}
-                  registration{" "}
+                  entry{" "}
                   <span style={{ color: "#888" }}>· includes this event</span>
                 </>
               )}

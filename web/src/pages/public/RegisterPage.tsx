@@ -1409,7 +1409,7 @@ export default function RegisterPage() {
             <div style={{ fontSize: 13, color: ink }}>
               {lineItems.length} event{lineItems.length === 1 ? "" : "s"}
               {(() => {
-                // Tier breakdown — e.g. "1 first + 2 additional + 1 flat".
+                // Tier breakdown — e.g. "Entry + 2 extra events + 1 flat-fee".
                 const first = lineItems.filter((i) => i.tier === "first").length;
                 const additional = lineItems.filter(
                   (i) => i.tier === "additional",
@@ -1418,8 +1418,11 @@ export default function RegisterPage() {
                   (i) => i.tier === "override",
                 ).length;
                 const parts: string[] = [];
-                if (first > 0) parts.push(`${first} first`);
-                if (additional > 0) parts.push(`${additional} additional`);
+                if (first > 0) parts.push("Entry");
+                if (additional > 0)
+                  parts.push(
+                    additional === 1 ? "1 extra event" : `${additional} extra events`,
+                  );
                 if (override > 0)
                   parts.push(`${override} flat-fee`);
                 return parts.length > 0 ? (
@@ -1665,9 +1668,9 @@ function EventRow({
               <span style={{ color: "#888" }}>
                 (
                 {lineItem.tier === "first"
-                  ? "first event"
+                  ? "entry"
                   : lineItem.tier === "additional"
-                    ? "additional event"
+                    ? "extra event"
                     : "flat fee"}
                 )
               </span>
