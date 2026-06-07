@@ -1361,6 +1361,9 @@ export default function RegisterPage() {
               {events.map((ev) => {
                 const sel = selections.get(ev.id)!;
                 const existing = existingRegs.get(ev.id);
+                const eligResult = me
+                  ? checkEligibility(me, ev)
+                  : { eligible: true, reasons: [] as string[] };
                 return (
                   <EventRow
                     key={ev.id}
@@ -1382,6 +1385,9 @@ export default function RegisterPage() {
                         registeredByEvent.get(ev.id) ?? new Set<string>(),
                       ),
                     ]}
+                    ineligibleReasons={
+                      eligResult.eligible ? undefined : eligResult.reasons
+                    }
                   />
                 );
               })}
@@ -1510,6 +1516,7 @@ function EventRow({
   disabled,
   onChange,
   excludePlayerIds,
+  ineligibleReasons,
 }: {
   event: Event;
   selection: EventSelection;
@@ -1523,8 +1530,14 @@ function EventRow({
   disabled: boolean;
   onChange: (patch: Partial<EventSelection>) => void;
   excludePlayerIds: string[];
+  // Non-empty when the logged-in player doesn't meet this event's
+  // eligibility requirements and has no existing registration.
+  // The checkbox is disabled and the reasons are shown inline.
+  ineligibleReasons?: string[];
 }) {
   const chips = eligibilityChips(event);
+  // Gate: hide the checkbox for ineligible events the player isn't yet in.
+  const isIneligible = !!ineligibleReasons?.length && !existing;
 
   // Visual treatment derived from existing-reg + diff state.
   // "added"           → blue border, "Will register" pill
@@ -1575,14 +1588,14 @@ function EventRow({
         background: bg,
         border: `1px solid ${borderColor}`,
         borderRadius: 6,
-        cursor: disabled ? "not-allowed" : "pointer",
+        cursor: disabled || isIneligible ? "not-allowed" : "pointer",
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <input
           type="checkbox"
           checked={selection.selected}
-          disabled={disabled}
+          disabled={disabled || isIneligible}
           onChange={(e) => onChange({ selected: e.target.checked })}
           style={{ marginTop: 3 }}
         />
@@ -1708,6 +1721,11 @@ function EventRow({
                   {c}
                 </span>
               ))}
+            </div>
+          )}
+          {isIneligible && (
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+              Not eligible: {ineligibleReasons!.join("; ")}
             </div>
           )}
         </div>
