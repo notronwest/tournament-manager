@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Issue #57 — Register button options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f5f6f8; color: #111; }
+
+  .page { max-width: 980px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: #666; margin-bottom: 40px; }
+
+  /* Section headers */
+  .option-header {
+    display: flex; align-items: baseline; gap: 12px;
+    margin-bottom: 20px; padding-bottom: 10px;
+    border-bottom: 2px solid #e5e7eb;
+  }
+  .option-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    background: #1e40af; color: #fff; padding: 3px 8px; border-radius: 4px;
+  }
+  .option-title { font-size: 17px; font-weight: 600; }
+  .option-desc { font-size: 13px; color: #666; line-height: 1.5; margin-bottom: 20px; }
+
+  .option-section { margin-bottom: 56px; }
+
+  /* Scenario columns */
+  .scenarios { display: grid; gap: 20px; }
+  .scenarios.cols-2 { grid-template-columns: 1fr 1fr; }
+  .scenarios.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 700px) {
+    .scenarios.cols-2, .scenarios.cols-3 { grid-template-columns: 1fr; }
+  }
+
+  .scenario-label {
+    font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: 10px;
+  }
+
+  /* ── The app shell ── */
+  .app-shell {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  /* Tournament header bar */
+  .t-header {
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 16px 20px;
+  }
+  .t-name { font-size: 16px; font-weight: 700; }
+  .t-meta { font-size: 12px; color: #888; margin-top: 2px; }
+
+  /* Event list */
+  .event-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* Collapsed event card */
+  .event-card {
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+  .event-card.expanded { border-color: #2563eb; }
+  .event-card.paid { background: #f0fdf4; border-color: #bbf7d0; }
+
+  .event-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; }
+  .event-info { flex: 1; min-width: 0; }
+  .event-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .event-name { font-size: 15px; font-weight: 600; }
+  .event-meta { font-size: 12px; color: #666; margin-top: 3px; }
+
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+  .pill-green { background: #dcfce7; color: #166534; }
+  .pill-amber { background: #fef3c7; color: #7a5d00; }
+  .pill-blue { background: #dbeafe; color: #1e40af; }
+  .pill-red { background: #fee2e2; color: #991b1b; }
+
+  /* Expanded inline form */
+  .inline-form {
+    margin-top: 14px; padding-top: 14px;
+    border-top: 1px dashed #e5e7eb;
+  }
+
+  /* Partner mode tiles */
+  .mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .mode-tile {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 6px; border: 1px solid;
+    font-size: 13px; cursor: pointer;
+  }
+  .mode-tile.active { background: #eff6ff; border-color: #2563eb; color: #1e40af; }
+  .mode-tile.inactive { background: #fff; border-color: #d1d5db; color: #444; }
+  .mode-tile svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+  /* Partner search field */
+  .partner-field {
+    border: 1px solid #e2e2e2; border-radius: 6px;
+    padding: 9px 12px; font-size: 13px; color: #111;
+    background: #fff; margin-bottom: 12px; width: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .partner-field.picked { border-color: #2563eb; background: #eff6ff; }
+  .partner-field .player-name { font-weight: 500; color: #1e40af; }
+  .partner-field .clear-btn { color: #888; font-size: 16px; cursor: pointer; }
+  .partner-field .placeholder { color: #9ca3af; }
+
+  .cost-line { font-size: 13px; color: #444; margin-bottom: 12px; }
+  .cost-line strong { color: #111; }
+
+  /* Button styles */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px; border-radius: 6px; border: none;
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    font-family: inherit; white-space: nowrap; text-decoration: none;
+  }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary-lg { padding: 12px 24px; font-size: 15px; }
+  .btn-secondary { background: #fff; color: #555; border: 1px solid #e2e2e2; }
+  .btn-success { background: #16a34a; color: #fff; }
+  .btn-success-lg { padding: 12px 24px; font-size: 15px; }
+  .btn-outline { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
+  .btn-disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; }
+  .btn-sm { padding: 7px 14px; font-size: 13px; }
+
+  .btn-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn-hint { font-size: 12px; color: #9ca3af; }
+
+  /* Cart / summary bar */
+  .cart-bar {
+    margin: 16px 20px 0;
+    padding: 14px 16px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .cart-bar-items { font-size: 13px; color: #166534; }
+  .cart-bar-items strong { font-weight: 600; }
+
+  /* Sticky bar (Option C) */
+  .sticky-wrap { position: relative; }
+  .sticky-bar {
+    position: sticky; bottom: 0;
+    background: #fff;
+    border-top: 2px solid #2563eb;
+    padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    box-shadow: 0 -4px 12px rgba(0,0,0,.08);
+  }
+  .sticky-bar-left { font-size: 13px; color: #333; }
+  .sticky-bar-left .total { font-size: 16px; font-weight: 700; color: #111; }
+
+  /* Dimmed/other events */
+  .event-card.dimmed { opacity: 0.45; }
+
+  /* Annotation badges */
+  .annotation {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px;
+    font-weight: 600; letter-spacing: .04em;
+    display: inline-block; margin-left: 8px;
+  }
+  .ann-change { background: #fef3c7; color: #7a5d00; }
+  .ann-new { background: #dbeafe; color: #1e40af; }
+
+  /* Divider */
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 40px 0; }
+
+  /* "Registered" partner line */
+  .partner-line { font-size: 12px; color: #166534; margin-top: 3px; }
+  .partner-line-pending { font-size: 12px; color: #7a5d00; margin-top: 3px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Issue #57 — Centralize the "Register" button</h1>
+  <p class="subtitle">Three design approaches for the doubles inline-register flow in <code>PublicTournamentPage</code>. Each section shows the same states: no partner picked · partner picked · already registered (for reference).</p>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- OPTION A — Label-only fix, per-event → checkout           -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="option-section">
+    <div class="option-header">
+      <span class="option-label">Option A</span>
+      <span class="option-title">Contextual label &mdash; smallest change</span>
+    </div>
+    <p class="option-desc">
+      Keep the current per-event → checkout flow but rename the button to match its actual consequence.
+      No partner picked: button is disabled with a hint. Partner picked: button clearly says where you're going and what's being saved.
+      Minimal code change — one conditional on the button label.
+    </p>
+
+    <div class="scenarios cols-3">
+
+      <!-- No partner picked -->
+      <div>
+        <div class="scenario-label">No partner picked yet</div>
+        <div class="app-shell">
+          <div class="t-header">
+            <div class="t-name">WMPC Summer Open</div>
+            <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+          </div>
+          <div class="event-list">
+            <div class="event-card expanded">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Mixed Doubles 3.5</span>
+                  </div>
+                  <div class="event-meta">Doubles · Mixed · 11 win by 2</div>
+                </div>
+              </div>
+              <div class="inline-form">
+                <div class="mode-grid">
+                  <div class="mode-tile active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17a4 4 0 0 0 8 0 4 4 0 0 0-8 0"/><path d="M16 3a4 4 0 0 1 0 8"/><path d="M3 17a4 4 0 0 1 8 0"/><path d="M8 3a4 4 0 0 0 0 8"/></svg>
+                    I have a partner
+                  </div>
+                  <div class="mode-tile inactive">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
+                    I need a partner
+                  </div>
+                </div>
+                <div class="partner-field">
+                  <span class="placeholder">Search by name, email, or phone…</span>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-disabled">Register →</button>
+                  <button class="btn btn-secondary btn-sm">Cancel</button>
+                  <span class="btn-hint">Pick a partner to continue</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Partner picked -->
+      <div>
+        <div class="scenario-label">Partner picked <span class="annotation ann-change">button changes</span></div>
+        <div class="app-shell">
+          <div class="t-header">
+            <div class="t-name">WMPC Summer Open</div>
+            <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+          </div>
+          <div class="event-list">
+            <div class="event-card expanded">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Mixed Doubles 3.5</span>
+                  </div>
+                  <div class="event-meta">Doubles · Mixed · 11 win by 2</div>
+                </div>
+              </div>
+              <div class="inline-form">
+                <div class="mode-grid">
+                  <div class="mode-tile active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17a4 4 0 0 0 8 0 4 4 0 0 0-8 0"/><path d="M16 3a4 4 0 0 1 0 8"/><path d="M3 17a4 4 0 0 1 8 0"/><path d="M8 3a4 4 0 0 0 0 8"/></svg>
+                    I have a partner
+                  </div>
+                  <div class="mode-tile inactive">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
+                    I need a partner
+                  </div>
+                </div>
+                <div class="partner-field picked">
+                  <span class="player-name">Sarah Johnson</span>
+                  <span class="clear-btn">×</span>
+                </div>
+                <div class="cost-line"><strong>$45</strong> <span style="color:#888">(first event, includes registration)</span></div>
+                <div class="btn-row">
+                  <button class="btn btn-primary">Save partner &amp; checkout →</button>
+                  <button class="btn btn-secondary btn-sm">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Already registered (reference) -->
+      <div>
+        <div class="scenario-label">Already registered (reference)</div>
+        <div class="app-shell">
+          <div class="t-header">
+            <div class="t-name">WMPC Summer Open</div>
+            <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+          </div>
+          <div class="event-list">
+            <div class="event-card paid">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Mixed Doubles 3.5</span>
+                    <span class="pill pill-green">Registered</span>
+                  </div>
+                  <div class="partner-line">Partnered with <strong>Sarah Johnson</strong></div>
+                  <div class="event-meta">Doubles · Mixed · 11 win by 2</div>
+                </div>
+                <button class="btn btn-outline btn-sm">Manage</button>
+              </div>
+            </div>
+            <div class="event-card">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Men's Doubles 3.5</span>
+                  </div>
+                  <div class="event-meta">Doubles · Men · 11 win by 2</div>
+                </div>
+                <button class="btn btn-primary btn-sm">Register</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size:13px;color:#666;margin-top:12px;">
+      <strong>Variants:</strong> "Continue to checkout →" (neutral, no mention of partner) &nbsp;·&nbsp;
+      "Save &amp; pay" (shorter) &nbsp;·&nbsp;
+      "Confirm &amp; checkout →" (emphasizes confirmation)
+    </p>
+  </div>
+
+  <hr>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- OPTION B — Save inside card + bottom "Complete Reg" CTA   -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="option-section">
+    <div class="option-header">
+      <span class="option-label">Option B</span>
+      <span class="option-title">Cart model &mdash; "Save" per event, one checkout at the end</span>
+    </div>
+    <p class="option-desc">
+      The per-event button becomes <strong>"Save"</strong> (or "Add to registration") — it commits the event + partner
+      but does <em>not</em> immediately navigate to checkout. Instead, a summary bar/section appears below all events
+      once you have at least one saved item, and a single <strong>"Complete Registration"</strong> CTA handles
+      checkout for everything at once. This is the model <code>RegisterPage</code> already uses (Confirm X changes → checkout).
+    </p>
+
+    <div class="scenarios cols-2">
+
+      <!-- Saved one event, expanding second -->
+      <div>
+        <div class="scenario-label">One event saved, expanding a second</div>
+        <div class="app-shell">
+          <div class="t-header">
+            <div class="t-name">WMPC Summer Open</div>
+            <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+          </div>
+          <div class="event-list">
+
+            <!-- Saved event -->
+            <div class="event-card" style="background:#f0fdf4;border-color:#bbf7d0;">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Mixed Doubles 3.5</span>
+                    <span class="pill pill-amber">Pending payment</span>
+                  </div>
+                  <div class="partner-line-pending">Invited <strong>Sarah Johnson</strong></div>
+                  <div class="event-meta">Doubles · Mixed · 11 win by 2 · $45</div>
+                </div>
+                <button class="btn btn-outline btn-sm">Change partner</button>
+              </div>
+            </div>
+
+            <!-- Second event, expanding -->
+            <div class="event-card expanded">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Men's Doubles 3.5</span>
+                  </div>
+                  <div class="event-meta">Doubles · Men · 11 win by 2</div>
+                </div>
+              </div>
+              <div class="inline-form">
+                <div class="mode-grid">
+                  <div class="mode-tile active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17a4 4 0 0 0 8 0 4 4 0 0 0-8 0"/><path d="M16 3a4 4 0 0 1 0 8"/><path d="M3 17a4 4 0 0 1 8 0"/><path d="M8 3a4 4 0 0 0 0 8"/></svg>
+                    I have a partner
+                  </div>
+                  <div class="mode-tile inactive">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
+                    I need a partner
+                  </div>
+                </div>
+                <div class="partner-field picked">
+                  <span class="player-name">Tom Rivera</span>
+                  <span class="clear-btn">×</span>
+                </div>
+                <div class="cost-line"><strong>+$20</strong> <span style="color:#888">(additional event)</span></div>
+                <div class="btn-row">
+                  <button class="btn btn-primary">Save</button>
+                  <button class="btn btn-secondary btn-sm">Cancel</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Cart summary bar -->
+          <div class="cart-bar" style="margin:0 16px 16px;margin-top:4px;">
+            <div class="cart-bar-items">
+              <strong>2 events saved</strong> &nbsp;·&nbsp; $65 total
+            </div>
+            <button class="btn btn-success">Complete Registration →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Just the button states zoomed in -->
+      <div>
+        <div class="scenario-label">Button states at a glance</div>
+        <div class="app-shell" style="padding:20px;">
+
+          <div style="margin-bottom:20px;">
+            <div class="scenario-label" style="margin-bottom:8px;">No partner picked → disabled</div>
+            <div class="btn-row">
+              <button class="btn btn-disabled">Save</button>
+              <button class="btn btn-secondary btn-sm">Cancel</button>
+              <span class="btn-hint">Pick a partner first</span>
+            </div>
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <div class="scenario-label" style="margin-bottom:8px;">Partner picked → active</div>
+            <div class="btn-row">
+              <button class="btn btn-primary">Save</button>
+              <button class="btn btn-secondary btn-sm">Cancel</button>
+            </div>
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <div class="scenario-label" style="margin-bottom:8px;">"I need a partner" mode → active</div>
+            <div class="btn-row">
+              <button class="btn btn-primary">Save</button>
+              <button class="btn btn-secondary btn-sm">Cancel</button>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#e5e7eb;margin:16px 0;"></div>
+
+          <div>
+            <div class="scenario-label" style="margin-bottom:8px;">Bottom CTA (appears once ≥1 event saved)</div>
+            <div style="padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div style="font-size:13px;color:#166534;"><strong>1 event saved</strong> · $45 total</div>
+              <button class="btn btn-success">Complete Registration →</button>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <div style="padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div style="font-size:13px;color:#166534;"><strong>2 events saved</strong> · $65 total</div>
+              <button class="btn btn-success">Complete Registration →</button>
+            </div>
+          </div>
+
+          <p style="font-size:12px;color:#888;margin-top:14px;line-height:1.5;">
+            "Complete Registration" only appears after at least one event is saved.
+            Saves create <code>pending_payment</code> rows (same as today).
+            Checkout is one trip for everything.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- OPTION C — Sticky bottom bar (cart variant)               -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="option-section">
+    <div class="option-header">
+      <span class="option-label">Option C</span>
+      <span class="option-title">Sticky bottom bar &mdash; always-visible checkout CTA</span>
+    </div>
+    <p class="option-desc">
+      Like Option B but the checkout CTA lives in a <strong>sticky footer bar</strong> instead of inline below the events.
+      The bar appears as soon as one event is saved, stays visible while the player continues picking events,
+      and shows a running total. Familiar from e-commerce (cart drawer / floating bag).
+      The per-event button still says <strong>"Save"</strong>; the sticky bar says <strong>"Go to checkout"</strong> with a badge showing item count.
+    </p>
+
+    <div class="scenarios cols-2">
+
+      <div>
+        <div class="scenario-label">Full page view (sticky bar at bottom)</div>
+        <div class="app-shell sticky-wrap">
+          <div class="t-header">
+            <div class="t-name">WMPC Summer Open</div>
+            <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+          </div>
+          <div class="event-list">
+
+            <div class="event-card" style="background:#f0fdf4;border-color:#bbf7d0;">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Mixed Doubles 3.5</span>
+                    <span class="pill pill-amber">Pending payment</span>
+                  </div>
+                  <div class="partner-line-pending">Invited <strong>Sarah Johnson</strong></div>
+                  <div class="event-meta">Doubles · Mixed · 11 win by 2</div>
+                </div>
+                <button class="btn btn-outline btn-sm">Change partner</button>
+              </div>
+            </div>
+
+            <div class="event-card expanded">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row">
+                    <span class="event-name">Men's Doubles 3.5</span>
+                  </div>
+                  <div class="event-meta">Doubles · Men · 11 win by 2</div>
+                </div>
+              </div>
+              <div class="inline-form">
+                <div class="mode-grid">
+                  <div class="mode-tile active">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17a4 4 0 0 0 8 0 4 4 0 0 0-8 0"/><path d="M16 3a4 4 0 0 1 0 8"/><path d="M3 17a4 4 0 0 1 8 0"/><path d="M8 3a4 4 0 0 0 0 8"/></svg>
+                    I have a partner
+                  </div>
+                  <div class="mode-tile inactive">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
+                    I need a partner
+                  </div>
+                </div>
+                <div class="partner-field">
+                  <span class="placeholder">Search by name, email, or phone…</span>
+                </div>
+                <div class="btn-row">
+                  <button class="btn btn-disabled">Save</button>
+                  <button class="btn btn-secondary btn-sm">Cancel</button>
+                  <span class="btn-hint">Pick a partner first</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="event-card dimmed">
+              <div class="event-row">
+                <div class="event-info">
+                  <div class="event-name-row"><span class="event-name">Women's Doubles 3.5</span></div>
+                  <div class="event-meta">Doubles · Women · 11 win by 2</div>
+                </div>
+                <button class="btn btn-primary btn-sm">Register</button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Sticky bar -->
+          <div class="sticky-bar">
+            <div class="sticky-bar-left">
+              <div>1 event saved</div>
+              <div class="total">$45</div>
+            </div>
+            <button class="btn btn-success btn-primary-lg">
+              Go to checkout
+              <span style="background:#fff;color:#16a34a;border-radius:20px;padding:1px 8px;font-size:12px;font-weight:700;">1</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="scenario-label">Sticky bar states</div>
+        <div class="app-shell" style="padding:20px;">
+
+          <div style="margin-bottom:20px;">
+            <div class="scenario-label" style="margin-bottom:8px;">0 events saved → bar hidden</div>
+            <div style="padding:12px;background:#f9fafb;border:1px dashed #d1d5db;border-radius:6px;text-align:center;font-size:12px;color:#9ca3af;">
+              (sticky bar not shown)
+            </div>
+          </div>
+
+          <div style="margin-bottom:20px;">
+            <div class="scenario-label" style="margin-bottom:8px;">1 event saved → bar appears</div>
+            <div style="padding:14px 16px;background:#fff;border:2px solid #2563eb;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div>
+                <div style="font-size:12px;color:#555;">1 event saved</div>
+                <div style="font-size:16px;font-weight:700;">$45</div>
+              </div>
+              <button class="btn btn-success">
+                Go to checkout
+                <span style="background:#fff;color:#16a34a;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700;">1</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div class="scenario-label" style="margin-bottom:8px;">2 events saved</div>
+            <div style="padding:14px 16px;background:#fff;border:2px solid #2563eb;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div>
+                <div style="font-size:12px;color:#555;">2 events saved</div>
+                <div style="font-size:16px;font-weight:700;">$65</div>
+              </div>
+              <button class="btn btn-success">
+                Go to checkout
+                <span style="background:#fff;color:#16a34a;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700;">2</span>
+              </button>
+            </div>
+          </div>
+
+          <div style="height:1px;background:#e5e7eb;margin:20px 0;"></div>
+
+          <p style="font-size:12px;color:#666;line-height:1.6;">
+            <strong>Tradeoff vs Option B:</strong> The sticky bar is always visible regardless of how far down the page the player is, which helps when there are many events.
+            But it's a bigger implementation — requires a floating overlay positioned relative to the card container.
+            For a short list of events it may feel like overkill.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <!-- SUMMARY TABLE                                             -->
+  <!-- ══════════════════════════════════════════════════════════ -->
+  <div class="option-section">
+    <div class="option-header">
+      <span class="option-label" style="background:#374151;">Summary</span>
+      <span class="option-title">Trade-off at a glance</span>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f3f4f6;">
+          <th style="text-align:left;padding:10px 12px;border:1px solid #e5e7eb;width:12%;"></th>
+          <th style="text-align:left;padding:10px 12px;border:1px solid #e5e7eb;">Per-event CTA label</th>
+          <th style="text-align:left;padding:10px 12px;border:1px solid #e5e7eb;">Checkout trigger</th>
+          <th style="text-align:left;padding:10px 12px;border:1px solid #e5e7eb;">Multi-event checkout?</th>
+          <th style="text-align:left;padding:10px 12px;border:1px solid #e5e7eb;">Implementation</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">A</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">"Save partner &amp; checkout →"</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">Immediately after clicking per-event CTA</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">No — one event at a time</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">Tiny — rename string only</td>
+        </tr>
+        <tr style="background:#fafafa;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">B</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">"Save"</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">"Complete Registration" bar below events</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;color:#16a34a;">Yes — all saved events at once</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">Medium — cart bar component + state</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">C</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">"Save"</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">"Go to checkout" sticky footer bar</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;color:#16a34a;">Yes — all saved events at once</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">Larger — sticky overlay + position logic</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:13px;color:#666;margin-top:14px;line-height:1.6;">
+      <strong>Key open question for B &amp; C:</strong> When "Save" is clicked on a pending-payment flow,
+      does it create the <code>event_registration</code> row immediately (with <code>status='pending_payment'</code>)
+      or does it live purely in client state until "Complete Registration" is clicked?
+      Creating rows immediately is safer (partner invite goes out, capacity slot is held)
+      but means partial saves are possible if the player never checks out.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
