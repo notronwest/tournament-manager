@@ -1,0 +1,41 @@
+name: Migration drift check
+
+# DETECTION guardrail: catches the door the deploy workflow can't — schema
+# changed by hand in the Supabase dashboard (or ad-hoc psql). Runs daily and
+# on demand; if a migration is applied on prod but not committed, it pings
+# Discord so drift is caught in hours, not at the next blocked deploy.
+#
+# Required repo secrets:
+#   SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD, SUPABASE_PROJECT_REF
+#   MIGRATION_ALERT_WEBHOOK — Discord webhook for the drift alert
+
+on:
+  schedule:
+    - cron: "0 11 * * *" # 11:00 UTC daily (~6–7am ET)
+  workflow_dispatch:
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Check for schema drift
+        id: check
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: bash supabase/scripts/check-migration-drift.sh
+      - name: Alert on drift
+        if: failure()
+        env:
+          HOOK: ${{ secrets.MIGRATION_ALERT_WEBHOOK }}
+        run: |
+          [ -n "${HOOK:-}" ] || { echo "no MIGRATION_ALERT_WEBHOOK set — skipping alert"; exit 0; }
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          msg="⚠️ Supabase schema **drift** in tournament-manager: a migration is applied on prod but not committed. \`supabase db push\` is blocked until reconciled (\`supabase db pull\`). Log: ${run_url}"
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d "$(jq -Rn --arg m "$msg" '{content:$m}')" "$HOOK" >/dev/null || true

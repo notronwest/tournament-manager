@@ -50,6 +50,32 @@ Mirrors `wmpc-rating-hub` (deliberately — see `~/.claude/CLAUDE.md` for the "w
 
 ---
 
+## Database migrations — discipline (read before touching schema)
+
+The committed `supabase/migrations/` directory is the **single source of truth**
+for the prod schema. Drift — schema applied to prod that isn't in the repo —
+silently blocks `supabase db push` for *everyone* (it happened 2026-06-06: two
+migrations applied directly to prod, never committed, blocked all later
+deploys). The rules that prevent it:
+
+- **Every schema change is a committed migration file.** No exceptions.
+- **NEVER change prod schema by hand** — not via the Supabase dashboard SQL
+  editor, not ad-hoc `psql`, not `db execute`. That's the drift door.
+- **NEVER `supabase db push` from a laptop.** Migrations are applied **only by
+  CI**, on merge to `main` (`.github/workflows/deploy-migrations.yml`). CI can
+  only apply what's committed, so "on prod but not in the repo" can't happen
+  through the normal flow.
+- **The Builder must Block any card needing a migration** (a `.sql` in its diff
+  = stop). Schema changes are Ron's, written deliberately, reviewed in a PR.
+- **A drift alarm** (`.github/workflows/migration-drift-check.yml`, daily) pings
+  Discord if prod ever diverges from the repo — the backstop for the dashboard
+  door. Run it locally anytime: `bash supabase/scripts/check-migration-drift.sh`.
+- **If you hit "Remote migration versions not found in local":** that's drift.
+  Reconcile with `supabase db pull` (check the orphans into the repo under their
+  original timestamps), commit, merge — *then* deploys flow again.
+
+See `supabase/migrations/README.md` for the day-to-day workflow.
+
 ## Schema overview (12 tables, see `supabase/migrations/20260503000001_init_schema.sql` for the full thing)
 
 ```
