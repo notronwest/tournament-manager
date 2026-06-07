@@ -7,7 +7,72 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-03**
+Last updated: **2026-06-06**
+
+## 2026-06-06 — Drift reconciled (event_roster) + eligibility enforcement (#56) validated
+
+Working the project board's **Blocked** queue (#72, #18, #56, #13, #66),
+starting with the eligibility epic (#13 → #55/#56). Hit — and fixed — a
+prod migration-drift blocker along the way.
+
+- **#56 server-side enforcement — written + VALIDATED** on branch
+  `feature/issue-56-eligibility-server-enforce`
+  (`supabase/migrations/20260606140000_enforce_event_eligibility.sql`).
+  A `BEFORE INSERT` trigger on `event_registrations` mirroring the client
+  guard (`web/src/lib/eligibility.ts`, PR #75) byte-for-byte — rating
+  gate by event format, gender gate, null-rating = ineligible. **Design
+  (approved):** trigger not RPC (bypass-proof without rewriting every
+  insert path); exempts service_role (`auth.uid()` null) + org staff
+  (`has_org_role`) so organizers can hand-place players and seed tools
+  keep working. Adds a `format_rating()` helper. **Validated** by running
+  the full migration inside a `begin … rollback` txn via the Supabase
+  Management API `/database/query` — executes clean against the real prod
+  schema, nothing persisted (verified the fn/helper are absent after).
+
+- **Drift root-caused + reconciled.** Two migrations were applied
+  directly to prod and were missing locally: `20260606120000`
+  (`lock_pricing_with_active_regs`, #16) and `20260606130000`
+  (`event_roster_rpc`, #71/#69). Turned out **120000 was already on
+  `main`** (merged via PR #63) — so the *only* real remaining orphan was
+  **130000 event_roster**. Recovered its exact SQL read-only from the
+  prod migration-history table (Management API, token from Ron) and
+  committed it under its original name on a clean branch
+  **`fix/reconcile-event-roster-drift`** (off `main`). `supabase db push
+  --dry-run` now reports "Remote database is up to date" — drift closed.
+  This was also the root of **#72**'s Blocked status (roster panel needs
+  that RPC).
+
+- **Parallel session (daemon) built the *prevention*: PR #76** —
+  CI-applied migrations (`deploy-migrations.yml`), daily drift alarm
+  (`migration-drift-check.yml` + `check-migration-drift.sh`), and the
+  written rule in CLAUDE.md / `supabase/migrations/README.md`. Kept
+  entirely separate from this reconcile work (no migration files in #76).
+
+- **Traceability:** every PR from this work now closes a tracked issue —
+  **#78→#56** (eligibility), **#77→#79** (reconcile, new tracking issue),
+  **#76→#80** (guardrails, new tracking issue). The guardrails issue
+  notes the through-line: a machine-applied, drift-free migration path is
+  a prerequisite for trustworthy **automated regression testing (#66)**.
+  New issues #79/#80 may still need adding to the WMPC Roadmap board
+  (project write-scope wasn't granted this session). Temp recovery token
+  has been revoked by Ron.
+
+- **🔜 Next / merge order (clean baseline first):**
+  1. Merge **`fix/reconcile-event-roster-drift`** → `main` (main now
+     matches prod exactly).
+  2. Merge **PR #76** (guardrails) → CI enforces from here on. Ron must
+     first add repo secrets: `SUPABASE_ACCESS_TOKEN`,
+     `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`,
+     `MIGRATION_ALERT_WEBHOOK`.
+  3. Merge **#55 (PR #75)** + **#56** → **epic #13 closes**; eligibility
+     enforced client + server. `140000` deploys via the new CI.
+  - Remaining Blocked queue: **#72** (now unblockable — RPC is in the
+    repo; frontend-only build, mockup + AC exist), **#18** (locations),
+    **#66** (needs the CI service-role secret from Ron).
+  - Tooling notes: psql installed via `brew install libpq`; Docker NOT
+    available (so `supabase db dump`/`db pull` can't run — used the
+    Management API instead). Revoke the temporary Supabase access token
+    used for recovery.
 
 ## 2026-06-05 — Partner-mode picker shipped to PR #58 (choice tiles)
 
