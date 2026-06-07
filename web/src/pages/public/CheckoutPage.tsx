@@ -108,6 +108,10 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  // True when the player already has a paid registration in this
+  // tournament from a prior session. Drives the additional-only
+  // pricing path in computeLineItems.
+  const [alreadyHasPaidEvent, setAlreadyHasPaidEvent] = useState(false);
 
   // After Pay succeeds we render the "you're paid up" view instead
   // of the review form. doneEventNames carries the list of events
@@ -274,6 +278,22 @@ export default function CheckoutPage() {
         partnerEmail,
       };
     });
+    // Determine whether the player already paid for at least one
+    // event in this tournament in a prior session. If so, every
+    // pick in this basket is a returning-registrant addition and
+    // should be priced at the additional-event rate.
+    const { data: paidRegData } = await supabase
+      .from("event_registrations")
+      .select(`event:events!event_id (tournament_id)`)
+      .eq("player_id", me.id)
+      .eq("status", "paid")
+      .is("deleted_at", null);
+    type PaidRegRow = { event: { tournament_id: string } | null };
+    const hasPriorPaid = (paidRegData ?? []).some(
+      (r) => (r as unknown as PaidRegRow).event?.tournament_id === t.id,
+    );
+    setAlreadyHasPaidEvent(hasPriorPaid);
+
     setRows(built);
     setLoading(false);
   }, [orgSlug, tournamentSlug, user]);
@@ -303,6 +323,7 @@ export default function CheckoutPage() {
           firstEventFeeCents: activeTier.first_event_fee_cents,
           additionalEventFeeCents: activeTier.additional_event_fee_cents,
         },
+        alreadyHasPaidEvent,
       )
     : { items: [] as LineItem[], totalCents: 0 };
   const lineItemByEventId = new Map(

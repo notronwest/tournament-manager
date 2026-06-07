@@ -167,12 +167,37 @@ export function PendingPaymentsProvider({
       });
     }
 
+    // Check which pending tournaments the player already has a paid
+    // registration in — those are returning registrants whose
+    // first-event fee was already collected in a prior session.
+    const pendingTournamentIds = Array.from(byTournament.keys());
+    const paidTournamentIds = new Set<string>();
+    if (pendingTournamentIds.length > 0) {
+      const { data: paidRegData } = await supabase
+        .from("event_registrations")
+        .select(`event:events!event_id (tournament_id)`)
+        .eq("player_id", me.id)
+        .eq("status", "paid")
+        .is("deleted_at", null);
+      type PaidRow = { event: { tournament_id: string } | null };
+      for (const pr of (paidRegData ?? []) as unknown as PaidRow[]) {
+        const tid = pr.event?.tournament_id;
+        if (tid && pendingTournamentIds.includes(tid)) {
+          paidTournamentIds.add(tid);
+        }
+      }
+    }
+
     const out: PendingTournamentGroup[] = [];
     for (const g of byTournament.values()) {
-      const { items, totalCents } = computeLineItems(g.events, {
-        firstEventFeeCents: g.entryFeeCents,
-        additionalEventFeeCents: g.additionalEventFeeCents,
-      });
+      const { items, totalCents } = computeLineItems(
+        g.events,
+        {
+          firstEventFeeCents: g.entryFeeCents,
+          additionalEventFeeCents: g.additionalEventFeeCents,
+        },
+        paidTournamentIds.has(g.tournamentId),
+      );
       out.push({
         tournamentId: g.tournamentId,
         tournamentName: g.tournamentName,
