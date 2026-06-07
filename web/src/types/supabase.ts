@@ -967,6 +967,24 @@ export type Database = {
         Args: { p_invite_id: string }
         Returns: undefined
       }
+      event_roster: {
+        Args: { p_event_ids: string[] }
+        Returns: {
+          age: number
+          city: string
+          event_id: string
+          first_name: string
+          gender: Database["public"]["Enums"]["player_gender"]
+          last_name: string
+          partner_registration_id: string
+          partner_status: Database["public"]["Enums"]["partner_status"]
+          registration_id: string
+          self_rating_doubles: number
+          self_rating_mixed: number
+          self_rating_singles: number
+          state: string
+        }[]
+      }
       find_user_by_email: { Args: { p_email: string }; Returns: string }
       get_invite_context: {
         Args: { p_token: string }
