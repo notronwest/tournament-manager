@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event roster panel — mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f5f6f8; color: #111; }
+
+  .page { max-width: 700px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 36px; line-height: 1.5; }
+
+  .section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: #888; margin-bottom: 12px; margin-top: 32px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* ─── app chrome ─── */
+  .t-header {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 10px 10px 0 0;
+    border-bottom: none; padding: 16px 20px;
+  }
+  .t-name { font-size: 15px; font-weight: 700; }
+  .t-meta { font-size: 12px; color: #888; margin-top: 2px; }
+  .event-list {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 0 0 10px 10px;
+    padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+
+  /* ─── event card ─── */
+  .card { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  .card.registered { background: #f0fdf4; border-color: #bbf7d0; }
+  .card.seeking-self { background: #eff6ff; border-color: #bfdbfe; }
+
+  .card-main {
+    padding: 14px 16px;
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 3px; }
+  .card-name { font-size: 15px; font-weight: 600; }
+  .card-meta { font-size: 12px; color: #666; }
+
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; white-space: nowrap;
+  }
+  .pill-green  { background: #dcfce7; color: #166534; }
+  .pill-amber  { background: #fef3c7; color: #7a5d00; }
+  .pill-blue   { background: #dbeafe; color: #1e40af; }
+  .pill-slate  { background: #f1f5f9; color: #475569; }
+
+  /* ─── roster toggle bar ─── */
+  .roster-toggle {
+    padding: 7px 16px;
+    background: #f8fafc;
+    border-top: 1px solid #e5e7eb;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .count-chips { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; align-items: center; }
+  .count-chip { font-size: 12px; color: #555; }
+  .count-chip .n { font-weight: 600; color: #111; }
+  .dot { color: #d1d5db; }
+  .seeking-chip { color: #1e40af; }
+  .seeking-chip .n { color: #2563eb; }
+
+  .toggle-btn {
+    background: none; border: none; font-size: 12px; color: #2563eb;
+    cursor: pointer; font-family: inherit; padding: 0; white-space: nowrap;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .toggle-btn:hover { text-decoration: underline; }
+  .chevron { display: inline-block; font-size: 10px; transition: transform .15s; }
+  .chevron.open { transform: rotate(180deg); }
+
+  /* ─── roster panel ─── */
+  .roster-panel { display: none; border-top: 1px solid #e5e7eb; }
+  .roster-panel.visible { display: block; }
+
+  .roster-section {
+    padding: 12px 16px 14px;
+  }
+  .roster-section + .roster-section {
+    border-top: 1px solid #e5e7eb;
+  }
+  .roster-section-head {
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: #888; margin-bottom: 8px;
+  }
+  .roster-section-head.blue { color: #1e40af; }
+
+  /* ─── PB-style paired player rows ─── */
+  .player-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .player-table th {
+    font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase;
+    letter-spacing: .05em; text-align: left; padding: 0 8px 6px;
+  }
+  .player-table th:first-child { padding-left: 12px; }
+
+  /* Paired team group */
+  .team-group { position: relative; }
+  .team-group + .team-group { margin-top: 4px; }
+
+  .player-row {
+    display: grid;
+    grid-template-columns: 1fr 60px 48px 28px 1fr;
+    align-items: center;
+    padding: 5px 8px 5px 12px;
+    font-size: 13px;
+    position: relative;
+    background: #fff;
+  }
+  .player-row.top    { padding-bottom: 2px; border-radius: 4px 4px 0 0; }
+  .player-row.bottom { padding-top: 2px;    border-radius: 0 0 4px 4px; }
+  .player-row.solo   { border-radius: 4px; padding: 6px 8px 6px 12px; }
+  .player-row.me     { background: #f0fdf4; }
+  .player-row.me-seeking { background: #eff6ff; }
+
+  /* Blue left bracket connecting the two players in a pair */
+  .team-group .player-row.top::before,
+  .team-group .player-row.bottom::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: #bfdbfe;
+  }
+  .team-group .player-row.top::before    { top: 6px; border-radius: 2px 2px 0 0; }
+  .team-group .player-row.bottom::before { bottom: 6px; border-radius: 0 0 2px 2px; }
+
+  /* Seeking players — warmer left border */
+  .seeking-group .player-row::before {
+    background: #93c5fd !important;
+  }
+
+  .player-name { color: #2563eb; font-weight: 500; }
+  .player-name.me-name { color: #166534; }
+  .player-name.me-seeking-name { color: #1d4ed8; }
+  .player-name.you-tag { font-size: 10px; color: #6b7280; margin-left: 5px; font-weight: 400; font-style: italic; }
+  .player-col { color: #374151; }
+  .player-col.muted { color: #9ca3af; }
+
+  .join-btn {
+    padding: 4px 12px; background: #2563eb; color: #fff;
+    border: none; border-radius: 5px; font-size: 12px; font-weight: 500;
+    cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .join-btn:hover { background: #1d4ed8; }
+
+  /* column headers row */
+  .col-header {
+    display: grid;
+    grid-template-columns: 1fr 60px 48px 28px 1fr;
+    padding: 0 8px 4px 12px;
+    font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em;
+  }
+
+  /* Action btns */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; border: none; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-outline  { background: #fff; color: #2563eb; border: 1px solid #2563eb; }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+  hr { border: none; border-top: 2px solid #e5e7eb; margin: 40px 0; }
+  .note { font-size: 12px; color: #555; line-height: 1.6; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; margin-top: 14px; }
+  .note strong { color: #222; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Event roster panel</h1>
+  <p class="subtitle">Toggle bars and collapsible rosters on each event card in <code>PublicTournamentPage</code>.
+  Paired players share a blue left-bar. Click "Show roster" below — the panels are live.</p>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!-- STATE 1 — Unregistered player               -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="section-label">State 1 — Not registered for this event</div>
+
+  <div class="t-header">
+    <div class="t-name">WMPC Summer Open</div>
+    <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+  </div>
+  <div class="event-list">
+
+    <!-- Doubles event with seeking players -->
+    <div class="card" id="card-a">
+      <div class="card-main">
+        <div class="card-info">
+          <div class="card-name-row"><span class="card-name">Mixed Doubles 3.5</span></div>
+          <div class="card-meta">Doubles · Mixed · 11 win by 2 · max 16 teams</div>
+        </div>
+        <button class="btn btn-primary btn-sm">Register</button>
+      </div>
+      <div class="roster-toggle">
+        <div class="count-chips">
+          <span class="count-chip"><span class="n">6</span> teams</span>
+          <span class="dot">·</span>
+          <span class="count-chip seeking-chip"><span class="n">2</span> seeking partner</span>
+        </div>
+        <button class="toggle-btn" onclick="toggleRoster('a')">Show roster <span class="chevron" id="chev-a">▾</span></button>
+      </div>
+      <div class="roster-panel" id="roster-a">
+
+        <!-- Seeking section first when there are seekers — more actionable -->
+        <div class="roster-section">
+          <div class="roster-section-head blue">Looking for a partner (2)</div>
+          <div class="col-header"><span>Name</span><span>Rating</span><span>Age</span><span>G</span><span></span></div>
+
+          <div class="team-group seeking-group">
+            <div class="player-row solo">
+              <span class="player-name">David Martinez</span>
+              <span class="player-col">3.5</span>
+              <span class="player-col">42</span>
+              <span class="player-col">M</span>
+              <span style="text-align:right"><button class="join-btn">Partner up →</button></span>
+            </div>
+          </div>
+          <div style="height:4px;"></div>
+          <div class="team-group seeking-group">
+            <div class="player-row solo">
+              <span class="player-name">Priya Liu</span>
+              <span class="player-col">3.5</span>
+              <span class="player-col">38</span>
+              <span class="player-col">F</span>
+              <span style="text-align:right"><button class="join-btn">Partner up →</button></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="roster-section" style="background:#fafafa;">
+          <div class="roster-section-head">Registered teams (6 of 16)</div>
+          <div class="col-header"><span>Name</span><span>Rating</span><span>Age</span><span>G</span><span>Location</span></div>
+
+          <div class="team-group">
+            <div class="player-row top">
+              <span class="player-name">Sarah Johnson</span>
+              <span class="player-col">3.5</span><span class="player-col">34</span><span class="player-col">F</span>
+              <span class="player-col">Dover NH</span>
+            </div>
+            <div class="player-row bottom">
+              <span class="player-name">Mike Chen</span>
+              <span class="player-col">3.5</span><span class="player-col">36</span><span class="player-col">M</span>
+              <span class="player-col">Dover NH</span>
+            </div>
+          </div>
+          <div style="height:6px;"></div>
+          <div class="team-group">
+            <div class="player-row top">
+              <span class="player-name">Lisa Rodriguez</span>
+              <span class="player-col">4.0</span><span class="player-col">41</span><span class="player-col">F</span>
+              <span class="player-col">Concord NH</span>
+            </div>
+            <div class="player-row bottom">
+              <span class="player-name">Tom Park</span>
+              <span class="player-col">3.5</span><span class="player-col">45</span><span class="player-col">M</span>
+              <span class="player-col">Concord NH</span>
+            </div>
+          </div>
+          <div style="height:6px;"></div>
+          <div class="team-group">
+            <div class="player-row top">
+              <span class="player-name">Amy Kim</span>
+              <span class="player-col">3.5</span><span class="player-col">29</span><span class="player-col">F</span>
+              <span class="player-col">Portsmouth NH</span>
+            </div>
+            <div class="player-row bottom">
+              <span class="player-name">James White</span>
+              <span class="player-col">4.0</span><span class="player-col">52</span><span class="player-col">M</span>
+              <span class="player-col">Portsmouth NH</span>
+            </div>
+          </div>
+          <div style="height:6px;"></div>
+          <div class="team-group" style="opacity:.55;">
+            <div class="player-row top"><span class="player-col" style="font-style:italic;color:#888;">3 more teams…</span><span></span><span></span><span></span><span></span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Singles event -->
+    <div class="card" id="card-b">
+      <div class="card-main">
+        <div class="card-info">
+          <div class="card-name-row"><span class="card-name">Men's Singles 3.5</span></div>
+          <div class="card-meta">Singles · Men · 11 win by 2</div>
+        </div>
+        <button class="btn btn-primary btn-sm">Register</button>
+      </div>
+      <div class="roster-toggle">
+        <div class="count-chips">
+          <span class="count-chip"><span class="n">8</span> players</span>
+        </div>
+        <button class="toggle-btn" onclick="toggleRoster('b')">Show roster <span class="chevron" id="chev-b">▾</span></button>
+      </div>
+      <div class="roster-panel" id="roster-b">
+        <div class="roster-section" style="background:#fafafa;">
+          <div class="roster-section-head">Registered players (8)</div>
+          <div class="col-header"><span>Name</span><span>Rating</span><span>Age</span><span>G</span><span>Location</span></div>
+
+          <div class="team-group">
+            <div class="player-row solo">
+              <span class="player-name">Randy Arial</span>
+              <span class="player-col">4.0</span><span class="player-col muted">--</span><span class="player-col">M</span>
+              <span class="player-col">Dover NH</span>
+            </div>
+          </div>
+          <div style="height:4px;"></div>
+          <div class="team-group">
+            <div class="player-row solo">
+              <span class="player-name">Raymond Ong</span>
+              <span class="player-col">4.5</span><span class="player-col">60</span><span class="player-col">M</span>
+              <span class="player-col">Dover NH</span>
+            </div>
+          </div>
+          <div style="height:4px;"></div>
+          <div class="team-group">
+            <div class="player-row solo">
+              <span class="player-name">Douglas Campbell</span>
+              <span class="player-col">4.0</span><span class="player-col">56</span><span class="player-col">M</span>
+              <span class="player-col">Croydon NH</span>
+            </div>
+          </div>
+          <div style="height:4px;"></div>
+          <div class="team-group">
+            <div class="player-row solo">
+              <span class="player-name">Geoffrey Whitchurch</span>
+              <span class="player-col">3.5</span><span class="player-col">53</span><span class="player-col">M</span>
+              <span class="player-col">Danville VT</span>
+            </div>
+          </div>
+          <div style="height:4px;opacity:.5;">
+            <div class="player-row solo"><span class="player-col" style="font-style:italic;color:#888;">4 more players…</span><span></span><span></span><span></span><span></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <strong>Seeking section appears first</strong> when there are seekers — more actionable than team names for someone deciding whether to register.
+    "Partner up →" pre-fills that player into the inline partner picker (same as clicking Register then selecting them manually).
+    Singles shows individual rows with no left-bracket pairing.
+    Age shows "--" when the player hasn't entered their birth year.
+  </div>
+
+  <hr>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!-- STATE 2 — Already registered, has partner   -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="section-label">State 2 — Registered with a confirmed partner</div>
+
+  <div class="t-header">
+    <div class="t-name">WMPC Summer Open</div>
+    <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+  </div>
+  <div class="event-list">
+    <div class="card registered" id="card-c">
+      <div class="card-main">
+        <div class="card-info">
+          <div class="card-name-row">
+            <span class="card-name">Mixed Doubles 3.5</span>
+            <span class="pill pill-green">Registered</span>
+          </div>
+          <div class="card-meta" style="color:#166534;margin-bottom:2px;">Partnered with <strong>Sarah Johnson</strong></div>
+          <div class="card-meta">Doubles · Mixed · 11 win by 2 · max 16 teams</div>
+        </div>
+        <button class="btn btn-outline btn-sm">Manage</button>
+      </div>
+      <div class="roster-toggle" style="background:#f0fdf4;border-top-color:#bbf7d0;">
+        <div class="count-chips">
+          <span class="count-chip"><span class="n">7</span> teams</span>
+          <span class="dot">·</span>
+          <span class="count-chip seeking-chip"><span class="n">1</span> seeking partner</span>
+        </div>
+        <button class="toggle-btn" onclick="toggleRoster('c')">Show roster <span class="chevron" id="chev-c">▾</span></button>
+      </div>
+      <div class="roster-panel" id="roster-c">
+
+        <div class="roster-section">
+          <div class="roster-section-head blue">Looking for a partner (1)</div>
+          <div class="col-header"><span>Name</span><span>Rating</span><span>Age</span><span>G</span><span></span></div>
+          <div class="team-group seeking-group">
+            <div class="player-row solo">
+              <span class="player-name">David Martinez</span>
+              <span class="player-col">3.5</span><span class="player-col">42</span><span class="player-col">M</span>
+              <span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="roster-section" style="background:#fafafa;">
+          <div class="roster-section-head">Registered teams (7 of 16)</div>
+          <div class="col-header"><span>Name</span><span>Rating</span><span>Age</span><span>G</span><span>Location</span></div>
+
+          <!-- Your team highlighted -->
+          <div class="team-group">
+            <div class="player-row top me">
+              <span class="player-name me-name">You (Ron West) <span class="you-tag">← you</span></span>
+              <span class="player-col">3.5</span><span class="player-col">--</span><span class="player-col">M</span>
+              <span class="player-col">Concord NH</span>
+            </div>
+            <div class="player-row bottom me">
+              <span class="player-name me-name">Sarah Johnson</span>
+              <span class="player-col">3.5</span><span class="player-col">34</span><span class="player-col">F</span>
+              <span class="player-col">Dover NH</span>
+            </div>
+          </div>
+          <div style="height:6px;"></div>
+          <div class="team-group">
+            <div class="player-row top">
+              <span class="player-name">Lisa Rodriguez</span>
+              <span class="player-col">4.0</span><span class="player-col">41</span><span class="player-col">F</span>
+              <span class="player-col">Concord NH</span>
+            </div>
+            <div class="player-row bottom">
+              <span class="player-name">Tom Park</span>
+              <span class="player-col">3.5</span><span class="player-col">45</span><span class="player-col">M</span>
+              <span class="player-col">Concord NH</span>
+            </div>
+          </div>
+          <div style="height:6px;opacity:.5;">
+            <div class="player-row top"><span class="player-col" style="font-style:italic;color:#888;">5 more teams…</span><span></span><span></span><span></span><span></span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Your team</strong> is highlighted in green at the top of the teams list regardless of alphabetical order.
+    "Partner up" is replaced with "you're registered" in the seeking section — no action available.
+  </div>
+
+  <hr>
+
+  <!-- ════════════════════════════════════════════ -->
+  <!-- STATE 3 — Seeking partner yourself          -->
+  <!-- ════════════════════════════════════════════ -->
+  <div class="section-label">State 3 — Registered, looking for a partner (you're in the seeking list)</div>
+
+  <div class="t-header">
+    <div class="t-name">WMPC Summer Open</div>
+    <div class="t-meta">Jun 28 · White Mountain Pickleball</div>
+  </div>
+  <div class="event-list">
+    <div class="card seeking-self" id="card-d">
+      <div class="card-main">
+        <div class="card-info">
+          <div class="card-name-row">
+            <span class="card-name">Mixed Doubles 3.5</span>
+            <span class="pill pill-blue">Looking for partner</span>
+          </div>
+          <div class="card-meta" style="color:#1e40af;margin-bottom:2px;">You're registered — organizer will help match you</div>
+          <div class="card-meta">Doubles · Mixed · 11 win by 2</div>
+        </div>
+        <button class="btn btn-outline btn-sm">Manage</button>
+      </div>
+      <div class="roster-toggle" style="background:#eff6ff;border-top-color:#bfdbfe;">
+        <div class="count-chips">
+          <span class="count-chip"><span class="n">5</span> teams</span>
+          <span class="dot">·</span>
+          <span class="count-chip seeking-chip"><span class="n">3</span> seeking partner</span>
+        </div>
+        <button class="toggle-btn" onclick="toggleRoster('d')">Show roster <span class="chevron" id="chev-d">▾</span></button>
+      </div>
+      <div class="roster-panel" id="roster-d" style="background:#f5f8ff;">
+
+        <div class="roster-section" style="background:#f0f5ff;">
+          <div class="roster-section-head blue">Looking for a partner (3)</div>
+          <div class="col-header"><span>Name</span><span>Rating</span><span>Age</span><span>G</span><span></span></div>
+
+          <!-- You appear first -->
+          <div class="team-group seeking-group">
+            <div class="player-row solo me-seeking">
+              <span class="player-name me-seeking-name">You (Ron West) <span class="you-tag">← you</span></span>
+              <span class="player-col">3.5</span><span class="player-col">--</span><span class="player-col">M</span>
+              <span style="text-align:right;font-size:11px;color:#6b7280;font-style:italic;">that's you</span>
+            </div>
+          </div>
+          <div style="height:4px;"></div>
+          <div class="team-group seeking-group">
+            <div class="player-row solo">
+              <span class="player-name">David Martinez</span>
+              <span class="player-col">3.5</span><span class="player-col">42</span><span class="player-col">M</span>
+              <span style="text-align:right"><button class="join-btn">Partner up →</button></span>
+            </div>
+          </div>
+          <div style="height:4px;"></div>
+          <div class="team-group seeking-group">
+            <div class="player-row solo">
+              <span class="player-name">Priya Liu</span>
+              <span class="player-col">3.5</span><span class="player-col">38</span><span class="player-col">F</span>
+              <span style="text-align:right"><button class="join-btn">Partner up →</button></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="roster-section" style="background:#fafafa;">
+          <div class="roster-section-head">Registered teams (5)</div>
+          <div class="col-header"><span>Name</span><span>Rating</span><span>Age</span><span>G</span><span>Location</span></div>
+          <div class="team-group">
+            <div class="player-row top">
+              <span class="player-name">Lisa Rodriguez</span>
+              <span class="player-col">4.0</span><span class="player-col">41</span><span class="player-col">F</span>
+              <span class="player-col">Concord NH</span>
+            </div>
+            <div class="player-row bottom">
+              <span class="player-name">Tom Park</span>
+              <span class="player-col">3.5</span><span class="player-col">45</span><span class="player-col">M</span>
+              <span class="player-col">Concord NH</span>
+            </div>
+          </div>
+          <div style="height:6px;opacity:.5;">
+            <div class="player-row top"><span class="player-col" style="font-style:italic;color:#888;">4 more teams…</span><span></span><span></span><span></span><span></span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>You appear first</strong> in the seeking list so you can see how you look to others, but "Partner up" buttons still appear on the other seekers —
+    clicking one would pre-fill the Manage → change-partner flow with that person selected.
+  </div>
+
+</div>
+
+<script>
+function toggleRoster(id) {
+  const panel = document.getElementById('roster-' + id);
+  const chev  = document.getElementById('chev-' + id);
+  const btn   = chev.closest('.toggle-btn');
+  const open  = panel.classList.toggle('visible');
+  chev.classList.toggle('open', open);
+  btn.childNodes[0].textContent = open ? 'Hide roster ' : 'Show roster ';
+}
+</script>
+</body>
+</html>
