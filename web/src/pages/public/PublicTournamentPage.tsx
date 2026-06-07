@@ -10,7 +10,8 @@ import {
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { usePendingPayments } from "../../components/PendingPaymentsContext";
+import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
+import { formatUsd } from "../../lib/pricing";
 import { eligibilityChips } from "../../lib/eligibility";
 import {
   deriveRegistrationStatus,
@@ -84,7 +85,7 @@ export default function PublicTournamentPage() {
   const navigate = useNavigate();
   // Used to refresh the global PendingPaymentsBar after we mutate
   // event_registrations from this page (inline register / cancel).
-  const { refresh: refreshPending } = usePendingPayments();
+  const { refresh: refreshPending, groups: pendingGroups } = usePendingPayments();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   // Ordered pricing tiers for this tournament. Backfilled by migration
@@ -434,6 +435,8 @@ export default function PublicTournamentPage() {
   const hasActiveRegInTournament = Array.from(myStatus.values()).some((s) =>
     activeRegStates.has(s.state),
   );
+  const myPendingGroup =
+    pendingGroups?.find((g) => g.tournamentId === tournament.id) ?? null;
 
   // Public lifecycle status pill — the second surface of the tier
   // dates. "Early Bird Registration Open" / "Registration Open" /
@@ -451,6 +454,7 @@ export default function PublicTournamentPage() {
   const regStatusColors = regStatusPalette[regStatus.tone];
 
   return (
+  <>
     <Shell>
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 26 }}>{tournament.name}</h1>
@@ -693,6 +697,92 @@ export default function PublicTournamentPage() {
         )}
       </section>
     </Shell>
+    {myPendingGroup && (
+      <StickyCheckoutBar
+        group={myPendingGroup}
+        orgSlug={orgSlug ?? ""}
+        tournamentSlug={tournamentSlug ?? ""}
+      />
+    )}
+  </>
+  );
+}
+
+function StickyCheckoutBar({
+  group,
+  orgSlug,
+  tournamentSlug,
+}: {
+  group: PendingTournamentGroup;
+  orgSlug: string;
+  tournamentSlug: string;
+}) {
+  const count = group.events.length;
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "#fff",
+        borderTop: "1px solid #d1fae5",
+        boxShadow: "0 -2px 8px rgba(0,0,0,0.08)",
+        zIndex: 40,
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 1080,
+          margin: "0 auto",
+          padding: "12px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>
+          {count} event{count !== 1 ? "s" : ""} saved &middot;{" "}
+          {formatUsd(group.totalCents)} total
+        </span>
+        <Link
+          to={`/t/${orgSlug}/${tournamentSlug}/checkout`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            background: "#16a34a",
+            color: "#fff",
+            padding: "10px 18px",
+            borderRadius: 6,
+            textDecoration: "none",
+            fontSize: 14,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}
+        >
+          Go to checkout →
+          <span
+            style={{
+              background: "rgba(255,255,255,0.25)",
+              borderRadius: "50%",
+              minWidth: 20,
+              height: 20,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 11,
+              fontWeight: 700,
+              padding: "0 4px",
+            }}
+          >
+            {count}
+          </span>
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -1640,12 +1730,10 @@ function EventCard({
               }}
             >
               {submitting
-                ? editMode === "change-partner"
-                  ? "Saving…"
-                  : "Registering…"
+                ? "Saving…"
                 : editMode === "change-partner"
                   ? "Save partner change"
-                  : "Register"}
+                  : "Save"}
             </button>
             <button
               type="button"
