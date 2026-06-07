@@ -7,7 +7,26 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-06**
+Last updated: **2026-06-07**
+
+## 2026-06-07 — Backlog additions: pricing bug #81 + register-focus mockup #98
+
+Two new backlog items captured (both on the WMPC Roadmap board, Priority
+**"Next up"** = the board's high-urgency bucket; project write-scope now
+granted):
+
+- **#81 (bug) — returning-player overcharge.** Already detailed in the
+  06-06 entry below. Board: Backlog · Next up.
+- **#98 (story) — "register focus mode."** Clicking Register dims every
+  *other* event behind a scrim and lifts the chosen card into focus.
+  Built the mockup `mockups/event-focus-overlay.html` (self-contained,
+  on-brand, interactive — Esc/scrim/× exits; JS + tag balance validated)
+  shipped as **PR #99** (Closes #98). Issue carries the implementation
+  spec + a11y notes (focus trap, `inert` siblings, reduced-motion).
+  Touches `PublicTournamentPage` `EventCard` only; no schema/pricing.
+  Board: Backlog · Next up.
+
+Board write-access is now set, so future board updates need no re-auth.
 
 ## 2026-06-06 — Drift reconciled (event_roster) + eligibility enforcement (#56) validated
 
