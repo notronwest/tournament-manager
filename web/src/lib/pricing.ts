@@ -82,10 +82,17 @@ export type LineItem = {
  * sorted), so a UI rendering them inline next to their event row
  * doesn't get reshuffled. Tier classification reflects the
  * internal sort, not the input order.
+ *
+ * `alreadyHasPaidEvent` — set to true when the player already has
+ * at least one paid registration in this tournament from a prior
+ * session. In that case the first-event (entry) fee has already
+ * been collected and every pick in this basket is priced at the
+ * additional-event rate. Per-event override events are unaffected.
  */
 export function computeLineItems(
   selectedEvents: Event[],
   rates: PricingRates,
+  alreadyHasPaidEvent = false,
 ): { items: LineItem[]; totalCents: number } {
   if (selectedEvents.length === 0) {
     return { items: [], totalCents: 0 };
@@ -109,7 +116,7 @@ export function computeLineItems(
     const hasOverride = t.ev.event_fee_cents > 0;
     if (hasOverride) {
       tierByEventId.set(t.ev.id, "override");
-    } else if (i === 0) {
+    } else if (i === 0 && !alreadyHasPaidEvent) {
       tierByEventId.set(t.ev.id, "first");
     } else {
       tierByEventId.set(t.ev.id, "additional");
