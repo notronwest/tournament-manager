@@ -35,11 +35,12 @@ Backlog issues filed this session (all on the WMPC Roadmap board):
 Open PRs needing attention:
 - **#78** (#56 eligibility server trigger) — clean/mergeable; its
   migration is not yet on `main`.
-- **#75** (#55 client guard) — **rebased onto `main`, conflict resolved,
-  now MERGEABLE** (import-only conflict in `PublicTournamentPage`; guards
-  intact; typecheck + build green; 0 new lint vs main). PR gate passes
-  (`Closes #55`); only the Cloudflare Pages preview is still building.
-  Epic **#13** closes when #55 + #56 land.
+- **✅ Eligibility shipped — epic #13 CLOSED (Done).** #75 (#55 client
+  guard, after my rebase) and #78 (#56 server trigger) both **merged**.
+  #55 + #56 closed; #13 epic closed. The #56 migration landed as
+  `20260607160000_enforce_event_eligibility.sql` and is **applied on prod**
+  (`migration list` confirms) — the `BEFORE INSERT` trigger is live, so
+  rating + gender eligibility is enforced in UI *and* at the DB.
 - **#76** (drift guardrails) — clean; needs the 4 CI secrets first.
 - **#99 / #101** (mockups) — set to **"Part of"** (not Closes) so they
   don't close the impl tickets; showing **UNSTABLE** — the new PR gate may
@@ -60,7 +61,7 @@ Open PRs needing attention:
   not actionable now.
 - **#13** stays — auto-closes when #75 + #78 merge. **#66** already
   handled per Ron (test-DB decision made elsewhere).
-- Blocked queue now: **#13, #38, #66**.
+- Blocked queue now: **#38, #66** (#13 closed/Done after #75+#78 merged).
 
 (Earlier session STATUS notes are stranded on
 `fix/reconcile-event-roster-drift` after #77 merged early; this entry is
