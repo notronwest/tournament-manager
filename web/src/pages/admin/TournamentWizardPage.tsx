@@ -237,6 +237,21 @@ export default function TournamentWizardPage() {
     };
   }, [isResume, org, routeSlug]);
 
+  // Must be declared before any early returns to satisfy Rules of Hooks.
+  // `org` is always non-null when this callback is actually invoked
+  // (the component returns null before reaching any call site if org is absent).
+  const goStep = useCallback(
+    (id: StepId) => {
+      const slug = tournament?.slug ?? routeSlug;
+      if (slug) {
+        navigate(`/admin/${org!.slug}/tournaments/${slug}/wizard/${id}`);
+      } else {
+        navigate(`/admin/${org!.slug}/tournaments/new/${id}`);
+      }
+    },
+    [tournament, routeSlug, org, navigate]
+  );
+
   if (!org) return null;
   if (loadingDraft) {
     return <div style={{ padding: 24, color: "#666" }}>Loading draft…</div>;
@@ -513,20 +528,6 @@ export default function TournamentWizardPage() {
   const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
   const next = STEPS[stepIndex + 1];
   const prev = STEPS[stepIndex - 1];
-
-  // Navigate to a wizard step, updating the URL for deep-linking and
-  // browser back/forward. Uses the resume URL once we have a slug.
-  const goStep = useCallback(
-    (id: StepId) => {
-      const slug = tournament?.slug ?? routeSlug;
-      if (slug) {
-        navigate(`/admin/${org!.slug}/tournaments/${slug}/wizard/${id}`);
-      } else {
-        navigate(`/admin/${org!.slug}/tournaments/new/${id}`);
-      }
-    },
-    [tournament, routeSlug, org, navigate]
-  );
 
   // On Save & continue: persist the current step (real steps only),
   // then advance.
