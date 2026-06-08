@@ -22,7 +22,6 @@ import EventConsolePage from "./pages/admin/EventConsolePage";
 import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
-import OrgOverviewPage from "./pages/admin/OrgOverviewPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
 import HomePage from "./pages/public/HomePage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
@@ -153,7 +152,7 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<OrgOverviewPage />} />
+        <Route index element={<Navigate to="tournaments" replace />} />
         <Route
           path="settings/stripe"
           element={<OrgStripeSettingsPage />}
