@@ -35,8 +35,11 @@ Backlog issues filed this session (all on the WMPC Roadmap board):
 Open PRs needing attention:
 - **#78** (#56 eligibility server trigger) — clean/mergeable; its
   migration is not yet on `main`.
-- **#75** (#55 client guard) — **CONFLICTING** after the pricing reframe;
-  needs a rebase. Epic **#13** closes when #55 + #56 land.
+- **#75** (#55 client guard) — **rebased onto `main`, conflict resolved,
+  now MERGEABLE** (import-only conflict in `PublicTournamentPage`; guards
+  intact; typecheck + build green; 0 new lint vs main). PR gate passes
+  (`Closes #55`); only the Cloudflare Pages preview is still building.
+  Epic **#13** closes when #55 + #56 land.
 - **#76** (drift guardrails) — clean; needs the 4 CI secrets first.
 - **#99 / #101** (mockups) — set to **"Part of"** (not Closes) so they
   don't close the impl tickets; showing **UNSTABLE** — the new PR gate may
