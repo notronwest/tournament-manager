@@ -35,13 +35,13 @@ When an issue is merged, add `web/e2e/issue-<N>-<slug>.spec.ts` translating its
 cd web
 npm i
 npx playwright install --with-deps chromium
-SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… npx tsx e2e/seed.ts   # seed the fixture
+E2E_SUPABASE_URL=… E2E_SUPABASE_SERVICE_ROLE_KEY=… npx tsx e2e/seed.ts   # seed the fixture
 BASE_URL=https://tournament-manager.pages.dev TEST_ORG_PW=… npm run test:e2e
 ```
 
 ## Required CI secrets
 
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — for the seed.
+- `E2E_SUPABASE_URL`, `E2E_SUPABASE_SERVICE_ROLE_KEY` — for the seed.
 - `E2E_BASE_URL` — the deployed app to test (prod or a preview).
 - `E2E_TEST_PASSWORD` — password for the seeded test accounts.
 - `DISCORD_WEBHOOK` — the Backlog channel webhook for the report.

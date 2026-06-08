@@ -3,7 +3,7 @@
  * service-role key (bypasses RLS). Idempotent: upserts a fixed `e2e-test`
  * org so re-runs are stable. Run before the Playwright suite.
  *
- *   SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… E2E_TEST_PASSWORD=… npx tsx e2e/seed.ts
+ *   E2E_SUPABASE_URL=… E2E_SUPABASE_SERVICE_ROLE_KEY=… E2E_TEST_PASSWORD=… npx tsx e2e/seed.ts
  *
  * NOTE: written from supabase/migrations/20260503000001_init_schema.sql. The
  * column/enum names below match that schema, but this needs ONE live run to
@@ -11,8 +11,8 @@
  */
 import { createClient } from "@supabase/supabase-js";
 
-const url = required("SUPABASE_URL");
-const key = required("SUPABASE_SERVICE_ROLE_KEY");
+const url = required("E2E_SUPABASE_URL");
+const key = required("E2E_SUPABASE_SERVICE_ROLE_KEY");
 const password = process.env.E2E_TEST_PASSWORD || "e2e-password";
 const db = createClient(url, key, { auth: { persistSession: false } });
 
