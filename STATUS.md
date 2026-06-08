@@ -71,8 +71,14 @@ Open PRs needing attention:
 (was #13/#22/#30/#38/#66) →
 - **#38** split — admin Contacts CRUD carved out as **#117 (Agent Ready,
   Next up)** since the `tournament_contacts` schema is already live (#92,
-  frontend-only). #38 stays Blocked, now scoped to the *public* contact
-  form + Resend edge fn (Ron-owned).
+  frontend-only). The *public* contact form + edge function are now
+  **BUILT in PR #119 (Closes #38)**: `supabase/functions/submit-contact-form`
+  (salted-IP hash, 3/IP/10min throttle via `contact_form_submissions`,
+  service_role insert, Resend fan-out to `receives_form_messages` contacts
+  with Reply-To=sender) + a contacts list + form on `PublicTournamentPage`.
+  typecheck/build green, 0 new lint. **Ron to ship:** set
+  `CONTACT_FORM_IP_SALT` secret + `supabase functions deploy submit-contact-form`,
+  then merge #119.
 - **#22** (withdraw/refund) + **#30** (coupons) → **Backlog** — both
   fundamentally depend on real payments (#20) + Ron's DB/Stripe design;
   not actionable now.
