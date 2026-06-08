@@ -1,4 +1,4 @@
--- 20260606140000_enforce_event_eligibility.sql
+-- 20260607160000_enforce_event_eligibility.sql
 --
 -- Issue #56 (sub-story of the #13 eligibility epic): server-side
 -- enforcement of event eligibility as a TRUST BOUNDARY.
