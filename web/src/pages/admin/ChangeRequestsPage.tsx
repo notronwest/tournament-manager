@@ -106,6 +106,7 @@ export default function ChangeRequestsPage() {
   // Expanded row tracking + resolution form state
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [resolution, setResolution] = useState("");
+  const [resolutionStatus, setResolutionStatus] = useState<"approved" | "denied">("approved");
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   // Increment to trigger a reload after resolve
@@ -353,6 +354,7 @@ export default function ChangeRequestsPage() {
                       onClick={() => {
                         setExpandedId(expanded ? null : req.id);
                         setResolution("");
+                        setResolutionStatus("approved");
                         setResolveError(null);
                       }}
                       style={{
@@ -403,6 +405,40 @@ export default function ChangeRequestsPage() {
                     <label
                       style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}
                     >
+                      Resolution
+                    </label>
+                    <select
+                      value={resolutionStatus}
+                      onChange={(e) =>
+                        setResolutionStatus(e.target.value as "approved" | "denied")
+                      }
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        marginTop: 6,
+                        padding: "8px 10px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: 6,
+                        fontSize: 13,
+                        fontFamily: "inherit",
+                        background: "#fff",
+                        color: "#111827",
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <option value="approved">Approved</option>
+                      <option value="denied">Denied</option>
+                    </select>
+
+                    <label
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#374151",
+                        display: "block",
+                        marginTop: 12,
+                      }}
+                    >
                       Reply to player (optional)
                     </label>
                     <textarea
@@ -445,13 +481,13 @@ export default function ChangeRequestsPage() {
                       <button
                         type="button"
                         disabled={resolving}
-                        onClick={() => void resolve(req, "approved")}
+                        onClick={() => void resolve(req, resolutionStatus)}
                         style={{
                           padding: "8px 20px",
                           borderRadius: 6,
-                          border: "1px solid #16a34a",
-                          background: resolving ? "#f0fdf4" : "#dcfce7",
-                          color: "#166534",
+                          border: "1px solid #2563eb",
+                          background: resolving ? "#eff6ff" : "#dbeafe",
+                          color: "#1d4ed8",
                           fontSize: 13,
                           fontWeight: 600,
                           cursor: resolving ? "not-allowed" : "pointer",
@@ -459,18 +495,23 @@ export default function ChangeRequestsPage() {
                           opacity: resolving ? 0.7 : 1,
                         }}
                       >
-                        {resolving ? "Saving…" : "Approve"}
+                        {resolving ? "Sending…" : "Send"}
                       </button>
                       <button
                         type="button"
                         disabled={resolving}
-                        onClick={() => void resolve(req, "denied")}
+                        onClick={() => {
+                          setExpandedId(null);
+                          setResolution("");
+                          setResolutionStatus("approved");
+                          setResolveError(null);
+                        }}
                         style={{
                           padding: "8px 20px",
                           borderRadius: 6,
-                          border: "1px solid #fca5a5",
-                          background: resolving ? "#fef2f2" : "#fee2e2",
-                          color: "#991b1b",
+                          border: "1px solid #d1d5db",
+                          background: "#fff",
+                          color: "#374151",
                           fontSize: 13,
                           fontWeight: 600,
                           cursor: resolving ? "not-allowed" : "pointer",
@@ -478,7 +519,7 @@ export default function ChangeRequestsPage() {
                           opacity: resolving ? 0.7 : 1,
                         }}
                       >
-                        {resolving ? "Saving…" : "Deny"}
+                        Cancel
                       </button>
                     </div>
                   </div>
