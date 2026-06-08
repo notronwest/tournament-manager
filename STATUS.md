@@ -9,6 +9,23 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-07**
 
+## 2026-06-07 — Regression secrets renamed E2E_*; setup state
+
+- Renamed the regression harness's generic secrets so they can't collide
+  with prod: `SUPABASE_URL` → **`E2E_SUPABASE_URL`**, `SUPABASE_SERVICE_ROLE_KEY`
+  → **`E2E_SUPABASE_SERVICE_ROLE_KEY`** across `regression.yml`, `seed.ts`,
+  e2e `README.md` + `SETUP.md`. `VITE_SUPABASE_URL` (app build var) untouched.
+- ⚠️ **Process slip:** this landed as a **direct commit to `main`** (`0f424c2`,
+  Closes #118), not a PR — `HEAD` was on `main` at commit time (likely a
+  concurrent git op in this shared checkout; didn't re-verify branch before
+  committing). Change is correct + YAML valid; `main` history left intact (not
+  rewritten — fleet pulls it). Lesson: verify branch in the same step as commit.
+- **Test-harness setup state:** test Supabase project + schema done (1,2);
+  `tournament-manager-test` Cloudflare Pages deploy in progress (3) →
+  `E2E_BASE_URL = https://tournament-manager-test.pages.dev`. Secrets to set:
+  `E2E_SUPABASE_URL`, `E2E_SUPABASE_SERVICE_ROLE_KEY`, `E2E_BASE_URL`,
+  `E2E_TEST_PASSWORD` (DISCORD_WEBHOOK already set). Then Phase 5 (first green).
+
 ## 2026-06-07 — Backlog grooming + status check (after a big parallel merge)
 
 A lot merged to `main` in parallel (Builder/daemon) while this session was
