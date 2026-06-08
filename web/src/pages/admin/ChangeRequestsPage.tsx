@@ -369,7 +369,7 @@ export default function ChangeRequestsPage() {
                         flexShrink: 0,
                       }}
                     >
-                      {expanded ? "Close" : "Resolve"}
+                      {expanded ? "Close" : "Respond"}
                     </button>
                   )}
                 </div>
