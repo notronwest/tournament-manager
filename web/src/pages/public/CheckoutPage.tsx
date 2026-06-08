@@ -751,10 +751,15 @@ function PaymentSection({
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
+  // The Payment Element mounts asynchronously (it's an iframe). Calling
+  // confirmPayment before it's ready throws an IntegrationError, so we
+  // gate the Pay button on its onReady callback.
+  const [elementReady, setElementReady] = useState(false);
   const busy = submitting || finalizing;
+  const canPay = elementReady && !!stripe && !!elements && !busy;
 
   const handlePay = async () => {
-    if (!stripe || !elements) return;
+    if (!stripe || !elements || !elementReady) return;
     setSubmitting(true);
     onPaymentError("");
     const { error, paymentIntent } = await stripe.confirmPayment({
@@ -781,13 +786,21 @@ function PaymentSection({
 
   return (
     <div>
-      <PaymentElement />
+      <PaymentElement
+        onReady={() => setElementReady(true)}
+        onLoadError={(e) =>
+          onPaymentError(
+            e.error?.message ??
+              "Couldn't load the payment form. Please refresh and try again.",
+          )
+        }
+      />
       <button
         type="button"
         onClick={() => void handlePay()}
-        disabled={busy || !stripe || !elements}
+        disabled={!canPay}
         style={{
-          ...(busy || !stripe ? ctaPrimaryDisabledStyle : ctaPrimaryStyle),
+          ...(canPay ? ctaPrimaryStyle : ctaPrimaryDisabledStyle),
           padding: "14px 22px",
           width: "100%",
           marginTop: 16,
@@ -798,7 +811,9 @@ function PaymentSection({
           ? "Finalizing…"
           : submitting
             ? "Processing…"
-            : `Pay ${formatUsd(totalCents)} →`}
+            : !elementReady
+              ? "Loading payment form…"
+              : `Pay ${formatUsd(totalCents)} →`}
       </button>
       <button
         type="button"
