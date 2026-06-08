@@ -12,7 +12,7 @@ import { PartnerSearch } from "../../components/PartnerSearch";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
 import { formatUsd } from "../../lib/pricing";
-import { eligibilityChips } from "../../lib/eligibility";
+import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   deriveRegistrationStatus,
   pickActivePricingTier,
@@ -720,6 +720,50 @@ export default function PublicTournamentPage() {
           </div>
         )}
       </section>
+
+      {/* Refund policy — combines cancellation preset (mechanism) with
+          refund_policy_md (the organizer's copy). Show if either is set. */}
+      {(tournament.cancellation_policy_preset || tournament.refund_policy_md) && (
+        <TournamentContentSection title="Refund policy">
+          {tournament.cancellation_policy_preset && (
+            <p style={{ margin: "0 0 10px", lineHeight: 1.6 }}>
+              <strong>Cancellation policy: </strong>
+              {cancellationPresetSummary(tournament.cancellation_policy_preset)}
+            </p>
+          )}
+          {tournament.refund_policy_md && renderSimpleMd(tournament.refund_policy_md)}
+        </TournamentContentSection>
+      )}
+
+      {tournament.weather_md && (
+        <TournamentContentSection title="Weather plan">
+          {renderSimpleMd(tournament.weather_md)}
+        </TournamentContentSection>
+      )}
+
+      {tournament.facility_info_md && (
+        <TournamentContentSection title="Facility info">
+          {renderSimpleMd(tournament.facility_info_md)}
+        </TournamentContentSection>
+      )}
+
+      {tournament.additional_info_md && (
+        <TournamentContentSection title="Additional info">
+          {renderSimpleMd(tournament.additional_info_md)}
+        </TournamentContentSection>
+      )}
+
+      {tournament.sponsors_md && (
+        <TournamentContentSection title="Sponsors">
+          {renderSimpleMd(tournament.sponsors_md)}
+        </TournamentContentSection>
+      )}
+
+      {tournament.faqs_md && (
+        <TournamentContentSection title="FAQs">
+          {renderSimpleMd(tournament.faqs_md)}
+        </TournamentContentSection>
+      )}
     </Shell>
     {myPendingGroup && (
       <StickyCheckoutBar
@@ -881,6 +925,11 @@ function EventCard({
   // Roster panel collapsed by default; toggled by the toggle bar.
   const [rosterOpen, setRosterOpen] = useState(false);
 
+  // ─── Eligibility: compute once, gate the Register button ─────────
+  const { eligible: playerEligible, reasons: eligibilityReasons } = me
+    ? checkEligibility(me, event)
+    : { eligible: true, reasons: [] as string[] };
+
   // ─── Derived state for visual treatment ──────────────────────────
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
@@ -962,6 +1011,12 @@ function EventCard({
           return;
         }
       }
+    }
+
+    const { eligible, reasons } = checkEligibility(me, event);
+    if (!eligible) {
+      setFormError(`Not eligible: ${reasons.join("; ")}.`);
+      return;
     }
 
     setSubmitting(true);
@@ -1407,6 +1462,13 @@ function EventCard({
       );
     }
     if (expanded) return null; // expanded form has its own buttons
+    if (me && !playerEligible) {
+      return (
+        <span style={{ fontSize: 12, color: "#6b7280" }}>
+          Not eligible: {eligibilityReasons.join("; ")}
+        </span>
+      );
+    }
     return (
       <button
         type="button"
@@ -1653,7 +1715,7 @@ function EventCard({
             >
               {isAdditionalEvent ? (
                 <>
-                  Additional event:{" "}
+                  Extra event:{" "}
                   <strong>+${(additionalFeeCents / 100).toFixed(0)}</strong>{" "}
                   <span style={{ color: "#888" }}>
                     (added to your registration)
@@ -1662,7 +1724,7 @@ function EventCard({
               ) : (
                 <>
                   <strong>${(regFeeCents / 100).toFixed(0)}</strong>{" "}
-                  registration{" "}
+                  entry{" "}
                   <span style={{ color: "#888" }}>· includes this event</span>
                 </>
               )}
@@ -2368,5 +2430,83 @@ function fmtDateTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+type CancellationPolicyPreset =
+  Database["public"]["Enums"]["cancellation_policy_preset"];
+
+function cancellationPresetSummary(p: CancellationPolicyPreset): string {
+  switch (p) {
+    case "generous":
+      return "Full refund > 7 days before, none within 7 days.";
+    case "standard":
+      return "Full refund <7d after reg, half >30d before, none <7d before.";
+    case "strict":
+      return "No refunds after registration.";
+    case "custom":
+      return "Custom refund windows — see organizer for details.";
+  }
+}
+
+// Minimal markdown renderer: paragraphs, unordered lists, bold, italic,
+// links. No external library — the content is organizer-authored and
+// limited to these constructs.
+function renderSimpleMd(md: string): ReactNode {
+  const blocks = md.split(/\n\n+/);
+  return blocks.map((block, bi) => {
+    const lines = block.split("\n");
+    if (lines.length > 0 && lines.every((l) => l.startsWith("- "))) {
+      return (
+        <ul key={bi} style={{ paddingLeft: 20, margin: "0 0 10px" }}>
+          {lines.map((l, li) => (
+            <li key={li}>{renderInline(l.slice(2))}</li>
+          ))}
+        </ul>
+      );
+    }
+    return (
+      <p key={bi} style={{ margin: "0 0 10px", lineHeight: 1.6 }}>
+        {renderInline(block.replace(/\n/g, " "))}
+      </p>
+    );
+  });
+}
+
+function renderInline(text: string): ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/);
+  return parts.map((tok, i) => {
+    if (tok.startsWith("**") && tok.endsWith("**")) {
+      return <strong key={i}>{tok.slice(2, -2)}</strong>;
+    }
+    if (tok.startsWith("*") && tok.endsWith("*")) {
+      return <em key={i}>{tok.slice(1, -1)}</em>;
+    }
+    const m = tok.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (m) {
+      return (
+        <a key={i} href={m[2]} target="_blank" rel="noopener noreferrer">
+          {m[1]}
+        </a>
+      );
+    }
+    return tok;
+  });
+}
+
+function TournamentContentSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section style={{ marginTop: 32 }}>
+      <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>{title}</h2>
+      <div style={{ fontSize: 15, color: "#444", lineHeight: 1.6 }}>
+        {children}
+      </div>
+    </section>
+  );
 }
 
