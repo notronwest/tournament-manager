@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
@@ -67,6 +67,11 @@ type InboundInvite = {
   token: string;
 };
 
+// Checked once per page lifetime — does not change during a session.
+const prefersReducedMotion =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 // Public tournament page at /t/:orgSlug/:tournamentSlug. Anonymous-
 // readable thanks to existing RLS: tournaments + events with status
 // in ('published', 'closed', 'completed') are readable by anyone.
@@ -120,6 +125,11 @@ export default function PublicTournamentPage() {
   const [registeredByEvent, setRegisteredByEvent] = useState<
     Map<string, Set<string>>
   >(new Map());
+
+  // #98: which event's register form is currently in focus mode.
+  // null = no card focused; a string event_id = that card is lifted
+  // above the scrim and all siblings are dimmed + inert.
+  const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
 
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
@@ -455,6 +465,26 @@ export default function PublicTournamentPage() {
 
   return (
   <>
+    {/* #98: translucent scrim — always in the DOM so the CSS opacity
+        transition fires on both open and close. pointer-events:none
+        when inactive so it never intercepts normal page clicks.
+        Clicking the scrim exits focus mode directly (no discard-
+        confirm), matching the mockup: scrim click = "step back." */}
+    <div
+      aria-hidden="true"
+      onClick={() => setFocusedEventId(null)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(20, 24, 31, 0.55)",
+        backdropFilter: "saturate(0.7) blur(1px)",
+        zIndex: 50,
+        opacity: focusedEventId ? 1 : 0,
+        pointerEvents: focusedEventId ? "auto" : "none",
+        transition: prefersReducedMotion ? undefined : "opacity 0.2s ease",
+        cursor: "pointer",
+      }}
+    />
     <Shell>
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 26 }}>{tournament.name}</h1>
@@ -678,6 +708,10 @@ export default function PublicTournamentPage() {
                 alreadyRegisteredPlayerIds={
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
+                isFocused={focusedEventId === ev.id}
+                isDimmed={focusedEventId !== null && focusedEventId !== ev.id}
+                onRequestFocus={() => setFocusedEventId(ev.id)}
+                onReleaseFocus={() => setFocusedEventId(null)}
                 onChanged={async () => {
                   // Refetch both the page's local state AND the
                   // site-wide pending bar — they read different
@@ -842,6 +876,10 @@ function EventCard({
   additionalFeeCents,
   isAdditionalEvent,
   alreadyRegisteredPlayerIds,
+  isFocused,
+  isDimmed,
+  onRequestFocus,
+  onReleaseFocus,
   onChanged,
   onNeedsAuth,
 }: {
@@ -862,6 +900,13 @@ function EventCard({
   // into the PartnerSearch excludePlayerIds so the search can't
   // surface someone who's already in.
   alreadyRegisteredPlayerIds: Set<string>;
+  // #98: focus overlay. isFocused = this card is lifted above the
+  // scrim. isDimmed = another card is focused; this card goes
+  // behind the scrim, grayscale + inert.
+  isFocused: boolean;
+  isDimmed: boolean;
+  onRequestFocus: () => void;
+  onReleaseFocus: () => void;
   onChanged: () => Promise<void> | void;
   onNeedsAuth: () => void;
 }) {
@@ -896,6 +941,16 @@ function EventCard({
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // ─── Refs for #98 focus management ───────────────────────────────
+  // cardRef: root div — for the `inert` attribute and focus-trap query.
+  // registerBtnRef: the Register button — keyboard focus returns here
+  //   when focus mode exits, restoring the user's position.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const registerBtnRef = useRef<HTMLButtonElement>(null);
+  // Stable ref so the keydown effect always calls the latest
+  // requestDiscardForm without re-running on every render.
+  const requestDiscardFormRef = useRef<() => void>(() => {});
+
   // ─── Eligibility: compute once, gate the Register button ─────────
   const { eligible: playerEligible, reasons: eligibilityReasons } = me
     ? checkEligibility(me, event)
@@ -920,6 +975,7 @@ function EventCard({
       onNeedsAuth();
       return;
     }
+    onRequestFocus();
     setEditMode("register");
     setPartner(emptySelection);
     setSeekingPartner(false);
@@ -930,6 +986,8 @@ function EventCard({
   // without losing the reg itself. Pre-fills "seekingPartner" with
   // the current state so toggling between picking-a-partner and
   // seeking is a one-click affordance.
+  // Note: change-partner does NOT enter focus mode — only the
+  // initial Register action focuses the card (#98).
   const startChangePartner = () => {
     setEditMode("change-partner");
     setPartner(emptySelection);
@@ -942,7 +1000,101 @@ function EventCard({
     setPartner(emptySelection);
     setSeekingPartner(false);
     setFormError(null);
+    onReleaseFocus();
   };
+
+  // ─── #98: collapse form when focus is released externally ────────
+  // Scrim click drives focusedEventId → null at the page level, which
+  // makes isFocused go false here while editMode is still set. Collapse
+  // without the discard-confirm — scrim click is a direct "step back."
+  useEffect(() => {
+    if (!isFocused && editMode !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditMode(null);
+      setPartner(emptySelection);
+      setSeekingPartner(false);
+      setFormError(null);
+    }
+  // Intentionally omit editMode from deps: only fire when isFocused
+  // changes, not on every form interaction.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocused]);
+
+  // ─── #98: set/clear `inert` + `aria-hidden` on dimmed siblings ───
+  // `inert` is not in React 18 JSX types; set it imperatively.
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    if (isDimmed) {
+      el.setAttribute("inert", "");
+      el.setAttribute("aria-hidden", "true");
+    } else {
+      el.removeAttribute("inert");
+      el.removeAttribute("aria-hidden");
+    }
+  }, [isDimmed]);
+
+  // ─── #98: focus trap + Esc key while this card is focused ────────
+  useEffect(() => {
+    if (!isFocused) {
+      // Focus released — restore keyboard position to Register button
+      // after the re-render that makes it visible again.
+      requestAnimationFrame(() => registerBtnRef.current?.focus());
+      return;
+    }
+
+    const card = cardRef.current;
+
+    const getFocusables = (): HTMLElement[] => {
+      if (!card) return [];
+      return Array.from(
+        card.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), ' +
+          'select:not([disabled]), textarea:not([disabled]), ' +
+          '[tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    };
+
+    // Move initial focus to the first interactive element in the card.
+    requestAnimationFrame(() => getFocusables()[0]?.focus());
+
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Esc respects the existing discard-confirm flow: if a partner
+        // is already picked it shows the confirm modal first, then
+        // cancelExpand (which calls onReleaseFocus) on confirmation.
+        requestDiscardFormRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusables = getFocusables();
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    const btnRef = registerBtnRef.current;
+    document.addEventListener("keydown", handleKeydown);
+    return () => {
+      document.removeEventListener("keydown", handleKeydown);
+      requestAnimationFrame(() => btnRef?.focus());
+    };
+  }, [isFocused]);
 
   const onSubmitRegister = async () => {
     if (!me) {
@@ -1120,6 +1272,7 @@ function EventCard({
     setPartner(emptySelection);
     setSeekingPartner(false);
     setSubmitting(false);
+    onReleaseFocus();
     await onChanged();
   };
 
@@ -1407,6 +1560,7 @@ function EventCard({
     }
     return (
       <button
+        ref={registerBtnRef}
         type="button"
         onClick={startRegister}
         style={{
@@ -1441,18 +1595,52 @@ function EventCard({
     if (partnerPicked) setConfirmDiscardForm(true);
     else cancelExpand();
   };
+  // Keep the ref current so the Esc keydown handler always calls the
+  // latest closure (captures current partnerPicked + cancelExpand).
+  // eslint-disable-next-line react-hooks/refs
+  requestDiscardFormRef.current = requestDiscardForm;
+
   // Submit gate: singles always submit-able. Doubles need EITHER a
   // partner picked OR the "I need a partner" toggle on.
   const canSubmit = !isDoubles || partnerPicked || seekingPartner;
 
+  // ─── #98: card visual state ───────────────────────────────────────
+  // Lifted card (isFocused): position:relative + z-index:60 places it
+  // above the fixed scrim (z-index:50) in the same stacking context.
+  // Dimmed card (isDimmed): filter applied; inert+aria-hidden set via
+  // the imperative effect above (React 18 JSX doesn't expose inert).
+  const cardStyle: CSSProperties = {
+    padding: 16,
+    background: bg,
+    border: `1px solid ${borderColor}`,
+    borderRadius: 8,
+    position: "relative",
+    ...(isFocused
+      ? {
+          zIndex: 60,
+          boxShadow: "0 18px 50px rgba(20,24,31,0.28)",
+          transform: "translateY(-2px)",
+          transition: prefersReducedMotion
+            ? undefined
+            : "box-shadow 0.2s ease, transform 0.2s ease",
+        }
+      : isDimmed
+        ? {
+            filter: "grayscale(0.55) opacity(0.45)",
+            transition: prefersReducedMotion ? undefined : "filter 0.2s ease",
+          }
+        : {}),
+  };
+
   return (
     <div
-      style={{
-        padding: 16,
-        background: bg,
-        border: `1px solid ${borderColor}`,
-        borderRadius: 8,
-      }}
+      ref={cardRef}
+      style={cardStyle}
+      // #98: treat the lifted card as a dialog so screen readers know
+      // focus is contained here while focus mode is active.
+      role={isFocused ? "dialog" : undefined}
+      aria-modal={isFocused ? true : undefined}
+      aria-label={isFocused ? `Registering for ${event.name}` : undefined}
     >
       {confirmCancel && (
         <ConfirmModal
@@ -1812,7 +2000,7 @@ function EventCard({
                 fontFamily: "inherit",
               }}
             >
-              Cancel
+              Not now
             </button>
             {isDoubles && !partnerPicked && !seekingPartner && !submitting && (
               <span style={{ fontSize: 12, color: "#888" }}>
@@ -2033,4 +2221,3 @@ function TournamentContentSection({
     </section>
   );
 }
-
