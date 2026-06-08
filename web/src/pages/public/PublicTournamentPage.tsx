@@ -12,7 +12,7 @@ import { PartnerSearch } from "../../components/PartnerSearch";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
 import { formatUsd } from "../../lib/pricing";
-import { eligibilityChips } from "../../lib/eligibility";
+import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   deriveRegistrationStatus,
   pickActivePricingTier,
@@ -896,6 +896,11 @@ function EventCard({
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // ─── Eligibility: compute once, gate the Register button ─────────
+  const { eligible: playerEligible, reasons: eligibilityReasons } = me
+    ? checkEligibility(me, event)
+    : { eligible: true, reasons: [] as string[] };
+
   // ─── Derived state for visual treatment ──────────────────────────
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
@@ -977,6 +982,12 @@ function EventCard({
           return;
         }
       }
+    }
+
+    const { eligible, reasons } = checkEligibility(me, event);
+    if (!eligible) {
+      setFormError(`Not eligible: ${reasons.join("; ")}.`);
+      return;
     }
 
     setSubmitting(true);
@@ -1387,6 +1398,13 @@ function EventCard({
       );
     }
     if (expanded) return null; // expanded form has its own buttons
+    if (me && !playerEligible) {
+      return (
+        <span style={{ fontSize: 12, color: "#6b7280" }}>
+          Not eligible: {eligibilityReasons.join("; ")}
+        </span>
+      );
+    }
     return (
       <button
         type="button"
