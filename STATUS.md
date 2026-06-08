@@ -48,6 +48,12 @@ Backlog issues filed this session (all on the WMPC Roadmap board):
   delete / Current+Archived views (needs `archived_at` migration).
 - **#106** (Later) rich-text WYSIWYG editor for tournament long-text
   sections; must sanitize (XSS).
+- **#121** (Next up, epic) apply the V5 brand/UX to *every* page —
+  consistency sweep. Audit: HomePage/Checkout/Register/PartnerAccept are
+  on `publicTheme`; ProfilePage, PublicTournamentPage, LoginPage (#100),
+  and the whole `pages/admin/` area (~37 files) are not. Ship in slices,
+  one surface per PR, driven by `publicTheme.ts` tokens. Largest single
+  piece = PublicTournamentPage (mockup 02).
 
 Open PRs needing attention:
 - **#78** (#56 eligibility server trigger) — clean/mergeable; its
