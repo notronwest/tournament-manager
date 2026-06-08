@@ -19,7 +19,9 @@ export async function loginAs(page: Page, email: string) {
   await page.goto("/login");
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(PASSWORD);
-  await page.getByRole("button", { name: /sign in|log in/i }).click();
+  // Scope to the form — the page also has a nav "Sign in" button, which would
+  // otherwise trip Playwright's strict-mode (two matches).
+  await page.locator("form").getByRole("button", { name: /sign in|log in/i }).click();
   await expect(page).not.toHaveURL(/\/login/);
 }
 
