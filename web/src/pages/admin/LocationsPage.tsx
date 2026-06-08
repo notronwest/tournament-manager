@@ -380,12 +380,12 @@ const rowStyle: CSSProperties = {
 };
 
 const primaryBtn: CSSProperties = {
-  padding: "8px 16px",
+  padding: "6px 14px",
   background: "#2563eb",
   color: "#fff",
   border: "none",
   borderRadius: 6,
-  fontSize: 14,
+  fontSize: 13,
   fontWeight: 500,
   cursor: "pointer",
   fontFamily: "inherit",
