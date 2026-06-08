@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import type { Database } from "../../types/supabase";
@@ -276,13 +276,18 @@ function Section({
 
 function TournamentCard({ group }: { group: TournamentGroup }) {
   const href = `/t/${group.org_slug}/${group.tournament_slug}`;
+  const navigate = useNavigate();
   return (
-    <div style={cardStyle}>
+    <div
+      style={cardStyle}
+      onClick={() => navigate(href)}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && navigate(href)}
+    >
       <div style={cardHeaderStyle}>
         <div>
-          <Link to={href} style={cardTitleStyle}>
-            {group.tournament_name}
-          </Link>
+          <span style={cardTitleStyle}>{group.tournament_name}</span>
           <p style={cardMetaStyle}>
             {group.org_name}
             {group.location_name ? ` · ${group.location_name}` : ""}
@@ -307,6 +312,15 @@ function TournamentCard({ group }: { group: TournamentGroup }) {
             </span>
           </div>
         ))}
+      </div>
+      <div style={cardFooterStyle}>
+        <Link
+          to={href}
+          style={viewLinkStyle}
+          onClick={(e) => e.stopPropagation()}
+        >
+          View tournament &rarr;
+        </Link>
       </div>
     </div>
   );
@@ -350,6 +364,7 @@ const cardStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 12,
+  cursor: "pointer",
 };
 
 const cardHeaderStyle: CSSProperties = {
@@ -400,6 +415,19 @@ const emptyStyle: CSSProperties = {
   flexDirection: "column",
   alignItems: "center",
   gap: 16,
+};
+
+const cardFooterStyle: CSSProperties = {
+  borderTop: "1px solid #f3f4f6",
+  paddingTop: 10,
+  marginTop: 2,
+};
+
+const viewLinkStyle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 500,
+  color: "#2563eb",
+  textDecoration: "none",
 };
 
 const browseLinkStyle: CSSProperties = {
