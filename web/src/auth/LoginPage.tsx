@@ -13,11 +13,11 @@ import {
   warnFg,
   dangerBg,
   dangerFg,
-  courtYellow,
   displayFontStack,
   bodyFontStack,
   monoFontStack,
 } from "../lib/publicTheme";
+import logoUrl from "../assets/bert-and-erne-v5-outlined.svg";
 
 // Three modes:
 //   magic  — email-only "get a link" flow. Default for public-flow
@@ -165,17 +165,14 @@ export default function LoginPage() {
         }}
       >
         {/* Wordmark */}
-        <div
-          style={{
-            fontFamily: displayFontStack,
-            fontSize: 18,
-            color: ink,
-            marginBottom: 14,
-            letterSpacing: "0.2px",
-          }}
-        >
-          bert &amp; erne
-          <span style={{ color: courtYellow }}>.</span>
+        <div style={{ marginBottom: 18 }}>
+          <img
+            src={logoUrl}
+            alt="bert & erne"
+            width="140"
+            height="59"
+            style={{ display: "block" }}
+          />
         </div>
 
         <h1
