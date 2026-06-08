@@ -1216,17 +1216,8 @@ function EventsStep({
   onAddDefaults: (divs: DefaultDivision[]) => void;
   onRemoveEvent: (id: string) => void;
 }) {
-  if (!tournament) {
-    return (
-      <div>
-        <StepHeader
-          title="Events"
-          lede="Save Basics first — events attach to a draft tournament. Click ← Back if you haven't filled in Basics yet."
-        />
-      </div>
-    );
-  }
-
+  // Compute template data unconditionally so hooks below are always called
+  // in the same order regardless of whether tournament is null (Rules of Hooks).
   const existingKeys = new Set(events.map(divisionKey));
   const allTemplates = buildDefaultTemplate();
   const availableTemplates = allTemplates.filter(
@@ -1251,6 +1242,17 @@ function EventsStep({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events.length]);
+
+  if (!tournament) {
+    return (
+      <div>
+        <StepHeader
+          title="Events"
+          lede="Save Basics first — events attach to a draft tournament. Click ← Back if you haven't filled in Basics yet."
+        />
+      </div>
+    );
+  }
 
   const checkedCount = availableTemplates.filter((d) => checked.has(d.id))
     .length;
