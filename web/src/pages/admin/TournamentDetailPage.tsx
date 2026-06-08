@@ -383,6 +383,17 @@ export default function TournamentDetailPage() {
           >
             Schedule
           </Link>
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/contacts`}
+            style={{
+              ...primaryLinkBtn,
+              background: "#fff",
+              color: "#2563eb",
+              border: "1px solid #2563eb",
+            }}
+          >
+            Contacts
+          </Link>
           {/* Court manager is always reachable from the tournament home —
               users want it to peek at the queue / setup courts even
               before an event is active. The page itself handles the
