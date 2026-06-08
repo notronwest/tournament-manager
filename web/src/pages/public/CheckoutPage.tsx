@@ -37,6 +37,13 @@ import {
   ruleSoft,
   statusPanelStyle,
 } from "../../lib/publicTheme";
+import {
+  Elements,
+  PaymentElement,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
+import { stripePromise, stripeConfigured } from "../../lib/stripe";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -83,11 +90,15 @@ function isObviouslyFakeEmail(email: string | null): boolean {
 // each pending reg → 'paid' (with the computed cents snapshotted)
 // and fires partner-invite emails for doubles regs.
 //
-// Stripe is deliberately NOT wired up yet — backlog has Stripe
-// Connect onboarding as its own Soon item. For now Pay is a status
-// flip + email fan-out. When Stripe lands the same handler will
-// route through a PaymentIntent and the status flip moves to the
-// webhook handler.
+// Payment flow (Stripe Connect destination charge):
+//   1. "Continue to payment" calls the create-payment-intent edge
+//      function, which computes the authoritative total server-side and
+//      returns a clientSecret.
+//   2. The Stripe Payment Element renders; the player confirms the card.
+//   3. The stripe-webhook edge function (source of truth) flips the
+//      registrations pending_payment → paid. The client polls for that
+//      flip, then shows the success view. The client never flips status
+//      itself.
 export default function CheckoutPage() {
   const { orgSlug, tournamentSlug } = useParams<{
     orgSlug: string;
@@ -108,7 +119,13 @@ export default function CheckoutPage() {
   const [rows, setRows] = useState<PendingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [paying, setPaying] = useState(false);
+  // Stripe payment phase. Once create-payment-intent succeeds we hold
+  // its clientSecret and render the Payment Element. creatingIntent
+  // covers step 1; finalizing covers the post-confirm webhook poll.
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [creatingIntent, setCreatingIntent] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   // True when the player already has a paid registration in this
   // tournament from a prior session. Drives the additional-only
   // pricing path in computeLineItems.
@@ -329,9 +346,6 @@ export default function CheckoutPage() {
         alreadyHasPaidEvent,
       )
     : { items: [] as LineItem[], totalCents: 0 };
-  const lineItemByEventId = new Map(
-    lineItems.map((it) => [it.event.id, it]),
-  );
 
   // Block Pay if any doubles row is missing a partner AND is not a
   // seeker — seekers intentionally have no partner yet; they can pay
@@ -343,47 +357,68 @@ export default function CheckoutPage() {
       !r.partnerLabel,
   );
 
-  const onPay = async () => {
+  // Step 1 — create the PaymentIntent server-side. The edge function
+  // computes the authoritative amount (compute_checkout_total), applies
+  // the Connect destination charge + platform fee, records a pending
+  // payment, and returns a clientSecret. We never send the amount.
+  const startPayment = async () => {
     if (!tournament || rows.length === 0) return;
-    setError(null);
-    setPaying(true);
+    setPaymentError(null);
+    setCreatingIntent(true);
+    const { data, error: fnErr } = await supabase.functions.invoke(
+      "create-payment-intent",
+      { body: { orgSlug, tournamentSlug } },
+    );
+    setCreatingIntent(false);
+    const cs = (data as { clientSecret?: string; error?: string } | null)
+      ?.clientSecret;
+    if (fnErr || !cs) {
+      const code = (data as { error?: string } | null)?.error;
+      setPaymentError(
+        code
+          ? `Couldn't start payment (${code}). Please try again.`
+          : fnErr?.message ?? "Couldn't start payment. Please try again.",
+      );
+      return;
+    }
+    setClientSecret(cs);
+  };
 
-    // 1. Flip each pending reg → paid, with the computed cents
-    //    snapshotted. We do these sequentially so an early failure
-    //    doesn't leave a partial state — could be a single RPC
-    //    in a future commit.
-    const paidRegIds: string[] = [];
-    for (const r of rows) {
-      const line = lineItemByEventId.get(r.eventId);
-      const cents = line ? line.cents : r.eventFeeCentsOverride;
-      const { error: updErr } = await supabase
+  // Step 2 — called by the Payment Element form once Stripe confirms the
+  // charge. The webhook is the source of truth for the status flip, so
+  // we poll our regs until they read 'paid', then fire the partner
+  // invite emails and show the success view. (Card C moves the email
+  // fan-out to the webhook.)
+  const onConfirmed = async () => {
+    setFinalizing(true);
+    const paidRows = rows; // capture before clearing
+    const regIds = paidRows.map((r) => r.regId);
+
+    let allPaid = false;
+    for (let i = 0; i < 20; i++) {
+      const { data } = await supabase
         .from("event_registrations")
-        .update({ status: "paid", event_fee_cents: cents })
-        .eq("id", r.regId);
-      if (updErr) {
-        setError(`Failed to finalize ${r.eventName}: ${updErr.message}`);
-        setPaying(false);
-        return;
+        .select("id, status")
+        .in("id", regIds);
+      if (
+        data &&
+        data.length === regIds.length &&
+        data.every((r) => r.status === "paid")
+      ) {
+        allPaid = true;
+        break;
       }
-      paidRegIds.push(r.regId);
+      await new Promise((res) => setTimeout(res, 1500));
     }
 
-    // 2. Fire partner-invite emails for each doubles row that has
-    //    an outbound invite. Skip obviously-fake addresses (test
-    //    accounts). Errors are tolerated — the user is paid up
-    //    either way; we just surface a console warn for now.
-    for (const r of rows) {
+    for (const r of paidRows) {
       if (r.format !== "doubles" || !r.inviteId) continue;
       if (isObviouslyFakeEmail(r.partnerEmail)) continue;
       try {
         await supabase.functions.invoke("send-partner-invite", {
-          body: {
-            inviteId: r.inviteId,
-            baseUrl: window.location.origin,
-          },
+          body: { inviteId: r.inviteId, baseUrl: window.location.origin },
         });
       } catch (e) {
-        // eslint-disable-next-line no-console
         console.warn(
           `Invite email for ${r.eventName} failed:`,
           e instanceof Error ? e.message : String(e),
@@ -391,12 +426,16 @@ export default function CheckoutPage() {
       }
     }
 
-    // 3. Surface success state + refresh the global bar so it
-    //    drops these rows.
-    setDoneEventNames(rows.map((r) => r.eventName));
+    if (!allPaid) {
+      console.warn(
+        "Payment confirmed but the reg flip wasn't observed within the poll window; the pending bar will reconcile.",
+      );
+    }
+    setDoneEventNames(paidRows.map((r) => r.eventName));
     setRows([]);
+    setClientSecret(null);
     await refreshPending();
-    setPaying(false);
+    setFinalizing(false);
   };
 
   if (loading) {
@@ -597,59 +636,190 @@ export default function CheckoutPage() {
             <span>Total</span>
             <span>{formatUsd(totalCents)}</span>
           </div>
-          <button
-            type="button"
-            onClick={() => void onPay()}
-            disabled={paying || !!blockingError}
-            style={{
-              ...(paying || blockingError
-                ? ctaPrimaryDisabledStyle
-                : ctaPrimaryStyle),
-              padding: "14px 22px",
-              width: "100%",
-              marginTop: 14,
-              textAlign: "center",
-            }}
-          >
-            {paying
-              ? "Finalizing…"
-              : blockingError
-                ? "Fix the partner issue above"
-                : `Pay ${formatUsd(totalCents)} →`}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate(`/t/${orgSlug}/${tournamentSlug}`)}
-            disabled={paying}
-            style={{
-              background: "none",
-              border: "none",
-              color: inkSoft,
-              cursor: paying ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-              fontSize: 13,
-              textDecoration: "underline",
-              width: "100%",
-              padding: "10px 0 0",
-              textAlign: "center",
-            }}
-          >
-            Cancel checkout (keep registrations)
-          </button>
-          <div
-            style={{
-              fontSize: 11,
-              color: inkSoft,
-              textAlign: "center",
-              marginTop: 10,
-            }}
-          >
-            Stripe checkout coming soon — for now Pay finalizes the
-            registration directly.
-          </div>
+          {paymentError && (
+            <div
+              style={{
+                ...statusPanelStyle("danger"),
+                fontSize: 13,
+                padding: "10px 12px",
+                margin: "12px 0 0",
+              }}
+            >
+              {paymentError}
+            </div>
+          )}
+
+          {!clientSecret ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void startPayment()}
+                disabled={creatingIntent || !!blockingError || !stripeConfigured}
+                style={{
+                  ...(creatingIntent || blockingError || !stripeConfigured
+                    ? ctaPrimaryDisabledStyle
+                    : ctaPrimaryStyle),
+                  padding: "14px 22px",
+                  width: "100%",
+                  marginTop: 14,
+                  textAlign: "center",
+                }}
+              >
+                {creatingIntent
+                  ? "Starting…"
+                  : blockingError
+                    ? "Fix the partner issue above"
+                    : `Continue to payment · ${formatUsd(totalCents)} →`}
+              </button>
+              {!stripeConfigured && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: courtRed,
+                    textAlign: "center",
+                    marginTop: 10,
+                  }}
+                >
+                  Payments aren't configured yet (missing
+                  VITE_STRIPE_PUBLISHABLE_KEY).
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => navigate(`/t/${orgSlug}/${tournamentSlug}`)}
+                disabled={creatingIntent}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: inkSoft,
+                  cursor: creatingIntent ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  textDecoration: "underline",
+                  width: "100%",
+                  padding: "10px 0 0",
+                  textAlign: "center",
+                }}
+              >
+                Cancel checkout (keep registrations)
+              </button>
+            </>
+          ) : (
+            <div style={{ marginTop: 14 }}>
+              <Elements
+                stripe={stripePromise}
+                options={{ clientSecret, appearance: { theme: "stripe" } }}
+              >
+                <PaymentSection
+                  totalCents={totalCents}
+                  finalizing={finalizing}
+                  onConfirmed={() => void onConfirmed()}
+                  onPaymentError={setPaymentError}
+                  onCancel={() => {
+                    setClientSecret(null);
+                    setPaymentError(null);
+                  }}
+                />
+              </Elements>
+            </div>
+          )}
         </div>
       </div>
     </Shell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Stripe Payment Element form. Lives inside <Elements> so it can use
+// the Stripe hooks. Confirms the PaymentIntent in-page (redirect only
+// if a method requires it); the parent then polls for the webhook flip.
+// ─────────────────────────────────────────────────────────────────────
+
+function PaymentSection({
+  totalCents,
+  finalizing,
+  onConfirmed,
+  onPaymentError,
+  onCancel,
+}: {
+  totalCents: number;
+  finalizing: boolean;
+  onConfirmed: () => void;
+  onPaymentError: (msg: string) => void;
+  onCancel: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const busy = submitting || finalizing;
+
+  const handlePay = async () => {
+    if (!stripe || !elements) return;
+    setSubmitting(true);
+    onPaymentError("");
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+      confirmParams: { return_url: window.location.href },
+    });
+    if (error) {
+      onPaymentError(error.message ?? "Payment failed. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+    if (
+      paymentIntent &&
+      (paymentIntent.status === "succeeded" ||
+        paymentIntent.status === "processing")
+    ) {
+      onConfirmed(); // parent polls for the webhook flip; keep busy
+      return;
+    }
+    onPaymentError("Payment didn't complete. Please try again.");
+    setSubmitting(false);
+  };
+
+  return (
+    <div>
+      <PaymentElement />
+      <button
+        type="button"
+        onClick={() => void handlePay()}
+        disabled={busy || !stripe || !elements}
+        style={{
+          ...(busy || !stripe ? ctaPrimaryDisabledStyle : ctaPrimaryStyle),
+          padding: "14px 22px",
+          width: "100%",
+          marginTop: 16,
+          textAlign: "center",
+        }}
+      >
+        {finalizing
+          ? "Finalizing…"
+          : submitting
+            ? "Processing…"
+            : `Pay ${formatUsd(totalCents)} →`}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={busy}
+        style={{
+          background: "none",
+          border: "none",
+          color: inkSoft,
+          cursor: busy ? "not-allowed" : "pointer",
+          fontFamily: "inherit",
+          fontSize: 13,
+          textDecoration: "underline",
+          width: "100%",
+          padding: "10px 0 0",
+          textAlign: "center",
+        }}
+      >
+        Back
+      </button>
+    </div>
   );
 }
 
