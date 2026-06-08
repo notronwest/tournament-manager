@@ -35,7 +35,10 @@
   .t-accent{height:5px;width:84px;background:var(--red);border-radius:3px;margin:6px 0 10px}
   .sub{color:var(--inkSoft);font-size:14px;margin-bottom:22px}
 
-  .events{display:flex;flex-direction:column;gap:14px;position:relative;z-index:1}
+  /* NOTE: no z-index here — a positioned ancestor with z-index creates a
+     stacking context that would trap .card.lifted's z-index below the page
+     scrim, making the scrim paint over the "lifted" card. Keep it context-free. */
+  .events{display:flex;flex-direction:column;gap:14px}
 
   .card{
     position:relative;background:#fff;border:1px solid var(--rule);border-radius:14px;
