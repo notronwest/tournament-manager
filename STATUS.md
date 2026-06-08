@@ -9,6 +9,23 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-07**
 
+## 2026-06-07 — Regression secrets renamed E2E_*; setup state
+
+- Renamed the regression harness's generic secrets so they can't collide
+  with prod: `SUPABASE_URL` → **`E2E_SUPABASE_URL`**, `SUPABASE_SERVICE_ROLE_KEY`
+  → **`E2E_SUPABASE_SERVICE_ROLE_KEY`** across `regression.yml`, `seed.ts`,
+  e2e `README.md` + `SETUP.md`. `VITE_SUPABASE_URL` (app build var) untouched.
+- ⚠️ **Process slip:** this landed as a **direct commit to `main`** (`0f424c2`,
+  Closes #118), not a PR — `HEAD` was on `main` at commit time (likely a
+  concurrent git op in this shared checkout; didn't re-verify branch before
+  committing). Change is correct + YAML valid; `main` history left intact (not
+  rewritten — fleet pulls it). Lesson: verify branch in the same step as commit.
+- **Test-harness setup state:** test Supabase project + schema done (1,2);
+  `tournament-manager-test` Cloudflare Pages deploy in progress (3) →
+  `E2E_BASE_URL = https://tournament-manager-test.pages.dev`. Secrets to set:
+  `E2E_SUPABASE_URL`, `E2E_SUPABASE_SERVICE_ROLE_KEY`, `E2E_BASE_URL`,
+  `E2E_TEST_PASSWORD` (DISCORD_WEBHOOK already set). Then Phase 5 (first green).
+
 ## 2026-06-07 — Backlog grooming + status check (after a big parallel merge)
 
 A lot merged to `main` in parallel (Builder/daemon) while this session was
@@ -31,15 +48,22 @@ Backlog issues filed this session (all on the WMPC Roadmap board):
   delete / Current+Archived views (needs `archived_at` migration).
 - **#106** (Later) rich-text WYSIWYG editor for tournament long-text
   sections; must sanitize (XSS).
+- **#121** (Next up, epic) apply the V5 brand/UX to *every* page —
+  consistency sweep. Audit: HomePage/Checkout/Register/PartnerAccept are
+  on `publicTheme`; ProfilePage, PublicTournamentPage, LoginPage (#100),
+  and the whole `pages/admin/` area (~37 files) are not. Ship in slices,
+  one surface per PR, driven by `publicTheme.ts` tokens. Largest single
+  piece = PublicTournamentPage (mockup 02).
 
 Open PRs needing attention:
 - **#78** (#56 eligibility server trigger) — clean/mergeable; its
   migration is not yet on `main`.
-- **#75** (#55 client guard) — **rebased onto `main`, conflict resolved,
-  now MERGEABLE** (import-only conflict in `PublicTournamentPage`; guards
-  intact; typecheck + build green; 0 new lint vs main). PR gate passes
-  (`Closes #55`); only the Cloudflare Pages preview is still building.
-  Epic **#13** closes when #55 + #56 land.
+- **✅ Eligibility shipped — epic #13 CLOSED (Done).** #75 (#55 client
+  guard, after my rebase) and #78 (#56 server trigger) both **merged**.
+  #55 + #56 closed; #13 epic closed. The #56 migration landed as
+  `20260607160000_enforce_event_eligibility.sql` and is **applied on prod**
+  (`migration list` confirms) — the `BEFORE INSERT` trigger is live, so
+  rating + gender eligibility is enforced in UI *and* at the DB.
 - **#76** (drift guardrails) — clean; needs the 4 CI secrets first.
 - **#99 / #101** (mockups) — set to **"Part of"** (not Closes) so they
   don't close the impl tickets; showing **UNSTABLE** — the new PR gate may
@@ -48,6 +72,25 @@ Open PRs needing attention:
   or relax the gate for mockup PRs.
 - **#20** confirmed NOT done (real Stripe charging is still a placeholder
   status-flip; no PaymentIntent / `stripe-webhook`).
+
+**Blocked-queue drain (Ron's loop):** worked the board's Blocked column
+(was #13/#22/#30/#38/#66) →
+- **#38** split — admin Contacts CRUD carved out as **#117 (Agent Ready,
+  Next up)** since the `tournament_contacts` schema is already live (#92,
+  frontend-only). The *public* contact form + edge function are now
+  **BUILT in PR #119 (Closes #38)**: `supabase/functions/submit-contact-form`
+  (salted-IP hash, 3/IP/10min throttle via `contact_form_submissions`,
+  service_role insert, Resend fan-out to `receives_form_messages` contacts
+  with Reply-To=sender) + a contacts list + form on `PublicTournamentPage`.
+  typecheck/build green, 0 new lint. **Ron to ship:** set
+  `CONTACT_FORM_IP_SALT` secret + `supabase functions deploy submit-contact-form`,
+  then merge #119.
+- **#22** (withdraw/refund) + **#30** (coupons) → **Backlog** — both
+  fundamentally depend on real payments (#20) + Ron's DB/Stripe design;
+  not actionable now.
+- **#13** stays — auto-closes when #75 + #78 merge. **#66** already
+  handled per Ron (test-DB decision made elsewhere).
+- Blocked queue now: **#38, #66** (#13 closed/Done after #75+#78 merged).
 
 (Earlier session STATUS notes are stranded on
 `fix/reconcile-event-roster-drift` after #77 merged early; this entry is
