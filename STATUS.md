@@ -35,6 +35,14 @@ write-scope now granted):
     above the scrim. Gotcha logged as a comment on #98 (the real build
     must keep the focused card out of any ancestor stacking context, or
     portal it to the root).
+  - **Moved to Agent Ready** (Ron signed off the mockup) + `agent-ready`
+    label; live mockup link added to the issue for the Builder.
+  - **Fixed a ticketing mistake:** the mockup PRs **#99/#101 said
+    "Closes #98/#100"** — merging a *mockup* would have wrongly closed the
+    *implementation* ticket (and the linked-PR auto-workflow kept flipping
+    #98 to In Progress). Changed both to **"Part of"** so the impl tickets
+    stay open until the feature ships. (Real impl PRs #76/#77/#78 keep their
+    correct `Closes` links.)
 - **#100 (story) — rebrand the login screen on the V5 brand.** `LoginPage`
   is still the old "Tournament Manager" card + `#2563eb` blue; never got
   the V5 treatment. Built mockup `mockups/login-screen.html` (split ink
