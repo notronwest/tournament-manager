@@ -12,8 +12,14 @@ agent can't create). Then a Claude session does step 5 (first green).
 ## 1. Create the test Supabase project
 
 - New Supabase project, e.g. **`tournament-manager-test`** (same region as prod
-  is fine). Note its **project ref**, **URL**, **anon key**, **service-role
-  key**, and set a **DB password** you keep.
+  is fine). From **Settings**, capture (into a password manager, **not** chat):
+  - **Project ref** and **URL** (Settings → **Data API**).
+  - **Publishable key** (`sb_publishable_…`, Settings → **API Keys**) — the
+    public/anon key for the app build.
+  - **Secret key** (`sb_secret_…`, same **API Keys** page) — the full-access
+    server key the seed uses (this is the "service-role" key in the new key
+    system; **never** ships to the frontend).
+  - A **DB password** you set (for the `db push` in step 2).
 
 ## 2. Put the schema on it
 
@@ -33,21 +39,32 @@ schema changes.)
 ## 3. Deploy a test app instance pointed at the test project
 
 The suite drives a **deployed app**, and that app must talk to the **test** DB —
-not prod. Stand up a separate Cloudflare Pages deploy (or a dedicated branch/
-preview) whose env vars point at the test project:
+not prod. Stand up a **separate Cloudflare Pages project** (free — the Pages
+free plan allows many sites). Cloudflare → **Workers & Pages → Create → Pages →
+Connect to Git** → the `tournament-manager` repo, then mirror prod's build with
+test env vars:
 
-- `VITE_SUPABASE_URL` = test project URL
-- `VITE_SUPABASE_ANON_KEY` = test project anon key
+| Setting | Value |
+|---|---|
+| Project name | `tm-test` (→ `https://tm-test.pages.dev` = `E2E_BASE_URL`) |
+| Production branch | `main` (same code as prod; differs only by env → test DB) |
+| Root directory | `web` *(the app lives in `web/`)* |
+| Build command | `npm run build` |
+| Build output directory | `dist` (i.e. `web/dist`) |
+| Env var `VITE_SUPABASE_URL` | test project URL (Settings → **Data API**) |
+| Env var `VITE_SUPABASE_ANON_KEY` | test **Publishable key** (`sb_publishable_…`, Settings → **API Keys**) |
 
-Note its URL (e.g. `https://tm-test.pages.dev`) — that's `E2E_BASE_URL`.
+Save and Deploy. SPA routing already works (`web/public/_redirects`). Note: this
+project rebuilds on every push to `main` like prod (same code, test DB) — fine
+within the free 500 builds/month.
 
 ## 4. Set the GitHub Actions secrets (repo → Settings → Secrets → Actions)
 
 | Secret | Value |
 |---|---|
 | `SUPABASE_URL` | test project URL (step 1) |
-| `SUPABASE_SERVICE_ROLE_KEY` | test project service-role key (step 1) — **sensitive** |
-| `E2E_BASE_URL` | the test app deploy URL (step 3) |
+| `SUPABASE_SERVICE_ROLE_KEY` | test **Secret key** `sb_secret_…` (step 1) — **sensitive, bypasses RLS** |
+| `E2E_BASE_URL` | the `tm-test` Pages URL (step 3) |
 | `E2E_TEST_PASSWORD` | a password for the seeded test accounts (you choose) |
 | `DISCORD_WEBHOOK` | the Backlog channel webhook (for the pass/fail post) |
 
