@@ -7,7 +7,51 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-06**
+Last updated: **2026-06-07**
+
+## 2026-06-07 — Backlog grooming + status check (after a big parallel merge)
+
+A lot merged to `main` in parallel (Builder/daemon) while this session was
+grooming the backlog: **#81 pricing bug fixed (#82)**, roster view #21
+(#83), drop Overview #25 (#85), pricing reframe #26 (#86), content
+sections #39 (#96), additive schema migrations for #39/#18/#36/#38 (#92),
+event_roster types (#87), and **CI gates requiring every PR to reference a
+board issue / use a closing keyword**. **My drift-reconcile PR #77
+merged** — the `event_roster` migration is on `main`.
+
+Backlog issues filed this session (all on the WMPC Roadmap board):
+- **#98** register-focus overlay — **Agent Ready** (mockup PR #99). Scrim
+  stacking-context bug fixed; selected card now sits above the dim.
+- **#100** login V5 rebrand + 3-step "Get started" storyboard (mockup PR
+  #101). Next up.
+- **#102** (bug, Next up) seeker blocked at checkout — `CheckoutPage`
+  `blockingError` doesn't exempt `partner_status='seeking'`.
+- **#103** (Next up) "My Tournaments" player page.
+- **#104** (Soon) admin tournament list: clickable name / archive /
+  delete / Current+Archived views (needs `archived_at` migration).
+- **#106** (Later) rich-text WYSIWYG editor for tournament long-text
+  sections; must sanitize (XSS).
+
+Open PRs needing attention:
+- **#78** (#56 eligibility server trigger) — clean/mergeable; its
+  migration is not yet on `main`.
+- **#75** (#55 client guard) — **rebased onto `main`, conflict resolved,
+  now MERGEABLE** (import-only conflict in `PublicTournamentPage`; guards
+  intact; typecheck + build green; 0 new lint vs main). PR gate passes
+  (`Closes #55`); only the Cloudflare Pages preview is still building.
+  Epic **#13** closes when #55 + #56 land.
+- **#76** (drift guardrails) — clean; needs the 4 CI secrets first.
+- **#99 / #101** (mockups) — set to **"Part of"** (not Closes) so they
+  don't close the impl tickets; showing **UNSTABLE** — the new PR gate may
+  want a *closing* keyword, which fights the "mockup shouldn't close impl
+  ticket" intent. **Decide:** give each mockup its own closeable sub-issue,
+  or relax the gate for mockup PRs.
+- **#20** confirmed NOT done (real Stripe charging is still a placeholder
+  status-flip; no PaymentIntent / `stripe-webhook`).
+
+(Earlier session STATUS notes are stranded on
+`fix/reconcile-event-roster-drift` after #77 merged early; this entry is
+the current `main` handoff.)
 
 ## 2026-06-06 — Drift reconciled (event_roster) + eligibility enforcement (#56) validated
 

@@ -217,7 +217,7 @@ export function PricingTiersEditor({
 
               <div style={feeGridStyle}>
                 <label style={feeFieldStyle}>
-                  <span>First-event fee (USD)</span>
+                  <span>Entry fee — includes 1st event (USD)</span>
                   <input
                     type="number"
                     min="0"
@@ -307,15 +307,15 @@ function PreviewMath({
               </div>
             )}
             <div style={previewRowStyle}>
-              <span>1 event</span>
+              <span>Entry (1 event)</span>
               <span>{formatUsd(first)}</span>
             </div>
             <div style={previewRowStyle}>
-              <span>2 events</span>
+              <span>Entry + 1 extra event</span>
               <span>{formatUsd(first + add)}</span>
             </div>
             <div style={previewRowStyle}>
-              <span>3 events</span>
+              <span>Entry + 2 extra events</span>
               <span>{formatUsd(first + add * 2)}</span>
             </div>
           </div>
