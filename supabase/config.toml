@@ -188,3 +188,8 @@ s3_host = "env(S3_HOST)"
 s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+# Stripe calls this endpoint server-to-server with no Supabase JWT;
+# authentication is the webhook signature check inside the function.
+[functions.stripe-webhook]
+verify_jwt = false
