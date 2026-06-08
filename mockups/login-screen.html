@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Mockup — Login screen (V5 brand)</title>
+<title>Mockup — Login + "Get started" flow (V5 brand)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
@@ -13,7 +13,7 @@
     --bg:#fafaf7; --cream:#f6efd6; --creamDeep:#ead9a3;
     --rule:#e3dec8; --ruleSoft:#ece6cf;
     --green:#2c8a3d; --yellow:#f3d111; --red:#d8341c; --blue:#1e6cd6;
-    --okBg:#e8f4eb; --okFg:#1e6b2c;
+    --okBg:#e8f4eb; --okFg:#1e6b2c; --amberBg:#fef6d6; --amberFg:#8a6500; --amberBd:#f0d98a;
     --body:"Inter",system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
     --display:"Alfa Slab One","Times New Roman",serif;
     --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
@@ -21,142 +21,144 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
 
-  .demo-note{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:5;max-width:760px;width:calc(100% - 24px);
-    background:#fffef8;border:1px solid var(--creamDeep);border-radius:10px;padding:8px 14px;color:var(--inkSoft);font-size:12.5px;line-height:1.45;box-shadow:0 6px 18px rgba(20,24,31,.08)}
+  .demo-note{max-width:1100px;margin:0 auto;padding:18px 22px 0;color:var(--inkSoft);font-size:13px;line-height:1.5}
   .demo-note b{color:var(--ink)}
-  .demo-note code{font-family:var(--mono);font-size:11px;background:#fff;border:1px solid var(--rule);padding:1px 4px;border-radius:4px}
+  .demo-note code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--rule);padding:1px 5px;border-radius:5px}
 
-  .split{min-height:100vh;display:grid;grid-template-columns:minmax(0,440px) 1fr}
+  header.site{background:var(--ink);color:#fff;padding:14px 22px;display:flex;align-items:center;gap:10px}
+  header.site .mark{font-family:var(--display);font-size:18px;letter-spacing:.2px}
+  header.site .dot{color:var(--yellow)}
 
-  /* ---- left brand panel ---- */
-  .brand{
-    background:var(--ink);color:#fff;padding:48px 44px;display:flex;flex-direction:column;justify-content:space-between;
-    position:relative;overflow:hidden;
-  }
-  .brand::after{content:"";position:absolute;right:-120px;bottom:-120px;width:340px;height:340px;border-radius:50%;
-    background:radial-gradient(circle,rgba(243,209,17,.18),transparent 70%)}
-  .wordmark{font-family:var(--display);font-size:34px;line-height:1;letter-spacing:.3px}
-  .wordmark .dot{color:var(--yellow)}
-  .tagline{font-size:16px;color:#c9cdd4;margin-top:14px;max-width:24ch;line-height:1.4}
-  .stripes{display:flex;gap:6px;margin-top:26px}
-  .stripes span{height:6px;width:46px;border-radius:3px}
-  .stripes .g{background:var(--green)} .stripes .y{background:var(--yellow)} .stripes .r{background:var(--red)}
-  .brand .foot{font-size:12.5px;color:#8b919b;position:relative;z-index:1}
-  .brand .foot b{color:#e7e9ec;font-weight:600}
+  .flowhead{max-width:1100px;margin:22px auto 4px;padding:0 22px}
+  .flowhead h1{font-family:var(--display);font-size:clamp(22px,3.2vw,30px);margin:0 0 4px}
+  .flowhead p{color:var(--inkSoft);font-size:14px;margin:0}
 
-  /* ---- right form panel ---- */
-  .panel{display:flex;align-items:center;justify-content:center;padding:40px 24px}
-  .card{width:100%;max-width:392px}
-  h1.h{font-family:var(--display);font-size:26px;margin:0 0 6px;line-height:1.1}
-  .ctx{color:var(--inkSoft);font-size:13.5px;line-height:1.5;margin:0 0 22px}
+  /* storyboard */
+  .flow{max-width:1100px;margin:0 auto;padding:18px 22px 70px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;align-items:start}
+  .step{position:relative}
+  .steptag{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .num{width:26px;height:26px;border-radius:50%;background:var(--ink);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;font-family:var(--mono)}
+  .steptag .lbl{font-weight:700;font-size:14px}
+  .steptag .sub{color:var(--inkMuted);font-size:12px}
+  .arrow{position:absolute;top:6px;right:-13px;color:var(--creamDeep);font-size:20px;z-index:2}
+  .step:last-child .arrow{display:none}
 
-  /* segmented control (selections look like selections) */
-  .seg{display:flex;background:var(--cream);border:1px solid var(--creamDeep);border-radius:11px;padding:4px;gap:4px;margin-bottom:20px}
-  .seg button{flex:1;appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--body);
-    font-size:13px;font-weight:600;color:var(--inkSoft);padding:9px 6px;border-radius:8px}
-  .seg button[aria-selected="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(20,24,31,.12)}
+  .screen{background:#fff;border:1px solid var(--rule);border-radius:16px;padding:22px;box-shadow:0 6px 22px rgba(20,24,31,.06)}
+  .brandline{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+  .brandline .w{font-family:var(--display);font-size:17px}
+  .brandline .dot{color:var(--yellow)}
+  h2.h{font-family:var(--display);font-size:19px;margin:0 0 5px;line-height:1.15}
+  .ctx{color:var(--inkSoft);font-size:12.5px;line-height:1.5;margin:0 0 16px}
 
-  label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--inkSoft);margin-bottom:13px}
-  input{padding:11px 13px;border:1px solid var(--rule);border-radius:10px;font-size:14px;font-family:var(--body);width:100%;background:#fff;color:var(--ink)}
-  input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(44,138,61,.14)}
-  .hint{font-size:12px;color:var(--inkMuted);line-height:1.5;margin:-4px 0 14px}
+  .seg{display:flex;background:var(--cream);border:1px solid var(--creamDeep);border-radius:10px;padding:3px;gap:3px;margin-bottom:16px}
+  .seg span{flex:1;text-align:center;font-size:11.5px;font-weight:600;color:var(--inkSoft);padding:7px 4px;border-radius:7px}
+  .seg span.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(20,24,31,.12)}
 
-  .btn{appearance:none;border:0;cursor:pointer;font-family:var(--body);font-weight:600;font-size:14.5px;width:100%;padding:12px;border-radius:11px}
+  label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--inkSoft);margin-bottom:12px}
+  input{padding:10px 12px;border:1px solid var(--rule);border-radius:9px;font-size:13.5px;font-family:var(--body);width:100%;background:#fff;color:var(--ink)}
+  .hint{font-size:11.5px;color:var(--inkMuted);line-height:1.5;margin:-3px 0 13px}
+  .btn{appearance:none;border:0;cursor:default;font-family:var(--body);font-weight:600;font-size:13.5px;width:100%;padding:11px;border-radius:10px}
   .btn.primary{background:var(--ink);color:#fff}
-  .btn.primary:hover{background:#000}
-  .or{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--inkMuted);font-size:11px;letter-spacing:.6px}
+  .btn.green{background:var(--green);color:#fff}
+  .or{display:flex;align-items:center;gap:10px;margin:15px 0;color:var(--inkMuted);font-size:10.5px;letter-spacing:.5px}
   .or hr{flex:1;border:0;border-top:1px solid var(--rule)}
-  .btn.google{background:#fff;color:var(--ink);border:1px solid var(--rule);display:flex;align-items:center;justify-content:center;gap:10px}
-  .btn.google:hover{background:#fbfaf5}
-  .gmark{width:16px;height:16px;border-radius:3px;background:
-    conic-gradient(from -45deg,#ea4335 0 25%,#fbbc05 0 50%,#34a853 0 75%,#4285f4 0 100%);}
-  .cancel{display:block;width:100%;text-align:center;margin-top:18px;background:none;border:0;color:var(--inkMuted);font-size:13px;cursor:pointer;text-decoration:underline;font-family:var(--body)}
+  .btn.google{background:#fff;color:var(--ink);border:1px solid var(--rule);display:flex;align-items:center;justify-content:center;gap:9px}
+  .gmark{width:15px;height:15px;border-radius:3px;background:conic-gradient(from -45deg,#ea4335 0 25%,#fbbc05 0 50%,#34a853 0 75%,#4285f4 0 100%)}
 
-  /* password row hidden in magic mode */
-  .pw{display:none}
-  body[data-mode="signin"] .pw, body[data-mode="signup"] .pw{display:flex}
-  body[data-mode="magic"] .magic-hint{display:block}
-  .magic-hint{display:none}
+  /* step 2 — check email */
+  .mailcard{background:var(--amberBg);border:1px solid var(--amberBd);border-radius:12px;padding:18px;text-align:center;color:var(--amberFg)}
+  .mailcard .ico{font-size:34px;line-height:1;margin-bottom:8px}
+  .mailcard b{display:block;color:var(--ink);font-size:15px;margin-bottom:6px}
+  .mailcard p{font-size:12.5px;line-height:1.5;margin:0}
+  .mailcard .addr{font-family:var(--mono);font-size:12px;color:var(--ink)}
+  .resend{margin-top:14px;font-size:12px;color:var(--inkMuted);text-align:center}
+  .resend u{cursor:default}
 
-  @media (max-width:760px){
-    .split{grid-template-columns:1fr}
-    .brand{padding:30px 24px;flex-direction:row;align-items:center;gap:16px;justify-content:flex-start}
-    .brand .foot,.tagline,.stripes{display:none}
-    .wordmark{font-size:24px}
-    .demo-note{position:static;transform:none;margin:10px auto 0;box-shadow:none}
+  .pwnote{background:var(--okBg);border:1px solid #bfe3c8;border-radius:9px;padding:9px 11px;font-size:11.5px;color:var(--okFg);line-height:1.45;margin:-2px 0 12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  .caption{color:var(--inkSoft);font-size:12px;line-height:1.5;margin-top:11px;padding-left:2px}
+
+  @media (max-width:880px){
+    .flow{grid-template-columns:1fr;gap:30px}
+    .arrow{display:none}
   }
-  @media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
-<body data-mode="magic">
+<body>
   <div class="demo-note">
-    <b>Mockup — login screen on the V5 “bert &amp; erne” brand.</b> The live
-    <code>LoginPage</code> still uses the old “Tournament Manager” card + blue.
-    This rebrands it onto the cream/ink tokens and re-arranges it as a split
-    brand panel + form. Tabs (Get started / Sign in / New password) toggle the
-    password field. Issue&nbsp;to-be-filed.
+    <b>Mockup — the “Get started” flow on the V5 brand (issue&nbsp;#100).</b>
+    Email-only sign-up → magic-link email → return to finish profile + (optionally) set a password.
+    This is already the app’s behaviour (<code>LoginPage</code> magic mode → <code>RequireProfile</code> →
+    <code>ProfilePage</code>’s optional password field); the mockup rebrands the screens and shows the whole journey end-to-end.
   </div>
 
-  <div class="split">
-    <aside class="brand">
-      <div>
-        <div class="wordmark">bert &amp; erne<span class="dot">.</span></div>
-        <div class="tagline">Pickleball tournaments, run right.</div>
-        <div class="stripes"><span class="g"></span><span class="y"></span><span class="r"></span></div>
-      </div>
-      <div class="foot">Registering for a tournament? <b>Get started</b> with just your email — no password required.</div>
-    </aside>
+  <header class="site"><span class="mark">bert &amp; erne<span class="dot">.</span></span></header>
 
-    <main class="panel">
-      <div class="card" role="form" aria-label="Sign in">
-        <h1 class="h">Get started</h1>
+  <div class="flowhead">
+    <h1>“Get started” — three steps, no password required up front</h1>
+    <p>One field to begin. We email a link. They come back to finish.</p>
+  </div>
+
+  <div class="flow">
+
+    <!-- STEP 1 -->
+    <div class="step">
+      <div class="arrow">→</div>
+      <div class="steptag"><span class="num">1</span><span><span class="lbl">Get started</span> · <span class="sub">just an email</span></span></div>
+      <div class="screen">
+        <div class="brandline"><span class="w">bert &amp; erne<span class="dot">.</span></span></div>
+        <h2 class="h">Get started</h2>
         <p class="ctx">Sign in or get started below — we just need to know who you are before you register.</p>
-
-        <div class="seg" role="tablist" aria-label="Sign-in method">
-          <button role="tab" aria-selected="true"  data-mode="magic">Get started</button>
-          <button role="tab" aria-selected="false" data-mode="signin">Sign in</button>
-          <button role="tab" aria-selected="false" data-mode="signup">New password</button>
-        </div>
-
-        <p class="hint magic-hint">Enter your email and we’ll send you a link. New here? No password needed — you’ll set one (if you want) with your profile after you click the link.</p>
-
+        <div class="seg"><span class="on">Get started</span><span>Sign in</span><span>New password</span></div>
+        <p class="hint">Enter your email and we’ll send you a link. New here? <b>No password needed</b> — you can set one later with your profile.</p>
         <label class="f">Email
-          <input type="email" placeholder="you@example.com" autocomplete="email" />
+          <input type="email" value="jordan@example.com" readonly />
         </label>
-
-        <label class="f pw">Password
-          <input type="password" placeholder="••••••••" autocomplete="current-password" />
-        </label>
-
-        <button class="btn primary" id="submit">Email me a link</button>
-
+        <button class="btn primary">Email me a link</button>
         <div class="or"><hr/>OR<hr/></div>
-
         <button class="btn google"><span class="gmark"></span>Continue with Google</button>
-
-        <button class="cancel">Cancel</button>
       </div>
-    </main>
-  </div>
+      <p class="caption">Only the email field. No password to invent before they understand what they’re signing up for.</p>
+    </div>
 
-<script>
-  // Static-first: the page renders fully (magic mode) without JS.
-  // JS only toggles the password field + button label per tab.
-  const body = document.body;
-  const h1 = document.querySelector('h1.h');
-  const submit = document.getElementById('submit');
-  const labels = { magic:["Get started","Email me a link"], signin:["Welcome back","Sign in"], signup:["Create your account","Create account"] };
-  document.querySelectorAll('.seg button').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const m = btn.dataset.mode;
-      body.dataset.mode = m;
-      document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-selected', String(b===btn)));
-      h1.textContent = labels[m][0];
-      submit.textContent = labels[m][1];
-      const pw = document.querySelector('.pw input');
-      if(pw) pw.autocomplete = m==='signup' ? 'new-password' : 'current-password';
-    });
-  });
-</script>
+    <!-- STEP 2 -->
+    <div class="step">
+      <div class="arrow">→</div>
+      <div class="steptag"><span class="num">2</span><span><span class="lbl">Check your email</span> · <span class="sub">click the link</span></span></div>
+      <div class="screen">
+        <div class="brandline"><span class="w">bert &amp; erne<span class="dot">.</span></span></div>
+        <div class="mailcard">
+          <div class="ico">✉️</div>
+          <b>Check your email</b>
+          <p>We sent a sign-in link to<br/><span class="addr">jordan@example.com</span>.<br/>Click it to continue — you’ll finish your profile next.</p>
+        </div>
+        <div class="resend">Didn’t get it? <u>Resend</u> · <u>use a different email</u></div>
+      </div>
+      <p class="caption">The link brings them straight back to the page they were headed for, signed in.</p>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="step">
+      <div class="steptag"><span class="num">3</span><span><span class="lbl">Finish your profile</span> · <span class="sub">+ optional password</span></span></div>
+      <div class="screen">
+        <div class="brandline"><span class="w">bert &amp; erne<span class="dot">.</span></span></div>
+        <h2 class="h">Welcome! Finish your profile</h2>
+        <p class="ctx">A couple of details so organizers and partners know who you are.</p>
+        <div class="grid2">
+          <label class="f">First name<input value="Jordan" readonly /></label>
+          <label class="f">Last name<input value="Avery" readonly /></label>
+        </div>
+        <label class="f">Set a password <span style="color:var(--inkMuted)">(optional)</span>
+          <input type="password" value="••••••••" readonly />
+        </label>
+        <div class="pwnote">Optional — set a password to sign in directly next time. Leave it blank to keep using email links.</div>
+        <button class="btn green">Save &amp; continue</button>
+      </div>
+      <p class="caption">Name is required; gender / skill ratings &amp; password are encouraged but optional.</p>
+    </div>
+
+  </div>
 </body>
 </html>
