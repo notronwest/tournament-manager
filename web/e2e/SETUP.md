@@ -62,8 +62,8 @@ within the free 500 builds/month.
 
 | Secret | Value |
 |---|---|
-| `SUPABASE_URL` | test project URL (step 1) |
-| `SUPABASE_SERVICE_ROLE_KEY` | test **Secret key** `sb_secret_…` (step 1) — **sensitive, bypasses RLS** |
+| `E2E_SUPABASE_URL` | test project URL (step 1) |
+| `E2E_SUPABASE_SERVICE_ROLE_KEY` | test **Secret key** `sb_secret_…` (step 1) — **sensitive, bypasses RLS** |
 | `E2E_BASE_URL` | the `tm-test` Pages URL (step 3) |
 | `E2E_TEST_PASSWORD` | a password for the seeded test accounts (you choose) |
 | `DISCORD_WEBHOOK` | the Backlog channel webhook (for the pass/fail post) |
@@ -75,7 +75,7 @@ Once all five exist, the nightly stops being inert and runs on schedule.
 ```
 cd web
 npm i && npx playwright install --with-deps chromium
-SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… E2E_TEST_PASSWORD=… npx tsx e2e/seed.ts
+E2E_SUPABASE_URL=… E2E_SUPABASE_SERVICE_ROLE_KEY=… E2E_TEST_PASSWORD=… npx tsx e2e/seed.ts
 E2E_BASE_URL=<test deploy> E2E_TEST_PASSWORD=… npm run test:e2e
 ```
 
