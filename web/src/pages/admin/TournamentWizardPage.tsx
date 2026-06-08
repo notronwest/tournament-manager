@@ -109,7 +109,7 @@ export default function TournamentWizardPage() {
   const [endsAt, setEndsAt] = useState("");
   const [registrationOpensAt, setRegistrationOpensAt] = useState("");
   const [registrationClosesAt, setRegistrationClosesAt] = useState("");
-  const [courtCount, setCourtCount] = useState("0");
+  const [courtCount, setCourtCount] = useState("4");
 
   // Pricing state
   const [pricingPattern, setPricingPattern] =
@@ -281,8 +281,8 @@ export default function TournamentWizardPage() {
       return false;
     }
     const courtCountNum = parseInt(courtCount || "0", 10);
-    if (Number.isNaN(courtCountNum) || courtCountNum < 0) {
-      setError("Court count must be a non-negative integer.");
+    if (Number.isNaN(courtCountNum) || courtCountNum < 1 || courtCountNum > 32) {
+      setError("Court count must be a whole number between 1 and 32.");
       return false;
     }
 
