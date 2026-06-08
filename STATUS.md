@@ -41,6 +41,12 @@ write-scope now granted):
   brand-panel + cream/ink form, segmented mode control, static-first)
   shipped as **PR #101** (Closes #100). Touches `web/src/auth/LoginPage.tsx`
   → `publicTheme` tokens; presentation only. Board: Backlog · Next up.
+  - **Reworked into a 3-step "Get started" storyboard** (per Ron): email-only
+    → check-email magic link → finish-profile + optional password. This is
+    already the app's behavior (`LoginPage` magic → `RequireProfile` →
+    `ProfilePage` first-fill optional password) — the mockup just shows it
+    end-to-end, so the re-skin covers the return screens too. Flow spec
+    logged as a comment on #100.
 - **#102 (bug) — partner-seeker blocked at checkout.** A player who
   registers as "I need a partner" (`partner_status='seeking'`) can't pay —
   checkout shows "Fix the partner issue above." Root cause traced:
