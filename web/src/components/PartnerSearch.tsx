@@ -77,7 +77,7 @@ export function PartnerSearch({
     setResults((data ?? []).filter((p) => !excludePlayerIds.includes(p.id)));
   };
 
-  // ─── EXISTING mode: chip + × ──────────────────────────────────────
+  // ─── EXISTING mode: chip + action buttons ────────────────────────
   if (selection.mode === "existing") {
     const p = selection.player;
     return (
@@ -97,25 +97,37 @@ export function PartnerSearch({
             </div>
           )}
         </div>
-        {/* "Change" instead of a bare ×. The × was small enough to
-            miss, and the label tells the user what's going to
-            happen — clear the chip and surface the search input so
-            they can pick someone else. */}
-        <button
-          type="button"
-          onClick={() => {
-            onChange(emptySelection);
-            setQuery("");
-            setCommittedQuery("");
-            setResults([]);
-            setHasSearched(false);
-          }}
-          style={changeBtn}
-          aria-label="Change partner"
-          title="Change partner"
-        >
-          Change
-        </button>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => {
+              onChange(emptySelection);
+              setQuery("");
+              setCommittedQuery("");
+              setResults([]);
+              setHasSearched(false);
+            }}
+            style={changeBtn}
+            aria-label="Find a new partner"
+          >
+            Find a new partner
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onChange(emptySelection);
+              setQuery("");
+              setCommittedQuery("");
+              setResults([]);
+              setHasSearched(false);
+            }}
+            style={clearBtn}
+            aria-label="Remove partner"
+            title="Remove partner"
+          >
+            ×
+          </button>
+        </div>
       </div>
     );
   }
@@ -454,6 +466,18 @@ const changeBtn: CSSProperties = {
   color: "#1e40af",
   fontFamily: "inherit",
   whiteSpace: "nowrap",
+};
+
+const clearBtn: CSSProperties = {
+  padding: "4px 8px",
+  background: "transparent",
+  border: "none",
+  borderRadius: 4,
+  cursor: "pointer",
+  fontSize: 16,
+  lineHeight: 1,
+  color: "#6b7280",
+  fontFamily: "inherit",
 };
 
 const newCardStyle: CSSProperties = {
