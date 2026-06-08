@@ -118,6 +118,62 @@ export type Database = {
           },
         ]
       }
+      coupons: {
+        Row: {
+          active: boolean
+          code: string
+          created_at: string
+          deleted_at: string | null
+          discount_type: Database["public"]["Enums"]["coupon_discount_type"]
+          discount_value: number
+          expires_at: string | null
+          id: string
+          max_uses: number | null
+          starts_at: string | null
+          tournament_id: string
+          updated_at: string
+          uses_count: number
+        }
+        Insert: {
+          active?: boolean
+          code: string
+          created_at?: string
+          deleted_at?: string | null
+          discount_type: Database["public"]["Enums"]["coupon_discount_type"]
+          discount_value: number
+          expires_at?: string | null
+          id?: string
+          max_uses?: number | null
+          starts_at?: string | null
+          tournament_id: string
+          updated_at?: string
+          uses_count?: number
+        }
+        Update: {
+          active?: boolean
+          code?: string
+          created_at?: string
+          deleted_at?: string | null
+          discount_type?: Database["public"]["Enums"]["coupon_discount_type"]
+          discount_value?: number
+          expires_at?: string | null
+          id?: string
+          max_uses?: number | null
+          starts_at?: string | null
+          tournament_id?: string
+          updated_at?: string
+          uses_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coupons_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_courts: {
         Row: {
           court_number: number
@@ -729,6 +785,30 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_settings: {
+        Row: {
+          id: boolean
+          platform_fee_bps: number
+          platform_fee_fixed_cents: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: boolean
+          platform_fee_bps?: number
+          platform_fee_fixed_cents?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: boolean
+          platform_fee_bps?: number
+          platform_fee_fixed_cents?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       player_ratings: {
         Row: {
           as_of: string
@@ -1152,6 +1232,10 @@ export type Database = {
         Args: { p_invite_id: string }
         Returns: undefined
       }
+      compute_checkout_total: {
+        Args: { p_player_id: string; p_tournament_id: string }
+        Returns: Json
+      }
       current_player_id: { Args: never; Returns: string }
       current_pricing_tier: {
         Args: { as_of?: string; tournament_id_arg: string }
@@ -1197,6 +1281,7 @@ export type Database = {
         }[]
       }
       find_user_by_email: { Args: { p_email: string }; Returns: string }
+      format_rating: { Args: { n: number }; Returns: string }
       get_invite_context: {
         Args: { p_token: string }
         Returns: {
@@ -1222,6 +1307,7 @@ export type Database = {
         Returns: boolean
       }
       is_org_member: { Args: { org: string }; Returns: boolean }
+      is_platform_admin: { Args: never; Returns: boolean }
       players_registered_for_events: {
         Args: { p_event_ids: string[] }
         Returns: {
@@ -1229,9 +1315,18 @@ export type Database = {
           player_id: string
         }[]
       }
+      redeem_coupon: { Args: { p_coupon_id: string }; Returns: boolean }
       replace_pricing_tiers: {
         Args: { p_tiers: Json; p_tournament_id: string }
         Returns: undefined
+      }
+      validate_coupon: {
+        Args: {
+          p_code: string
+          p_subtotal_cents: number
+          p_tournament_id: string
+        }
+        Returns: Json
       }
     }
     Enums: {
@@ -1247,6 +1342,7 @@ export type Database = {
         | "withdrawal"
         | "other"
       change_request_status: "open" | "approved" | "denied" | "cancelled"
+      coupon_discount_type: "percent" | "fixed_amount"
       event_format: "singles" | "doubles"
       event_gender: "men" | "women" | "mixed"
       event_status:
@@ -1439,6 +1535,7 @@ export const Constants = {
         "other",
       ],
       change_request_status: ["open", "approved", "denied", "cancelled"],
+      coupon_discount_type: ["percent", "fixed_amount"],
       event_format: ["singles", "doubles"],
       event_gender: ["men", "women", "mixed"],
       event_status: [
