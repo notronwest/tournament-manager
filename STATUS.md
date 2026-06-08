@@ -29,6 +29,12 @@ write-scope now granted):
     Quick Look / sandboxed panes) showed a blank page. Rewrote them as
     **static HTML** (JS now only drives the focus interaction). Pushed to
     PR #99.
+  - **Fix 2:** scrim was painting over the focused card — `.events` had
+    `z-index:1`, a stacking context that trapped the lifted card's
+    `z-index` below the page scrim. Removed it; lifted card now rises
+    above the scrim. Gotcha logged as a comment on #98 (the real build
+    must keep the focused card out of any ancestor stacking context, or
+    portal it to the root).
 - **#100 (story) — rebrand the login screen on the V5 brand.** `LoginPage`
   is still the old "Tournament Manager" card + `#2563eb` blue; never got
   the V5 treatment. Built mockup `mockups/login-screen.html` (split ink
