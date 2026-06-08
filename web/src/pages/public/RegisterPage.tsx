@@ -13,7 +13,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
-import { eligibilityChips } from "../../lib/eligibility";
+import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   computeLineItems,
   formatUsd,
@@ -615,6 +615,14 @@ export default function RegisterPage() {
           );
           return;
         }
+      }
+    }
+
+    for (const ev of addedEvents) {
+      const { eligible, reasons } = checkEligibility(me, ev);
+      if (!eligible) {
+        setError(`"${ev.name}": not eligible — ${reasons.join("; ")}.`);
+        return;
       }
     }
 
@@ -1353,6 +1361,9 @@ export default function RegisterPage() {
               {events.map((ev) => {
                 const sel = selections.get(ev.id)!;
                 const existing = existingRegs.get(ev.id);
+                const eligResult = me
+                  ? checkEligibility(me, ev)
+                  : { eligible: true, reasons: [] as string[] };
                 return (
                   <EventRow
                     key={ev.id}
@@ -1374,6 +1385,9 @@ export default function RegisterPage() {
                         registeredByEvent.get(ev.id) ?? new Set<string>(),
                       ),
                     ]}
+                    ineligibleReasons={
+                      eligResult.eligible ? undefined : eligResult.reasons
+                    }
                   />
                 );
               })}
@@ -1409,7 +1423,7 @@ export default function RegisterPage() {
             <div style={{ fontSize: 13, color: ink }}>
               {lineItems.length} event{lineItems.length === 1 ? "" : "s"}
               {(() => {
-                // Tier breakdown — e.g. "1 first + 2 additional + 1 flat".
+                // Tier breakdown — e.g. "Entry + 2 extra events + 1 flat-fee".
                 const first = lineItems.filter((i) => i.tier === "first").length;
                 const additional = lineItems.filter(
                   (i) => i.tier === "additional",
@@ -1418,8 +1432,11 @@ export default function RegisterPage() {
                   (i) => i.tier === "override",
                 ).length;
                 const parts: string[] = [];
-                if (first > 0) parts.push(`${first} first`);
-                if (additional > 0) parts.push(`${additional} additional`);
+                if (first > 0) parts.push("Entry");
+                if (additional > 0)
+                  parts.push(
+                    additional === 1 ? "1 extra event" : `${additional} extra events`,
+                  );
                 if (override > 0)
                   parts.push(`${override} flat-fee`);
                 return parts.length > 0 ? (
@@ -1499,6 +1516,7 @@ function EventRow({
   disabled,
   onChange,
   excludePlayerIds,
+  ineligibleReasons,
 }: {
   event: Event;
   selection: EventSelection;
@@ -1512,8 +1530,14 @@ function EventRow({
   disabled: boolean;
   onChange: (patch: Partial<EventSelection>) => void;
   excludePlayerIds: string[];
+  // Non-empty when the logged-in player doesn't meet this event's
+  // eligibility requirements and has no existing registration.
+  // The checkbox is disabled and the reasons are shown inline.
+  ineligibleReasons?: string[];
 }) {
   const chips = eligibilityChips(event);
+  // Gate: hide the checkbox for ineligible events the player isn't yet in.
+  const isIneligible = !!ineligibleReasons?.length && !existing;
 
   // Visual treatment derived from existing-reg + diff state.
   // "added"           → blue border, "Will register" pill
@@ -1564,14 +1588,14 @@ function EventRow({
         background: bg,
         border: `1px solid ${borderColor}`,
         borderRadius: 6,
-        cursor: disabled ? "not-allowed" : "pointer",
+        cursor: disabled || isIneligible ? "not-allowed" : "pointer",
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
         <input
           type="checkbox"
           checked={selection.selected}
-          disabled={disabled}
+          disabled={disabled || isIneligible}
           onChange={(e) => onChange({ selected: e.target.checked })}
           style={{ marginTop: 3 }}
         />
@@ -1665,9 +1689,9 @@ function EventRow({
               <span style={{ color: "#888" }}>
                 (
                 {lineItem.tier === "first"
-                  ? "first event"
+                  ? "entry"
                   : lineItem.tier === "additional"
-                    ? "additional event"
+                    ? "extra event"
                     : "flat fee"}
                 )
               </span>
@@ -1697,6 +1721,11 @@ function EventRow({
                   {c}
                 </span>
               ))}
+            </div>
+          )}
+          {isIneligible && (
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+              Not eligible: {ineligibleReasons!.join("; ")}
             </div>
           )}
         </div>
