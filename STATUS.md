@@ -49,6 +49,19 @@ Open PRs needing attention:
 - **#20** confirmed NOT done (real Stripe charging is still a placeholder
   status-flip; no PaymentIntent / `stripe-webhook`).
 
+**Blocked-queue drain (Ron's loop):** worked the board's Blocked column
+(was #13/#22/#30/#38/#66) →
+- **#38** split — admin Contacts CRUD carved out as **#117 (Agent Ready,
+  Next up)** since the `tournament_contacts` schema is already live (#92,
+  frontend-only). #38 stays Blocked, now scoped to the *public* contact
+  form + Resend edge fn (Ron-owned).
+- **#22** (withdraw/refund) + **#30** (coupons) → **Backlog** — both
+  fundamentally depend on real payments (#20) + Ron's DB/Stripe design;
+  not actionable now.
+- **#13** stays — auto-closes when #75 + #78 merge. **#66** already
+  handled per Ron (test-DB decision made elsewhere).
+- Blocked queue now: **#13, #38, #66**.
+
 (Earlier session STATUS notes are stranded on
 `fix/reconcile-event-roster-drift` after #77 merged early; this entry is
 the current `main` handoff.)
