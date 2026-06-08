@@ -671,9 +671,7 @@ export default function TournamentWizardPage() {
             cancellationPreset={cancellationPreset}
             stripeStatus={org.stripe_account_status}
             blockers={publishBlockers}
-            onPublish={() => void publish()}
             onJumpTo={goStep}
-            busy={busy}
           />
         )}
 
@@ -2049,9 +2047,7 @@ function ReviewStep({
   cancellationPreset,
   stripeStatus,
   blockers,
-  onPublish,
   onJumpTo,
-  busy,
 }: {
   tournament: Tournament | null;
   eventCount: number;
@@ -2060,9 +2056,7 @@ function ReviewStep({
   cancellationPreset: CancellationPolicyPreset | null;
   stripeStatus: StripeStatus;
   blockers: string[];
-  onPublish: () => void;
   onJumpTo: (id: StepId) => void;
-  busy: boolean;
 }) {
   return (
     <div>
@@ -2201,16 +2195,6 @@ function ReviewStep({
         </ReviewCard>
       </div>
 
-      <div style={{ marginTop: 18 }}>
-        <button
-          type="button"
-          style={btnPrimary(busy || blockers.length > 0)}
-          onClick={onPublish}
-          disabled={busy || blockers.length > 0}
-        >
-          {busy ? "Publishing…" : "Publish tournament"}
-        </button>
-      </div>
     </div>
   );
 }
