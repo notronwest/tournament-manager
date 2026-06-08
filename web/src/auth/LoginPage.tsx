@@ -1,6 +1,23 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
+import {
+  bg,
+  ink,
+  inkSoft,
+  inkMuted,
+  cream,
+  creamDeep,
+  rule,
+  warnBg,
+  warnFg,
+  dangerBg,
+  dangerFg,
+  courtYellow,
+  displayFontStack,
+  bodyFontStack,
+  monoFontStack,
+} from "../lib/publicTheme";
 
 // Three modes:
 //   magic  — email-only "get a link" flow. Default for public-flow
@@ -93,25 +110,33 @@ export default function LoginPage() {
     if (error) setError(error.message);
   };
 
-  // Friendlier copy when we know the user is mid-registration — they
-  // get to see what they're being asked to do this for.
   const sentToEmailPanel = (heading: string, body: string) => (
     <div
       style={{
         padding: 16,
-        background: "#fffbeb",
-        border: "1px solid #fde68a",
-        borderRadius: 6,
-        color: "#7a5d00",
+        background: warnBg,
+        border: `1px solid ${creamDeep}`,
+        borderRadius: 10,
+        color: warnFg,
         fontSize: 13,
         lineHeight: 1.55,
+        textAlign: "center",
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>{heading}</div>
+      <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8 }}>✉️</div>
+      <div style={{ fontWeight: 600, color: ink, fontSize: 15, marginBottom: 6 }}>
+        {heading}
+      </div>
       <div>{body}</div>
-      <div style={{ marginTop: 10, color: "#9a7d00", fontSize: 12 }}>
-        Sent to <strong>{email}</strong>. The link will bring you back
-        here to finish.
+      <div
+        style={{
+          marginTop: 10,
+          fontFamily: monoFontStack,
+          fontSize: 12,
+          color: ink,
+        }}
+      >
+        {email}
       </div>
     </div>
   );
@@ -124,46 +149,94 @@ export default function LoginPage() {
         alignItems: "center",
         justifyContent: "center",
         padding: 24,
-        background: "#fafafa",
+        background: bg,
+        fontFamily: bodyFontStack,
       }}
     >
       <div
         style={{
           width: "100%",
           maxWidth: 400,
-          background: "#fff",
-          border: "1px solid #e2e2e2",
-          borderRadius: 8,
+          background: "#ffffff",
+          border: `1px solid ${rule}`,
+          borderRadius: 12,
           padding: 32,
+          boxShadow: `0 6px 22px rgba(20,24,31,.06)`,
         }}
       >
-        <h1 style={{ margin: "0 0 4px", fontSize: 22 }}>Tournament Manager</h1>
-        <p style={{ margin: "0 0 24px", color: "#666", fontSize: 13 }}>
+        {/* Wordmark */}
+        <div
+          style={{
+            fontFamily: displayFontStack,
+            fontSize: 18,
+            color: ink,
+            marginBottom: 14,
+            letterSpacing: "0.2px",
+          }}
+        >
+          bert &amp; erne
+          <span style={{ color: courtYellow }}>.</span>
+        </div>
+
+        <h1
+          style={{
+            fontFamily: displayFontStack,
+            fontSize: 22,
+            margin: "0 0 6px",
+            color: ink,
+            lineHeight: 1.15,
+          }}
+        >
+          {mode === "magic"
+            ? "Get started"
+            : mode === "signin"
+              ? "Sign in"
+              : "Create account"}
+        </h1>
+        <p style={{ margin: "0 0 20px", color: inkSoft, fontSize: 13, lineHeight: 1.5 }}>
           {isPublicFlow
-            ? "Sign in or get started below — we just need to know who you are before you register."
+            ? "Sign in or get started — we just need to know who you are before you register."
             : "Sign in to manage tournaments."}
         </p>
 
-        <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
-          {(["magic", "signin", "signup"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => {
-                setMode(m);
-                setError(null);
-                setMagicSent(false);
-                setSignupPending(false);
-              }}
-              style={tabStyle(mode === m)}
-            >
-              {m === "magic"
-                ? "Get started"
-                : m === "signin"
-                  ? "Sign in"
-                  : "New password"}
-            </button>
-          ))}
+        {/* Segmented control */}
+        <div
+          role="radiogroup"
+          aria-label="Sign-in mode"
+          style={{
+            display: "flex",
+            background: cream,
+            border: `1px solid ${creamDeep}`,
+            borderRadius: 10,
+            padding: 3,
+            gap: 3,
+            marginBottom: 18,
+          }}
+        >
+          {(["magic", "signin", "signup"] as const).map((m) => {
+            const active = mode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => {
+                  setMode(m);
+                  setError(null);
+                  setMagicSent(false);
+                  setSignupPending(false);
+                }}
+                style={segTabStyle(active)}
+              >
+                {m === "magic"
+                  ? "Get started"
+                  : m === "signin"
+                    ? "Sign in"
+                    : "New password"}
+              </button>
+            );
+          })}
         </div>
 
         {magicSent
@@ -185,14 +258,14 @@ export default function LoginPage() {
               <p
                 style={{
                   margin: "0 0 4px",
-                  color: "#666",
+                  color: inkMuted,
                   fontSize: 12,
                   lineHeight: 1.5,
                 }}
               >
-                Enter your email and we'll send you a link. New here? No
-                password needed — you'll set one (if you want) along with
-                your profile after you click the link.
+                Enter your email and we&apos;ll send you a link.{" "}
+                <strong style={{ color: ink }}>No password needed</strong> —
+                you can set one later with your profile.
               </p>
             )}
             <Field label="Email">
@@ -202,7 +275,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={inputStyle}
+                style={inputFieldStyle}
               />
             </Field>
 
@@ -217,7 +290,7 @@ export default function LoginPage() {
                   }
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  style={inputStyle}
+                  style={inputFieldStyle}
                 />
               </Field>
             )}
@@ -240,21 +313,17 @@ export default function LoginPage() {
             alignItems: "center",
             gap: 12,
             margin: "20px 0",
-            color: "#999",
+            color: inkMuted,
             fontSize: 11,
             letterSpacing: 0.5,
           }}
         >
-          <hr
-            style={{ flex: 1, border: "none", borderTop: "1px solid #e2e2e2" }}
-          />
+          <hr style={{ flex: 1, border: "none", borderTop: `1px solid ${rule}` }} />
           OR
-          <hr
-            style={{ flex: 1, border: "none", borderTop: "1px solid #e2e2e2" }}
-          />
+          <hr style={{ flex: 1, border: "none", borderTop: `1px solid ${rule}` }} />
         </div>
 
-        <button type="button" onClick={onGoogle} style={secondaryBtnStyle}>
+        <button type="button" onClick={onGoogle} style={googleBtnStyle}>
           Continue with Google
         </button>
 
@@ -263,10 +332,10 @@ export default function LoginPage() {
             style={{
               marginTop: 16,
               padding: 12,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: 6,
-              color: "#991b1b",
+              background: dangerBg,
+              border: `1px solid #f5a49a`,
+              borderRadius: 8,
+              color: dangerFg,
               fontSize: 13,
             }}
           >
@@ -278,19 +347,14 @@ export default function LoginPage() {
             "Register" by accident isn't stuck on the sign-in screen
             without a clear way back. Drops them at the homepage where
             they can keep browsing. */}
-        <div
-          style={{
-            marginTop: 16,
-            textAlign: "center",
-          }}
-        >
+        <div style={{ marginTop: 16, textAlign: "center" }}>
           <button
             type="button"
             onClick={() => navigate("/")}
             style={{
               background: "none",
               border: "none",
-              color: "#666",
+              color: inkMuted,
               fontSize: 13,
               cursor: "pointer",
               fontFamily: "inherit",
@@ -320,7 +384,7 @@ function Field({
         flexDirection: "column",
         gap: 4,
         fontSize: 13,
-        color: "#555",
+        color: inkSoft,
       }}
     >
       {label}
@@ -329,53 +393,60 @@ function Field({
   );
 }
 
-function tabStyle(active: boolean): CSSProperties {
+function segTabStyle(active: boolean): CSSProperties {
   return {
     flex: 1,
-    padding: "8px 12px",
-    fontSize: 13,
-    background: active ? "#2563eb" : "#fff",
-    color: active ? "#fff" : "#555",
-    border: `1px solid ${active ? "#2563eb" : "#e2e2e2"}`,
-    borderRadius: 6,
+    padding: "7px 4px",
+    fontSize: 12,
+    fontWeight: 600,
+    background: active ? "#ffffff" : "transparent",
+    color: active ? ink : inkSoft,
+    border: "none",
+    borderRadius: 7,
     cursor: "pointer",
-    fontFamily: "inherit",
+    fontFamily: bodyFontStack,
+    boxShadow: active ? "0 1px 3px rgba(20,24,31,.12)" : "none",
+    textAlign: "center",
   };
 }
 
-const inputStyle: CSSProperties = {
+const inputFieldStyle: CSSProperties = {
   padding: "10px 12px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
+  border: `1px solid ${rule}`,
+  borderRadius: 9,
   fontSize: 14,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
   width: "100%",
+  background: "#ffffff",
+  color: ink,
+  outline: "none",
 };
 
 function primaryBtnStyle(busy: boolean): CSSProperties {
   return {
     marginTop: 4,
-    padding: "10px 12px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    padding: "11px 12px",
+    background: busy ? "#9ca3af" : ink,
+    color: "#ffffff",
     border: "none",
-    borderRadius: 6,
+    borderRadius: 10,
     fontSize: 14,
     cursor: busy ? "not-allowed" : "pointer",
-    fontWeight: 500,
-    fontFamily: "inherit",
+    fontWeight: 600,
+    fontFamily: bodyFontStack,
+    width: "100%",
   };
 }
 
-const secondaryBtnStyle: CSSProperties = {
+const googleBtnStyle: CSSProperties = {
   width: "100%",
   padding: "10px 12px",
-  background: "#fff",
-  color: "#333",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
+  background: "#ffffff",
+  color: ink,
+  border: `1px solid ${rule}`,
+  borderRadius: 10,
   fontSize: 14,
   cursor: "pointer",
   fontWeight: 500,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
 };
