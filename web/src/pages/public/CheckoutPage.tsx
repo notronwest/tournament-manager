@@ -49,6 +49,7 @@ type PendingRow = {
   eventId: string;
   eventName: string;
   format: Database["public"]["Enums"]["event_format"];
+  partner_status: Database["public"]["Enums"]["partner_status"];
   eventFeeCentsOverride: number;
   // Doubles only. The pending outbound invite created at register
   // time. We fire its email after Stripe takes payment (which is
@@ -180,7 +181,7 @@ export default function CheckoutPage() {
     const { data: regs, error: regsErr } = await supabase
       .from("event_registrations")
       .select(
-        `id, event_id,
+        `id, event_id, partner_status,
          event:events!event_id (id, name, format, event_fee_cents)`,
       )
       .eq("player_id", me.id)
@@ -198,6 +199,7 @@ export default function CheckoutPage() {
     type RegRow = {
       id: string;
       event_id: string;
+      partner_status: Database["public"]["Enums"]["partner_status"];
       event: {
         id: string;
         name: string;
@@ -272,6 +274,7 @@ export default function CheckoutPage() {
         eventId: r.event_id,
         eventName: r.event?.name ?? "Event",
         format: r.event?.format ?? "singles",
+        partner_status: r.partner_status,
         eventFeeCentsOverride: r.event?.event_fee_cents ?? 0,
         inviteId: inv?.id ?? null,
         partnerLabel,
@@ -330,10 +333,14 @@ export default function CheckoutPage() {
     lineItems.map((it) => [it.event.id, it]),
   );
 
-  // Block Pay if any doubles row is missing a partner — shouldn't
-  // happen given the inline register form enforces it, but defensive.
+  // Block Pay if any doubles row is missing a partner AND is not a
+  // seeker — seekers intentionally have no partner yet; they can pay
+  // and get matched later.
   const blockingError = rows.find(
-    (r) => r.format === "doubles" && !r.partnerLabel,
+    (r) =>
+      r.format === "doubles" &&
+      r.partner_status !== "seeking" &&
+      !r.partnerLabel,
   );
 
   const onPay = async () => {
@@ -516,7 +523,18 @@ export default function CheckoutPage() {
                   invited when you pay
                 </div>
               )}
-              {r.format === "doubles" && !r.partnerLabel && (
+              {r.format === "doubles" && !r.partnerLabel && r.partner_status === "seeking" && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: courtBlue,
+                    marginTop: 10,
+                  }}
+                >
+                  Looking for a partner — we'll help you match. You can add one anytime before the event.
+                </div>
+              )}
+              {r.format === "doubles" && !r.partnerLabel && r.partner_status !== "seeking" && (
                 <div
                   style={{
                     fontSize: 12,
