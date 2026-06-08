@@ -21,7 +21,9 @@ import {
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
-type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
+  locations: { id: string; name: string; address: string | null } | null;
+};
 type Event = Database["public"]["Tables"]["events"]["Row"];
 // Public-visible contact (is_public, not deleted) for the Contacts
 // section + contact form (#38). RLS only returns these to anon.
@@ -167,7 +169,7 @@ export default function PublicTournamentPage() {
 
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("*")
+      .select("*, locations(id, name, address)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .in("status", ["published", "closed", "completed"])
@@ -532,13 +534,17 @@ export default function PublicTournamentPage() {
             label="When"
             value={`${fmtDate(tournament.starts_at)} – ${fmtDate(tournament.ends_at)}`}
           />
-          {tournament.location_name && (
+          {(tournament.locations ?? tournament.location_name) && (
             <Meta
               label="Where"
               value={
-                tournament.location_address
-                  ? `${tournament.location_name} · ${tournament.location_address}`
-                  : tournament.location_name
+                tournament.locations
+                  ? tournament.locations.address
+                    ? `${tournament.locations.name} · ${tournament.locations.address}`
+                    : tournament.locations.name
+                  : tournament.location_address
+                    ? `${tournament.location_name} · ${tournament.location_address}`
+                    : tournament.location_name!
               }
             />
           )}

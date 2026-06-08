@@ -8,6 +8,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { LocationPicker } from "../../components/LocationPicker";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { PricingTiersEditor } from "../../components/PricingTiersEditor";
 import {
@@ -103,6 +104,7 @@ export default function TournamentWizardPage() {
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [description, setDescription] = useState("");
+  const [locationId, setLocationId] = useState<string | null>(null);
   const [locationName, setLocationName] = useState("");
   const [locationAddress, setLocationAddress] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -179,6 +181,7 @@ export default function TournamentWizardPage() {
       setSlug(t.slug);
       setSlugTouched(true);
       setDescription(t.description ?? "");
+      setLocationId(t.location_id ?? null);
       setLocationName(t.location_name ?? "");
       setLocationAddress(t.location_address ?? "");
       setStartsAt(isoToLocal(t.starts_at));
@@ -290,8 +293,9 @@ export default function TournamentWizardPage() {
       slug: finalSlug,
       name: name.trim(),
       description: description.trim() || null,
-      location_name: locationName.trim() || null,
-      location_address: locationAddress.trim() || null,
+      location_id: locationId ?? null,
+      location_name: locationId ? null : (locationName.trim() || null),
+      location_address: locationId ? null : (locationAddress.trim() || null),
       starts_at: startsAtIso,
       ends_at: endsAtIso,
       registration_opens_at: toIso(registrationOpensAt),
@@ -625,6 +629,7 @@ export default function TournamentWizardPage() {
       <main style={paneStyle}>
         {currentStep === "basics" && (
           <BasicsStep
+            orgId={org.id}
             name={name}
             setName={setName}
             slug={slug}
@@ -633,6 +638,8 @@ export default function TournamentWizardPage() {
             setSlugTouched={setSlugTouched}
             description={description}
             setDescription={setDescription}
+            locationId={locationId}
+            setLocationId={setLocationId}
             locationName={locationName}
             setLocationName={setLocationName}
             locationAddress={locationAddress}
@@ -991,6 +998,7 @@ function Rail({
 // ─────────────────────────────────────────────────────────────────────
 
 function BasicsStep(props: {
+  orgId: string;
   name: string;
   setName: (s: string) => void;
   slug: string;
@@ -999,6 +1007,8 @@ function BasicsStep(props: {
   setSlugTouched: (b: boolean) => void;
   description: string;
   setDescription: (s: string) => void;
+  locationId: string | null;
+  setLocationId: (id: string | null) => void;
   locationName: string;
   setLocationName: (s: string) => void;
   locationAddress: string;
@@ -1063,24 +1073,17 @@ function BasicsStep(props: {
         />
       </Field>
 
-      <FieldRow>
-        <Field label="Location name">
-          <input
-            type="text"
-            value={props.locationName}
-            onChange={(e) => props.setLocationName(e.target.value)}
-            style={inputStyle}
-          />
-        </Field>
-        <Field label="Location address">
-          <input
-            type="text"
-            value={props.locationAddress}
-            onChange={(e) => props.setLocationAddress(e.target.value)}
-            style={inputStyle}
-          />
-        </Field>
-      </FieldRow>
+      <Field label="Venue">
+        <LocationPicker
+          orgId={props.orgId}
+          locationId={props.locationId}
+          setLocationId={props.setLocationId}
+          locationName={props.locationName}
+          setLocationName={props.setLocationName}
+          locationAddress={props.locationAddress}
+          setLocationAddress={props.setLocationAddress}
+        />
+      </Field>
 
       <FieldRow>
         <Field label="Starts at" required>
