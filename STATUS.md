@@ -48,6 +48,19 @@ write-scope now granted):
   Past history), reachable from `SiteHeader`. Reads `event_registrations`
   for `current_player_id()` → events → tournaments (RLS already scopes to
   self). New route + page; no schema change. Board: Backlog · Next up.
+- **#104 (story, Priority Soon) — admin tournament-list management.**
+  Four asks bundled for `TournamentsListPage`: (1) make the tournament
+  name a `Link` (quick win), (2) manual archive/unarchive via a new
+  `tournaments.archived_at` column, (3) delete with a `ConfirmModal`
+  warning (soft-delete via `deleted_at`; strong warning if paid/pending
+  regs exist), (4) Current/Archived tab views. Needs a migration +
+  types regen. Board: Backlog · **Soon** (admin QoL, not a blocker).
+
+**Mockup viewing:** the mockup HTML files live only on their PR branches
+(not `main`), so they won't open from a `main` checkout — that's why
+"neither mockup loaded." Repo is public, so render them via raw.githack:
+- register-focus: `https://raw.githack.com/notronwest/tournament-manager/mockup/issue-98-register-focus-overlay/mockups/event-focus-overlay.html`
+- login: `https://raw.githack.com/notronwest/tournament-manager/mockup/issue-100-login-screen/mockups/login-screen.html`
 
 Board write-access is now set, so future board updates need no re-auth.
 All mockups are static-HTML-first so they render in any previewer.
