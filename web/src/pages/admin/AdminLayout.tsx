@@ -9,7 +9,7 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 //
 // Identity (who am I, sign-out) is owned by the global SiteHeader
 // rendered at the App level — this sidebar only owns *in-org*
-// navigation (Overview, Tournaments, Tools).
+// navigation (Tournaments, Tools).
 export default function AdminLayout() {
   const { org, role, loading, error, viaPlatformAdmin } = useCurrentOrg();
   const navigate = useNavigate();
@@ -83,9 +83,6 @@ export default function AdminLayout() {
         </div>
 
         <nav style={{ flex: 1, padding: "12px 0" }}>
-          <SideLink to={`/admin/${org.slug}`} end>
-            Overview
-          </SideLink>
           <SideLink to={`/admin/${org.slug}/tournaments`}>Tournaments</SideLink>
           <SideLink to={`/admin/${org.slug}/tools/round-robin`}>
             RR estimator

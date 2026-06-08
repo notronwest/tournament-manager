@@ -34,6 +34,7 @@ type StepId =
   | "pricing"
   | "cancellation"
   | "sponsors"
+  | "content"
   | "faqs"
   | "payment"
   | "review";
@@ -55,6 +56,7 @@ const STEPS: StepMeta[] = [
   { id: "pricing", title: "Pricing", required: true, stub: false },
   { id: "cancellation", title: "Cancellation policy", required: false, stub: true },
   { id: "sponsors", title: "Sponsors & branding", required: false, stub: true },
+  { id: "content", title: "Content sections", required: false, stub: false },
   { id: "faqs", title: "FAQs", required: false, stub: true },
   { id: "payment", title: "Accept payment", required: false, stub: true },
   { id: "review", title: "Review & publish", required: true, stub: false },
@@ -124,10 +126,15 @@ export default function TournamentWizardPage() {
   const [cancellationPreset, setCancellationPreset] =
     useState<CancellationPolicyPreset | null>("standard");
 
-  // Step 5 (Sponsors) + Step 6 (FAQs). Free-form markdown that
-  // renders as a section on the public tournament page.
+  // Step 5 (Sponsors) + Step 6 (Content sections) + Step 7 (FAQs).
+  // Free-form markdown that renders as labeled sections on the public
+  // tournament page. NULL (empty string → null on save) hides the section.
   const [sponsorsMd, setSponsorsMd] = useState("");
   const [faqsMd, setFaqsMd] = useState("");
+  const [additionalInfoMd, setAdditionalInfoMd] = useState("");
+  const [refundPolicyMd, setRefundPolicyMd] = useState("");
+  const [weatherMd, setWeatherMd] = useState("");
+  const [facilityInfoMd, setFacilityInfoMd] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,6 +192,10 @@ export default function TournamentWizardPage() {
       setCancellationPreset(t.cancellation_policy_preset ?? null);
       setSponsorsMd(t.sponsors_md ?? "");
       setFaqsMd(t.faqs_md ?? "");
+      setAdditionalInfoMd(t.additional_info_md ?? "");
+      setRefundPolicyMd(t.refund_policy_md ?? "");
+      setWeatherMd(t.weather_md ?? "");
+      setFacilityInfoMd(t.facility_info_md ?? "");
 
       // Pricing tiers
       const { data: tierRows } = await supabase
@@ -405,6 +416,31 @@ export default function TournamentWizardPage() {
     return true;
   };
 
+  const saveContentSections = async (): Promise<boolean> => {
+    if (!tournament) {
+      setError("Save Basics first.");
+      return false;
+    }
+    setError(null);
+    setBusy(true);
+    const trim = (v: string) => v.trim() || null;
+    const { error: updErr } = await supabase
+      .from("tournaments")
+      .update({
+        additional_info_md: trim(additionalInfoMd),
+        refund_policy_md: trim(refundPolicyMd),
+        weather_md: trim(weatherMd),
+        facility_info_md: trim(facilityInfoMd),
+      })
+      .eq("id", tournament.id);
+    setBusy(false);
+    if (updErr) {
+      setError(updErr.message);
+      return false;
+    }
+    return true;
+  };
+
   const publish = async (): Promise<void> => {
     if (!tournament) return;
     setError(null);
@@ -500,6 +536,7 @@ export default function TournamentWizardPage() {
     if (currentStep === "cancellation") return saveCancellationPolicy();
     if (currentStep === "sponsors")
       return saveMarkdownColumn("sponsors_md", sponsorsMd);
+    if (currentStep === "content") return saveContentSections();
     if (currentStep === "faqs") return saveMarkdownColumn("faqs_md", faqsMd);
     return true;
   };
@@ -646,6 +683,18 @@ export default function TournamentWizardPage() {
             placeholder={`**Title sponsor:** [Acme Pickleball](https://example.com)\n\n**Court sponsors:**\n- Local Bagel Shop\n- Downtown Auto`}
             value={sponsorsMd}
             onChange={setSponsorsMd}
+          />
+        )}
+        {currentStep === "content" && (
+          <ContentSectionsStep
+            additionalInfoMd={additionalInfoMd}
+            setAdditionalInfoMd={setAdditionalInfoMd}
+            refundPolicyMd={refundPolicyMd}
+            setRefundPolicyMd={setRefundPolicyMd}
+            weatherMd={weatherMd}
+            setWeatherMd={setWeatherMd}
+            facilityInfoMd={facilityInfoMd}
+            setFacilityInfoMd={setFacilityInfoMd}
           />
         )}
         {currentStep === "faqs" && (
@@ -1760,6 +1809,134 @@ function MarkdownStep({
         <code>[link](url)</code>, <code>- bullet</code>, blank line for a
         paragraph break. Leave empty to hide this section from the public
         page entirely.
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Step 6: Content sections — additional info, refund policy, weather,
+// facility info. Four optional prose blocks shown on the public page
+// when non-empty. Each saves as NULL when left blank (hides section).
+// ─────────────────────────────────────────────────────────────────────
+
+function ContentSectionsStep({
+  additionalInfoMd,
+  setAdditionalInfoMd,
+  refundPolicyMd,
+  setRefundPolicyMd,
+  weatherMd,
+  setWeatherMd,
+  facilityInfoMd,
+  setFacilityInfoMd,
+}: {
+  additionalInfoMd: string;
+  setAdditionalInfoMd: (v: string) => void;
+  refundPolicyMd: string;
+  setRefundPolicyMd: (v: string) => void;
+  weatherMd: string;
+  setWeatherMd: (v: string) => void;
+  facilityInfoMd: string;
+  setFacilityInfoMd: (v: string) => void;
+}) {
+  const sectionStyle: CSSProperties = {
+    marginTop: 28,
+    paddingTop: 24,
+    borderTop: "1px solid #f0f0f0",
+  };
+  const labelStyle: CSSProperties = {
+    display: "block",
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#222",
+    marginBottom: 4,
+  };
+  const hintStyle: CSSProperties = {
+    fontSize: 12,
+    color: "#888",
+    marginBottom: 8,
+    lineHeight: 1.55,
+  };
+  const textareaStyle: CSSProperties = {
+    width: "100%",
+    padding: "10px 12px",
+    border: "1px solid #e2e2e2",
+    borderRadius: 6,
+    fontSize: 14,
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    lineHeight: 1.55,
+    resize: "vertical",
+    boxSizing: "border-box",
+    minHeight: 120,
+  };
+  return (
+    <div>
+      <StepHeader
+        title="Content sections"
+        lede="Optional prose sections shown on the public tournament page when filled in. Leave any field empty to hide that section entirely."
+      />
+      <div>
+        <label style={labelStyle}>Additional info</label>
+        <div style={hintStyle}>
+          Catch-all section for anything that doesn't fit elsewhere — schedule
+          notes, bracket format, rules clarifications.
+        </div>
+        <textarea
+          value={additionalInfoMd}
+          onChange={(e) => setAdditionalInfoMd(e.target.value)}
+          placeholder="## Schedule&#10;&#10;Pool play starts at 8 AM. Gold/Silver medal rounds begin at 1 PM."
+          rows={5}
+          style={textareaStyle}
+        />
+      </div>
+      <div style={sectionStyle}>
+        <label style={labelStyle}>Refund policy</label>
+        <div style={hintStyle}>
+          The refund copy players read before they pay. This is the text of
+          your policy — the cancellation-policy preset (set in the previous
+          step) determines the refund mechanism. Both render together on the
+          public page.
+        </div>
+        <textarea
+          value={refundPolicyMd}
+          onChange={(e) => setRefundPolicyMd(e.target.value)}
+          placeholder="Full refunds are available up to 14 days before the tournament. After that date, refunds are at the organizer's discretion."
+          rows={5}
+          style={textareaStyle}
+        />
+      </div>
+      <div style={sectionStyle}>
+        <label style={labelStyle}>Weather plan</label>
+        <div style={hintStyle}>
+          Rain / heat contingency so players know what happens if conditions
+          turn. Shown on the public page when filled in.
+        </div>
+        <textarea
+          value={weatherMd}
+          onChange={(e) => setWeatherMd(e.target.value)}
+          placeholder="Play continues in light rain. In the event of lightning or heavy rain, we pause for 30 minutes and reassess. No refunds for weather delays."
+          rows={5}
+          style={textareaStyle}
+        />
+      </div>
+      <div style={sectionStyle}>
+        <label style={labelStyle}>Facility info</label>
+        <div style={hintStyle}>
+          Parking, restrooms, food, accessibility — practical info players
+          need on arrival.
+        </div>
+        <textarea
+          value={facilityInfoMd}
+          onChange={(e) => setFacilityInfoMd(e.target.value)}
+          placeholder="**Parking:** Free lot off Main St, overflow on Oak Ave.&#10;&#10;**Food:** Snack bar on-site; bring your own lunch."
+          rows={5}
+          style={textareaStyle}
+        />
+      </div>
+      <div style={{ marginTop: 8, fontSize: 12, color: "#888", lineHeight: 1.55 }}>
+        Markdown supported: <code>**bold**</code>, <code>*italic*</code>,{" "}
+        <code>[link](url)</code>, <code>- bullet</code>, blank line for a
+        paragraph break.
       </div>
     </div>
   );
