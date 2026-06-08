@@ -84,6 +84,7 @@ export default function AdminLayout() {
 
         <nav style={{ flex: 1, padding: "12px 0" }}>
           <SideLink to={`/admin/${org.slug}/tournaments`}>Tournaments</SideLink>
+          <SideLink to={`/admin/${org.slug}/locations`}>Venues</SideLink>
           <SideLink to={`/admin/${org.slug}/tools/round-robin`}>
             RR estimator
           </SideLink>
