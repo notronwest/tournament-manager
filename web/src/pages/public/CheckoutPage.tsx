@@ -83,6 +83,35 @@ function isObviouslyFakeEmail(email: string | null): boolean {
   return false;
 }
 
+// Turn the create-payment-intent edge function's error code into a message
+// the registrant can actually act on. Unknown codes still surface verbatim
+// (better a raw code than the opaque SDK string); a missing code falls back
+// to the SDK message.
+function checkoutErrorMessage(
+  code: string | undefined,
+  fallback: string | undefined,
+): string {
+  switch (code) {
+    case "org_stripe_not_active":
+      return "This organizer hasn't finished connecting Stripe yet, so online payment isn't available. Please contact the organizer.";
+    case "nothing_to_charge":
+      return "There's nothing to pay for right now — your registrations may already be paid.";
+    case "player_not_found":
+      return "We couldn't find your player profile. Try completing your profile, then retry.";
+    case "tournament_not_found":
+      return "This tournament could not be found. Please refresh and try again.";
+    case "total_compute_failed":
+    case "payment_record_failed":
+      return "Something went wrong starting your payment on our end. Please try again in a moment.";
+    case "unauthorized":
+      return "Your session expired. Please sign in again.";
+    default:
+      return code
+        ? `Couldn't start payment (${code}). Please try again.`
+        : fallback ?? "Couldn't start payment. Please try again.";
+  }
+}
+
 // Checkout page at /t/:orgSlug/:tournamentSlug/checkout.
 //
 // Reads the user's pending_payment registrations for THIS tournament,
@@ -373,12 +402,21 @@ export default function CheckoutPage() {
     const cs = (data as { clientSecret?: string; error?: string } | null)
       ?.clientSecret;
     if (fnErr || !cs) {
-      const code = (data as { error?: string } | null)?.error;
-      setPaymentError(
-        code
-          ? `Couldn't start payment (${code}). Please try again.`
-          : fnErr?.message ?? "Couldn't start payment. Please try again.",
-      );
+      // supabase-js surfaces a non-2xx edge response as a FunctionsHttpError
+      // and leaves `data` null — the server's { error } code lives in the
+      // raw Response on `fnErr.context`, NOT in `data`. Read it from there so
+      // the user sees the real reason (e.g. org_stripe_not_active) instead of
+      // the opaque "Edge Function returned a non-2xx status code".
+      let code = (data as { error?: string } | null)?.error;
+      const ctx = (fnErr as { context?: Response } | null)?.context;
+      if (!code && ctx && typeof ctx.clone === "function") {
+        try {
+          code = (await ctx.clone().json())?.error;
+        } catch {
+          /* body wasn't JSON — fall back to the generic message below */
+        }
+      }
+      setPaymentError(checkoutErrorMessage(code, fnErr?.message));
       return;
     }
     setClientSecret(cs);
