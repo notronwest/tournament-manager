@@ -2566,6 +2566,25 @@ function RosterPanel({
                 >
                   <table style={tableStyle}>
                     <RosterCols />
+                    {isPair && (
+                      <thead>
+                        <tr>
+                          <td
+                            colSpan={5}
+                            style={{
+                              padding: "3px 6px 2px",
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: isMyTeam ? "#166534" : "#1e40af",
+                              background: isMyTeam ? "#dcfce7" : "#dbeafe",
+                              borderBottom: "1px solid #e5e7eb",
+                            }}
+                          >
+                            {team[0].first_name} & {team[1].first_name}
+                          </td>
+                        </tr>
+                      </thead>
+                    )}
                     <tbody>
                       {team.map((row, ri) => {
                         const isMe = row.registration_id === myRegId;
