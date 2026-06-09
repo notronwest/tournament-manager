@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
@@ -16,6 +17,7 @@ import {
   ctaPrimaryDisabledStyle,
   ctaPrimaryStyle,
   ctaSecondaryStyle,
+  dangerFg,
   ink,
   inkMuted,
   inkSoft,
@@ -76,6 +78,8 @@ export default function ProfilePage() {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
   const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwNewVisible, setPwNewVisible] = useState(false);
+  const [pwConfirmVisible, setPwConfirmVisible] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -484,25 +488,57 @@ export default function ProfilePage() {
               </div>
               <FieldRow>
                 <Field label="New password">
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={pwNew}
-                    onChange={(e) => { setPwNew(e.target.value); setPwSuccess(false); }}
-                    style={inputStyle}
-                    disabled={pwBusy}
-                    placeholder="At least 6 characters"
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={pwNewVisible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={pwNew}
+                      onChange={(e) => { setPwNew(e.target.value); setPwSuccess(false); setPwError(null); }}
+                      style={{ ...inputStyle, paddingRight: 36 }}
+                      disabled={pwBusy}
+                      placeholder="At least 6 characters"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPwNewVisible((v) => !v)}
+                      disabled={pwBusy}
+                      style={eyeButtonStyle}
+                      aria-label={pwNewVisible ? "Hide password" : "Show password"}
+                    >
+                      {pwNewVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {pwNew.length > 0 && pwNew.length < 6 && (
+                    <span style={{ fontSize: 11, color: dangerFg, marginTop: 2 }}>
+                      At least 6 characters
+                    </span>
+                  )}
                 </Field>
                 <Field label="Confirm new password">
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={pwConfirm}
-                    onChange={(e) => { setPwConfirm(e.target.value); setPwSuccess(false); }}
-                    style={inputStyle}
-                    disabled={pwBusy}
-                  />
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={pwConfirmVisible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={pwConfirm}
+                      onChange={(e) => { setPwConfirm(e.target.value); setPwSuccess(false); setPwError(null); }}
+                      style={{ ...inputStyle, paddingRight: 36 }}
+                      disabled={pwBusy}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPwConfirmVisible((v) => !v)}
+                      disabled={pwBusy}
+                      style={eyeButtonStyle}
+                      aria-label={pwConfirmVisible ? "Hide password" : "Show password"}
+                    >
+                      {pwConfirmVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {pwConfirm.length > 0 && pwNew !== pwConfirm && (
+                    <span style={{ fontSize: 11, color: dangerFg, marginTop: 2 }}>
+                      Passwords don't match
+                    </span>
+                  )}
                 </Field>
               </FieldRow>
             </div>
@@ -620,4 +656,18 @@ const sectionHeadingStyle: CSSProperties = {
   fontWeight: 600,
   color: ink,
   margin: "0 0 16px",
+};
+
+const eyeButtonStyle: CSSProperties = {
+  position: "absolute",
+  right: 8,
+  top: "50%",
+  transform: "translateY(-50%)",
+  background: "none",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  color: inkMuted,
+  display: "flex",
+  alignItems: "center",
 };
