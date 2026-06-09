@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
@@ -23,6 +23,12 @@ import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
+// Public-visible contact (is_public, not deleted) for the Contacts
+// section + contact form (#38). RLS only returns these to anon.
+type PublicContact = Pick<
+  Database["public"]["Tables"]["tournament_contacts"]["Row"],
+  "id" | "name" | "role" | "phone" | "email"
+>;
 type Player = Database["public"]["Tables"]["players"]["Row"];
 
 // Per-event registration status for the currently signed-in user.
@@ -71,6 +77,11 @@ type InboundInvite = {
 type RosterRow =
   Database["public"]["Functions"]["event_roster"]["Returns"][number];
 
+// Checked once per page lifetime — does not change during a session.
+const prefersReducedMotion =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 // Public tournament page at /t/:orgSlug/:tournamentSlug. Anonymous-
 // readable thanks to existing RLS: tournaments + events with status
 // in ('published', 'closed', 'completed') are readable by anyone.
@@ -91,6 +102,7 @@ export default function PublicTournamentPage() {
   // event_registrations from this page (inline register / cancel).
   const { refresh: refreshPending, groups: pendingGroups } = usePendingPayments();
   const [tournament, setTournament] = useState<Tournament | null>(null);
+  const [contacts, setContacts] = useState<PublicContact[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   // Ordered pricing tiers for this tournament. Backfilled by migration
   // 20260526170000 — every existing tournament has at least one
@@ -131,6 +143,11 @@ export default function PublicTournamentPage() {
   const [rosterByEvent, setRosterByEvent] = useState<
     Map<string, RosterRow[]>
   >(new Map());
+
+  // #98: which event's register form is currently in focus mode.
+  // null = no card focused; a string event_id = that card is lifted
+  // above the scrim and all siblings are dimmed + inert.
+  const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
 
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
@@ -178,6 +195,17 @@ export default function PublicTournamentPage() {
       return;
     }
     setTournament(t);
+
+    // Public contacts for this tournament (#38). RLS returns only
+    // is_public, non-deleted contacts to anon visitors.
+    const { data: contactRows } = await supabase
+      .from("tournament_contacts")
+      .select("id, name, role, phone, email")
+      .eq("tournament_id", t.id)
+      .eq("is_public", true)
+      .is("deleted_at", null)
+      .order("sort_order", { ascending: true });
+    setContacts(contactRows ?? []);
 
     const { data: evs, error: evErr } = await supabase
       .from("events")
@@ -478,6 +506,26 @@ export default function PublicTournamentPage() {
 
   return (
   <>
+    {/* #98: translucent scrim — always in the DOM so the CSS opacity
+        transition fires on both open and close. pointer-events:none
+        when inactive so it never intercepts normal page clicks.
+        Clicking the scrim exits focus mode directly (no discard-
+        confirm), matching the mockup: scrim click = "step back." */}
+    <div
+      aria-hidden="true"
+      onClick={() => setFocusedEventId(null)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(20, 24, 31, 0.55)",
+        backdropFilter: "saturate(0.7) blur(1px)",
+        zIndex: 50,
+        opacity: focusedEventId ? 1 : 0,
+        pointerEvents: focusedEventId ? "auto" : "none",
+        transition: prefersReducedMotion ? undefined : "opacity 0.2s ease",
+        cursor: "pointer",
+      }}
+    />
     <Shell>
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 26 }}>{tournament.name}</h1>
@@ -702,6 +750,10 @@ export default function PublicTournamentPage() {
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
                 rosterRows={rosterByEvent.get(ev.id) ?? []}
+                isFocused={focusedEventId === ev.id}
+                isDimmed={focusedEventId !== null && focusedEventId !== ev.id}
+                onRequestFocus={() => setFocusedEventId(ev.id)}
+                onReleaseFocus={() => setFocusedEventId(null)}
                 onChanged={async () => {
                   // Refetch both the page's local state AND the
                   // site-wide pending bar — they read different
@@ -764,6 +816,8 @@ export default function PublicTournamentPage() {
           {renderSimpleMd(tournament.faqs_md)}
         </TournamentContentSection>
       )}
+
+      <ContactSection tournamentId={tournament.id} contacts={contacts} />
     </Shell>
     {myPendingGroup && (
       <StickyCheckoutBar
@@ -867,6 +921,10 @@ function EventCard({
   isAdditionalEvent,
   alreadyRegisteredPlayerIds,
   rosterRows,
+  isFocused,
+  isDimmed,
+  onRequestFocus,
+  onReleaseFocus,
   onChanged,
   onNeedsAuth,
 }: {
@@ -889,6 +947,13 @@ function EventCard({
   alreadyRegisteredPlayerIds: Set<string>;
   // Roster rows for the collapsible roster panel.
   rosterRows: RosterRow[];
+  // #98: focus overlay. isFocused = this card is lifted above the
+  // scrim. isDimmed = another card is focused; this card goes
+  // behind the scrim, grayscale + inert.
+  isFocused: boolean;
+  isDimmed: boolean;
+  onRequestFocus: () => void;
+  onReleaseFocus: () => void;
   onChanged: () => Promise<void> | void;
   onNeedsAuth: () => void;
 }) {
@@ -925,6 +990,16 @@ function EventCard({
   // Roster panel collapsed by default; toggled by the toggle bar.
   const [rosterOpen, setRosterOpen] = useState(false);
 
+  // ─── Refs for #98 focus management ───────────────────────────────
+  // cardRef: root div — for the `inert` attribute and focus-trap query.
+  // registerBtnRef: the Register button — keyboard focus returns here
+  //   when focus mode exits, restoring the user's position.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const registerBtnRef = useRef<HTMLButtonElement>(null);
+  // Stable ref so the keydown effect always calls the latest
+  // requestDiscardForm without re-running on every render.
+  const requestDiscardFormRef = useRef<() => void>(() => {});
+
   // ─── Eligibility: compute once, gate the Register button ─────────
   const { eligible: playerEligible, reasons: eligibilityReasons } = me
     ? checkEligibility(me, event)
@@ -949,6 +1024,7 @@ function EventCard({
       onNeedsAuth();
       return;
     }
+    onRequestFocus();
     setEditMode("register");
     setPartner(emptySelection);
     setSeekingPartner(false);
@@ -959,6 +1035,8 @@ function EventCard({
   // without losing the reg itself. Pre-fills "seekingPartner" with
   // the current state so toggling between picking-a-partner and
   // seeking is a one-click affordance.
+  // Note: change-partner does NOT enter focus mode — only the
+  // initial Register action focuses the card (#98).
   const startChangePartner = () => {
     setEditMode("change-partner");
     setPartner(emptySelection);
@@ -971,7 +1049,101 @@ function EventCard({
     setPartner(emptySelection);
     setSeekingPartner(false);
     setFormError(null);
+    onReleaseFocus();
   };
+
+  // ─── #98: collapse form when focus is released externally ────────
+  // Scrim click drives focusedEventId → null at the page level, which
+  // makes isFocused go false here while editMode is still set. Collapse
+  // without the discard-confirm — scrim click is a direct "step back."
+  useEffect(() => {
+    if (!isFocused && editMode !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditMode(null);
+      setPartner(emptySelection);
+      setSeekingPartner(false);
+      setFormError(null);
+    }
+  // Intentionally omit editMode from deps: only fire when isFocused
+  // changes, not on every form interaction.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFocused]);
+
+  // ─── #98: set/clear `inert` + `aria-hidden` on dimmed siblings ───
+  // `inert` is not in React 18 JSX types; set it imperatively.
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    if (isDimmed) {
+      el.setAttribute("inert", "");
+      el.setAttribute("aria-hidden", "true");
+    } else {
+      el.removeAttribute("inert");
+      el.removeAttribute("aria-hidden");
+    }
+  }, [isDimmed]);
+
+  // ─── #98: focus trap + Esc key while this card is focused ────────
+  useEffect(() => {
+    if (!isFocused) {
+      // Focus released — restore keyboard position to Register button
+      // after the re-render that makes it visible again.
+      requestAnimationFrame(() => registerBtnRef.current?.focus());
+      return;
+    }
+
+    const card = cardRef.current;
+
+    const getFocusables = (): HTMLElement[] => {
+      if (!card) return [];
+      return Array.from(
+        card.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), ' +
+          'select:not([disabled]), textarea:not([disabled]), ' +
+          '[tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    };
+
+    // Move initial focus to the first interactive element in the card.
+    requestAnimationFrame(() => getFocusables()[0]?.focus());
+
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        // Esc respects the existing discard-confirm flow: if a partner
+        // is already picked it shows the confirm modal first, then
+        // cancelExpand (which calls onReleaseFocus) on confirmation.
+        requestDiscardFormRef.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusables = getFocusables();
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    const btnRef = registerBtnRef.current;
+    document.addEventListener("keydown", handleKeydown);
+    return () => {
+      document.removeEventListener("keydown", handleKeydown);
+      requestAnimationFrame(() => btnRef?.focus());
+    };
+  }, [isFocused]);
 
   const onSubmitRegister = async () => {
     if (!me) {
@@ -1149,6 +1321,7 @@ function EventCard({
     setPartner(emptySelection);
     setSeekingPartner(false);
     setSubmitting(false);
+    onReleaseFocus();
     await onChanged();
   };
 
@@ -1471,6 +1644,7 @@ function EventCard({
     }
     return (
       <button
+        ref={registerBtnRef}
         type="button"
         onClick={startRegister}
         style={{
@@ -1505,18 +1679,52 @@ function EventCard({
     if (partnerPicked) setConfirmDiscardForm(true);
     else cancelExpand();
   };
+  // Keep the ref current so the Esc keydown handler always calls the
+  // latest closure (captures current partnerPicked + cancelExpand).
+  // eslint-disable-next-line react-hooks/refs
+  requestDiscardFormRef.current = requestDiscardForm;
+
   // Submit gate: singles always submit-able. Doubles need EITHER a
   // partner picked OR the "I need a partner" toggle on.
   const canSubmit = !isDoubles || partnerPicked || seekingPartner;
 
+  // ─── #98: card visual state ───────────────────────────────────────
+  // Lifted card (isFocused): position:relative + z-index:60 places it
+  // above the fixed scrim (z-index:50) in the same stacking context.
+  // Dimmed card (isDimmed): filter applied; inert+aria-hidden set via
+  // the imperative effect above (React 18 JSX doesn't expose inert).
+  const cardStyle: CSSProperties = {
+    padding: 16,
+    background: bg,
+    border: `1px solid ${borderColor}`,
+    borderRadius: 8,
+    position: "relative",
+    ...(isFocused
+      ? {
+          zIndex: 60,
+          boxShadow: "0 18px 50px rgba(20,24,31,0.28)",
+          transform: "translateY(-2px)",
+          transition: prefersReducedMotion
+            ? undefined
+            : "box-shadow 0.2s ease, transform 0.2s ease",
+        }
+      : isDimmed
+        ? {
+            filter: "grayscale(0.55) opacity(0.45)",
+            transition: prefersReducedMotion ? undefined : "filter 0.2s ease",
+          }
+        : {}),
+  };
+
   return (
     <div
-      style={{
-        padding: 16,
-        background: bg,
-        border: `1px solid ${borderColor}`,
-        borderRadius: 8,
-      }}
+      ref={cardRef}
+      style={cardStyle}
+      // #98: treat the lifted card as a dialog so screen readers know
+      // focus is contained here while focus mode is active.
+      role={isFocused ? "dialog" : undefined}
+      aria-modal={isFocused ? true : undefined}
+      aria-label={isFocused ? `Registering for ${event.name}` : undefined}
     >
       {confirmCancel && (
         <ConfirmModal
@@ -1899,7 +2107,7 @@ function EventCard({
                 fontFamily: "inherit",
               }}
             >
-              Cancel
+              Not now
             </button>
             {isDoubles && !partnerPicked && !seekingPartner && !submitting && (
               <span style={{ fontSize: 12, color: "#888" }}>
@@ -2510,3 +2718,211 @@ function TournamentContentSection({
   );
 }
 
+// #38 — public Contacts list + "Contact the organizers" form. The form
+// posts to the submit-contact-form edge function (salted-IP throttle +
+// Resend fan-out to contacts flagged receives_form_messages). Always
+// shown; the contacts list only renders when the org has public contacts.
+function ContactSection({
+  tournamentId,
+  contacts,
+}: {
+  tournamentId: string;
+  contacts: PublicContact[];
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle",
+  );
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !message.trim()) return;
+    setStatus("sending");
+    setErrorMsg(null);
+
+    const { data, error } = await supabase.functions.invoke(
+      "submit-contact-form",
+      {
+        body: {
+          tournamentId,
+          senderName: name.trim(),
+          senderEmail: email.trim(),
+          message: message.trim(),
+        },
+      },
+    );
+
+    if (error) {
+      // The edge function returns a JSON { error } body on 4xx/5xx;
+      // supabase-js surfaces that as a FunctionsHttpError whose
+      // `context` is the raw Response. Read it for a friendly message.
+      let msg = "Something went wrong sending your message. Please try again.";
+      try {
+        const ctx = (error as { context?: Response }).context;
+        if (ctx) {
+          const j = (await ctx.json()) as { error?: string };
+          if (j?.error) msg = j.error;
+        }
+      } catch {
+        /* fall back to the generic message */
+      }
+      setErrorMsg(msg);
+      setStatus("error");
+      return;
+    }
+    if ((data as { error?: string } | null)?.error) {
+      setErrorMsg((data as { error: string }).error);
+      setStatus("error");
+      return;
+    }
+    setStatus("sent");
+    setName("");
+    setEmail("");
+    setMessage("");
+  };
+
+  const inputStyle: CSSProperties = {
+    width: "100%",
+    padding: "10px 12px",
+    border: "1px solid #d1d5db",
+    borderRadius: 8,
+    fontSize: 14,
+    fontFamily: "inherit",
+    marginTop: 4,
+  };
+  const labelStyle: CSSProperties = {
+    display: "block",
+    fontSize: 13,
+    color: "#555",
+    marginBottom: 12,
+  };
+
+  return (
+    <section style={{ marginTop: 32 }}>
+      <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>Contact the organizers</h2>
+
+      {contacts.length > 0 && (
+        <div style={{ marginBottom: 18 }}>
+          {contacts.map((c) => (
+            <div
+              key={c.id}
+              style={{
+                fontSize: 14,
+                color: "#444",
+                lineHeight: 1.5,
+                marginBottom: 8,
+              }}
+            >
+              <strong>{c.name}</strong>
+              {c.role && <span style={{ color: "#666" }}> · {c.role}</span>}
+              <div style={{ color: "#666", fontSize: 13 }}>
+                {c.email && (
+                  <a href={`mailto:${c.email}`} style={{ color: "#2563eb" }}>
+                    {c.email}
+                  </a>
+                )}
+                {c.email && c.phone && " · "}
+                {c.phone && (
+                  <a href={`tel:${c.phone}`} style={{ color: "#2563eb" }}>
+                    {c.phone}
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {status === "sent" ? (
+        <div
+          style={{
+            padding: 14,
+            background: "#e8f4eb",
+            border: "1px solid #bfe3c8",
+            borderRadius: 8,
+            color: "#1e6b2c",
+            fontSize: 14,
+            lineHeight: 1.5,
+          }}
+        >
+          Thanks — your message was sent to the organizers. They'll reply to
+          the email you provided.
+        </div>
+      ) : (
+        <form onSubmit={onSubmit} style={{ maxWidth: 520 }}>
+          <p style={{ fontSize: 14, color: "#666", margin: "0 0 14px", lineHeight: 1.5 }}>
+            Have a question about this tournament? Send the organizers a note.
+          </p>
+          <label style={labelStyle}>
+            Your name
+            <input
+              type="text"
+              required
+              maxLength={120}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Your email
+            <input
+              type="email"
+              required
+              maxLength={200}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Message
+            <textarea
+              required
+              maxLength={5000}
+              rows={5}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+          </label>
+          {status === "error" && errorMsg && (
+            <div
+              style={{
+                padding: 12,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: 8,
+                color: "#991b1b",
+                fontSize: 13,
+                marginBottom: 12,
+              }}
+            >
+              {errorMsg}
+            </div>
+          )}
+          <button
+            type="submit"
+            disabled={status === "sending"}
+            style={{
+              padding: "10px 20px",
+              background: status === "sending" ? "#9ca3af" : "#14181f",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: status === "sending" ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {status === "sending" ? "Sending…" : "Send message"}
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}

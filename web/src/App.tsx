@@ -10,6 +10,7 @@ import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
+import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
@@ -174,6 +175,10 @@ export default function App() {
           element={<TournamentWizardPage />}
         />
         <Route
+          path="tournaments/new/:stepId"
+          element={<TournamentWizardPage />}
+        />
+        <Route
           path="tournaments/:tournamentSlug"
           element={<TournamentDetailPage />}
         />
@@ -186,12 +191,20 @@ export default function App() {
           element={<TournamentWizardPage />}
         />
         <Route
+          path="tournaments/:tournamentSlug/wizard/:stepId"
+          element={<TournamentWizardPage />}
+        />
+        <Route
           path="tournaments/:tournamentSlug/courts"
           element={<TournamentCourtManagerPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/attendees"
           element={<AttendeesPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/change-requests"
+          element={<ChangeRequestsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/schedule"
