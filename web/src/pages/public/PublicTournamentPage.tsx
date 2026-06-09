@@ -718,12 +718,12 @@ export default function PublicTournamentPage() {
           {/* Window detail: when it opens (if not yet) or closes (if open). */}
           {regStatus.tone === "soon" &&
             tournament.registration_opens_at && (
-              <div style={{ fontSize: 12, color: warnFg, marginBottom: 4 }}>
+              <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
                 Registration opens {fmtDateTime(tournament.registration_opens_at)}
               </div>
             )}
           {tournament.registration_closes_at && registrationOpen && (
-            <div style={{ fontSize: 12, color: inkSoft }}>
+            <div style={{ fontSize: 14, color: inkSoft }}>
               Registration closes {fmtDateTime(tournament.registration_closes_at)}
             </div>
           )}
@@ -2677,7 +2677,7 @@ function Meta({ label, value }: { label: string; value: string }) {
       <div
         style={{
           fontFamily: monoFontStack,
-          fontSize: 10,
+          fontSize: 11,
           color: inkMuted,
           textTransform: "uppercase",
           letterSpacing: "0.18em",
@@ -2687,7 +2687,7 @@ function Meta({ label, value }: { label: string; value: string }) {
       >
         {label}
       </div>
-      <div style={{ fontSize: 14, color: inkSoft }}>{value}</div>
+      <div style={{ fontSize: 15, color: ink }}>{value}</div>
     </div>
   );
 }
