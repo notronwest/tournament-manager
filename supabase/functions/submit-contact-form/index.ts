@@ -41,6 +41,7 @@ type Body = {
   senderName: string;
   senderEmail: string;
   message: string;
+  targetContactId?: string;
 };
 
 // @ts-expect-error Deno global in edge runtime
@@ -64,6 +65,7 @@ Deno.serve(async (req: Request) => {
   const senderName = (body.senderName || "").trim();
   const senderEmail = (body.senderEmail || "").trim();
   const message = (body.message || "").trim();
+  const targetContactId = (body.targetContactId || "").trim() || null;
 
   if (!tournamentId || !senderName || !senderEmail || !message) {
     return jsonResp(
@@ -142,7 +144,7 @@ Deno.serve(async (req: Request) => {
       `
       id, name,
       organization:organizations!organization_id(name),
-      contacts:tournament_contacts(name, email, receives_form_messages, deleted_at)
+      contacts:tournament_contacts(id, name, email, receives_form_messages, deleted_at)
     `,
     )
     .eq("id", tournamentId)
@@ -157,6 +159,7 @@ Deno.serve(async (req: Request) => {
     name: string;
     organization: { name: string } | null;
     contacts: Array<{
+      id: string;
       name: string;
       email: string | null;
       receives_form_messages: boolean;
@@ -165,9 +168,26 @@ Deno.serve(async (req: Request) => {
   };
   const t = tournament as unknown as TournamentShape;
 
-  const recipients = (t.contacts ?? [])
-    .filter((c) => c.receives_form_messages && !c.deleted_at && c.email)
-    .map((c) => c.email as string);
+  const allRecipients = (t.contacts ?? []).filter(
+    (c) => c.receives_form_messages && !c.deleted_at && c.email,
+  );
+
+  // If the client sent a targetContactId, validate it server-side
+  // (must be one of this tournament's receives_form_messages contacts)
+  // and route only to that contact. Otherwise fan out as before.
+  let recipients: string[];
+  if (targetContactId) {
+    const target = allRecipients.find((c) => c.id === targetContactId);
+    if (!target) {
+      return jsonResp(
+        { error: "The selected recipient is not valid for this tournament." },
+        400,
+      );
+    }
+    recipients = [target.email as string];
+  } else {
+    recipients = allRecipients.map((c) => c.email as string);
+  }
 
   // ── Record the submission (audit + throttle source of truth) ─────
   const { error: insErr } = await admin

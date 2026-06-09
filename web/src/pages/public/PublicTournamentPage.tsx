@@ -70,7 +70,7 @@ type Event = Database["public"]["Tables"]["events"]["Row"];
 // section + contact form (#38). RLS only returns these to anon.
 type PublicContact = Pick<
   Database["public"]["Tables"]["tournament_contacts"]["Row"],
-  "id" | "name" | "role" | "phone" | "email"
+  "id" | "name" | "role" | "phone" | "email" | "receives_form_messages"
 >;
 type Player = Database["public"]["Tables"]["players"]["Row"];
 
@@ -243,7 +243,7 @@ export default function PublicTournamentPage() {
     // is_public, non-deleted contacts to anon visitors.
     const { data: contactRows } = await supabase
       .from("tournament_contacts")
-      .select("id, name, role, phone, email")
+      .select("id, name, role, phone, email, receives_form_messages")
       .eq("tournament_id", t.id)
       .eq("is_public", true)
       .is("deleted_at", null)
@@ -2799,9 +2799,18 @@ function ContactSection({
   tournamentId: string;
   contacts: PublicContact[];
 }) {
+  // Contacts eligible to appear in the recipient picker: public,
+  // flagged receives_form_messages, and have an email address.
+  const selectableContacts = contacts.filter(
+    (c) => c.receives_form_messages && c.email,
+  );
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [targetContactId, setTargetContactId] = useState<string>(
+    selectableContacts[0]?.id ?? "",
+  );
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
     "idle",
   );
@@ -2813,16 +2822,17 @@ function ContactSection({
     setStatus("sending");
     setErrorMsg(null);
 
+    const body: Record<string, string> = {
+      tournamentId,
+      senderName: name.trim(),
+      senderEmail: email.trim(),
+      message: message.trim(),
+    };
+    if (targetContactId) body.targetContactId = targetContactId;
+
     const { data, error } = await supabase.functions.invoke(
       "submit-contact-form",
-      {
-        body: {
-          tournamentId,
-          senderName: name.trim(),
-          senderEmail: email.trim(),
-          message: message.trim(),
-        },
-      },
+      { body },
     );
 
     if (error) {
@@ -2918,14 +2928,36 @@ function ContactSection({
             lineHeight: 1.5,
           }}
         >
-          Thanks — your message was sent to the organizers. They'll reply to
-          the email you provided.
+          {(() => {
+            const recipient = selectableContacts.find(
+              (c) => c.id === targetContactId,
+            );
+            return recipient
+              ? `Thanks — your message was sent to ${recipient.name}. They'll reply to the email you provided.`
+              : "Thanks — your message was sent to the organizers. They'll reply to the email you provided.";
+          })()}
         </div>
       ) : (
         <form onSubmit={onSubmit} style={{ maxWidth: 520 }}>
           <p style={{ fontSize: 14, color: "#666", margin: "0 0 14px", lineHeight: 1.5 }}>
             Have a question about this tournament? Send the organizers a note.
           </p>
+          {selectableContacts.length > 0 && (
+            <label style={labelStyle}>
+              Direct your question to…
+              <select
+                value={targetContactId}
+                onChange={(e) => setTargetContactId(e.target.value)}
+                style={{ ...inputStyle, background: "#fff" }}
+              >
+                {selectableContacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.role ? ` · ${c.role}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label style={labelStyle}>
             Your name
             <input
