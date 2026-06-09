@@ -137,9 +137,6 @@ canvas {
 .login-brand-panel {
   display: none;
 }
-.login-card-logo {
-  display: block;
-}
 @media (min-width: 700px) {
   .login-layout {
     flex-direction: row;
@@ -151,9 +148,6 @@ canvas {
     display: flex;
     width: 360px;
     flex-shrink: 0;
-  }
-  .login-card-logo {
-    display: none;
   }
 }
 
