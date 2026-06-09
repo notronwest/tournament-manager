@@ -91,6 +91,7 @@ export default function HomePage() {
         .eq("status", "published")
         .gte("ends_at", todayIso)
         .is("deleted_at", null)
+        .is("archived_at", null)
         .order("starts_at", { ascending: true });
       if (cancelled) return;
       if (err) {
