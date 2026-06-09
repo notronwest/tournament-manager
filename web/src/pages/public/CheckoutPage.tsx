@@ -106,20 +106,30 @@ export default function CheckoutPage() {
   // its clientSecret and render the Payment Element. creatingIntent
   // covers step 1; finalizing covers the post-confirm webhook poll.
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // The payment row id returned by create-payment-intent. Needed to
+  // load the receipt line items from payment_line_items after the
+  // webhook confirms.
+  const [paymentId, setPaymentId] = useState<string | null>(null);
   const [creatingIntent, setCreatingIntent] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // Set when Stripe returns a card-error / decline. Shows a dedicated
+  // "payment declined" panel instead of the inline error banner.
+  const [paymentDeclined, setPaymentDeclined] = useState<string | null>(null);
   // True when the player already has a paid registration in this
   // tournament from a prior session. Drives the additional-only
   // pricing path in computeLineItems.
   const [alreadyHasPaidEvent, setAlreadyHasPaidEvent] = useState(false);
 
-  // After Pay succeeds we render the "you're paid up" view instead
-  // of the review form. doneEventNames carries the list of events
-  // that just transitioned so we can name them in the success card.
+  // After Pay succeeds we render the receipt view. doneEventNames
+  // carries the confirmed events; receiptItems holds the server-side
+  // line-item breakdown loaded from payment_line_items.
   const [doneEventNames, setDoneEventNames] = useState<string[] | null>(
     null,
   );
+  const [receiptItems, setReceiptItems] = useState<
+    { description: string; amount_cents: number }[]
+  >([]);
 
   const reload = useCallback(async () => {
     if (!orgSlug || !tournamentSlug || !user) return;
@@ -355,10 +365,14 @@ export default function CheckoutPage() {
       { body: { orgSlug, tournamentSlug, baseUrl: window.location.origin } },
     );
     setCreatingIntent(false);
-    const cs = (data as { clientSecret?: string; error?: string } | null)
-      ?.clientSecret;
+    const res = data as {
+      clientSecret?: string;
+      paymentId?: string;
+      error?: string;
+    } | null;
+    const cs = res?.clientSecret;
     if (fnErr || !cs) {
-      const code = (data as { error?: string } | null)?.error;
+      const code = res?.error;
       setPaymentError(
         code
           ? `Couldn't start payment (${code}). Please try again.`
@@ -367,6 +381,7 @@ export default function CheckoutPage() {
       return;
     }
     setClientSecret(cs);
+    setPaymentId(res?.paymentId ?? null);
   };
 
   // Step 2 — called by the Payment Element form once Stripe confirms the
@@ -401,9 +416,26 @@ export default function CheckoutPage() {
         "Payment confirmed but the reg flip wasn't observed within the poll window; the pending bar will reconcile.",
       );
     }
+
+    // Load the server-side receipt line items from payment_line_items.
+    // These were written by create-payment-intent and are readable
+    // by the player via SELECT RLS. If the query fails we show the
+    // success view without the breakdown rather than blocking it.
+    if (paymentId) {
+      const { data: liData } = await supabase
+        .from("payment_line_items")
+        .select("description, amount_cents")
+        .eq("payment_id", paymentId)
+        .order("amount_cents", { ascending: false });
+      setReceiptItems(
+        (liData ?? []) as { description: string; amount_cents: number }[],
+      );
+    }
+
     setDoneEventNames(paidRows.map((r) => r.eventName));
     setRows([]);
     setClientSecret(null);
+    setPaymentId(null);
     await refreshPending();
     setFinalizing(false);
   };
@@ -429,6 +461,10 @@ export default function CheckoutPage() {
 
   // Success state — shown right after Pay succeeds.
   if (doneEventNames && tournament) {
+    const receiptTotal = receiptItems.reduce(
+      (sum, it) => sum + it.amount_cents,
+      0,
+    );
     return (
       <Shell>
         <div
@@ -446,15 +482,42 @@ export default function CheckoutPage() {
               color: "inherit",
             }}
           >
-            🎉 You're paid up!
+            You're registered!
           </h1>
           <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>
             Confirmed for {fmtList(doneEventNames)} in{" "}
-            <strong>{tournament.name}</strong>. Doubles partners have been
-            emailed their invites.
+            <strong>{tournament.name}</strong>.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+
+        {receiptItems.length > 0 && (
+          <div style={receiptCard}>
+            <div
+              style={{
+                fontFamily: headingFontStack,
+                fontSize: 11,
+                color: inkSoft,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                marginBottom: 12,
+              }}
+            >
+              Receipt
+            </div>
+            {receiptItems.map((it, i) => (
+              <div key={i} style={summaryRow}>
+                <span style={{ flex: 1, minWidth: 0 }}>{it.description}</span>
+                <span>{formatUsd(it.amount_cents)}</span>
+              </div>
+            ))}
+            <div style={summaryTotal}>
+              <span>Total charged</span>
+              <span>{formatUsd(receiptTotal)}</span>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
           <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={secondaryLinkBtn}>
             ← Back to tournament
           </Link>
@@ -619,7 +682,66 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {!clientSecret ? (
+          {/* Dedicated decline view — replaces the Payment Element on
+              card error so the explanation is prominent, not buried. */}
+          {clientSecret && paymentDeclined ? (
+            <div style={{ marginTop: 14 }}>
+              <div
+                style={{
+                  ...statusPanelStyle("danger"),
+                  padding: "14px 16px",
+                  marginBottom: 14,
+                }}
+              >
+                <div
+                  style={{
+                    fontFamily: headingFontStack,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    marginBottom: 4,
+                  }}
+                >
+                  Payment declined
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  {paymentDeclined}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentDeclined(null);
+                  setPaymentError(null);
+                }}
+                style={{
+                  ...ctaPrimaryStyle,
+                  padding: "14px 22px",
+                  width: "100%",
+                  textAlign: "center",
+                }}
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/t/${orgSlug}/${tournamentSlug}`)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: inkSoft,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  textDecoration: "underline",
+                  width: "100%",
+                  padding: "10px 0 0",
+                  textAlign: "center",
+                }}
+              >
+                Cancel checkout (keep registrations)
+              </button>
+            </div>
+          ) : !clientSecret ? (
             <>
               <button
                 type="button"
@@ -685,9 +807,11 @@ export default function CheckoutPage() {
                   finalizing={finalizing}
                   onConfirmed={() => void onConfirmed()}
                   onPaymentError={setPaymentError}
+                  onPaymentDeclined={setPaymentDeclined}
                   onCancel={() => {
                     setClientSecret(null);
                     setPaymentError(null);
+                    setPaymentDeclined(null);
                   }}
                 />
               </Elements>
@@ -710,12 +834,14 @@ function PaymentSection({
   finalizing,
   onConfirmed,
   onPaymentError,
+  onPaymentDeclined,
   onCancel,
 }: {
   totalCents: number;
   finalizing: boolean;
   onConfirmed: () => void;
   onPaymentError: (msg: string) => void;
+  onPaymentDeclined: (msg: string) => void;
   onCancel: () => void;
 }) {
   const stripe = useStripe();
@@ -738,7 +864,13 @@ function PaymentSection({
       confirmParams: { return_url: window.location.href },
     });
     if (error) {
-      onPaymentError(error.message ?? "Payment failed. Please try again.");
+      // Card errors and declines get the dedicated declined view;
+      // other error types (network, integration) stay as inline banners.
+      if (error.type === "card_error" || error.type === "validation_error") {
+        onPaymentDeclined(error.message ?? "Your card was declined. Please try a different card.");
+      } else {
+        onPaymentError(error.message ?? "Payment failed. Please try again.");
+      }
       setSubmitting(false);
       return;
     }
@@ -861,6 +993,14 @@ const summaryCard: CSSProperties = {
   alignSelf: "flex-start",
   position: "sticky",
   top: 16,
+};
+
+const receiptCard: CSSProperties = {
+  padding: 20,
+  background: "#ffffff",
+  border: `1px solid ${rule}`,
+  borderRadius: 10,
+  marginBottom: 20,
 };
 
 const summaryRow: CSSProperties = {
