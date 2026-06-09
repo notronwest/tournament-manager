@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { supabase } from "../supabase";
 import {
   emptySelection,
@@ -25,10 +25,14 @@ type Player = Database["public"]["Tables"]["players"]["Row"];
 // power users want speed. PartnerSearch is the no-jumpy-UI flavor
 // for first-time registrants.
 //
+// On viewports < 768 px the empty/new states open as a bottom-anchored
+// sheet (slides up from the bottom, dismissable via backdrop or ×).
+// On viewports >= 768 px all states render inline as before.
+//
 // Selection states render the same as PlayerPicker:
 //   * existing → a compact chip with name + contact info, × clears.
-//   * new      → an inline first/last/email/phone form.
-//   * empty    → the search panel itself.
+//   * new      → an inline first/last/email/phone form (or sheet on mobile).
+//   * empty    → the search panel itself (or trigger + sheet on mobile).
 export function PartnerSearch({
   selection,
   onChange,
@@ -45,6 +49,32 @@ export function PartnerSearch({
   const [results, setResults] = useState<Player[]>([]);
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  // Lazy initializer reads the media query once at mount (no effect
+  // setState); the effect only subscribes to viewport changes.
+  const [isMobile, setIsMobile] = useState(
+    () => window.matchMedia("(max-width: 767px)").matches,
+  );
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  // Lock body scroll while sheet is open so background doesn't scroll
+  // under the backdrop.
+  useEffect(() => {
+    if (sheetOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [sheetOpen]);
 
   const runSearch = async () => {
     const q = query.trim();
@@ -77,7 +107,22 @@ export function PartnerSearch({
     setResults((data ?? []).filter((p) => !excludePlayerIds.includes(p.id)));
   };
 
+  const closeSheet = () => {
+    // If the user dismisses the sheet while in "new" mode, reset to
+    // empty so the trigger button is clean on next open.
+    if (selection.mode === "new") {
+      onChange(emptySelection);
+    }
+    setSheetOpen(false);
+    setQuery("");
+    setCommittedQuery("");
+    setResults([]);
+    setHasSearched(false);
+  };
+
   // ─── EXISTING mode: chip + action buttons ────────────────────────
+  // Renders the same on mobile and desktop — no sheet needed once a
+  // partner is chosen.
   if (selection.mode === "existing") {
     const p = selection.player;
     return (
@@ -132,77 +177,238 @@ export function PartnerSearch({
     );
   }
 
-  // ─── NEW mode: inline create form ─────────────────────────────────
-  if (selection.mode === "new") {
+  // ─── MOBILE: trigger button + bottom sheet ───────────────────────
+  if (isMobile) {
+    const trimmed = query.trim();
+    const showResults = hasSearched && committedQuery.length >= 2;
+
     return (
-      <div style={newCardStyle}>
-        <div
-          style={{
-            fontSize: 12,
-            color: "#444",
-            marginBottom: 8,
-            fontWeight: 500,
-          }}
-        >
-          New partner — we'll email them an invite to confirm
-        </div>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <input
-            type="text"
-            placeholder="First name *"
-            value={selection.firstName}
-            onChange={(e) =>
-              onChange({ ...selection, firstName: e.target.value })
-            }
-            style={inputStyle}
-          />
-          <input
-            type="text"
-            placeholder="Last name *"
-            value={selection.lastName}
-            onChange={(e) =>
-              onChange({ ...selection, lastName: e.target.value })
-            }
-            style={inputStyle}
-          />
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            type="email"
-            placeholder="Email *"
-            value={selection.email}
-            onChange={(e) =>
-              onChange({ ...selection, email: e.target.value })
-            }
-            style={inputStyle}
-          />
-          <input
-            type="tel"
-            placeholder="Phone (optional)"
-            value={selection.phone}
-            onChange={(e) =>
-              onChange({ ...selection, phone: e.target.value })
-            }
-            style={inputStyle}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            onChange(emptySelection);
-            setQuery("");
-            setCommittedQuery("");
-            setHasSearched(false);
-          }}
-          style={inlineLinkBtn}
-        >
-          ← Search again
-        </button>
-      </div>
+      <>
+        {/* Trigger — visible when sheet is closed */}
+        {!sheetOpen && (
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            style={mobilePickerTrigger}
+          >
+            Choose a doubles partner
+          </button>
+        )}
+
+        {sheetOpen && (
+          <>
+            {/* Backdrop */}
+            <div
+              style={backdropStyle}
+              onClick={closeSheet}
+              aria-hidden="true"
+            />
+
+            {/* Bottom sheet */}
+            <div
+              className="partner-sheet-enter"
+              style={sheetStyle}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Choose a doubles partner"
+            >
+              {/* Drag handle */}
+              <div style={handleBarStyle} />
+
+              {/* Sheet header */}
+              <div style={sheetHeaderRow}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: "#111" }}>
+                  Choose a doubles partner
+                </span>
+                <button
+                  type="button"
+                  onClick={closeSheet}
+                  style={sheetCloseBtn}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Sheet body: new-player form or search panel */}
+              {selection.mode === "new" ? (
+                <div style={newCardStyle}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "#444",
+                      marginBottom: 8,
+                      fontWeight: 500,
+                    }}
+                  >
+                    New partner — we'll email them an invite to confirm
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                    <input
+                      type="text"
+                      placeholder="First name *"
+                      value={selection.firstName}
+                      onChange={(e) =>
+                        onChange({ ...selection, firstName: e.target.value })
+                      }
+                      style={inputStyle}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Last name *"
+                      value={selection.lastName}
+                      onChange={(e) =>
+                        onChange({ ...selection, lastName: e.target.value })
+                      }
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type="email"
+                      placeholder="Email *"
+                      value={selection.email}
+                      onChange={(e) =>
+                        onChange({ ...selection, email: e.target.value })
+                      }
+                      style={inputStyle}
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Phone (optional)"
+                      value={selection.phone}
+                      onChange={(e) =>
+                        onChange({ ...selection, phone: e.target.value })
+                      }
+                      style={inputStyle}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(emptySelection);
+                      setQuery("");
+                      setCommittedQuery("");
+                      setHasSearched(false);
+                    }}
+                    style={inlineLinkBtn}
+                  >
+                    ← Search again
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void runSearch();
+                        }
+                      }}
+                      placeholder="Search by name, email, or phone…"
+                      style={{ ...inputStyle, flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void runSearch()}
+                      disabled={searching || trimmed.length < 2}
+                      style={primaryBtn(searching || trimmed.length < 2)}
+                    >
+                      {searching ? "Searching…" : "Search"}
+                    </button>
+                  </div>
+
+                  {showResults && (
+                    <>
+                      <div style={resultsLabel}>
+                        {results.length === 0
+                          ? `No players matching "${committedQuery}"`
+                          : `${results.length} match${results.length === 1 ? "" : "es"} for "${committedQuery}"`}
+                      </div>
+                      {results.length > 0 && (
+                        <div style={resultsList}>
+                          {results.map((p) => (
+                            <div key={p.id} style={resultRow}>
+                              <Avatar
+                                first={p.first_name ?? ""}
+                                last={p.last_name ?? ""}
+                                size={40}
+                              />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 15, fontWeight: 500 }}>
+                                  {p.first_name} {p.last_name}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: 12,
+                                    color: "#666",
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  {formatPlayerMeta(p) || "—"}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onChange({
+                                    mode: "existing",
+                                    player: p,
+                                    emailDraft: p.email ?? "",
+                                    phoneDraft: p.phone ?? "",
+                                  });
+                                  setSheetOpen(false);
+                                }}
+                                style={pickBtnLarge}
+                              >
+                                Pick
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Always-visible Add-new card */}
+                  <div style={addNewCard}>
+                    <div style={{ fontSize: 13, color: "#555" }}>
+                      {showResults && results.length === 0
+                        ? "Couldn't find them?"
+                        : "Don't see them?"}{" "}
+                      You can invite someone new.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const parts = trimmed.split(/\s+/);
+                        onChange({
+                          mode: "new",
+                          firstName: parts[0] ?? "",
+                          lastName: parts.slice(1).join(" "),
+                          email: "",
+                          phone: "",
+                        });
+                      }}
+                      style={addNewBtn}
+                    >
+                      + Add new player
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </>
     );
   }
 
-  // ─── EMPTY mode: search panel ─────────────────────────────────────
+  // ─── DESKTOP: inline rendering (unchanged from pre-#185) ─────────
   const trimmed = query.trim();
   const showResults = hasSearched && committedQuery.length >= 2;
   return (
@@ -316,6 +522,74 @@ export function PartnerSearch({
           + Add new player
         </button>
       </div>
+
+      {/* Desktop new-player form (inline, below the search panel) */}
+      {selection.mode === "new" && (
+        <div style={{ ...newCardStyle, marginTop: 12 }}>
+          <div
+            style={{
+              fontSize: 12,
+              color: "#444",
+              marginBottom: 8,
+              fontWeight: 500,
+            }}
+          >
+            New partner — we'll email them an invite to confirm
+          </div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+            <input
+              type="text"
+              placeholder="First name *"
+              value={selection.firstName}
+              onChange={(e) =>
+                onChange({ ...selection, firstName: e.target.value })
+              }
+              style={inputStyle}
+            />
+            <input
+              type="text"
+              placeholder="Last name *"
+              value={selection.lastName}
+              onChange={(e) =>
+                onChange({ ...selection, lastName: e.target.value })
+              }
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              type="email"
+              placeholder="Email *"
+              value={selection.email}
+              onChange={(e) =>
+                onChange({ ...selection, email: e.target.value })
+              }
+              style={inputStyle}
+            />
+            <input
+              type="tel"
+              placeholder="Phone (optional)"
+              value={selection.phone}
+              onChange={(e) =>
+                onChange({ ...selection, phone: e.target.value })
+              }
+              style={inputStyle}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onChange(emptySelection);
+              setQuery("");
+              setCommittedQuery("");
+              setHasSearched(false);
+            }}
+            style={inlineLinkBtn}
+          >
+            ← Search again
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -406,9 +680,11 @@ function primaryBtn(disabled: boolean): CSSProperties {
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "inherit",
     whiteSpace: "nowrap",
+    minHeight: 44,
   };
 }
 
+// Smaller "Pick" button used in desktop result rows.
 const pickBtn: CSSProperties = {
   padding: "6px 14px",
   background: "#2563eb",
@@ -419,6 +695,22 @@ const pickBtn: CSSProperties = {
   fontWeight: 500,
   cursor: "pointer",
   fontFamily: "inherit",
+};
+
+// Larger "Pick" button for mobile result rows — meets the >= 44 px
+// tap-target requirement (AC #5).
+const pickBtnLarge: CSSProperties = {
+  padding: "11px 20px",
+  background: "#2563eb",
+  color: "#fff",
+  border: "none",
+  borderRadius: 6,
+  fontSize: 14,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  minHeight: 44,
+  flexShrink: 0,
 };
 
 const resultsLabel: CSSProperties = {
@@ -524,3 +816,72 @@ const addNewBtn: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+// ─── Mobile bottom-sheet styles ───────────────────────────────────────
+
+const mobilePickerTrigger: CSSProperties = {
+  width: "100%",
+  padding: "14px 16px",
+  background: "#fff",
+  border: "1px solid #d1d5db",
+  borderRadius: 8,
+  fontSize: 15,
+  fontWeight: 500,
+  color: "#2563eb",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  textAlign: "left",
+  minHeight: 44,
+};
+
+const backdropStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.5)",
+  zIndex: 1000,
+};
+
+const sheetStyle: CSSProperties = {
+  position: "fixed",
+  bottom: 0,
+  left: 0,
+  right: 0,
+  background: "#fff",
+  borderRadius: "16px 16px 0 0",
+  maxHeight: "85vh",
+  overflowY: "auto",
+  zIndex: 1001,
+  padding: "8px 16px 32px",
+  boxShadow: "0 -4px 24px rgba(0,0,0,0.12)",
+};
+
+const handleBarStyle: CSSProperties = {
+  width: 36,
+  height: 4,
+  background: "#d1d5db",
+  borderRadius: 2,
+  margin: "4px auto 16px",
+};
+
+const sheetHeaderRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: 16,
+};
+
+// Meets >= 44 px tap-target requirement (AC #5).
+const sheetCloseBtn: CSSProperties = {
+  width: 44,
+  height: 44,
+  padding: 0,
+  background: "transparent",
+  border: "1px solid #e5e7eb",
+  borderRadius: 8,
+  cursor: "pointer",
+  fontSize: 20,
+  lineHeight: "44px",
+  color: "#666",
+  fontFamily: "inherit",
+  textAlign: "center",
+  flexShrink: 0,
+};
