@@ -12,8 +12,6 @@ import {
   warnBg,
   warnFg,
   monoFontStack,
-  headingFontStack,
-  displayFontStack,
 } from "../../lib/publicTheme";
 
 // Sidebar-specific surface values. The sidebar lives on a dark ink
@@ -22,7 +20,6 @@ import {
 const SIDEBAR_BG = ink;
 const SIDEBAR_FG = bg; // cream-white on dark
 const SIDEBAR_FG_DIM = "rgba(250, 250, 247, 0.65)";
-const SIDEBAR_RULE = "rgba(250, 250, 247, 0.1)";
 const SIDEBAR_CHIP_BG = "rgba(250, 250, 247, 0.08)";
 
 type OrgSummary = { slug: string; name: string };
@@ -143,53 +140,12 @@ export default function AdminLayout() {
           flexShrink: 0,
         }}
       >
-        {/* Brand chip + org identity — hidden on mobile via index.css */}
+        {/* Org identity — hidden on mobile via index.css */}
         <div className="admin-sidebar-chrome">
-          {/* Brand mark */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "20px 18px 16px",
-              borderBottom: `1px solid ${SIDEBAR_RULE}`,
-            }}
-          >
-            <div
-              style={{
-                width: 32,
-                height: 32,
-                background: courtYellow,
-                borderRadius: 4,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontFamily: displayFontStack,
-                color: ink,
-                fontSize: 18,
-                flexShrink: 0,
-                lineHeight: 1,
-              }}
-            >
-              b
-            </div>
-            <span
-              style={{
-                fontFamily: headingFontStack,
-                fontSize: 14,
-                textTransform: "uppercase",
-                letterSpacing: "0.04em",
-                color: SIDEBAR_FG,
-              }}
-            >
-              bert &amp; erne
-            </span>
-          </div>
-
           {/* Org chip */}
           <div
             style={{
-              margin: "12px 14px 4px",
+              margin: "20px 14px 4px",
               padding: "10px 12px",
               background: SIDEBAR_CHIP_BG,
               borderRadius: 6,
