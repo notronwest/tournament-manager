@@ -8,6 +8,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { LocationPicker } from "../../components/LocationPicker";
 import { PricingTiersEditor } from "../../components/PricingTiersEditor";
 import {
   makeEmptyTierDraft,
@@ -47,6 +48,7 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [description, setDescription] = useState("");
+  const [locationId, setLocationId] = useState<string | null>(null);
   const [locationName, setLocationName] = useState("");
   const [locationAddress, setLocationAddress] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -104,6 +106,7 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       setSlug(data.slug);
       setSlugTouched(true);
       setDescription(data.description ?? "");
+      setLocationId(data.location_id ?? null);
       setLocationName(data.location_name ?? "");
       setLocationAddress(data.location_address ?? "");
       setStartsAt(isoToLocal(data.starts_at));
@@ -208,8 +211,9 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       slug: finalSlug,
       name: name.trim(),
       description: description.trim() || null,
-      location_name: locationName.trim() || null,
-      location_address: locationAddress.trim() || null,
+      location_id: locationId ?? null,
+      location_name: locationId ? null : (locationName.trim() || null),
+      location_address: locationId ? null : (locationAddress.trim() || null),
       starts_at: startsAtIso,
       ends_at: endsAtIso,
       registration_opens_at: toIso(registrationOpensAt),
@@ -371,24 +375,17 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
           />
         </Field>
 
-        <FieldRow>
-          <Field label="Location name">
-            <input
-              type="text"
-              value={locationName}
-              onChange={(e) => setLocationName(e.target.value)}
-              style={inputStyle}
-            />
-          </Field>
-          <Field label="Location address">
-            <input
-              type="text"
-              value={locationAddress}
-              onChange={(e) => setLocationAddress(e.target.value)}
-              style={inputStyle}
-            />
-          </Field>
-        </FieldRow>
+        <Field label="Venue">
+          <LocationPicker
+            orgId={org.id}
+            locationId={locationId}
+            setLocationId={setLocationId}
+            locationName={locationName}
+            setLocationName={setLocationName}
+            locationAddress={locationAddress}
+            setLocationAddress={setLocationAddress}
+          />
+        </Field>
 
         <FieldRow>
           <Field label="Starts at" required>

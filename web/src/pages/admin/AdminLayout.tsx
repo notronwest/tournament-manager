@@ -189,6 +189,7 @@ export default function AdminLayout() {
           <SideLink to={`/admin/${org.slug}/tournaments`}>
             Tournaments
           </SideLink>
+          <SideLink to={`/admin/${org.slug}/locations`}>Venues</SideLink>
           <SideLink to={`/admin/${org.slug}/tools/round-robin`}>
             RR estimator
           </SideLink>

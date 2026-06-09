@@ -10,6 +10,7 @@ import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
+import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
@@ -26,11 +27,14 @@ import HomePage from "./pages/public/HomePage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
+import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
 import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
+import TournamentContactsPage from "./pages/admin/TournamentContactsPage";
+import LocationsPage from "./pages/admin/LocationsPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
 
@@ -55,6 +59,16 @@ export default function App() {
       <Route
         path="/t/:orgSlug/:tournamentSlug"
         element={<PublicTournamentPage />}
+      />
+      {/* My Tournaments — player's personal registration history. Auth
+          required (must be signed in to have registrations). */}
+      <Route
+        path="/my-tournaments"
+        element={
+          <RequireAuth>
+            <MyTournamentsPage />
+          </RequireAuth>
+        }
       />
       {/* Profile — one-time setup that owns name / phone / gender /
           ratings. Auth required. Reached either via RequireProfile's
@@ -168,9 +182,14 @@ export default function App() {
           path="tools/test-players"
           element={<TestPlayersPage />}
         />
+        <Route path="locations" element={<LocationsPage />} />
         <Route path="tournaments" element={<TournamentsListPage />} />
         <Route
           path="tournaments/new"
+          element={<TournamentWizardPage />}
+        />
+        <Route
+          path="tournaments/new/:stepId"
           element={<TournamentWizardPage />}
         />
         <Route
@@ -186,12 +205,24 @@ export default function App() {
           element={<TournamentWizardPage />}
         />
         <Route
+          path="tournaments/:tournamentSlug/wizard/:stepId"
+          element={<TournamentWizardPage />}
+        />
+        <Route
           path="tournaments/:tournamentSlug/courts"
           element={<TournamentCourtManagerPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/attendees"
           element={<AttendeesPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/contacts"
+          element={<TournamentContactsPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/change-requests"
+          element={<ChangeRequestsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/schedule"

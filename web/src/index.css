@@ -122,6 +122,41 @@ canvas {
   }
 }
 
+/* Login split layout. Mobile-first: stacked column with a slim ink
+   header bar. At ≥700px the layout flips to a side-by-side row —
+   brand panel on the left, form on the right. Class names keep the
+   media-query in CSS where it belongs; all other styles are inline. */
+.login-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.login-mobile-header {
+  display: flex;
+}
+.login-brand-panel {
+  display: none;
+}
+.login-card-logo {
+  display: block;
+}
+@media (min-width: 700px) {
+  .login-layout {
+    flex-direction: row;
+  }
+  .login-mobile-header {
+    display: none;
+  }
+  .login-brand-panel {
+    display: flex;
+    width: 360px;
+    flex-shrink: 0;
+  }
+  .login-card-logo {
+    display: none;
+  }
+}
+
 /* Print rules: hide app chrome (sidebar + page padding) so a route can
    render to-paper exactly. Pages that print add their own per-card
    styles inside a <style> tag scoped via a wrapper class. */
