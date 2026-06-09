@@ -41,6 +41,7 @@ export default function TournamentDetailPage() {
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [eventCourts, setEventCourts] = useState<EventCourt[]>([]);
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
+  const [openChangeRequestCount, setOpenChangeRequestCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -73,8 +74,8 @@ export default function TournamentDetailPage() {
     }
 
     // Events + their registrations + court allocations + pricing
-    // tiers, in parallel.
-    const [evRes, regsRes, courtsRes, tiersRes] = await Promise.all([
+    // tiers + open change request count, in parallel.
+    const [evRes, regsRes, courtsRes, tiersRes, openCrRes] = await Promise.all([
       supabase
         .from("events")
         .select("*")
@@ -95,9 +96,15 @@ export default function TournamentDetailPage() {
         .select("*")
         .eq("tournament_id", tData.id)
         .order("sort_order", { ascending: true }),
+      supabase
+        .from("tournament_change_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("tournament_id", tData.id)
+        .eq("status", "open"),
     ]);
 
     setTiers(tiersRes.data ?? []);
+    setOpenChangeRequestCount(openCrRes.count ?? 0);
 
     if (evRes.error) {
       setError(evRes.error.message);
@@ -360,6 +367,21 @@ export default function TournamentDetailPage() {
           >
             Edit
           </Link>
+          {/* Resume wizard — only surfaced for draft tournaments so
+              the organizer has a clear path back into the setup flow. */}
+          {t.status === "draft" && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/wizard`}
+              style={{
+                ...primaryLinkBtn,
+                background: "#2563eb",
+                color: "#fff",
+                border: "1px solid #2563eb",
+              }}
+            >
+              Continue setup →
+            </Link>
+          )}
           {/* Public-facing tournament page. Available once the
               tournament is in a publicly-readable status (published,
               closed, or completed) — drafts have nothing to show on
@@ -415,6 +437,17 @@ export default function TournamentDetailPage() {
           }
         />
         <Stat label="Events" value={events.length} />
+        <Stat
+          label="Change requests"
+          value={
+            openChangeRequestCount === null
+              ? "…"
+              : openChangeRequestCount > 0
+                ? `${openChangeRequestCount} open`
+                : "none open"
+          }
+          to={`/admin/${org.slug}/tournaments/${t.slug}/change-requests`}
+        />
         {/* Status moved out of the stats grid into the header
             badge, next to the action buttons that mutate it. */}
         <Stat
