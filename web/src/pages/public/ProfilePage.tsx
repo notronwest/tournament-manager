@@ -69,6 +69,14 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Account section — change-password form (non-first-fill only).
+  // Has its own state so it doesn't interfere with the profile form.
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -229,6 +237,30 @@ export default function ProfilePage() {
     if (saved) {
       navigate(returnTo, { replace: true });
     }
+  };
+
+  const onPasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(false);
+    if (pwNew.length < 6) {
+      setPwError("Password must be at least 6 characters.");
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      setPwError("Passwords don't match.");
+      return;
+    }
+    setPwBusy(true);
+    const { error: pwErr } = await updatePassword(pwNew);
+    setPwBusy(false);
+    if (pwErr) {
+      setPwError(pwErr.message);
+      return;
+    }
+    setPwNew("");
+    setPwConfirm("");
+    setPwSuccess(true);
   };
 
   if (loading) {
@@ -434,6 +466,66 @@ export default function ProfilePage() {
           </button>
         </div>
       </form>
+
+      {!isFirstFill && (
+        <>
+          <div style={sectionDivider} />
+          <h2 style={sectionHeadingStyle}>Account</h2>
+          <form
+            onSubmit={onPasswordSubmit}
+            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            <div>
+              <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
+                <strong>Change password</strong>{" "}
+                <span style={{ color: inkMuted }}>
+                  (leave blank to keep your current sign-in method)
+                </span>
+              </div>
+              <FieldRow>
+                <Field label="New password">
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={pwNew}
+                    onChange={(e) => { setPwNew(e.target.value); setPwSuccess(false); }}
+                    style={inputStyle}
+                    disabled={pwBusy}
+                    placeholder="At least 6 characters"
+                  />
+                </Field>
+                <Field label="Confirm new password">
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={pwConfirm}
+                    onChange={(e) => { setPwConfirm(e.target.value); setPwSuccess(false); }}
+                    style={inputStyle}
+                    disabled={pwBusy}
+                  />
+                </Field>
+              </FieldRow>
+            </div>
+
+            {pwError && (
+              <div style={statusPanelStyle("danger")}>{pwError}</div>
+            )}
+            {pwSuccess && (
+              <div style={statusPanelStyle("success")}>Password updated.</div>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={pwBusy}
+                style={pwBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                {pwBusy ? "Updating…" : "Update password"}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
     </Shell>
   );
 }
@@ -516,4 +608,16 @@ const progressStep: CSSProperties = {
 const progressStepActive: CSSProperties = {
   ...progressStep,
   background: courtYellow,
+};
+
+const sectionDivider: CSSProperties = {
+  borderTop: `1px solid ${rule}`,
+  margin: "28px 0 24px",
+};
+
+const sectionHeadingStyle: CSSProperties = {
+  fontSize: 16,
+  fontWeight: 600,
+  color: ink,
+  margin: "0 0 16px",
 };
