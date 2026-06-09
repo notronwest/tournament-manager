@@ -9,6 +9,23 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import type { Database } from "../../types/supabase";
+import {
+  contentColStyle,
+  courtRed,
+  courtYellow,
+  ctaPrimaryDisabledStyle,
+  ctaPrimaryStyle,
+  ctaSecondaryStyle,
+  ink,
+  inkMuted,
+  inkSoft,
+  inputStyle,
+  pageH1Style,
+  pageSubStyle,
+  pageWrapStyle,
+  rule,
+  statusPanelStyle,
+} from "../../lib/publicTheme";
 
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type PlayerGender = Database["public"]["Enums"]["player_gender"];
@@ -217,7 +234,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <Shell>
-        <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: inkMuted, fontSize: 14 }}>Loading…</p>
       </Shell>
     );
   }
@@ -241,17 +258,8 @@ export default function ProfilePage() {
           <div style={progressStep} />
         </div>
       )}
-      <h1 style={{ margin: "0 0 6px", fontSize: 24 }}>{heading}</h1>
-      <p
-        style={{
-          color: "#666",
-          margin: "0 0 24px",
-          fontSize: 14,
-          lineHeight: 1.5,
-        }}
-      >
-        {subhead}
-      </p>
+      <h1 style={pageH1Style}>{heading}</h1>
+      <p style={pageSubStyle}>{subhead}</p>
 
       <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <FieldRow>
@@ -303,9 +311,9 @@ export default function ProfilePage() {
         </FieldRow>
 
         <div>
-          <div style={{ fontSize: 13, color: "#444", marginBottom: 4 }}>
+          <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
             <strong>Self-reported rating</strong>{" "}
-            <span style={{ color: "#888" }}>
+            <span style={{ color: inkMuted }}>
               (optional — helps organizers seed brackets)
             </span>
           </div>
@@ -354,9 +362,9 @@ export default function ProfilePage() {
 
         {isFirstFill && (
           <div>
-            <div style={{ fontSize: 13, color: "#444", marginBottom: 4 }}>
+            <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
               <strong>Set a password</strong>{" "}
-              <span style={{ color: "#888" }}>
+              <span style={{ color: inkMuted }}>
                 (optional — you can keep signing in with email links if
                 you prefer)
               </span>
@@ -390,16 +398,7 @@ export default function ProfilePage() {
         )}
 
         {error && (
-          <div
-            style={{
-              padding: 12,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: 6,
-              color: "#991b1b",
-              fontSize: 13,
-            }}
-          >
+          <div style={statusPanelStyle("danger")}>
             {error}
           </div>
         )}
@@ -408,17 +407,7 @@ export default function ProfilePage() {
           <button
             type="submit"
             disabled={busy}
-            style={{
-              padding: "12px 24px",
-              background: busy ? "#9ca3af" : "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              fontSize: 15,
-              fontWeight: 500,
-              cursor: busy ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-            }}
+            style={busy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
           >
             {busy
               ? "Saving…"
@@ -435,16 +424,11 @@ export default function ProfilePage() {
             type="button"
             onClick={() => navigate(isFirstFill ? "/" : returnTo)}
             disabled={busy}
-            style={{
-              padding: "12px 20px",
-              background: "#fff",
-              color: "#555",
-              border: "1px solid #e2e2e2",
-              borderRadius: 6,
-              fontSize: 14,
-              cursor: busy ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-            }}
+            style={
+              busy
+                ? { ...ctaSecondaryStyle, opacity: 0.6, cursor: "not-allowed" }
+                : ctaSecondaryStyle
+            }
           >
             Cancel
           </button>
@@ -470,11 +454,11 @@ function parseRating(s: string): number | null {
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main
-      style={{ padding: "32px 24px", maxWidth: 560, margin: "0 auto" }}
-    >
-      {children}
-    </main>
+    <div style={pageWrapStyle}>
+      <main style={contentColStyle(560)}>
+        {children}
+      </main>
+    </div>
   );
 }
 
@@ -494,7 +478,7 @@ function Field({
         flexDirection: "column",
         gap: 4,
         fontSize: 12,
-        color: "#555",
+        color: inkSoft,
         flex: "1 1 160px",
         minWidth: 0,
       }}
@@ -502,7 +486,7 @@ function Field({
       <span>
         {label}
         {required && (
-          <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>
+          <span style={{ color: courtRed, marginLeft: 4 }}>*</span>
         )}
       </span>
       {children}
@@ -516,16 +500,6 @@ function FieldRow({ children }: { children: ReactNode }) {
   );
 }
 
-const inputStyle: CSSProperties = {
-  padding: "10px 12px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 14,
-  fontFamily: "inherit",
-  width: "100%",
-  background: "#fff",
-};
-
 const progressBarRow: CSSProperties = {
   display: "flex",
   gap: 4,
@@ -535,11 +509,11 @@ const progressBarRow: CSSProperties = {
 const progressStep: CSSProperties = {
   flex: 1,
   height: 4,
-  background: "#e5e7eb",
+  background: rule,
   borderRadius: 2,
 };
 
 const progressStepActive: CSSProperties = {
   ...progressStep,
-  background: "#2563eb",
+  background: courtYellow,
 };
