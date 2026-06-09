@@ -14,6 +14,7 @@ import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
+import PlatformSettingsPage from "./pages/admin/PlatformSettingsPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
@@ -139,6 +140,17 @@ export default function App() {
         element={
           <RequireAuth>
             <CreateOrganizationPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only settings (fee config). Defined before
+          the :orgSlug catch-all so "platform" isn't treated as a slug. */}
+      <Route
+        path="/admin/platform"
+        element={
+          <RequireAuth>
+            <PlatformSettingsPage />
           </RequireAuth>
         }
       />
