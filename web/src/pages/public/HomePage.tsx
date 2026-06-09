@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import SiteFooter from "../../components/SiteFooter";
 import { supabase } from "../../supabase";
 import {
   compactTierPriceLabel,
@@ -185,6 +186,7 @@ export default function HomePage() {
           </div>
         )}
       </section>
+      <SiteFooter />
     </main>
   );
 }
