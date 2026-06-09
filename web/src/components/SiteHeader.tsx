@@ -265,6 +265,9 @@ export default function SiteHeader() {
                   Hi, {firstName}
                 </span>
               )}
+              <Link to="/my-tournaments" style={myTournamentsLinkStyle}>
+                My Tournaments
+              </Link>
               {isOrgMember && (
                 <Link to="/admin" style={ghostLinkStyle}>
                   Admin
@@ -318,6 +321,17 @@ const ghostButtonStyle: CSSProperties = {
   border: `1px solid ${CREAM_BORDER}`,
   borderRadius: 6,
   cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 13,
+};
+
+const myTournamentsLinkStyle: CSSProperties = {
+  padding: "6px 14px",
+  background: COURT_YELLOW,
+  color: INK,
+  textDecoration: "none",
+  borderRadius: 6,
+  fontWeight: 600,
   fontFamily: "inherit",
   fontSize: 13,
 };
