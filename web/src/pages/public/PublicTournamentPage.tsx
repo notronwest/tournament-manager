@@ -20,6 +20,37 @@ import {
   type PricingTier,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
+import {
+  bg as v5Bg,
+  ink,
+  inkSoft,
+  inkMuted,
+  cream,
+  creamDeep,
+  rule,
+  courtGreen,
+  courtYellow,
+  courtRed,
+  courtBlue,
+  displayFontStack,
+  headingFontStack,
+  monoFontStack,
+  pageWrapStyle,
+  contentColStyle,
+  sectionH2Style,
+  ctaPrimaryStyle,
+  ctaPrimaryDisabledStyle,
+  ctaSecondaryStyle,
+  panelStyle,
+  panelMutedStyle,
+  statusPanelStyle,
+  warnBg,
+  warnFg,
+  dangerBg,
+  dangerFg,
+  successBg,
+  successFg,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
   locations: {
@@ -451,15 +482,15 @@ export default function PublicTournamentPage() {
   if (loading) {
     return (
       <Shell>
-        <p style={{ color: "#666", fontSize: 14 }}>Loading…</p>
+        <p style={{ color: inkMuted, fontSize: 14 }}>Loading…</p>
       </Shell>
     );
   }
   if (error || !tournament) {
     return (
       <Shell>
-        <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Not available</h1>
-        <p style={{ color: "#666", fontSize: 14, margin: 0 }}>
+        <h1 style={{ margin: "0 0 8px", fontSize: 22, fontFamily: displayFontStack }}>Not available</h1>
+        <p style={{ color: inkSoft, fontSize: 14, margin: 0 }}>
           {error ?? "Tournament not found."}
         </p>
       </Shell>
@@ -506,16 +537,6 @@ export default function PublicTournamentPage() {
   // "Late Registration Open" / "Registration Closed", derived from
   // the registration window + active tier (no separate status flag).
   const regStatus = deriveRegistrationStatus(tournament, tiers);
-  const regStatusPalette: Record<
-    typeof regStatus.tone,
-    { bg: string; fg: string; border: string }
-  > = {
-    open: { bg: "#dcfce7", fg: "#166534", border: "#bbf7d0" },
-    soon: { bg: "#fef3c7", fg: "#92400e", border: "#fde68a" },
-    closed: { bg: "#f3f4f6", fg: "#666", border: "#e5e7eb" },
-  };
-  const regStatusColors = regStatusPalette[regStatus.tone];
-
   return (
   <>
     {/* #98: translucent scrim — always in the DOM so the CSS opacity
@@ -539,15 +560,47 @@ export default function PublicTournamentPage() {
       }}
     />
     <Shell>
-      <header style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 26 }}>{tournament.name}</h1>
+      <header
+        style={{
+          background: `linear-gradient(180deg, ${cream} 0%, ${creamDeep} 100%)`,
+          borderRadius: 10,
+          padding: "40px 32px 32px",
+          marginBottom: 24,
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: monoFontStack,
+            fontSize: 11,
+            textTransform: "uppercase",
+            letterSpacing: "0.2em",
+            color: courtRed,
+            fontWeight: 700,
+            marginBottom: 10,
+          }}
+        >
+          Tournament
+        </div>
+        <h1
+          style={{
+            fontFamily: displayFontStack,
+            fontSize: "clamp(32px, 5vw, 52px)",
+            lineHeight: 0.95,
+            margin: "0 0 14px",
+            color: ink,
+          }}
+        >
+          {tournament.name}
+        </h1>
         {tournament.description && (
           <p
             style={{
-              color: "#444",
-              margin: "8px 0 0",
+              color: inkSoft,
+              margin: "0 0 16px",
               fontSize: 15,
-              lineHeight: 1.5,
+              lineHeight: 1.55,
+              maxWidth: 580,
             }}
           >
             {tournament.description}
@@ -556,11 +609,8 @@ export default function PublicTournamentPage() {
         <div
           style={{
             display: "flex",
-            gap: 16,
-            marginTop: 16,
+            gap: 24,
             flexWrap: "wrap",
-            fontSize: 14,
-            color: "#444",
           }}
         >
           <Meta
@@ -615,84 +665,106 @@ export default function PublicTournamentPage() {
               }
             />
           )}
-          <Meta
-            label="Status"
-            value={capitalize(tournament.status)}
-          />
         </div>
+        <span
+          style={{
+            position: "absolute",
+            top: 24,
+            right: 24,
+            background:
+              regStatus.tone === "open"
+                ? courtGreen
+                : regStatus.tone === "soon"
+                  ? courtYellow
+                  : inkMuted,
+            color:
+              regStatus.tone === "soon" ? ink : v5Bg,
+            padding: "6px 14px",
+            borderRadius: 999,
+            fontFamily: headingFontStack,
+            fontSize: 12,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
+          {regStatus.tone === "open" && (
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: courtYellow,
+                display: "inline-block",
+              }}
+            />
+          )}
+          {regStatus.label}
+        </span>
       </header>
 
       <div
         style={{
+          ...panelStyle,
           display: "flex",
           gap: 12,
           alignItems: "center",
-          padding: 16,
-          background: registrationOpen ? "#eff6ff" : "#fafafa",
-          border: `1px solid ${registrationOpen ? "#bfdbfe" : "#e5e7eb"}`,
-          borderRadius: 8,
           marginBottom: 24,
         }}
       >
         <div style={{ flex: 1 }}>
-          {/* Lifecycle status pill — derived from the registration
-              window + active pricing tier. */}
-          <span
-            style={{
-              display: "inline-block",
-              padding: "3px 10px",
-              borderRadius: 999,
-              background: regStatusColors.bg,
-              color: regStatusColors.fg,
-              border: `1px solid ${regStatusColors.border}`,
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            {regStatus.label}
-          </span>
-          {/* Window detail under the pill: when it opens (if not yet)
-              or when it closes (if open). */}
+          {/* Window detail: when it opens (if not yet) or closes (if open). */}
           {regStatus.tone === "soon" &&
             tournament.registration_opens_at && (
-              <div style={{ fontSize: 12, color: "#92400e", marginTop: 6 }}>
-                Opens {fmtDateTime(tournament.registration_opens_at)}
+              <div style={{ fontSize: 12, color: warnFg, marginBottom: 4 }}>
+                Registration opens {fmtDateTime(tournament.registration_opens_at)}
               </div>
             )}
           {tournament.registration_closes_at && registrationOpen && (
-            <div style={{ fontSize: 12, color: "#1e40af", marginTop: 6 }}>
-              Closes {fmtDateTime(tournament.registration_closes_at)}
+            <div style={{ fontSize: 12, color: inkSoft }}>
+              Registration closes {fmtDateTime(tournament.registration_closes_at)}
+            </div>
+          )}
+          {regStatus.tone === "closed" && (
+            <div style={{ fontSize: 12, color: inkMuted }}>
+              Registration is closed
             </div>
           )}
         </div>
-        {/* Price headline. We lead with the registration fee — that's
-            what gets a player into their first event. The additional-
-            event fee is a quiet secondary line because most players
-            enter a single event. No global Register button here on
-            purpose: the per-event Register buttons on each card let
-            the player pick what they're registering for first. */}
+        {/* Price headline — registration fee to enter the first event. */}
         {regFeeCents > 0 && (
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             <div
               style={{
-                fontSize: 26,
-                fontWeight: 700,
-                color: "#111",
-                lineHeight: 1.1,
+                fontFamily: displayFontStack,
+                fontSize: 28,
+                color: ink,
+                lineHeight: 1.0,
               }}
             >
               ${(regFeeCents / 100).toFixed(0)}
             </div>
-            <div style={{ fontSize: 12, color: "#555", marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: inkSoft, marginTop: 2 }}>
               to register · includes 1 event
             </div>
             {additionalFeeCents > 0 && (
-              <div style={{ fontSize: 12, color: "#888", marginTop: 1 }}>
+              <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
                 +${(additionalFeeCents / 100).toFixed(0)} each additional event
               </div>
             )}
             {isMultiTier && activeTier && (
-              <div style={{ fontSize: 11, color: "#1e40af", marginTop: 4 }}>
+              <div
+                style={{
+                  fontFamily: monoFontStack,
+                  fontSize: 10,
+                  color: courtBlue,
+                  marginTop: 4,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                }}
+              >
                 {activeTier.label} pricing
                 {nextTier && activeTier.ends_at
                   ? ` · ${nextTier.label} from ${fmtDate(activeTier.ends_at)}`
@@ -711,10 +783,7 @@ export default function PublicTournamentPage() {
       {inboundInvites.length > 0 && (
         <section
           style={{
-            padding: 16,
-            background: "#fef3c7",
-            border: "1px solid #fde68a",
-            borderRadius: 8,
+            ...statusPanelStyle("warn"),
             marginBottom: 24,
           }}
         >
@@ -722,20 +791,13 @@ export default function PublicTournamentPage() {
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: "#7a5d00",
               marginBottom: 8,
             }}
           >
             You've been invited to be someone's partner
             {inboundInvites.length > 1 ? ` (${inboundInvites.length})` : ""}
           </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {inboundInvites.map((inv) => (
               <div
                 key={inv.token}
@@ -745,12 +807,12 @@ export default function PublicTournamentPage() {
                   justifyContent: "space-between",
                   gap: 12,
                   padding: 10,
-                  background: "#fff",
+                  background: v5Bg,
                   borderRadius: 6,
                   flexWrap: "wrap",
                 }}
               >
-                <div style={{ fontSize: 13, color: "#444" }}>
+                <div style={{ fontSize: 13, color: ink }}>
                   <strong>{inv.inviterName}</strong> invited you for{" "}
                   <strong>{inv.eventName}</strong>
                 </div>
@@ -758,8 +820,8 @@ export default function PublicTournamentPage() {
                   to={`/t/${orgSlug}/${tournamentSlug}/invites/${inv.token}`}
                   style={{
                     padding: "6px 14px",
-                    background: "#2563eb",
-                    color: "#fff",
+                    background: courtBlue,
+                    color: v5Bg,
                     textDecoration: "none",
                     borderRadius: 6,
                     fontSize: 13,
@@ -776,9 +838,7 @@ export default function PublicTournamentPage() {
       )}
 
       <section>
-        <h2 style={{ margin: "0 0 12px", fontSize: 18 }}>
-          Events ({events.length})
-        </h2>
+        <h2 style={sectionH2Style}>Events ({events.length})</h2>
         {events.length === 0 ? (
           <Empty>No events have been added yet.</Empty>
         ) : (
@@ -1059,12 +1119,19 @@ function EventCard({
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
   const isPending = myStatus?.state === "pending_payment";
-  const borderColor = isPending
-    ? "#fde68a"
+  const cardBorderLeft = isPending
+    ? `6px solid ${courtYellow}`
     : isPaid
-      ? "#bbf7d0"
-      : "#e5e7eb";
-  const bg = isPending ? "#fffbeb" : "#fff";
+      ? `6px solid ${courtGreen}`
+      : registrationOpen
+        ? `6px solid ${courtGreen}`
+        : `6px solid ${inkMuted}`;
+  const cardBorderColor = isPending
+    ? courtYellow
+    : isPaid
+      ? courtGreen
+      : rule;
+  const cardBg = isPending ? warnBg : "#fff";
 
   // ─── Handlers ────────────────────────────────────────────────────
   const startRegister = () => {
@@ -1591,21 +1658,14 @@ function EventCard({
   const renderAction = () => {
     if (!registrationOpen) return null;
     if (myStatus?.state === "invited" && myStatus.inviteToken) {
-      // Invited state takes priority — the inbound invite is the
-      // most actionable thing on this row.
       return (
         <Link
           to={`/t/${orgSlug}/${tournamentSlug}/invites/${myStatus.inviteToken}`}
           style={{
-            padding: "8px 16px",
-            background: "#2563eb",
-            color: "#fff",
+            ...ctaPrimaryStyle,
+            background: courtBlue,
             textDecoration: "none",
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 500,
             whiteSpace: "nowrap",
-            border: "1px solid #2563eb",
           }}
         >
           Review invite →
@@ -1613,10 +1673,6 @@ function EventCard({
       );
     }
     if (myStatus?.state === "pending_payment") {
-      // F-#9: doubles pending regs get a "Change partner" button
-      // next to Cancel so the user can swap their partner without
-      // canceling + re-registering (which would risk losing the
-      // pending slot to capacity sweep).
       return (
         <div style={{ display: "flex", gap: 6 }}>
           {isDoubles && !expanded && (
@@ -1625,16 +1681,10 @@ function EventCard({
               onClick={startChangePartner}
               disabled={cancelling}
               style={{
-                padding: "8px 14px",
-                background: "#fff",
-                color: "#2563eb",
-                border: "1px solid #2563eb",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
+                ...ctaSecondaryStyle,
                 cursor: cancelling ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
                 whiteSpace: "nowrap",
+                opacity: cancelling ? 0.6 : 1,
               }}
             >
               Change partner
@@ -1645,16 +1695,12 @@ function EventCard({
             onClick={requestCancel}
             disabled={cancelling}
             style={{
-              padding: "8px 14px",
-              background: "#fff",
-              color: "#991b1b",
-              border: "1px solid #fca5a5",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500,
+              ...ctaSecondaryStyle,
+              color: dangerFg,
+              boxShadow: `inset 0 0 0 2px ${dangerBg}`,
               cursor: cancelling ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
               whiteSpace: "nowrap",
+              opacity: cancelling ? 0.6 : 1,
             }}
           >
             {cancelling ? "Cancelling…" : "Cancel"}
@@ -1663,20 +1709,12 @@ function EventCard({
       );
     }
     if (isPaid) {
-      // Already-paid registration — Manage page handles withdraw +
-      // partner change. (That's the existing /register page.)
       return (
         <Link
           to={`/t/${orgSlug}/${tournamentSlug}/register?event=${event.id}`}
           style={{
-            padding: "8px 16px",
-            background: "#fff",
-            color: "#2563eb",
-            border: "1px solid #2563eb",
+            ...ctaSecondaryStyle,
             textDecoration: "none",
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 500,
             whiteSpace: "nowrap",
           }}
         >
@@ -1684,10 +1722,10 @@ function EventCard({
         </Link>
       );
     }
-    if (expanded) return null; // expanded form has its own buttons
+    if (expanded) return null;
     if (me && !playerEligible) {
       return (
-        <span style={{ fontSize: 12, color: "#6b7280" }}>
+        <span style={{ fontSize: 12, color: inkMuted }}>
           Not eligible: {eligibilityReasons.join("; ")}
         </span>
       );
@@ -1698,15 +1736,9 @@ function EventCard({
         type="button"
         onClick={startRegister}
         style={{
-          padding: "8px 16px",
-          background: "#2563eb",
-          color: "#fff",
-          border: "1px solid #2563eb",
-          borderRadius: 6,
-          fontSize: 13,
-          fontWeight: 500,
+          ...ctaPrimaryStyle,
+          background: courtRed,
           cursor: "pointer",
-          fontFamily: "inherit",
           whiteSpace: "nowrap",
         }}
       >
@@ -1745,8 +1777,9 @@ function EventCard({
   // the imperative effect above (React 18 JSX doesn't expose inert).
   const cardStyle: CSSProperties = {
     padding: 16,
-    background: bg,
-    border: `1px solid ${borderColor}`,
+    background: cardBg,
+    border: `1px solid ${cardBorderColor}`,
+    borderLeft: cardBorderLeft,
     borderRadius: 8,
     position: "relative",
     ...(isFocused
@@ -1825,35 +1858,43 @@ function EventCard({
               flexWrap: "wrap",
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+            <h3
+              style={{
+                margin: 0,
+                fontFamily: displayFontStack,
+                fontSize: 18,
+                lineHeight: 1.1,
+                color: ink,
+              }}
+            >
               {event.name}
             </h3>
             {myStatus?.state === "paid" && (
-              <Pill bg="#dcfce7" fg="#166534">Registered</Pill>
+              <Pill bg={successBg} fg={successFg}>Registered</Pill>
             )}
             {myStatus?.state === "pending_payment" && (
-              <Pill bg="#fef3c7" fg="#7a5d00">Pending payment</Pill>
+              <Pill bg={warnBg} fg={warnFg}>Pending payment</Pill>
             )}
             {myStatus?.state === "awaiting_partner" && (
-              <Pill bg="#fffbeb" fg="#92400e">Awaiting partner</Pill>
+              <Pill bg={warnBg} fg={warnFg}>Awaiting partner</Pill>
             )}
             {myStatus?.state === "invited" && (
-              <Pill bg="#fef3c7" fg="#7a5d00">You're invited</Pill>
+              <Pill bg={warnBg} fg={warnFg}>You're invited</Pill>
             )}
             {myStatus?.isSeekingPartner && (
-              <Pill bg="#dbeafe" fg="#1e40af">Looking for partner</Pill>
+              <Pill bg={cream} fg={courtBlue}>Looking for partner</Pill>
             )}
           </div>
           {/* Partner label */}
           {myStatus?.state === "invited" && myStatus.inviterName ? (
-            <div style={{ color: "#7a5d00", fontSize: 12, marginTop: 4 }}>
+            <div style={{ color: warnFg, fontSize: 12, marginTop: 4 }}>
               <strong>{myStatus.inviterName}</strong> picked you as their
               partner
             </div>
           ) : myStatus?.partnerLabel ? (
             <div
               style={{
-                color: isPending ? "#7a5d00" : "#166534",
+                color: isPending ? warnFg : successFg,
                 fontSize: 12,
                 marginTop: 4,
               }}
@@ -1869,11 +1910,11 @@ function EventCard({
               style={{
                 marginTop: 5,
                 padding: "5px 10px",
-                background: "#fef3c7",
-                border: "1px solid #fde68a",
+                background: warnBg,
+                border: `1px solid ${courtYellow}`,
                 borderRadius: 5,
                 fontSize: 11,
-                color: "#7a5d00",
+                color: warnFg,
                 display: "inline-block",
               }}
             >
@@ -1881,7 +1922,7 @@ function EventCard({
             </div>
           )}
           {/* Meta line */}
-          <div style={{ color: "#666", fontSize: 13, marginTop: 4 }}>
+          <div style={{ color: inkSoft, fontSize: 13, marginTop: 4 }}>
             {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
             {event.points_to_win} win by {event.win_by}
             {event.teams_advancing_to_playoff > 0
@@ -1903,8 +1944,9 @@ function EventCard({
                   key={c}
                   style={{
                     padding: "2px 8px",
-                    background: "#eff6ff",
-                    color: "#1e40af",
+                    background: cream,
+                    color: inkSoft,
+                    border: `1px solid ${rule}`,
                     borderRadius: 4,
                     fontSize: 11,
                     fontWeight: 500,
@@ -1955,7 +1997,7 @@ function EventCard({
           style={{
             marginTop: 14,
             paddingTop: 14,
-            borderTop: "1px dashed #e5e7eb",
+            borderTop: `1px dashed ${rule}`,
           }}
         >
           {/* Context-aware cost line. Only on the register flow (not
@@ -1968,14 +2010,14 @@ function EventCard({
               style={{
                 marginBottom: 12,
                 fontSize: 13,
-                color: "#444",
+                color: inkSoft,
               }}
             >
               {isAdditionalEvent ? (
                 <>
                   Extra event:{" "}
                   <strong>+${(additionalFeeCents / 100).toFixed(0)}</strong>{" "}
-                  <span style={{ color: "#888" }}>
+                  <span style={{ color: inkMuted }}>
                     (added to your registration)
                   </span>
                 </>
@@ -1983,7 +2025,7 @@ function EventCard({
                 <>
                   <strong>${(regFeeCents / 100).toFixed(0)}</strong>{" "}
                   entry{" "}
-                  <span style={{ color: "#888" }}>· includes this event</span>
+                  <span style={{ color: inkMuted }}>· includes this event</span>
                 </>
               )}
             </div>
@@ -2031,17 +2073,7 @@ function EventCard({
                 </button>
               </div>
               {seekingPartner ? (
-                <div
-                  style={{
-                    padding: 10,
-                    background: "#eff6ff",
-                    border: "1px solid #bfdbfe",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    color: "#1e40af",
-                    lineHeight: 1.55,
-                  }}
-                >
+                <div style={{ ...statusPanelStyle("info"), fontSize: 12 }}>
                   We'll register you for this event without a partner.
                   Other registrants will be able to find you in the
                   partner search, and the organizer will see you in
@@ -2071,18 +2103,7 @@ function EventCard({
                     ]}
                   />
                   {partnerPicked && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        padding: "8px 12px",
-                        background: "#fef3c7",
-                        border: "1px solid #fde68a",
-                        borderRadius: 6,
-                        fontSize: 12,
-                        color: "#7a5d00",
-                        lineHeight: 1.5,
-                      }}
-                    >
+                    <div style={{ ...statusPanelStyle("warn"), marginTop: 8, fontSize: 12 }}>
                       Your partner won't be notified until you check out.
                     </div>
                   )}
@@ -2091,17 +2112,7 @@ function EventCard({
             </>
           )}
           {formError && (
-            <div
-              style={{
-                marginTop: 10,
-                padding: 8,
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
-                borderRadius: 6,
-                color: "#991b1b",
-                fontSize: 12,
-              }}
-            >
+            <div style={{ ...statusPanelStyle("danger"), marginTop: 10, fontSize: 12 }}>
               {formError}
             </div>
           )}
@@ -2122,19 +2133,11 @@ function EventCard({
                   : onSubmitRegister())
               }
               disabled={submitting || !canSubmit}
-              style={{
-                padding: "10px 18px",
-                background:
-                  submitting || !canSubmit ? "#9ca3af" : "#2563eb",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                fontSize: 14,
-                fontWeight: 500,
-                cursor:
-                  submitting || !canSubmit ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
-              }}
+              style={
+                submitting || !canSubmit
+                  ? ctaPrimaryDisabledStyle
+                  : { ...ctaPrimaryStyle, cursor: "pointer" }
+              }
             >
               {submitting
                 ? "Saving…"
@@ -2147,20 +2150,15 @@ function EventCard({
               onClick={requestDiscardForm}
               disabled={submitting}
               style={{
-                padding: "10px 18px",
-                background: "#fff",
-                color: "#555",
-                border: "1px solid #e2e2e2",
-                borderRadius: 6,
-                fontSize: 13,
+                ...ctaSecondaryStyle,
                 cursor: submitting ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
+                opacity: submitting ? 0.6 : 1,
               }}
             >
               Not now
             </button>
             {isDoubles && !partnerPicked && !seekingPartner && !submitting && (
-              <span style={{ fontSize: 12, color: "#888" }}>
+              <span style={{ fontSize: 12, color: inkMuted }}>
                 Pick a partner to continue (or choose "I need a
                 partner" above).
               </span>
@@ -2669,14 +2667,10 @@ function RosterPanel({
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main
-      style={{
-        padding: "32px 24px",
-        maxWidth: 760,
-        margin: "0 auto",
-      }}
-    >
-      {children}
+    <main style={pageWrapStyle}>
+      <div style={contentColStyle(1080)}>
+        {children}
+      </div>
     </main>
   );
 }
@@ -2686,15 +2680,18 @@ function Meta({ label, value }: { label: string; value: string }) {
     <div>
       <div
         style={{
-          fontSize: 11,
-          color: "#888",
+          fontFamily: monoFontStack,
+          fontSize: 10,
+          color: inkMuted,
           textTransform: "uppercase",
-          letterSpacing: 0.5,
+          letterSpacing: "0.18em",
+          fontWeight: 700,
+          marginBottom: 2,
         }}
       >
         {label}
       </div>
-      <div style={{ marginTop: 2 }}>{value}</div>
+      <div style={{ fontSize: 14, color: inkSoft }}>{value}</div>
     </div>
   );
 }
@@ -2703,12 +2700,9 @@ function Empty({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
-        padding: 24,
+        ...panelMutedStyle,
         textAlign: "center",
-        background: "#fafafa",
-        border: "1px dashed #d1d5db",
-        borderRadius: 6,
-        color: "#666",
+        color: inkMuted,
         fontSize: 13,
       }}
     >
@@ -2809,8 +2803,8 @@ function TournamentContentSection({
 }) {
   return (
     <section style={{ marginTop: 32 }}>
-      <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>{title}</h2>
-      <div style={{ fontSize: 15, color: "#444", lineHeight: 1.6 }}>
+      <h2 style={sectionH2Style}>{title}</h2>
+      <div style={{ fontSize: 15, color: inkSoft, lineHeight: 1.6 }}>
         {children}
       </div>
     </section>
