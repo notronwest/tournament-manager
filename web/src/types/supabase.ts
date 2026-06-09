@@ -392,32 +392,50 @@ export type Database = {
       locations: {
         Row: {
           address: string | null
+          ceiling_height_max_ft: number | null
+          ceiling_height_min_ft: number | null
+          court_count: number | null
           created_at: string
           deleted_at: string | null
           id: string
           is_default: boolean
           name: string
+          net_type: Database["public"]["Enums"]["net_type"] | null
           organization_id: string
+          surface_notes: string | null
+          surface_type: Database["public"]["Enums"]["surface_type"] | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          ceiling_height_max_ft?: number | null
+          ceiling_height_min_ft?: number | null
+          court_count?: number | null
           created_at?: string
           deleted_at?: string | null
           id?: string
           is_default?: boolean
           name: string
+          net_type?: Database["public"]["Enums"]["net_type"] | null
           organization_id: string
+          surface_notes?: string | null
+          surface_type?: Database["public"]["Enums"]["surface_type"] | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          ceiling_height_max_ft?: number | null
+          ceiling_height_min_ft?: number | null
+          court_count?: number | null
           created_at?: string
           deleted_at?: string | null
           id?: string
           is_default?: boolean
           name?: string
+          net_type?: Database["public"]["Enums"]["net_type"] | null
           organization_id?: string
+          surface_notes?: string | null
+          surface_type?: Database["public"]["Enums"]["surface_type"] | null
           updated_at?: string
         }
         Relationships: [
@@ -1356,6 +1374,7 @@ export type Database = {
       match_stage: "round_robin" | "playoff"
       match_status: "pending" | "in_progress" | "completed"
       medal_match_format: "single_game" | "best_of_3"
+      net_type: "permanent" | "moveable"
       org_role: "owner" | "admin" | "staff"
       org_stripe_status: "not_connected" | "pending" | "active" | "restricted"
       partner_invite_status:
@@ -1385,6 +1404,14 @@ export type Database = {
         | "refunded"
         | "cancelled"
         | "withdrawn"
+      surface_type:
+        | "concrete"
+        | "asphalt"
+        | "cushion_core"
+        | "hardwood"
+        | "polycarbonate"
+        | "polyurethane"
+        | "other"
       tournament_status:
         | "draft"
         | "published"
@@ -1550,6 +1577,7 @@ export const Constants = {
       match_stage: ["round_robin", "playoff"],
       match_status: ["pending", "in_progress", "completed"],
       medal_match_format: ["single_game", "best_of_3"],
+      net_type: ["permanent", "moveable"],
       org_role: ["owner", "admin", "staff"],
       org_stripe_status: ["not_connected", "pending", "active", "restricted"],
       partner_invite_status: [
@@ -1582,6 +1610,15 @@ export const Constants = {
         "refunded",
         "cancelled",
         "withdrawn",
+      ],
+      surface_type: [
+        "concrete",
+        "asphalt",
+        "cushion_core",
+        "hardwood",
+        "polycarbonate",
+        "polyurethane",
+        "other",
       ],
       tournament_status: [
         "draft",

@@ -33,6 +33,7 @@ import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
 import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
+import TournamentContactsPage from "./pages/admin/TournamentContactsPage";
 import LocationsPage from "./pages/admin/LocationsPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
@@ -214,6 +215,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/attendees"
           element={<AttendeesPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/contacts"
+          element={<TournamentContactsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/change-requests"
