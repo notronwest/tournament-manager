@@ -718,12 +718,12 @@ export default function PublicTournamentPage() {
           {/* Window detail: when it opens (if not yet) or closes (if open). */}
           {regStatus.tone === "soon" &&
             tournament.registration_opens_at && (
-              <div style={{ fontSize: 12, color: warnFg, marginBottom: 4 }}>
+              <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
                 Registration opens {fmtDateTime(tournament.registration_opens_at)}
               </div>
             )}
           {tournament.registration_closes_at && registrationOpen && (
-            <div style={{ fontSize: 12, color: inkSoft }}>
+            <div style={{ fontSize: 14, color: inkSoft }}>
               Registration closes {fmtDateTime(tournament.registration_closes_at)}
             </div>
           )}
@@ -1018,6 +1018,26 @@ function StickyCheckoutBar({
   );
 }
 
+// Maps event format × gender to a left-border accent color so card type
+// is readable at a glance. Single source of truth — EventCard calls this;
+// don't inline these values elsewhere.
+//
+// CVD note: courtGreen (men-doubles) and courtRed (mixed-doubles) share the
+// red-green axis and may read similarly for deuteranopes/protanopes. The
+// format label and gender chip on the card still disambiguate. Add a legend
+// with text labels if a dense grid view is introduced later.
+function eventTypeColor(
+  format: Database["public"]["Enums"]["event_format"],
+  gender: Database["public"]["Enums"]["event_gender"],
+): string {
+  if (format === "singles" && gender === "men")   return courtBlue;    // #1e6cd6
+  if (format === "singles" && gender === "women") return "#7eb5f5";    // light blue
+  if (format === "doubles" && gender === "men")   return courtGreen;   // #2c8a3d
+  if (format === "doubles" && gender === "women") return "#9333ea";    // purple
+  if (format === "doubles" && gender === "mixed") return courtRed;     // #d8341c
+  return inkMuted; // fallback: singles·mixed or any unexpected combo
+}
+
 function EventCard({
   event,
   registrationOpen,
@@ -1119,13 +1139,7 @@ function EventCard({
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
   const isPending = myStatus?.state === "pending_payment";
-  const cardBorderLeft = isPending
-    ? `6px solid ${courtYellow}`
-    : isPaid
-      ? `6px solid ${courtGreen}`
-      : registrationOpen
-        ? `6px solid ${courtGreen}`
-        : `6px solid ${inkMuted}`;
+  const cardBorderLeft = `6px solid ${eventTypeColor(event.format, event.gender)}`;
   const cardBorderColor = isPending
     ? courtYellow
     : isPaid
@@ -2708,7 +2722,7 @@ function Meta({ label, value }: { label: string; value: string }) {
       <div
         style={{
           fontFamily: monoFontStack,
-          fontSize: 10,
+          fontSize: 11,
           color: inkMuted,
           textTransform: "uppercase",
           letterSpacing: "0.18em",
@@ -2718,7 +2732,7 @@ function Meta({ label, value }: { label: string; value: string }) {
       >
         {label}
       </div>
-      <div style={{ fontSize: 14, color: inkSoft }}>{value}</div>
+      <div style={{ fontSize: 15, color: ink }}>{value}</div>
     </div>
   );
 }
