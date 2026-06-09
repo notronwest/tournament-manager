@@ -100,22 +100,39 @@ export default function AdminIndexPage() {
           owner to add you, or create your own.
         </p>
         {isPlatformAdmin && (
-          <Link
-            to="/admin/new-org"
-            style={{
-              display: "inline-block",
-              marginTop: 12,
-              padding: "8px 14px",
-              background: "#2563eb",
-              color: "#fff",
-              textDecoration: "none",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            + Create organization
-          </Link>
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <Link
+              to="/admin/new-org"
+              style={{
+                display: "inline-block",
+                padding: "8px 14px",
+                background: "#2563eb",
+                color: "#fff",
+                textDecoration: "none",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+              }}
+            >
+              + Create organization
+            </Link>
+            <Link
+              to="/admin/platform"
+              style={{
+                display: "inline-block",
+                padding: "8px 14px",
+                background: "#fff",
+                color: "#2563eb",
+                border: "1px solid #2563eb",
+                textDecoration: "none",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+              }}
+            >
+              Platform settings
+            </Link>
+          </div>
         )}
       </main>
     );
@@ -135,20 +152,37 @@ export default function AdminIndexPage() {
       >
         <h1 style={{ fontSize: 20, margin: 0 }}>Choose an organization</h1>
         {isPlatformAdmin && (
-          <Link
-            to="/admin/new-org"
-            style={{
-              padding: "8px 14px",
-              background: "#2563eb",
-              color: "#fff",
-              textDecoration: "none",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            + Create organization
-          </Link>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link
+              to="/admin/new-org"
+              style={{
+                padding: "8px 14px",
+                background: "#2563eb",
+                color: "#fff",
+                textDecoration: "none",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+              }}
+            >
+              + Create organization
+            </Link>
+            <Link
+              to="/admin/platform"
+              style={{
+                padding: "8px 14px",
+                background: "#fff",
+                color: "#2563eb",
+                border: "1px solid #2563eb",
+                textDecoration: "none",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+              }}
+            >
+              Platform settings
+            </Link>
+          </div>
         )}
       </div>
       {orgs.length > 0 && (
