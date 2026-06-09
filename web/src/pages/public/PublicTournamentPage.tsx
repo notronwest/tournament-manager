@@ -53,7 +53,17 @@ import {
 } from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
-  locations: { id: string; name: string; address: string | null } | null;
+  locations: {
+    id: string;
+    name: string;
+    address: string | null;
+    court_count: number | null;
+    net_type: Database["public"]["Enums"]["net_type"] | null;
+    surface_type: Database["public"]["Enums"]["surface_type"] | null;
+    surface_notes: string | null;
+    ceiling_height_min_ft: number | null;
+    ceiling_height_max_ft: number | null;
+  } | null;
 };
 type Event = Database["public"]["Tables"]["events"]["Row"];
 // Public-visible contact (is_public, not deleted) for the Contacts
@@ -211,7 +221,7 @@ export default function PublicTournamentPage() {
 
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("*, locations(id, name, address)")
+      .select("*, locations(id, name, address, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .in("status", ["published", "closed", "completed"])
@@ -618,6 +628,40 @@ export default function PublicTournamentPage() {
                   : tournament.location_address
                     ? `${tournament.location_name} · ${tournament.location_address}`
                     : tournament.location_name!
+              }
+            />
+          )}
+          {tournament.locations?.court_count != null && (
+            <Meta label="Courts" value={String(tournament.locations.court_count)} />
+          )}
+          {tournament.locations?.net_type && (
+            <Meta label="Nets" value={tournament.locations.net_type === "permanent" ? "Permanent" : "Moveable"} />
+          )}
+          {tournament.locations?.surface_type && (
+            <Meta
+              label="Surface"
+              value={
+                tournament.locations.surface_type === "concrete" ? "Concrete"
+                : tournament.locations.surface_type === "asphalt" ? "Asphalt"
+                : tournament.locations.surface_type === "cushion_core" ? "Cushion Core"
+                : tournament.locations.surface_type === "hardwood" ? "Hardwood"
+                : tournament.locations.surface_type === "polycarbonate" ? "Polycarbonate"
+                : tournament.locations.surface_type === "polyurethane" ? "Polyurethane"
+                : tournament.locations.surface_notes
+                  ? `Other (${tournament.locations.surface_notes})`
+                  : "Other"
+              }
+            />
+          )}
+          {(tournament.locations?.ceiling_height_min_ft != null || tournament.locations?.ceiling_height_max_ft != null) && (
+            <Meta
+              label="Ceiling"
+              value={
+                tournament.locations!.ceiling_height_min_ft != null && tournament.locations!.ceiling_height_max_ft != null
+                  ? `${tournament.locations!.ceiling_height_min_ft}–${tournament.locations!.ceiling_height_max_ft} ft`
+                  : tournament.locations!.ceiling_height_max_ft != null
+                    ? `${tournament.locations!.ceiling_height_max_ft} ft`
+                    : `${tournament.locations!.ceiling_height_min_ft} ft min`
               }
             />
           )}
