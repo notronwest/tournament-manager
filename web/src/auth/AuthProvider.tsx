@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -47,6 +48,7 @@ function defaultRedirectTo(): string {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const user = session?.user ?? null;
 
   useEffect(() => {
     // Restore session on mount.
@@ -62,6 +64,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => data.subscription.unsubscribe();
   }, []);
+
+  // Silent email backfill (issue #157). Every auth path gives us a verified
+  // `user.email` — Google's OAuth returns it by default, and magic-link /
+  // password both require one. But a *player* row can lack an email (admin-
+  // pre-created rows, or the auth-linked update path that never wrote one),
+  // which silently breaks receipts and partner-cancellation notices — those
+  // read `players.email` (see supabase/functions/send-partner-cancellation).
+  // So when the signed-in user's own linked row has no email, copy in their
+  // session email. This is deliberately client-side, not a DB trigger: RLS
+  // confines the update to the user's own row (auth_user_id = auth.uid()) and
+  // we only ever write their own session email, so there's no way to fill in
+  // someone else's address. (A SECURITY DEFINER trigger reading auth.users
+  // would be an email-harvest vector given the open insert policy + publicly
+  // readable players table.) Best-effort and silent — never blocks the user.
+  const backfilledForRef = useRef<string | null>(null);
+  useEffect(() => {
+    const uid = user?.id;
+    const email = user?.email;
+    if (!uid || !email) return;
+    if (backfilledForRef.current === uid) return; // once per signed-in user
+    backfilledForRef.current = uid;
+
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("players")
+        .select("id, email")
+        .eq("auth_user_id", uid)
+        .is("deleted_at", null);
+      // Only act on an unambiguous single linked row that's missing an email.
+      if (cancelled || error || !data || data.length !== 1) return;
+      const row = data[0];
+      if (row.email && row.email.trim()) return;
+      // `.is("email", null)` makes the write race-safe: if another path filled
+      // the email between our read and write, this no-ops instead of clobbering.
+      await supabase
+        .from("players")
+        .update({ email })
+        .eq("id", row.id)
+        .is("email", null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.email]);
 
   const signInWithPassword = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -117,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user: session?.user ?? null,
+        user,
         session,
         loading,
         signInWithPassword,
