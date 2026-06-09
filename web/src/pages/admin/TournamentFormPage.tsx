@@ -68,7 +68,6 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
   // means the organizer has committed to those prices and cannot change
   // them without first cancelling/refunding.
   const [activeRegCount, setActiveRegCount] = useState(0);
-  const [courtCount, setCourtCount] = useState("0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,7 +112,6 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       setEndsAt(isoToLocal(data.ends_at));
       setRegistrationOpensAt(isoToLocal(data.registration_opens_at));
       setRegistrationClosesAt(isoToLocal(data.registration_closes_at));
-      setCourtCount(String(data.court_count));
       setPricingPattern(data.pricing_pattern);
 
       // Load the tournament's pricing tiers and convert to drafts.
@@ -197,12 +195,6 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
     }
     const tierRows = tierResult.rows;
 
-    const courtCountNum = parseInt(courtCount || "0", 10);
-    if (Number.isNaN(courtCountNum) || courtCountNum < 0) {
-      setError("Court count must be a non-negative integer.");
-      return;
-    }
-
     // Pricing lives entirely in tournament_pricing_tiers (written via
     // the replace_pricing_tiers RPC below). The legacy entry_fee_cents
     // / additional_event_fee_cents columns were dropped in migration
@@ -219,7 +211,6 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       registration_opens_at: toIso(registrationOpensAt),
       registration_closes_at: toIso(registrationClosesAt),
       pricing_pattern: pricingPattern,
-      court_count: courtCountNum,
     };
 
     setBusy(true);
@@ -436,22 +427,6 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
             setPricingTiers(nextTiers);
           }}
         />
-
-        <FieldRow>
-          <Field
-            label="Court count"
-            hint="Total courts available at the venue. Used by the schedule estimator."
-          >
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={courtCount}
-              onChange={(e) => setCourtCount(e.target.value)}
-              style={{ ...inputStyle, maxWidth: 160 }}
-            />
-          </Field>
-        </FieldRow>
 
         {error && (
           <div
