@@ -1291,6 +1291,8 @@ export type Database = {
           event_id: string
           first_name: string
           gender: Database["public"]["Enums"]["player_gender"]
+          invited_partner_first_name: string | null
+          invited_partner_last_name: string | null
           last_name: string
           partner_registration_id: string
           partner_status: Database["public"]["Enums"]["partner_status"]
