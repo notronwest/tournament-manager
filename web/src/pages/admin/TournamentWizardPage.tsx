@@ -731,9 +731,7 @@ export default function TournamentWizardPage() {
             stripeStatus={org.stripe_account_status}
             blockers={publishBlockers}
             softBlockers={softBlockers}
-            onPublish={() => void publish()}
             onJumpTo={goStep}
-            busy={busy}
           />
         )}
 
@@ -2141,9 +2139,7 @@ function ReviewStep({
   stripeStatus,
   blockers,
   softBlockers,
-  onPublish,
   onJumpTo,
-  busy,
 }: {
   tournament: Tournament | null;
   eventCount: number;
@@ -2153,9 +2149,7 @@ function ReviewStep({
   stripeStatus: StripeStatus;
   blockers: string[];
   softBlockers: string[];
-  onPublish: () => void;
   onJumpTo: (id: StepId) => void;
-  busy: boolean;
 }) {
   return (
     <div>
@@ -2317,16 +2311,6 @@ function ReviewStep({
         </ReviewCard>
       </div>
 
-      <div style={{ marginTop: 18 }}>
-        <button
-          type="button"
-          style={btnPrimary(busy || blockers.length > 0)}
-          onClick={onPublish}
-          disabled={busy || blockers.length > 0}
-        >
-          {busy ? "Publishing…" : "Publish tournament"}
-        </button>
-      </div>
     </div>
   );
 }
