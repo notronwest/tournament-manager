@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 410 175"
+   width="820"
+   height="350"
+   version="1.1"
+   id="svg24"
+   sodipodi:docname="bert-and-erne-v5-outlined.svg"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs24" />
+  <sodipodi:namedview
+     id="namedview24"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.67726422"
+     inkscape:cx="439.26726"
+     inkscape:cy="241.41243"
+     inkscape:window-width="1512"
+     inkscape:window-height="916"
+     inkscape:window-x="0"
+     inkscape:window-y="38"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg24"
+     showguides="true" />
+  <title
+     id="title1">bert &amp; erne — V5 (round 9) — outlined paths, no font dependency</title>
+  <desc
+     id="desc1">
+    ──────────────────────────────────────────────────────────────────
+    bert &amp; erne — logo lockup, round 9 / V5
+    &quot;Geometric and dark&quot; — square ink stamp + cream bookends.
+
+    ★ OUTLINED VERSION: all text has been converted to SVG paths.
+      No font installation required. Fully portable.
+      Text is no longer editable as type — to change words you'd need
+      to regenerate from the source HTML / opentype.js script.
+    ──────────────────────────────────────────────────────────────────
+    Source fonts (only needed if you want to regenerate paths):
+      • Alfa Slab One  https://fonts.google.com/specimen/Alfa+Slab+One
+      • Anton          https://fonts.google.com/specimen/Anton
+    ──────────────────────────────────────────────────────────────────
+    COLOR TOKENS
+      ink           #14181f
+      bg / off-white #fafaf7
+      cream         #f6efd6
+      court-green   #2c8a3d
+      court-yellow  #f3d111
+      court-red     #d8341c
+    ──────────────────────────────────────────────────────────────────
+    LAYER MAP (back-to-front)
+      1. Ink frame    (the black border / scaffolding)
+      2. BERT block   (green + kitchen + outlined &quot;BERT&quot;)
+      3. Net block    (yellow + net line + outlined &quot;&amp;&quot;)
+      4. ERNE block   (green + kitchen + outlined &quot;ERNE&quot;)
+      5. Tag row      (cream bookends + outlined tagline)
+      6. Stamp        (ink square + yellow bracket, rotated +8°)
+    ──────────────────────────────────────────────────────────────────
+  </desc>
+  <!-- ════════════════════════════════════════════════════════════
+       1. INK FRAME
+       ════════════════════════════════════════════════════════════ -->
+  <g
+     id="ink-frame"
+     transform="translate(13.998007,-0.40166249)"
+     style="display:inline">
+    <rect
+       x="10"
+       y="22"
+       width="366"
+       height="142"
+       fill="#14181f"
+       id="rect1" />
+  </g>
+  <!-- ════════════════════════════════════════════════════════════
+       2. BERT BLOCK
+       ════════════════════════════════════════════════════════════ -->
+  <g
+     id="bert-block"
+     transform="translate(12.167084,-1.6222779)">
+    <rect
+       x="14"
+       y="26"
+       width="140"
+       height="100"
+       fill="#2c8a3d"
+       id="rect2"
+       style="display:inline" />
+    <rect
+       x="114"
+       y="26"
+       width="40"
+       height="100"
+       fill="#f3d111"
+       id="rect3"
+       style="display:none" />
+    <line
+       x1="151.53973"
+       y1="26"
+       x2="151.53973"
+       y2="126"
+       stroke="#ffffff"
+       stroke-width="3"
+       id="line3" />
+    <rect
+       style="fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:1.00108;stroke-dasharray:none;stroke-opacity:1"
+       id="rect8"
+       width="136.00394"
+       height="1.9085488"
+       x="14.560843"
+       y="74.861038"
+       inkscape:label="rect8" />
+    <!-- "BERT" — Alfa Slab One 32px, ink fill with 4px cream halo stroke -->
+  </g>
+  <!-- ════════════════════════════════════════════════════════════
+       3. NET BLOCK
+       ════════════════════════════════════════════════════════════ -->
+  <g
+     id="net-block"
+     transform="matrix(1.2235079,0,0,1,-27.93662,-1.6222779)"
+     style="display:inline">
+    <rect
+       x="158"
+       y="26"
+       width="70"
+       height="100"
+       fill="#f3d111"
+       id="rect4"
+       style="display:inline" />
+    <line
+       x1="193"
+       y1="26"
+       x2="193"
+       y2="126"
+       stroke="#14181f"
+       stroke-width="2"
+       id="line4"
+       style="display:inline" />
+    <rect
+       x="178"
+       y="56"
+       width="30"
+       height="40"
+       fill="#f3d111"
+       id="rect5"
+       style="display:inline" />
+    <!-- "&amp;" — Alfa Slab One 44px, ink fill (no halo) -->
+    <path
+       id="word-amp"
+       d="m 190.184,91.616 q -7.084,0 -10.89,-2.618 -3.806,-2.618 -3.806,-7.238 0,-3.08 1.848,-5.346 1.848,-2.266 4.62,-3.41 -2.464,-1.76 -3.696,-3.608 -1.232,-1.848 -1.232,-4.312 0,-2.816 1.804,-4.84 1.804,-2.024 4.994,-3.058 3.19,-1.034 7.282,-1.034 4.136,0 7.568,1.012 3.432,1.012 5.104,2.244 v 8.448 h -9.24 v -0.792 q 0,-1.584 -0.748,-2.332 -0.748,-0.748 -2.244,-0.748 -2.772,0 -2.772,2.156 0,0.836 0.682,1.584 0.682,0.748 2.178,1.892 l 7.172,5.412 q 0.176,-0.924 0.176,-2.112 v -0.792 h 10.604 v 7.348 h -2.552 l -0.396,1.452 3.96,2.992 -5.368,7.084 -3.212,-2.464 q -4.4,3.08 -11.836,3.08 m 1.144,-7.832 q 2.156,0 3.52,-0.792 L 189.26,78.68 q -0.836,0.396 -1.32,1.078 -0.484,0.682 -0.484,1.518 0,1.32 0.99,1.914 0.99,0.594 2.882,0.594"
+       fill="#14181f"
+       style="display:inline" />
+  </g>
+  <!-- ════════════════════════════════════════════════════════════
+       4. ERNE BLOCK
+       ════════════════════════════════════════════════════════════ -->
+  <g
+     id="erne-block"
+     transform="matrix(0.98175446,0,0,1,22.415443,-1.6222779)"
+     style="display:inline">
+    <rect
+       x="232"
+       y="26"
+       width="140"
+       height="100"
+       fill="#2c8a3d"
+       id="rect6"
+       style="display:inline" />
+    <rect
+       x="232"
+       y="26"
+       width="40"
+       height="100"
+       fill="#f3d111"
+       id="rect7"
+       style="display:none" />
+    <line
+       x1="233.7626"
+       y1="26"
+       x2="233.7626"
+       y2="126"
+       stroke="#ffffff"
+       stroke-width="3"
+       id="line7"
+       style="display:inline" />
+    <rect
+       style="display:inline;fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:1.00996;stroke-dasharray:none;stroke-opacity:1"
+       id="rect8-7"
+       width="135.38049"
+       height="1.5555615"
+       x="236.02623"
+       y="75.016197"
+       inkscape:label="rect8-7" />
+    <!-- "ERNE" — Alfa Slab One 32px, ink fill with 4px cream halo stroke -->
+  </g>
+  <!-- ════════════════════════════════════════════════════════════
+       5. TAG ROW — cream bookends + outlined tagline
+       ════════════════════════════════════════════════════════════ -->
+  <g
+     id="tag-row"
+     transform="translate(12.167084,-1.6222779)"
+     style="display:inline">
+    <!-- Left bookend bracket (cream) -->
+    <!-- "PICKLEBALL TOURNAMENT MANAGEMENT" — Anton 11px, off-white fill -->
+    <path
+       id="tagline"
+       d="m 21.601796,151 h -2.407334 v -9.453 h 3.23526 q 1.017093,0 1.611799,0.349 0.594708,0.349 0.852544,0.994 0.256541,0.644 0.256541,1.536 0,0.859 -0.21508,1.496 -0.216375,0.636 -0.769621,0.985 -0.553246,0.349 -1.569042,0.349 H 21.601796 V 151 m 0,-7.729 v 2.288 h 0.139931 q 0.681517,0 0.834405,-0.295 0.152888,-0.296 0.152888,-0.87 0,-0.538 -0.149002,-0.83 -0.150296,-0.293 -0.706134,-0.293 M 32.73928,151 h -2.365873 v -9.453 h 2.365873 m 8.388096,9.539 q -1.329346,0 -2.140428,-0.639 -0.809788,-0.639 -0.809788,-1.789 v -4.361 q 0,-1.375 0.706134,-2.106 0.706134,-0.73 2.299796,-0.73 0.869386,0 1.548312,0.247 0.678925,0.247 1.067623,0.739 0.389993,0.491 0.389993,1.238 v 1.632 h -2.435839 v -1.396 q 0,-0.424 -0.138635,-0.572 -0.138636,-0.148 -0.431454,-0.148 -0.340759,0 -0.45996,0.191 -0.117904,0.191 -0.117904,0.507 v 4.732 q 0,0.392 0.150295,0.554 0.149002,0.161 0.427569,0.161 0.313549,0 0.441819,-0.199 0.12827,-0.199 0.12827,-0.516 v -1.702 h 2.464344 v 1.788 q 0,1.246 -0.81497,1.808 -0.813674,0.561 -2.275177,0.561 M 52.027754,151 h -2.435838 v -9.453 h 2.421585 v 3.786 l 1.141476,-3.786 h 2.464344 l -1.372104,4.329 1.657149,5.124 h -2.540788 l -1.335824,-4.576 M 65.851139,151 h -4.968851 v -9.453 h 2.45009 v 7.842 h 2.518761 M 76.167175,151 h -5.059548 v -9.453 h 4.898886 v 1.826 h -2.407334 v 1.842 h 2.310161 v 1.778 h -2.310161 v 2.165 h 2.567996 M 84.854568,151 H 81.53509 v -9.453 h 3.319478 q 1.335825,0 1.944784,0.502 0.60896,0.502 0.60896,1.657 v 0.414 q 0,0.666 -0.309662,1.079 -0.309664,0.414 -0.94324,0.543 0.827926,0.161 1.11038,0.754 0.282453,0.594 0.282453,1.448 0,0.918 -0.222853,1.606 -0.222853,0.687 -0.807195,1.069 Q 85.932557,151 84.854568,151 m -0.9251,-7.992 v 2.1 h 0.500124 q 0.340759,0 0.439229,-0.204 0.09718,-0.204 0.09718,-0.489 v -0.951 q 0,-0.456 -0.522151,-0.456 h -0.51438 m 0.243583,6.327 q 0.95231,0 0.95231,-0.698 v -1.182 q 0,-0.403 -0.155479,-0.636 -0.156775,-0.234 -0.588229,-0.234 H 83.92947 v 2.739 q 0.152887,0.011 0.243583,0.011 M 94.962003,151 h -2.380126 l 1.182938,-9.453 h 4.153882 L 99.080903,151 h -2.316638 l -0.173618,-1.525 H 95.114891 L 94.962003,151 m 0.792943,-7.842 -0.466436,4.807 h 1.112971 l -0.535108,-4.807 M 109.36196,151 h -4.96886 v -9.453 h 2.4501 v 7.842 h 2.51876 M 119.5873,151 h -4.96756 v -9.453 h 2.44879 v 7.842 h 2.51877 M 136.24558,151 h -2.44879 v -7.638 h -1.45503 v -1.815 h 5.35885 v 1.815 h -1.45503 m 9.62027,7.724 q -1.46798,0 -2.24408,-0.685 -0.7761,-0.685 -0.7761,-1.979 v -4.49 q 0,-1.214 0.76962,-1.843 0.76833,-0.628 2.25056,-0.628 1.48224,0 2.25185,0.628 0.76833,0.629 0.76833,1.843 v 4.49 q 0,1.294 -0.77609,1.979 -0.77611,0.685 -2.24409,0.685 m 0.0207,-1.74 q 0.55712,0 0.55712,-0.833 v -4.614 q 0,-0.698 -0.54288,-0.698 -0.61285,0 -0.61285,0.715 v 4.608 q 0,0.44 0.13994,0.631 0.13864,0.191 0.45867,0.191 m 11.38106,1.74 q -1.53147,0 -2.25445,-0.663 -0.72427,-0.664 -0.72427,-1.953 v -6.923 h 2.38013 v 6.848 q 0,0.236 0.035,0.454 0.035,0.217 0.15937,0.357 0.12568,0.14 0.40424,0.14 0.28505,0 0.41073,-0.137 0.12567,-0.137 0.15677,-0.357 0.031,-0.221 0.031,-0.457 v -6.848 h 2.38012 v 6.923 q 0,1.289 -0.72426,1.953 -0.72298,0.663 -2.25445,0.663 M 168.22374,151 h -2.4773 v -9.453 h 3.75741 q 0.93936,0 1.42005,0.33 0.48069,0.331 0.64393,0.924 0.16326,0.594 0.16326,1.394 0,0.773 -0.25395,1.235 -0.25395,0.462 -0.95749,0.639 0.57786,0.092 0.81108,0.443 0.23321,0.352 0.23321,0.911 V 151 h -2.4151 v -3.701 q 0,-0.413 -0.21897,-0.513 -0.21896,-0.099 -0.70613,-0.099 V 151 m 0.0143,-7.702 v 1.751 h 0.59082 q 0.5079,0 0.5079,-0.854 0,-0.553 -0.1114,-0.725 -0.1114,-0.172 -0.4172,-0.172 M 179.49343,151 h -2.39437 v -9.453 h 2.51876 l 1.12852,4.528 v -4.528 h 2.36588 V 151 h -2.39438 l -1.22441,-4.727 M 190.80454,151 h -2.38012 l 1.18294,-9.453 h 4.15388 l 1.1622,9.453 h -2.31664 l -0.17361,-1.525 h -1.47576 L 190.80448,151 m 0.79295,-7.842 -0.46643,4.807 h 1.11296 l -0.53511,-4.807 M 202.44857,151 h -2.21299 v -9.453 h 3.73021 l 1.03005,5.763 1.02356,-5.763 h 3.76519 V 151 h -2.24149 v -6.811 L 206.13732,151 h -2.19874 l -1.49001,-6.811 M 220.48932,151 h -5.05954 v -9.453 h 4.90018 v 1.826 h -2.40863 v 1.842 h 2.31146 v 1.778 h -2.31146 v 2.165 h 2.56799 m 7.7623,1.842 h -2.39438 v -9.453 h 2.52006 l 1.12722,4.528 v -4.528 h 2.36588 V 151 h -2.39438 l -1.2244,-4.727 M 241.01645,151 h -2.44879 v -7.638 h -1.45503 v -1.815 h 5.35885 v 1.815 h -1.45503 M 257.82891,151 h -2.21298 v -9.453 h 3.72891 l 1.03005,5.763 1.02357,-5.763 h 3.76518 V 151 h -2.24148 v -6.811 l -1.4058,6.811 h -2.19873 l -1.48872,-6.811 M 272.85597,151 h -2.38012 l 1.18294,-9.453 h 4.15387 l 1.16221,9.453 h -2.31664 l -0.17491,-1.525 h -1.47446 L 272.85597,151 m 0.79295,-7.842 -0.46645,4.807 h 1.11298 l -0.53511,-4.807 M 284.68145,151 h -2.39438 v -9.453 h 2.52006 l 1.12723,4.528 v -4.528 h 2.36586 V 151 h -2.39438 l -1.22439,-4.727 m 11.3111,4.727 h -2.38013 l 1.18294,-9.453 h 4.15518 l 1.16221,9.453 h -2.31793 l -0.17363,-1.525 h -1.47575 L 295.99255,151 m 0.79294,-7.842 -0.46643,4.807 h 1.11426 l -0.5364,-4.807 m 11.05457,7.928 q -2.62372,0 -2.62372,-2.9 v -4.077 q 0,-2.648 3.00594,-2.648 1.23865,0 1.89943,0.384 0.66079,0.384 0.91214,1.12 0.25006,0.736 0.25006,1.794 h -2.39307 v -0.838 q 0,-0.306 -0.10879,-0.513 -0.10755,-0.207 -0.44831,-0.207 -0.42497,0 -0.56101,0.22 -0.13475,0.221 -0.13475,0.484 v 4.581 q 0,0.382 0.12827,0.621 0.12827,0.239 0.5053,0.239 0.38871,0 0.51827,-0.239 0.12827,-0.239 0.12827,-0.631 v -1.349 h -0.65431 v -1.632 h 2.99297 V 151 h -0.98211 l -0.4172,-0.795 q -0.64006,0.881 -2.01734,0.881 M 321.95496,151 h -5.05954 v -9.453 h 4.90017 v 1.826 h -2.40862 v 1.842 h 2.31016 v 1.778 h -2.31016 v 2.165 h 2.56799 m 7.5809,1.842 h -2.21298 v -9.453 h 3.7302 l 1.03005,5.763 1.02357,-5.763 h 3.76389 V 151 h -2.24019 v -6.811 L 333.2246,151 h -2.19873 l -1.49001,-6.811 M 347.57662,151 h -5.05955 v -9.453 h 4.89889 v 1.826 h -2.40733 v 1.842 h 2.31016 v 1.778 h -2.31016 v 2.165 h 2.56799 m 7.76229,1.842 h -2.39438 v -9.453 h 2.51877 l 1.12721,4.528 v -4.528 h 2.36718 V 151 h -2.39439 l -1.22439,-4.727 M 368.10375,151 h -2.4488 v -7.638 h -1.45502 v -1.815 h 5.35884 v 1.815 h -1.45502"
+       fill="#fafaf7"
+       style="stroke-width:1.13827" />
+    <!-- Right bookend bracket (mirrored) -->
+  </g>
+  <!-- ════════════════════════════════════════════════════════════
+       6. STAMP — square ink badge, top-right, rotated +8°
+       ════════════════════════════════════════════════════════════ -->
+  <g
+     id="g13"
+     inkscape:label="Bert Text Block"
+     transform="translate(0,-0.22949439)">
+    <rect
+       style="fill:#000000;stroke:#fcfcfc;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
+       id="rect9"
+       width="143.44385"
+       height="54.549068"
+       x="35.019154"
+       y="47.814617"
+       inkscape:label="Bert Background" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:38px;font-family:'Alfa Slab One';-inkscape-font-specification:'Alfa Slab One';display:inline;fill:#fdfdfd;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"
+       x="50.656902"
+       y="88.73642"
+       id="text1"
+       inkscape:label="Bert Text"
+       transform="scale(0.98488817,1.0153437)"><tspan
+         sodipodi:role="line"
+         id="tspan1"
+         style="font-size:38px;fill:#fdfdfd;fill-opacity:1;stroke:none;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"
+         x="50.656902"
+         y="88.73642">BERT</tspan></text>
+  </g>
+  <g
+     id="g14"
+     inkscape:label="Erne Text Block"
+     transform="translate(0,-0.13769663)">
+    <rect
+       style="fill:#000000;stroke:#fcfcfc;stroke-width:1;stroke-dasharray:none;stroke-opacity:1"
+       id="rect12"
+       width="143.44385"
+       height="54.549068"
+       x="237.20351"
+       y="47.663864"
+       inkscape:label="Bert Background" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:38px;font-family:'Alfa Slab One';-inkscape-font-specification:'Alfa Slab One';display:inline;fill:#ffffff;fill-opacity:1;stroke:#ffffff;stroke-width:0;stroke-dasharray:none;stroke-opacity:1"
+       x="249.38989"
+       y="89.552322"
+       id="text2"
+       inkscape:label="Erne Text"
+       transform="scale(0.99775715,1.0022479)"><tspan
+         sodipodi:role="line"
+         id="tspan2"
+         style="font-size:38px;fill:#ffffff;fill-opacity:1;stroke-width:0;stroke-dasharray:none"
+         x="249.38989"
+         y="89.552322">ERNE</tspan></text>
+  </g>
+  <g
+     id="stamp"
+     transform="matrix(0.50792748,0.07927718,-0.07138456,0.56408644,199.4751,-23.172807)"
+     style="display:inline">
+    <rect
+       x="330"
+       y="4"
+       width="64"
+       height="64"
+       rx="4"
+       ry="4"
+       fill="#14181f"
+       stroke="#14181f"
+       stroke-width="3"
+       id="rect18" />
+    <rect
+       x="346.25"
+       y="22.5"
+       width="10.5"
+       height="6.75"
+       fill="none"
+       stroke="#f3d111"
+       stroke-width="1.5"
+       id="rect19" />
+    <rect
+       x="367.25"
+       y="22.5"
+       width="10.5"
+       height="6.75"
+       fill="none"
+       stroke="#f3d111"
+       stroke-width="1.5"
+       id="rect20" />
+    <rect
+       x="356.75"
+       y="42"
+       width="10.5"
+       height="7.5"
+       fill="#f3d111"
+       id="rect21"
+       style="stroke-width:0.75" />
+    <line
+       x1="351.5"
+       y1="29.25"
+       x2="351.5"
+       y2="34.5"
+       stroke="#f3d111"
+       stroke-width="1.5"
+       id="line21" />
+    <line
+       x1="372.5"
+       y1="29.25"
+       x2="372.5"
+       y2="34.5"
+       stroke="#f3d111"
+       stroke-width="1.5"
+       id="line22" />
+    <line
+       x1="350.74509"
+       y1="33.938725"
+       x2="373.2106"
+       y2="33.722588"
+       stroke="#f3d111"
+       stroke-width="1.59709"
+       id="line23" />
+    <line
+       x1="362"
+       y1="34.5"
+       x2="362"
+       y2="42"
+       stroke="#f3d111"
+       stroke-width="1.5"
+       id="line24" />
+  </g>
+</svg>
