@@ -414,7 +414,7 @@ export default function TournamentDetailPage() {
               border: "1px solid #2563eb",
             }}
           >
-            Contacts
+            Tournament Contacts
           </Link>
           {/* Court manager is always reachable from the tournament home —
               users want it to peek at the queue / setup courts even
