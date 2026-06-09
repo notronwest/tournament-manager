@@ -21,7 +21,9 @@ import {
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
-type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
+  locations: { id: string; name: string; address: string | null } | null;
+};
 type Event = Database["public"]["Tables"]["events"]["Row"];
 // Public-visible contact (is_public, not deleted) for the Contacts
 // section + contact form (#38). RLS only returns these to anon.
@@ -72,6 +74,10 @@ type InboundInvite = {
   inviterName: string;
   token: string;
 };
+
+// Row returned by the event_roster SECURITY DEFINER RPC.
+type RosterRow =
+  Database["public"]["Functions"]["event_roster"]["Returns"][number];
 
 // Checked once per page lifetime — does not change during a session.
 const prefersReducedMotion =
@@ -132,6 +138,13 @@ export default function PublicTournamentPage() {
   const [registeredByEvent, setRegisteredByEvent] = useState<
     Map<string, Set<string>>
   >(new Map());
+  // Roster rows per event for the toggle bar and collapsible panel.
+  // Loaded via the event_roster SECURITY DEFINER RPC alongside
+  // players_registered_for_events so both round trips happen in
+  // parallel.
+  const [rosterByEvent, setRosterByEvent] = useState<
+    Map<string, RosterRow[]>
+  >(new Map());
 
   // #98: which event's register form is currently in focus mode.
   // null = no card focused; a string event_id = that card is lifted
@@ -167,7 +180,7 @@ export default function PublicTournamentPage() {
 
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("*")
+      .select("*, locations(id, name, address)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .in("status", ["published", "closed", "completed"])
@@ -225,19 +238,19 @@ export default function PublicTournamentPage() {
     }
     setTiers(tierRows ?? []);
 
-    // F3: pull the set of already-registered player_ids for every
-    // event in this tournament. Goes through a SECURITY DEFINER RPC
-    // because event_registrations RLS blocks anon / non-org-member
-    // SELECTs of other players' rows. The RPC returns only ids —
-    // no PII — and lets the partner picker exclude them from
-    // results. Done in parallel with the auth + me load below.
+    // F3 + roster: pull registered player_ids and full roster rows
+    // for every event. Both RPCs are SECURITY DEFINER to bypass the
+    // event_registrations RLS that blocks anon/non-member SELECTs.
+    // Run in parallel since neither depends on the other.
     if (evs && evs.length > 0) {
-      const { data: regsByEvent } = await supabase.rpc(
-        "players_registered_for_events",
-        { p_event_ids: evs.map((e) => e.id) },
-      );
+      const evIds = evs.map((e) => e.id);
+      const [regsByEventRes, rosterRes] = await Promise.all([
+        supabase.rpc("players_registered_for_events", { p_event_ids: evIds }),
+        supabase.rpc("event_roster", { p_event_ids: evIds }),
+      ]);
+
       const grouped = new Map<string, Set<string>>();
-      for (const row of regsByEvent ?? []) {
+      for (const row of regsByEventRes.data ?? []) {
         let set = grouped.get(row.event_id);
         if (!set) {
           set = new Set<string>();
@@ -246,8 +259,20 @@ export default function PublicTournamentPage() {
         set.add(row.player_id);
       }
       setRegisteredByEvent(grouped);
+
+      const rosterGrouped = new Map<string, RosterRow[]>();
+      for (const row of (rosterRes.data ?? []) as RosterRow[]) {
+        let arr = rosterGrouped.get(row.event_id);
+        if (!arr) {
+          arr = [];
+          rosterGrouped.set(row.event_id, arr);
+        }
+        arr.push(row);
+      }
+      setRosterByEvent(rosterGrouped);
     } else {
       setRegisteredByEvent(new Map());
+      setRosterByEvent(new Map());
     }
 
     if (!user || !evs || evs.length === 0) {
@@ -532,13 +557,17 @@ export default function PublicTournamentPage() {
             label="When"
             value={`${fmtDate(tournament.starts_at)} – ${fmtDate(tournament.ends_at)}`}
           />
-          {tournament.location_name && (
+          {(tournament.locations ?? tournament.location_name) && (
             <Meta
               label="Where"
               value={
-                tournament.location_address
-                  ? `${tournament.location_name} · ${tournament.location_address}`
-                  : tournament.location_name
+                tournament.locations
+                  ? tournament.locations.address
+                    ? `${tournament.locations.name} · ${tournament.locations.address}`
+                    : tournament.locations.name
+                  : tournament.location_address
+                    ? `${tournament.location_name} · ${tournament.location_address}`
+                    : tournament.location_name!
               }
             />
           )}
@@ -726,6 +755,7 @@ export default function PublicTournamentPage() {
                 alreadyRegisteredPlayerIds={
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
+                rosterRows={rosterByEvent.get(ev.id) ?? []}
                 isFocused={focusedEventId === ev.id}
                 isDimmed={focusedEventId !== null && focusedEventId !== ev.id}
                 onRequestFocus={() => setFocusedEventId(ev.id)}
@@ -896,6 +926,7 @@ function EventCard({
   additionalFeeCents,
   isAdditionalEvent,
   alreadyRegisteredPlayerIds,
+  rosterRows,
   isFocused,
   isDimmed,
   onRequestFocus,
@@ -920,6 +951,8 @@ function EventCard({
   // into the PartnerSearch excludePlayerIds so the search can't
   // surface someone who's already in.
   alreadyRegisteredPlayerIds: Set<string>;
+  // Roster rows for the collapsible roster panel.
+  rosterRows: RosterRow[];
   // #98: focus overlay. isFocused = this card is lifted above the
   // scrim. isDimmed = another card is focused; this card goes
   // behind the scrim, grayscale + inert.
@@ -960,6 +993,8 @@ function EventCard({
   // partner is picked (discards the in-progress pick).
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Roster panel collapsed by default; toggled by the toggle bar.
+  const [rosterOpen, setRosterOpen] = useState(false);
 
   // ─── Refs for #98 focus management ───────────────────────────────
   // cardRef: root div — for the `inert` attribute and focus-trap query.
@@ -1473,6 +1508,41 @@ function EventCard({
     else void onCancelPending();
   };
 
+  // Roster: "Partner up →" button opens the register form with the
+  // seeker pre-selected as the partner. The event_roster RPC doesn't
+  // return player_id, so we do a name-based lookup restricted to
+  // players already registered for this event (alreadyRegisteredPlayerIds)
+  // to find the right record. In the rare case of a same-name collision,
+  // we prefer the registered player; if still ambiguous, we take the first
+  // match and note it in the PR.
+  const handlePartnerUp = async (seeker: {
+    first_name: string;
+    last_name: string;
+  }) => {
+    if (!user || !me) {
+      onNeedsAuth();
+      return;
+    }
+    setEditMode("register");
+    setSeekingPartner(false);
+    setFormError(null);
+    // Async lookup: search by exact name, then prefer the player
+    // who's already registered for this event (using the
+    // alreadyRegisteredPlayerIds set from the partner-picker RPC).
+    const { data: candidates } = await supabase
+      .from("players")
+      .select("*")
+      .eq("first_name", seeker.first_name)
+      .eq("last_name", seeker.last_name)
+      .is("deleted_at", null);
+    const p =
+      (candidates ?? []).find((c) => alreadyRegisteredPlayerIds.has(c.id)) ??
+      (candidates ?? [])[0];
+    if (p) {
+      setPartner({ mode: "existing", player: p, emailDraft: "", phoneDraft: "" });
+    }
+  };
+
   // ─── Right-side action button — depends on current state ─────────
   const renderAction = () => {
     if (!registrationOpen) return null;
@@ -1810,6 +1880,29 @@ function EventCard({
         <div style={{ alignSelf: "center" }}>{renderAction()}</div>
       </div>
 
+      {/* Toggle bar + collapsible roster panel */}
+      <RosterToggleBar
+        rosterRows={rosterRows}
+        isDoubles={isDoubles}
+        rosterOpen={rosterOpen}
+        onToggle={() => setRosterOpen((o) => !o)}
+      />
+      {rosterOpen && (
+        <RosterPanel
+          rosterRows={rosterRows}
+          event={event}
+          isDoubles={isDoubles}
+          myRegId={myStatus?.regId ?? null}
+          myIsRegistered={
+            myStatus !== undefined &&
+            (myStatus.state === "paid" ||
+              myStatus.state === "pending_payment" ||
+              myStatus.state === "awaiting_partner")
+          }
+          onPartnerUp={handlePartnerUp}
+        />
+      )}
+
       {/* Inline-expand register form. Slides in below the metadata
           row when the user clicks Register on an unregistered event.
           For singles, no partner picker — just the buttons. */}
@@ -2086,6 +2179,421 @@ function partnerModeTileStyle(active: boolean): CSSProperties {
     textAlign: "left",
     transition: "border-color 120ms, background 120ms, color 120ms",
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Roster helpers
+// ─────────────────────────────────────────────────────────────────────
+
+// Returns the right self-rating for the event format/gender.
+function rosterRating(row: RosterRow, event: Event): number | null {
+  if (event.format === "singles") return (row.self_rating_singles as number | null);
+  if (event.gender === "mixed") return (row.self_rating_mixed as number | null);
+  return (row.self_rating_doubles as number | null);
+}
+
+// Team-slot count for the toggle bar label.
+// Doubles: confirmed pairs each count as 1 team; every non-confirmed
+// registration counts as 1 individual slot.
+// Singles: one row = one player.
+function countTeamSlots(rows: RosterRow[], isDoubles: boolean): number {
+  if (!isDoubles) return rows.length;
+  const confirmedCount = rows.filter(
+    (r) => r.partner_status === "confirmed",
+  ).length;
+  const nonConfirmedCount = rows.length - confirmedCount;
+  return confirmedCount / 2 + nonConfirmedCount;
+}
+
+function RosterToggleBar({
+  rosterRows,
+  isDoubles,
+  rosterOpen,
+  onToggle,
+}: {
+  rosterRows: RosterRow[];
+  isDoubles: boolean;
+  rosterOpen: boolean;
+  onToggle: () => void;
+}) {
+  const teamSlots = countTeamSlots(rosterRows, isDoubles);
+  const seekerCount = rosterRows.filter(
+    (r) => r.partner_status === "seeking",
+  ).length;
+  const label = isDoubles ? "teams" : "players";
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginTop: 10,
+        paddingTop: 10,
+        borderTop: "1px solid #f3f4f6",
+        flexWrap: "wrap",
+      }}
+    >
+      <span style={{ fontSize: 12, color: "#555" }}>
+        {teamSlots} {label}
+      </span>
+      {seekerCount > 0 && (
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#1e40af",
+            background: "#dbeafe",
+            border: "1px solid #bfdbfe",
+            borderRadius: 999,
+            padding: "2px 8px",
+          }}
+        >
+          {seekerCount} seeking partner
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          marginLeft: "auto",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 12,
+          color: "#2563eb",
+          fontFamily: "inherit",
+          display: "flex",
+          alignItems: "center",
+          gap: 3,
+          padding: 0,
+        }}
+      >
+        {rosterOpen ? "Hide roster" : "Show roster"}
+        <span
+          style={{
+            display: "inline-block",
+            transform: rosterOpen ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 150ms",
+          }}
+        >
+          ▾
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function RosterPanel({
+  rosterRows,
+  event,
+  isDoubles,
+  myRegId,
+  myIsRegistered,
+  onPartnerUp,
+}: {
+  rosterRows: RosterRow[];
+  event: Event;
+  isDoubles: boolean;
+  myRegId: string | null;
+  // True when the current user already has any active reg for this event
+  // (paid/pending_payment/awaiting_partner). Hides "Partner up →" on seekers.
+  myIsRegistered: boolean;
+  onPartnerUp: (seeker: { first_name: string; last_name: string }) => void;
+}) {
+  const seekers = rosterRows.filter((r) => r.partner_status === "seeking");
+  const nonSeekers = rosterRows.filter((r) => r.partner_status !== "seeking");
+
+  // Group doubles non-seekers into pairs. Each confirmed pair has two
+  // rows pointing at each other via registration_id ↔
+  // partner_registration_id. Unconfirmed rows render as singles.
+  const teams: RosterRow[][] = [];
+  if (isDoubles) {
+    const placed = new Set<string>();
+    for (const row of nonSeekers) {
+      if (placed.has(row.registration_id)) continue;
+      placed.add(row.registration_id);
+      if (row.partner_registration_id) {
+        const partner = nonSeekers.find(
+          (r) => r.registration_id === row.partner_registration_id,
+        );
+        if (partner && !placed.has(partner.registration_id)) {
+          placed.add(partner.registration_id);
+          teams.push([row, partner]);
+          continue;
+        }
+      }
+      teams.push([row]);
+    }
+  } else {
+    for (const row of nonSeekers) teams.push([row]);
+  }
+
+  // Sort: current user's team/row first.
+  const myTeamIdx = teams.findIndex((t) =>
+    t.some((r) => r.registration_id === myRegId),
+  );
+  if (myTeamIdx > 0) {
+    const [myTeam] = teams.splice(myTeamIdx, 1);
+    teams.unshift(myTeam);
+  }
+
+  // Sort seekers: current user first.
+  const seekersSorted = [...seekers].sort((a) =>
+    a.registration_id === myRegId ? -1 : 0,
+  );
+
+  const isMeSeeker = seekers.some((r) => r.registration_id === myRegId);
+  const colStyle: CSSProperties = {
+    fontSize: 12,
+    color: "#555",
+    padding: "4px 6px",
+    verticalAlign: "middle",
+  };
+
+  // Shared fixed column tracks so every roster table — the seekers
+  // table and each per-team table — lines its columns up at the same
+  // x-positions regardless of name length. Without this each table
+  // auto-sizes to its own content and the columns drift row to row.
+  // Order: name · rating · age · gender · location/action.
+  const RosterCols = () => (
+    <colgroup>
+      <col style={{ width: "40%" }} />
+      <col style={{ width: "13%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "25%" }} />
+    </colgroup>
+  );
+  const tableStyle: CSSProperties = {
+    width: "100%",
+    borderCollapse: "collapse",
+    tableLayout: "fixed",
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: 8,
+        border: "1px solid #e5e7eb",
+        borderRadius: 6,
+        overflow: "hidden",
+      }}
+    >
+      {/* Section 1: seeking partner */}
+      {seekersSorted.length > 0 && (
+        <div>
+          <div
+            style={{
+              padding: "6px 10px",
+              background: "#eff6ff",
+              borderBottom: "1px solid #bfdbfe",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#1e40af",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
+          >
+            Looking for a partner
+          </div>
+          <table style={tableStyle}>
+            <RosterCols />
+            <tbody>
+              {seekersSorted.map((row) => {
+                const isMe = row.registration_id === myRegId;
+                const rating = rosterRating(row, event);
+                return (
+                  <tr
+                    key={row.registration_id}
+                    style={{
+                      background: isMe ? "#eff6ff" : undefined,
+                      borderBottom: "1px solid #f3f4f6",
+                    }}
+                  >
+                    <td style={{ ...colStyle, fontWeight: isMe ? 600 : undefined }}>
+                      {row.first_name} {row.last_name}
+                      {isMe && (
+                        <span
+                          style={{
+                            marginLeft: 5,
+                            fontSize: 10,
+                            color: "#2563eb",
+                            fontWeight: 700,
+                          }}
+                        >
+                          ← you
+                        </span>
+                      )}
+                    </td>
+                    <td style={colStyle}>
+                      {rating != null ? rating.toFixed(2) : "--"}
+                    </td>
+                    <td style={colStyle}>
+                      {(row.age as number | null) != null ? String(row.age) : "--"}
+                    </td>
+                    <td style={colStyle}>
+                      {row.gender ? capitalize(row.gender) : "--"}
+                    </td>
+                    <td style={{ ...colStyle, textAlign: "right" }}>
+                      {!isMe && !myIsRegistered && !isMeSeeker && (
+                        <button
+                          type="button"
+                          onClick={() => onPartnerUp(row)}
+                          style={{
+                            padding: "4px 10px",
+                            background: "#2563eb",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Partner up →
+                        </button>
+                      )}
+                      {isMeSeeker && !isMe && (
+                        <button
+                          type="button"
+                          onClick={() => onPartnerUp(row)}
+                          style={{
+                            padding: "4px 10px",
+                            background: "#2563eb",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Partner up →
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Section 2: registered teams / players */}
+      {teams.length > 0 && (
+        <div>
+          <div
+            style={{
+              padding: "6px 10px",
+              background: "#f9fafb",
+              borderTop: seekersSorted.length > 0 ? "1px solid #e5e7eb" : undefined,
+              borderBottom: "1px solid #e5e7eb",
+              fontSize: 11,
+              fontWeight: 700,
+              color: "#555",
+              textTransform: "uppercase",
+              letterSpacing: 0.5,
+            }}
+          >
+            {isDoubles ? "Registered teams" : "Registered players"}
+          </div>
+          <div style={{ background: "#fafafa" }}>
+            {teams.map((team, i) => {
+              const isMyTeam = team.some((r) => r.registration_id === myRegId);
+              const isPair = team.length === 2;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    // Pairs get a blue bracket; singles reserve the same
+                    // 3px with a transparent border so their columns stay
+                    // aligned with the bracketed teams.
+                    borderLeft: isPair
+                      ? "3px solid #93c5fd"
+                      : "3px solid transparent",
+                    background: isMyTeam ? "#f0fdf4" : undefined,
+                    borderBottom:
+                      i < teams.length - 1 ? "1px solid #e5e7eb" : undefined,
+                  }}
+                >
+                  <table style={tableStyle}>
+                    <RosterCols />
+                    <tbody>
+                      {team.map((row, ri) => {
+                        const isMe = row.registration_id === myRegId;
+                        const rating = rosterRating(row, event);
+                        const loc = [row.city as string | null, row.state as string | null]
+                          .filter(Boolean)
+                          .join(", ");
+                        return (
+                          <tr
+                            key={row.registration_id}
+                            style={{
+                              borderBottom:
+                                isPair && ri === 0
+                                  ? "1px solid #e5e7eb"
+                                  : undefined,
+                            }}
+                          >
+                            <td style={{ ...colStyle, fontWeight: isMe ? 600 : undefined }}>
+                              {row.first_name} {row.last_name}
+                              {isMe && (
+                                <span
+                                  style={{
+                                    marginLeft: 5,
+                                    fontSize: 10,
+                                    color: "#16a34a",
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  ← you
+                                </span>
+                              )}
+                            </td>
+                            <td style={colStyle}>
+                              {rating != null ? rating.toFixed(2) : "--"}
+                            </td>
+                            <td style={colStyle}>
+                              {(row.age as number | null) != null ? String(row.age) : "--"}
+                            </td>
+                            <td style={colStyle}>
+                              {row.gender ? capitalize(row.gender) : "--"}
+                            </td>
+                            <td style={{ ...colStyle, color: "#888" }}>
+                              {loc || "--"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {rosterRows.length === 0 && (
+        <div
+          style={{
+            padding: "14px 12px",
+            fontSize: 12,
+            color: "#888",
+            textAlign: "center",
+          }}
+        >
+          No registrations yet.
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────
