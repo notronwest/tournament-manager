@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import FeedbackWidget from "./components/FeedbackWidget";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
 import PendingPaymentsBar from "./components/PendingPaymentsBar";
@@ -275,6 +276,10 @@ export default function App() {
           registrations anywhere. Hides itself otherwise (and on
           the checkout page where its CTA would be redundant). */}
       <PendingPaymentsBar />
+      {/* Global feedback launcher — fixed bottom-right corner,
+          present on every page. Opens a form that files a GitHub
+          issue with the user's context (page, identity, message). */}
+      <FeedbackWidget />
     </PendingPaymentsProvider>
     </PartnerInvitesProvider>
   );
