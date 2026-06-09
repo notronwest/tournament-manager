@@ -111,7 +111,6 @@ export default function TournamentWizardPage() {
   const [endsAt, setEndsAt] = useState("");
   const [registrationOpensAt, setRegistrationOpensAt] = useState("");
   const [registrationClosesAt, setRegistrationClosesAt] = useState("");
-  const [courtCount, setCourtCount] = useState("4");
 
   // Pricing state
   const [pricingPattern, setPricingPattern] =
@@ -188,7 +187,6 @@ export default function TournamentWizardPage() {
       setEndsAt(isoToLocal(t.ends_at));
       setRegistrationOpensAt(isoToLocal(t.registration_opens_at));
       setRegistrationClosesAt(isoToLocal(t.registration_closes_at));
-      setCourtCount(String(t.court_count));
       setPricingPattern(t.pricing_pattern);
       // Preserve "not chosen" state when the org skipped Step 4
       // previously — don't snap them to "standard" on resume.
@@ -283,12 +281,6 @@ export default function TournamentWizardPage() {
       setError("End date must be on or after the start date.");
       return false;
     }
-    const courtCountNum = parseInt(courtCount || "0", 10);
-    if (Number.isNaN(courtCountNum) || courtCountNum < 1 || courtCountNum > 32) {
-      setError("Court count must be a whole number between 1 and 32.");
-      return false;
-    }
-
     const payload = {
       slug: finalSlug,
       name: name.trim(),
@@ -300,7 +292,6 @@ export default function TournamentWizardPage() {
       ends_at: endsAtIso,
       registration_opens_at: toIso(registrationOpensAt),
       registration_closes_at: toIso(registrationClosesAt),
-      court_count: courtCountNum,
     };
 
     setBusy(true);
@@ -652,8 +643,6 @@ export default function TournamentWizardPage() {
             setRegistrationOpensAt={setRegistrationOpensAt}
             registrationClosesAt={registrationClosesAt}
             setRegistrationClosesAt={setRegistrationClosesAt}
-            courtCount={courtCount}
-            setCourtCount={setCourtCount}
             mode={tournament ? "edit" : "create"}
           />
         )}
@@ -1019,8 +1008,6 @@ function BasicsStep(props: {
   setRegistrationOpensAt: (s: string) => void;
   registrationClosesAt: string;
   setRegistrationClosesAt: (s: string) => void;
-  courtCount: string;
-  setCourtCount: (s: string) => void;
   mode: "create" | "edit";
 }) {
   return (
@@ -1119,22 +1106,6 @@ function BasicsStep(props: {
             value={props.registrationClosesAt}
             onChange={(e) => props.setRegistrationClosesAt(e.target.value)}
             style={inputStyle}
-          />
-        </Field>
-      </FieldRow>
-
-      <FieldRow>
-        <Field
-          label="Court count"
-          hint="Total courts available at the venue. Used by the schedule estimator."
-        >
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={props.courtCount}
-            onChange={(e) => props.setCourtCount(e.target.value)}
-            style={{ ...inputStyle, maxWidth: 160 }}
           />
         </Field>
       </FieldRow>
