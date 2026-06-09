@@ -7,7 +7,36 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-07**
+Last updated: **2026-06-09**
+
+## 2026-06-09 — Issue #150: court count now sourced from the venue
+
+Dropped the tournament-level **Court count** field; court count now comes
+from the selected venue (`locations.court_count`, added last night in PRs
+#142/#144). Changes:
+
+- **Wizard** (`TournamentWizardPage`) + **edit form** (`TournamentFormPage`):
+  removed the "Court count" input, its state, validation, and the
+  `court_count` write in the payload.
+- **Consumers** now read `tournament.locations?.court_count` via a
+  `locations(court_count)` join: `TournamentCourtManagerPage`,
+  `SchedulePage`, `TournamentDetailPage`. The detail page's inline
+  court-count *editor* is gone — it's now a read-only venue-sourced
+  display (with a link to set it on the venue / pick a venue).
+- **Graceful degrade** (AC #4): new shared `NoCourtCountNotice` component.
+  Court manager + schedule show it (prompt to pick a venue / set court
+  count) instead of crashing when no venue court count is resolvable.
+- `RoundRobinEstimatorPage` was listed in the story but is a standalone
+  tool with its own courts input — it never read `tournament.court_count`,
+  so it was left alone.
+- Removed an orphaned `court_count` from the HomePage select. DB column
+  `tournaments.court_count` left in place (harmless; app no longer reads
+  it). Typecheck + build clean; no new lint errors.
+- **Scope note:** Ron also wants the venue **address** split into
+  line1/line2/city/state/zip — filed as its own story, *not* in this PR.
+
+**Next:** Ron reviews/merges the PR. Then drain the address-structuring
+story.
 
 ## 2026-06-07 — Regression secrets renamed E2E_*; setup state
 

@@ -17,7 +17,11 @@ import {
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
 
-type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+// Court count + venue details now live on the selected venue
+// (locations), joined in on the tournament fetch below.
+type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
+  locations: { name: string; address: string | null; court_count: number | null } | null;
+};
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type EventStatus = Database["public"]["Enums"]["event_status"];
 type TournamentStatus = Database["public"]["Enums"]["tournament_status"];
@@ -57,7 +61,7 @@ export default function TournamentDetailPage() {
 
     const { data: tData, error: tErr } = await supabase
       .from("tournaments")
-      .select("*")
+      .select("*, locations(name, address, court_count)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .is("deleted_at", null)
@@ -198,21 +202,6 @@ export default function TournamentDetailPage() {
     return m;
   }, [eventCourts, events]);
 
-  const setCourtCount = async (n: number) => {
-    if (!t) return;
-    setBusyAction("court_count");
-    const { error: updErr } = await supabase
-      .from("tournaments")
-      .update({ court_count: n })
-      .eq("id", t.id);
-    setBusyAction(null);
-    if (updErr) {
-      setError(updErr.message);
-      return;
-    }
-    await reload();
-  };
-
   const setEventStatus = async (eventId: string, status: EventStatus) => {
     setBusyAction(`status:${eventId}`);
     const { error: updErr } = await supabase
@@ -302,7 +291,11 @@ export default function TournamentDetailPage() {
   if (error) return <ErrorBox message={error} />;
   if (!t) return null;
 
-  const courts = Array.from({ length: t.court_count }, (_, i) => i + 1);
+  const venueCourtCount = t.locations?.court_count ?? null;
+  const courts = Array.from(
+    { length: venueCourtCount ?? 0 },
+    (_, i) => i + 1,
+  );
 
   return (
     <div>
@@ -484,29 +477,45 @@ export default function TournamentDetailPage() {
           label="Entry fee"
           value={compactTierPriceLabel(tiers)}
         />
-        <DtDd label="Location" value={t.location_name || "—"} />
-        <DtDd label="Address" value={t.location_address || "—"} />
+        <DtDd
+          label="Venue"
+          value={t.locations?.name || t.location_name || "—"}
+        />
+        <DtDd
+          label="Address"
+          value={t.locations?.address || t.location_address || "—"}
+        />
         <dt style={{ color: "#888" }}>Courts at venue</dt>
         <dd style={{ margin: 0 }}>
-          <input
-            type="number"
-            min="1"
-            max="32"
-            value={t.court_count}
-            onChange={(e) => {
-              const n = parseInt(e.target.value || "1", 10);
-              if (Number.isFinite(n) && n >= 1 && n <= 32) void setCourtCount(n);
-            }}
-            disabled={busyAction === "court_count"}
-            style={{
-              width: 60,
-              padding: "4px 8px",
-              border: "1px solid #e2e2e2",
-              borderRadius: 4,
-              fontSize: 13,
-              fontFamily: "inherit",
-            }}
-          />
+          {venueCourtCount != null ? (
+            <span style={{ fontSize: 13 }}>
+              {venueCourtCount} court{venueCourtCount === 1 ? "" : "s"}
+            </span>
+          ) : (
+            <span style={{ fontSize: 13, color: "#999" }}>
+              {t.location_id != null ? (
+                <>
+                  Not set —{" "}
+                  <Link
+                    to={`/admin/${org.slug}/locations`}
+                    style={{ color: "#2563eb", textDecoration: "none" }}
+                  >
+                    add it on the venue
+                  </Link>
+                </>
+              ) : (
+                <>
+                  No venue —{" "}
+                  <Link
+                    to={`/admin/${org.slug}/tournaments/${t.slug}/edit`}
+                    style={{ color: "#2563eb", textDecoration: "none" }}
+                  >
+                    choose one
+                  </Link>
+                </>
+              )}
+            </span>
+          )}
         </dd>
       </dl>
 
@@ -856,7 +865,7 @@ function EventCard({
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {courts.length === 0 ? (
             <span style={{ color: "#999", fontSize: 13 }}>
-              Set "Courts at venue" above to assign courts.
+              Set a court count on this tournament's venue to assign courts.
             </span>
           ) : (
             courts.map((n) => {
