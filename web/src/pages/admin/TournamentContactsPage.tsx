@@ -186,11 +186,11 @@ export default function TournamentContactsPage() {
         >
           {tournament.name}
         </Link>
-        {" / Contacts"}
+        {" / Tournament Contacts"}
       </nav>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Contacts</h1>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Tournament Contacts</h1>
         {!showAdd && (
           <button
             onClick={() => { setShowAdd(true); setAddDraft(emptyDraft()); setAddError(null); }}
