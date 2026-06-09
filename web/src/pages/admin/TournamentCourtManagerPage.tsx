@@ -16,9 +16,14 @@ import {
   playoffStageStyle,
 } from "../../lib/matchLabel";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
+import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
 import type { Database } from "../../types/supabase";
 
-type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+// Court count now lives on the selected venue (locations.court_count),
+// joined in on the tournament fetch below.
+type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
+  locations: { court_count: number | null } | null;
+};
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type EventRegistration =
@@ -46,7 +51,7 @@ type RankedSuggestion = {
 
 // Tournament-level court manager.
 //
-// Walks 1..tournament.court_count. For each court:
+// Walks 1..(the venue's court_count). For each court:
 //   * Find the active event holding the court (event_courts join).
 //   * If no owner ⇒ "Unassigned" card.
 //   * If an in_progress match on that court ⇒ score-entry card.
@@ -78,7 +83,7 @@ export default function TournamentCourtManagerPage() {
 
     const { data: tData, error: tErr } = await supabase
       .from("tournaments")
-      .select("*")
+      .select("*, locations(court_count)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .is("deleted_at", null)
@@ -356,7 +361,10 @@ export default function TournamentCourtManagerPage() {
 
     const usedTeamsByEvent = new Map<string, Set<string>>();
 
-    const courts = Array.from({ length: tournament.court_count }, (_, i) => i + 1);
+    const courts = Array.from(
+      { length: tournament.locations?.court_count ?? 0 },
+      (_, i) => i + 1,
+    );
     for (const cn of courts) {
       const eventId = ownerByCourt.get(cn);
       if (!eventId) continue;
@@ -547,10 +555,18 @@ export default function TournamentCourtManagerPage() {
   if (error) return <ErrorBox message={error} />;
   if (!tournament) return null;
 
-  const courts = Array.from(
-    { length: tournament.court_count },
-    (_, i) => i + 1,
-  );
+  const courtCount = tournament.locations?.court_count ?? null;
+  if (courtCount == null || courtCount < 1) {
+    return (
+      <NoCourtCountNotice
+        orgSlug={org.slug}
+        tournamentSlug={tournament.slug}
+        hasVenue={tournament.location_id != null}
+      />
+    );
+  }
+
+  const courts = Array.from({ length: courtCount }, (_, i) => i + 1);
   const completedCount = matches.filter((m) => m.status === "completed").length;
   const inProgressCount = matches.filter((m) => m.status === "in_progress").length;
   const pendingCount = matches.filter((m) => m.status === "pending").length;
