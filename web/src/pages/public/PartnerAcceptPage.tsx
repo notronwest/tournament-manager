@@ -7,6 +7,7 @@ import {
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import {
   contentColStyle,
@@ -104,6 +105,7 @@ export default function PartnerAcceptPage() {
   const [phase, setPhase] = useState<
     "ready" | "accepting" | "declining" | "accepted" | "declined"
   >("ready");
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
 
   // ─── Load invite context (anon-callable RPC) ──────────────────────
   useEffect(() => {
@@ -315,6 +317,7 @@ export default function PartnerAcceptPage() {
     if (rpcErr) {
       setError(rpcErr.message);
       setPhase("ready");
+      setShowDeclineModal(false);
       return;
     }
     setPhase("declined");
@@ -408,8 +411,8 @@ export default function PartnerAcceptPage() {
 
       <div style={contextCard}>
         <div style={metaGrid}>
-          <Meta label="Event" value={context.event_name} bold />
-          <Meta label="Tournament" value={context.tournament_name} />
+          <Meta label="Tournament" value={context.tournament_name} bold large />
+          <Meta label="Event" value={context.event_name} />
           {context.event_fee_cents > 0 && (
             <Meta
               label="Entry fee"
@@ -489,7 +492,7 @@ export default function PartnerAcceptPage() {
             : `Accept — I'll be ${context.inviter_first_name}'s partner`}
         </button>
         <button
-          onClick={() => void onDecline()}
+          onClick={() => setShowDeclineModal(true)}
           disabled={isBusy}
           style={{
             ...secondaryBtn,
@@ -497,9 +500,25 @@ export default function PartnerAcceptPage() {
             opacity: isBusy ? 0.6 : 1,
           }}
         >
-          {phase === "declining" ? "…" : "Decline"}
+          Decline
         </button>
       </div>
+
+      {showDeclineModal && (
+        <ConfirmModal
+          title="Decline this partner invite?"
+          body={
+            <>
+              You are about to decline this partner invite.{" "}
+              <strong>{inviterFull}</strong> will be notified.
+            </>
+          }
+          confirmLabel="Confirm decline"
+          cancelLabel="Cancel"
+          onCancel={() => setShowDeclineModal(false)}
+          onConfirm={onDecline}
+        />
+      )}
     </Shell>
   );
 }
@@ -583,10 +602,12 @@ function Meta({
   label,
   value,
   bold,
+  large,
 }: {
   label: string;
   value: string;
   bold?: boolean;
+  large?: boolean;
 }) {
   return (
     <div>
@@ -603,7 +624,7 @@ function Meta({
       </div>
       <div
         style={{
-          fontSize: 14,
+          fontSize: large ? 16 : 14,
           marginTop: 4,
           fontWeight: bold ? 600 : 400,
           color: ink,

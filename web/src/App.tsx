@@ -28,6 +28,7 @@ import HomePage from "./pages/public/HomePage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
+import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
@@ -58,6 +59,16 @@ export default function App() {
       <Route
         path="/t/:orgSlug/:tournamentSlug"
         element={<PublicTournamentPage />}
+      />
+      {/* My Tournaments — player's personal registration history. Auth
+          required (must be signed in to have registrations). */}
+      <Route
+        path="/my-tournaments"
+        element={
+          <RequireAuth>
+            <MyTournamentsPage />
+          </RequireAuth>
+        }
       />
       {/* Profile — one-time setup that owns name / phone / gender /
           ratings. Auth required. Reached either via RequireProfile's
