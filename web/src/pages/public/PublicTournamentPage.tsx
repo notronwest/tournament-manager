@@ -2345,6 +2345,26 @@ function RosterPanel({
     verticalAlign: "middle",
   };
 
+  // Shared fixed column tracks so every roster table — the seekers
+  // table and each per-team table — lines its columns up at the same
+  // x-positions regardless of name length. Without this each table
+  // auto-sizes to its own content and the columns drift row to row.
+  // Order: name · rating · age · gender · location/action.
+  const RosterCols = () => (
+    <colgroup>
+      <col style={{ width: "40%" }} />
+      <col style={{ width: "13%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "25%" }} />
+    </colgroup>
+  );
+  const tableStyle: CSSProperties = {
+    width: "100%",
+    borderCollapse: "collapse",
+    tableLayout: "fixed",
+  };
+
   return (
     <div
       style={{
@@ -2371,7 +2391,8 @@ function RosterPanel({
           >
             Looking for a partner
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table style={tableStyle}>
+            <RosterCols />
             <tbody>
               {seekersSorted.map((row) => {
                 const isMe = row.registration_id === myRegId;
@@ -2484,14 +2505,19 @@ function RosterPanel({
                 <div
                   key={i}
                   style={{
-                    borderLeft: isPair ? "3px solid #93c5fd" : undefined,
-                    paddingLeft: isPair ? 0 : undefined,
+                    // Pairs get a blue bracket; singles reserve the same
+                    // 3px with a transparent border so their columns stay
+                    // aligned with the bracketed teams.
+                    borderLeft: isPair
+                      ? "3px solid #93c5fd"
+                      : "3px solid transparent",
                     background: isMyTeam ? "#f0fdf4" : undefined,
                     borderBottom:
                       i < teams.length - 1 ? "1px solid #e5e7eb" : undefined,
                   }}
                 >
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <table style={tableStyle}>
+                    <RosterCols />
                     <tbody>
                       {team.map((row, ri) => {
                         const isMe = row.registration_id === myRegId;
