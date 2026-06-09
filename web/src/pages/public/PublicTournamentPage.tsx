@@ -2364,6 +2364,20 @@ function RosterPanel({
     borderCollapse: "collapse",
     tableLayout: "fixed",
   };
+  // Neutral "incomplete team" tag for a doubles player who named a
+  // partner that hasn't accepted yet (partner_status='pending'). Kept
+  // visually distinct from the green "← you" and blue seeking styling.
+  const awaitingTagStyle: CSSProperties = {
+    marginLeft: 6,
+    fontSize: 10,
+    fontWeight: 600,
+    color: "#6b7280",
+    background: "#f3f4f6",
+    border: "1px solid #e5e7eb",
+    borderRadius: 4,
+    padding: "1px 6px",
+    whiteSpace: "nowrap",
+  };
 
   return (
     <div
@@ -2549,6 +2563,15 @@ function RosterPanel({
                                   ← you
                                 </span>
                               )}
+                              {/* Doubles single with an unaccepted invite:
+                                  named a partner who hasn't registered yet. */}
+                              {isDoubles &&
+                                !isPair &&
+                                row.partner_status === "pending" && (
+                                  <span style={awaitingTagStyle}>
+                                    awaiting partner
+                                  </span>
+                                )}
                             </td>
                             <td style={colStyle}>
                               {rating != null ? rating.toFixed(2) : "--"}
