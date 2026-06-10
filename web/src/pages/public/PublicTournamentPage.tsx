@@ -2623,6 +2623,22 @@ function RosterPanel({
                                   ← you
                                 </span>
                               )}
+                              {isDoubles && !isPair && row.partner_status === "pending" && (
+                                <span
+                                  style={{
+                                    marginLeft: 5,
+                                    fontSize: 10,
+                                    color: "#92400e",
+                                    background: "#fef3c7",
+                                    border: "1px solid #fde68a",
+                                    borderRadius: 3,
+                                    padding: "1px 5px",
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  awaiting partner
+                                </span>
+                              )}
                             </td>
                             <td style={colStyle}>
                               {rating != null ? rating.toFixed(2) : "--"}
