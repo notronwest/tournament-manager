@@ -99,6 +99,8 @@ type MyRegStatus = {
   // Used by Cancel-pending to know which row to soft-delete.
   regId: string | null;
   partnerLabel: string | null;
+  partnerEmail: string | null;
+  partnerPhone: string | null;
   inviteToken: string | null;
   inviterName: string | null;
   // F1: true when partner_status='seeking' on my reg — I'm
@@ -357,7 +359,7 @@ export default function PublicTournamentPage() {
         .select(
           `id, event_id, status, partner_status,
            partner_registration:event_registrations!partner_registration_id (
-             player:players!player_id (first_name, last_name)
+             player:players!player_id (first_name, last_name, email, phone)
            )`,
         )
         .eq("player_id", myPlayer.id)
@@ -367,7 +369,7 @@ export default function PublicTournamentPage() {
         .from("partner_invites")
         .select(
           `event_id, invitee_email,
-           invitee:players!invitee_player_id (first_name, last_name)`,
+           invitee:players!invitee_player_id (first_name, last_name, email, phone)`,
         )
         .eq("inviter_player_id", myPlayer.id)
         .eq("status", "pending")
@@ -390,13 +392,13 @@ export default function PublicTournamentPage() {
       status: Database["public"]["Enums"]["registration_status"];
       partner_status: Database["public"]["Enums"]["partner_status"];
       partner_registration:
-        | { player: { first_name: string; last_name: string } | null }
+        | { player: { first_name: string; last_name: string; email: string | null; phone: string | null } | null }
         | null;
     };
     type OutboundRow = {
       event_id: string;
       invitee_email: string | null;
-      invitee: { first_name: string; last_name: string } | null;
+      invitee: { first_name: string; last_name: string; email: string | null; phone: string | null } | null;
     };
     type InboundRow = {
       event_id: string;
@@ -409,6 +411,8 @@ export default function PublicTournamentPage() {
       const partnerLabel = partner
         ? `${partner.first_name} ${partner.last_name}`
         : null;
+      const partnerEmail = partner?.email ?? null;
+      const partnerPhone = partner?.phone ?? null;
       // Derive the per-card state from the reg's payment + partner
       // status. pending_payment wins over partner_status (haven't
       // committed yet); for paid regs the partner_status splits
@@ -425,6 +429,8 @@ export default function PublicTournamentPage() {
         state,
         regId: r.id,
         partnerLabel,
+        partnerEmail,
+        partnerPhone,
         inviteToken: null,
         inviterName: null,
         isSeekingPartner: r.partner_status === "seeking",
@@ -438,7 +444,12 @@ export default function PublicTournamentPage() {
         ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
         : inv.invitee_email ?? null;
       if (cur && !cur.partnerLabel) {
-        map.set(inv.event_id, { ...cur, partnerLabel: label });
+        map.set(inv.event_id, {
+          ...cur,
+          partnerLabel: label,
+          partnerEmail: inv.invitee?.email ?? null,
+          partnerPhone: inv.invitee?.phone ?? null,
+        });
       }
     }
     // Inbound invites: any event I was picked for and haven't
@@ -463,6 +474,8 @@ export default function PublicTournamentPage() {
         state: "invited",
         regId: cur?.regId ?? null,
         partnerLabel: cur?.partnerLabel ?? null,
+        partnerEmail: cur?.partnerEmail ?? null,
+        partnerPhone: cur?.partnerPhone ?? null,
         inviteToken: inv.token,
         inviterName,
         isSeekingPartner: cur?.isSeekingPartner ?? false,
@@ -1721,7 +1734,7 @@ function EventCard({
               opacity: cancelling ? 0.6 : 1,
             }}
           >
-            {cancelling ? "Cancelling…" : "Cancel"}
+            {cancelling ? "Cancelling…" : "Cancel Registration"}
           </button>
         </div>
       );
@@ -1910,35 +1923,34 @@ function EventCard({
               partner
             </div>
           ) : myStatus?.partnerLabel ? (
-            <div
-              style={{
-                color: isAmberCard ? ink : successFg,
-                fontSize: 12,
-                marginTop: 4,
-              }}
-            >
-              {isPaid && myStatus.state === "paid"
-                ? "Partnered with "
-                : "Invited "}
-              <strong>{myStatus.partnerLabel}</strong>
+            <div style={{ marginTop: 4 }}>
+              <div style={{ color: isAmberCard ? ink : successFg, fontSize: 13 }}>
+                {isPaid && myStatus.state === "paid"
+                  ? "Partnered with "
+                  : "Invited "}
+              </div>
+              <div
+                style={{
+                  color: isAmberCard ? ink : successFg,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  lineHeight: 1.2,
+                }}
+              >
+                {myStatus.partnerLabel}
+              </div>
+              {(myStatus.partnerEmail || myStatus.partnerPhone) && (
+                <div style={{ marginTop: 2, fontSize: 12, color: inkSoft }}>
+                  {myStatus.partnerEmail && (
+                    <div>{myStatus.partnerEmail}</div>
+                  )}
+                  {myStatus.partnerPhone && (
+                    <div>{myStatus.partnerPhone}</div>
+                  )}
+                </div>
+              )}
             </div>
           ) : null}
-          {isPending && myStatus?.partnerLabel && (
-            <div
-              style={{
-                marginTop: 5,
-                padding: "5px 10px",
-                background: "#fff",
-                border: `2px solid ${warnFg}`,
-                borderRadius: 5,
-                fontSize: 11,
-                color: ink,
-                display: "inline-block",
-              }}
-            >
-              Your partner won't be notified until you check out.
-            </div>
-          )}
           {/* Meta line */}
           <div style={{ color: inkSoft, fontSize: 13, marginTop: 4 }}>
             {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
@@ -1981,7 +1993,25 @@ function EventCard({
               box, so repeating a per-event number on every card just
               muddied the model. */}
         </div>
-        <div style={{ alignSelf: "center" }}>{renderAction()}</div>
+        <div style={{ alignSelf: "flex-start", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          {renderAction()}
+          {isPending && myStatus?.partnerLabel && (
+            <div
+              style={{
+                padding: "5px 10px",
+                background: "#fff",
+                border: `2px solid ${warnFg}`,
+                borderRadius: 5,
+                fontSize: 11,
+                color: ink,
+                maxWidth: 180,
+                textAlign: "right",
+              }}
+            >
+              Your partner won't be notified until you check out.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Toggle bar + collapsible roster panel */}
