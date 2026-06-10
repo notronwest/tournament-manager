@@ -5,13 +5,14 @@ import { useAuth } from "./AuthProvider";
 
 // Wraps any route that needs a "complete" player profile — meaning
 // the authenticated user has a players row linked to their auth user
-// with first_name and last_name set. Anyone missing those bits is
+// with first_name, last_name, and email set. Anyone missing those is
 // bounced to /profile?return=<original-path>; ProfilePage redirects
 // back here once they've saved.
 //
-// "Complete" is intentionally minimal: just the two names. Phone,
-// gender, and self-ratings stay optional — the profile screen
-// nudges for them but doesn't block.
+// "Complete" is intentionally minimal: just the two names + email.
+// Email is required because flows like checkout and partner invites
+// send messages to the player. Phone, gender, and self-ratings stay
+// optional — the profile screen nudges for them but doesn't block.
 //
 // Always renders RequireAuth's loading UI for the auth-loading phase
 // so the two wrappers can stack cleanly without two competing
@@ -34,14 +35,38 @@ export function RequireProfile({ children }: { children: ReactNode }) {
     (async () => {
       const { data } = await supabase
         .from("players")
-        .select("first_name, last_name")
+        .select("id, first_name, last_name, email")
         .eq("auth_user_id", user.id)
         .is("deleted_at", null)
         .maybeSingle();
       if (cancelled) return;
-      setHasProfile(
-        !!(data && data.first_name?.trim() && data.last_name?.trim()),
-      );
+
+      // If the player row has names but no email and the auth session
+      // already has one (e.g. Google OAuth supplied it), backfill
+      // silently rather than bouncing the user to the profile form.
+      if (
+        data &&
+        data.first_name?.trim() &&
+        data.last_name?.trim() &&
+        !data.email?.trim() &&
+        user.email
+      ) {
+        await supabase
+          .from("players")
+          .update({ email: user.email })
+          .eq("id", data.id);
+        if (cancelled) return;
+        setHasProfile(true);
+      } else {
+        setHasProfile(
+          !!(
+            data &&
+            data.first_name?.trim() &&
+            data.last_name?.trim() &&
+            data.email?.trim()
+          ),
+        );
+      }
       setChecking(false);
     })();
     return () => {
