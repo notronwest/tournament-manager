@@ -1139,6 +1139,7 @@ export type Database = {
       tournaments: {
         Row: {
           additional_info_md: string | null
+          archived_at: string | null
           cancellation_policy_preset:
             | Database["public"]["Enums"]["cancellation_policy_preset"]
             | null
@@ -1169,6 +1170,7 @@ export type Database = {
         }
         Insert: {
           additional_info_md?: string | null
+          archived_at?: string | null
           cancellation_policy_preset?:
             | Database["public"]["Enums"]["cancellation_policy_preset"]
             | null
@@ -1199,6 +1201,7 @@ export type Database = {
         }
         Update: {
           additional_info_md?: string | null
+          archived_at?: string | null
           cancellation_policy_preset?:
             | Database["public"]["Enums"]["cancellation_policy_preset"]
             | null
