@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mockup — Register focus overlay (dim other events)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#14181f; --inkSoft:#4a5159; --inkMuted:#6b7280;
+    --bg:#fafaf7; --cream:#f6efd6; --creamDeep:#ead9a3;
+    --rule:#e3dec8; --ruleSoft:#ece6cf;
+    --green:#2c8a3d; --yellow:#f3d111; --red:#d8341c; --blue:#1e6cd6;
+    --okBg:#e8f4eb; --okFg:#1e6b2c;
+    --body:"Inter",system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    --display:"Alfa Slab One","Times New Roman",serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+
+  /* ---- demo chrome (not part of the product) ---- */
+  .demo-note{max-width:820px;margin:0 auto;padding:18px 22px 0;color:var(--inkSoft);font-size:13px;line-height:1.5}
+  .demo-note b{color:var(--ink)}
+  .demo-note code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--rule);padding:1px 5px;border-radius:5px}
+
+  header.site{background:var(--ink);color:#fff;padding:14px 22px;display:flex;align-items:center;gap:10px}
+  header.site .mark{font-family:var(--display);font-size:18px;letter-spacing:.2px}
+  header.site .dot{color:var(--yellow)}
+
+  .wrap{max-width:820px;margin:0 auto;padding:26px 22px 80px;position:relative}
+  h1.t{font-family:var(--display);font-size:clamp(28px,4.5vw,40px);line-height:1.05;margin:8px 0 2px}
+  .t-accent{height:5px;width:84px;background:var(--red);border-radius:3px;margin:6px 0 10px}
+  .sub{color:var(--inkSoft);font-size:14px;margin-bottom:22px}
+
+  /* NOTE: no z-index here — a positioned ancestor with z-index creates a
+     stacking context that would trap .card.lifted's z-index below the page
+     scrim, making the scrim paint over the "lifted" card. Keep it context-free. */
+  .events{display:flex;flex-direction:column;gap:14px}
+
+  .card{
+    position:relative;background:#fff;border:1px solid var(--rule);border-radius:14px;
+    padding:18px 18px 18px 22px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    box-shadow:0 1px 0 rgba(20,24,31,.03);transition:box-shadow .18s, transform .18s, filter .18s, opacity .18s;
+  }
+  .card::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:5px;border-radius:3px;background:var(--green)}
+  .card.s-green::before{background:var(--green)}
+  .card.s-yellow::before{background:var(--yellow)}
+  .card.s-red::before{background:var(--red)}
+  .card .info{flex:1;min-width:0}
+  .card .name{font-weight:700;font-size:17px;margin:0 0 4px}
+  .card .meta{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:12px;color:var(--inkSoft);background:var(--cream);border:1px solid var(--creamDeep);border-radius:999px;padding:2px 9px}
+  .price{font-family:var(--mono);font-size:14px;color:var(--ink);white-space:nowrap;text-align:right}
+  .price small{display:block;color:var(--inkMuted);font-size:11px;font-family:var(--body)}
+  .btn{
+    appearance:none;border:0;cursor:pointer;font-family:var(--body);font-weight:600;font-size:14px;
+    padding:10px 18px;border-radius:10px;background:var(--ink);color:#fff;white-space:nowrap;
+  }
+  .btn:hover{background:#000}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--rule)}
+  .btn.go{background:var(--green)}
+  .btn.go:hover{filter:brightness(1.05)}
+
+  /* ---- focus overlay ---- */
+  .scrim{
+    position:fixed;inset:0;background:rgba(20,24,31,.55);backdrop-filter:saturate(.7) blur(1px);
+    opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:50;
+  }
+  body.focused .scrim{opacity:1;pointer-events:auto}
+  /* dim every card while focused… */
+  body.focused .card{filter:grayscale(.55) opacity(.45);pointer-events:none}
+  /* …except the one we lifted above the scrim */
+  .card.lifted{position:relative;z-index:60;filter:none!important;opacity:1!important;pointer-events:auto;
+    box-shadow:0 18px 50px rgba(20,24,31,.28);transform:translateY(-2px);border-color:var(--creamDeep)}
+
+  /* expanded register form inside the lifted card */
+  .card .form{display:none;flex-basis:100%;margin-top:14px;border-top:1px dashed var(--rule);padding-top:14px}
+  .card.lifted .form{display:block}
+  .card.lifted .register-btn{display:none}
+  .form .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .tile{display:flex;align-items:center;gap:8px;border:1px solid var(--rule);border-radius:10px;padding:8px 12px;font-size:13px;background:#fff;cursor:pointer}
+  .tile.sel{border-color:var(--green);background:var(--okBg);color:var(--okFg);font-weight:600}
+  .form .actions{display:flex;gap:10px;align-items:center;margin-top:4px}
+  .form .close{margin-left:auto;background:transparent;border:1px solid var(--rule);border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:16px;line-height:1;color:var(--inkSoft)}
+  .focus-hint{font-size:12px;color:var(--inkMuted);margin-top:8px}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;z-index:70}
+  .toast.show{opacity:1}
+
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+  <div class="demo-note">
+    <b>Mockup — “focus the event you’re registering for.”</b> Clicking
+    <code>Register</code> dims every <i>other</i> event behind a scrim and lifts the
+    chosen card above it, where its inline form expands. Click the scrim, the
+    <code>×</code>, “Not now”, or press <code>Esc</code> to exit focus. Target surface:
+    <code>PublicTournamentPage</code> EventCard (issue&nbsp;#98).
+  </div>
+
+  <header class="site"><span class="mark">bert &amp; erne<span class="dot">.</span></span></header>
+
+  <div class="scrim" id="scrim"></div>
+
+  <div class="wrap">
+    <h1 class="t">Seacoast Summer Slam</h1>
+    <div class="t-accent"></div>
+    <div class="sub">Pickleball Angels · Sat Jul 12 · Stratham, NH · $45 entry (includes one event) + $15 each additional</div>
+
+    <div class="events" id="events">
+
+      <div class="card s-green">
+        <div class="info">
+          <p class="name">Men’s Doubles 3.5</p>
+          <div class="meta"><span class="chip">Doubles</span><span class="chip">Men</span><span class="chip">3.5</span></div>
+          <div class="form">
+            <div class="row"><span class="tile sel">🤝 Pick a partner</span><span class="tile">🙋 I need a partner</span></div>
+            <div class="actions">
+              <button class="btn go" data-confirm>Confirm registration · $45.00</button>
+              <button class="btn ghost" data-close>Not now</button>
+              <button class="close" data-close title="Close">×</button>
+            </div>
+            <div class="focus-hint">Other events are dimmed so you can focus on this one. Press <b>Esc</b> to step back out.</div>
+          </div>
+        </div>
+        <div class="price">$45.00<small>first event</small></div>
+        <button class="btn register-btn" data-register>Register</button>
+      </div>
+
+      <div class="card s-yellow">
+        <div class="info">
+          <p class="name">Mixed Doubles 4.0</p>
+          <div class="meta"><span class="chip">Doubles</span><span class="chip">Mixed</span><span class="chip">4.0</span></div>
+          <div class="form">
+            <div class="row"><span class="tile sel">🤝 Pick a partner</span><span class="tile">🙋 I need a partner</span></div>
+            <div class="actions">
+              <button class="btn go" data-confirm>Confirm registration · $15.00</button>
+              <button class="btn ghost" data-close>Not now</button>
+              <button class="close" data-close title="Close">×</button>
+            </div>
+            <div class="focus-hint">Other events are dimmed so you can focus on this one. Press <b>Esc</b> to step back out.</div>
+          </div>
+        </div>
+        <div class="price">$15.00<small>additional</small></div>
+        <button class="btn register-btn" data-register>Register</button>
+      </div>
+
+      <div class="card s-red">
+        <div class="info">
+          <p class="name">Women’s Doubles 3.0</p>
+          <div class="meta"><span class="chip">Doubles</span><span class="chip">Women</span><span class="chip">3.0</span></div>
+          <div class="form">
+            <div class="row"><span class="tile sel">🤝 Pick a partner</span><span class="tile">🙋 I need a partner</span></div>
+            <div class="actions">
+              <button class="btn go" data-confirm>Confirm registration · $45.00</button>
+              <button class="btn ghost" data-close>Not now</button>
+              <button class="close" data-close title="Close">×</button>
+            </div>
+            <div class="focus-hint">Other events are dimmed so you can focus on this one. Press <b>Esc</b> to step back out.</div>
+          </div>
+        </div>
+        <div class="price">$45.00<small>first event</small></div>
+        <button class="btn register-btn" data-register>Register</button>
+      </div>
+
+      <div class="card s-green">
+        <div class="info">
+          <p class="name">Men’s Singles 4.5</p>
+          <div class="meta"><span class="chip">Singles</span><span class="chip">Men</span><span class="chip">4.5</span></div>
+          <div class="form">
+            <div class="row"><span class="tile sel">Just me</span></div>
+            <div class="actions">
+              <button class="btn go" data-confirm>Confirm registration · $15.00</button>
+              <button class="btn ghost" data-close>Not now</button>
+              <button class="close" data-close title="Close">×</button>
+            </div>
+            <div class="focus-hint">Other events are dimmed so you can focus on this one. Press <b>Esc</b> to step back out.</div>
+          </div>
+        </div>
+        <div class="price">$15.00<small>additional</small></div>
+        <button class="btn register-btn" data-register>Register</button>
+      </div>
+
+      <div class="card s-yellow">
+        <div class="info">
+          <p class="name">Mixed Doubles 3.0</p>
+          <div class="meta"><span class="chip">Doubles</span><span class="chip">Mixed</span><span class="chip">3.0</span></div>
+          <div class="form">
+            <div class="row"><span class="tile sel">🤝 Pick a partner</span><span class="tile">🙋 I need a partner</span></div>
+            <div class="actions">
+              <button class="btn go" data-confirm>Confirm registration · $15.00</button>
+              <button class="btn ghost" data-close>Not now</button>
+              <button class="close" data-close title="Close">×</button>
+            </div>
+            <div class="focus-hint">Other events are dimmed so you can focus on this one. Press <b>Esc</b> to step back out.</div>
+          </div>
+        </div>
+        <div class="price">$15.00<small>additional</small></div>
+        <button class="btn register-btn" data-register>Register</button>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  // Cards are static HTML above; JS only drives the focus interaction,
+  // so the page still renders fully in viewers that don't execute JS.
+  const events = document.getElementById('events');
+  const scrim = document.getElementById('scrim');
+  const toast = document.getElementById('toast');
+  let lifted = null;
+
+  function focusCard(card){
+    lifted = card;
+    document.body.classList.add('focused');
+    card.classList.add('lifted');
+    card.querySelector('[data-confirm]')?.focus();
+  }
+  function exitFocus(){
+    document.body.classList.remove('focused');
+    if(lifted) lifted.classList.remove('lifted');
+    lifted = null;
+  }
+  function showToast(msg){
+    toast.textContent = msg; toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'), 1800);
+  }
+
+  events.addEventListener('click', (ev)=>{
+    if(ev.target.closest('[data-register]')){ focusCard(ev.target.closest('.card')); return; }
+    if(ev.target.closest('[data-close]')){ exitFocus(); return; }
+    if(ev.target.closest('[data-confirm]')){ exitFocus(); showToast('Added to your pending registrations ✓'); return; }
+    const tile = ev.target.closest('.tile');
+    if(tile && tile.parentElement.querySelectorAll('.tile').length > 1){
+      tile.parentElement.querySelectorAll('.tile').forEach(t=>t.classList.remove('sel'));
+      tile.classList.add('sel');
+    }
+  });
+  scrim.addEventListener('click', exitFocus);
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') exitFocus(); });
+</script>
+</body>
+</html>
