@@ -718,12 +718,12 @@ export default function PublicTournamentPage() {
           {/* Window detail: when it opens (if not yet) or closes (if open). */}
           {regStatus.tone === "soon" &&
             tournament.registration_opens_at && (
-              <div style={{ fontSize: 12, color: warnFg, marginBottom: 4 }}>
+              <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
                 Registration opens {fmtDateTime(tournament.registration_opens_at)}
               </div>
             )}
           {tournament.registration_closes_at && registrationOpen && (
-            <div style={{ fontSize: 12, color: inkSoft }}>
+            <div style={{ fontSize: 14, color: inkSoft }}>
               Registration closes {fmtDateTime(tournament.registration_closes_at)}
             </div>
           )}
@@ -1018,6 +1018,26 @@ function StickyCheckoutBar({
   );
 }
 
+// Maps event format × gender to a left-border accent color so card type
+// is readable at a glance. Single source of truth — EventCard calls this;
+// don't inline these values elsewhere.
+//
+// CVD note: courtGreen (men-doubles) and courtRed (mixed-doubles) share the
+// red-green axis and may read similarly for deuteranopes/protanopes. The
+// format label and gender chip on the card still disambiguate. Add a legend
+// with text labels if a dense grid view is introduced later.
+function eventTypeColor(
+  format: Database["public"]["Enums"]["event_format"],
+  gender: Database["public"]["Enums"]["event_gender"],
+): string {
+  if (format === "singles" && gender === "men")   return courtBlue;    // #1e6cd6
+  if (format === "singles" && gender === "women") return "#7eb5f5";    // light blue
+  if (format === "doubles" && gender === "men")   return courtGreen;   // #2c8a3d
+  if (format === "doubles" && gender === "women") return "#9333ea";    // purple
+  if (format === "doubles" && gender === "mixed") return courtRed;     // #d8341c
+  return inkMuted; // fallback: singles·mixed or any unexpected combo
+}
+
 function EventCard({
   event,
   registrationOpen,
@@ -1119,19 +1139,17 @@ function EventCard({
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
   const isPending = myStatus?.state === "pending_payment";
-  const cardBorderLeft = isPending
-    ? `6px solid ${courtYellow}`
-    : isPaid
-      ? `6px solid ${courtGreen}`
-      : registrationOpen
-        ? `6px solid ${courtGreen}`
-        : `6px solid ${inkMuted}`;
-  const cardBorderColor = isPending
-    ? courtYellow
-    : isPaid
-      ? courtGreen
-      : rule;
-  const cardBg = isPending ? warnBg : "#fff";
+  // #194 a11y: all three "action needed" states get the amber wash
+  // (pending_payment, awaiting_partner, invited) — amber bg + amber border
+  // color, with dark-ink text/pills (handled below) for contrast.
+  const isAmberCard =
+    isPending ||
+    myStatus?.state === "awaiting_partner" ||
+    myStatus?.state === "invited";
+  // Left border encodes the EVENT TYPE (#152), independent of status.
+  const cardBorderLeft = `6px solid ${eventTypeColor(event.format, event.gender)}`;
+  const cardBorderColor = isAmberCard ? courtYellow : isPaid ? courtGreen : rule;
+  const cardBg = isAmberCard ? warnBg : "#fff";
 
   // ─── Handlers ────────────────────────────────────────────────────
   const startRegister = () => {
@@ -1873,13 +1891,13 @@ function EventCard({
               <Pill bg={successBg} fg={successFg}>Registered</Pill>
             )}
             {myStatus?.state === "pending_payment" && (
-              <Pill bg={warnBg} fg={warnFg}>Pending payment</Pill>
+              <Pill bg={ink} fg={courtYellow}>Pending payment</Pill>
             )}
             {myStatus?.state === "awaiting_partner" && (
-              <Pill bg={warnBg} fg={warnFg}>Awaiting partner</Pill>
+              <Pill bg={ink} fg={courtYellow}>Awaiting partner</Pill>
             )}
             {myStatus?.state === "invited" && (
-              <Pill bg={warnBg} fg={warnFg}>You're invited</Pill>
+              <Pill bg={ink} fg={courtYellow}>You're invited</Pill>
             )}
             {myStatus?.isSeekingPartner && (
               <Pill bg={cream} fg={courtBlue}>Looking for partner</Pill>
@@ -1887,14 +1905,14 @@ function EventCard({
           </div>
           {/* Partner label */}
           {myStatus?.state === "invited" && myStatus.inviterName ? (
-            <div style={{ color: warnFg, fontSize: 12, marginTop: 4 }}>
+            <div style={{ color: ink, fontSize: 12, marginTop: 4 }}>
               <strong>{myStatus.inviterName}</strong> picked you as their
               partner
             </div>
           ) : myStatus?.partnerLabel ? (
             <div
               style={{
-                color: isPending ? warnFg : successFg,
+                color: isAmberCard ? ink : successFg,
                 fontSize: 12,
                 marginTop: 4,
               }}
@@ -1910,11 +1928,11 @@ function EventCard({
               style={{
                 marginTop: 5,
                 padding: "5px 10px",
-                background: warnBg,
-                border: `1px solid ${courtYellow}`,
+                background: "#fff",
+                border: `2px solid ${warnFg}`,
                 borderRadius: 5,
                 fontSize: 11,
-                color: warnFg,
+                color: ink,
                 display: "inline-block",
               }}
             >
@@ -2103,7 +2121,18 @@ function EventCard({
                     ]}
                   />
                   {partnerPicked && (
-                    <div style={{ ...statusPanelStyle("warn"), marginTop: 8, fontSize: 12 }}>
+                    <div
+                      style={{
+                        background: "#fff",
+                        border: `2px solid ${warnFg}`,
+                        borderRadius: 8,
+                        padding: "10px 14px",
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: ink,
+                        marginTop: 8,
+                      }}
+                    >
                       Your partner won't be notified until you check out.
                     </div>
                   )}
@@ -2545,7 +2574,7 @@ function RosterPanel({
           >
             {isDoubles ? "Registered teams" : "Registered players"}
           </div>
-          <div style={{ background: "#fafafa" }}>
+          <div style={{ background: "#fafafa", padding: "8px 8px 0" }}>
             {teams.map((team, i) => {
               const isMyTeam = team.some((r) => r.registration_id === myRegId);
               const isPair = team.length === 2;
@@ -2553,15 +2582,11 @@ function RosterPanel({
                 <div
                   key={i}
                   style={{
-                    // Pairs get a blue bracket; singles reserve the same
-                    // 3px with a transparent border so their columns stay
-                    // aligned with the bracketed teams.
-                    borderLeft: isPair
-                      ? "3px solid #93c5fd"
-                      : "3px solid transparent",
-                    background: isMyTeam ? "#f0fdf4" : undefined,
-                    borderBottom:
-                      i < teams.length - 1 ? "1px solid #e5e7eb" : undefined,
+                    background: "#fff",
+                    border: isMyTeam ? "1px solid #bbf7d0" : "1px solid #e5e7eb",
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    marginBottom: 8,
                   }}
                 >
                   <table style={tableStyle}>
@@ -2577,13 +2602,14 @@ function RosterPanel({
                           <tr
                             key={row.registration_id}
                             style={{
+                              background: isMe ? "#f0fdf4" : undefined,
                               borderBottom:
                                 isPair && ri === 0
                                   ? "1px solid #e5e7eb"
                                   : undefined,
                             }}
                           >
-                            <td style={{ ...colStyle, fontWeight: isMe ? 600 : undefined }}>
+                            <td style={{ ...colStyle, fontSize: 15, fontWeight: isMe ? 600 : undefined }}>
                               {row.first_name} {row.last_name}
                               {isMe && (
                                 <span
@@ -2613,6 +2639,37 @@ function RosterPanel({
                           </tr>
                         );
                       })}
+                      {/* Ghost row: invited partner who hasn't registered yet.
+                          Visible only in doubles when the player sent an invite
+                          (partner_status='pending') that hasn't been accepted. */}
+                      {isDoubles && !isPair && team[0].invited_partner_first_name && (
+                        <tr style={{ borderTop: "1px dashed #e5e7eb" }}>
+                          <td
+                            style={{
+                              ...colStyle,
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                            }}
+                          >
+                            {team[0].invited_partner_first_name}{" "}
+                            {team[0].invited_partner_last_name}
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                color: "#9ca3af",
+                                fontStyle: "normal",
+                              }}
+                            >
+                              invited — hasn't registered
+                            </span>
+                          </td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -2658,7 +2715,7 @@ function Meta({ label, value }: { label: string; value: string }) {
       <div
         style={{
           fontFamily: monoFontStack,
-          fontSize: 10,
+          fontSize: 11,
           color: inkMuted,
           textTransform: "uppercase",
           letterSpacing: "0.18em",
@@ -2668,7 +2725,7 @@ function Meta({ label, value }: { label: string; value: string }) {
       >
         {label}
       </div>
-      <div style={{ fontSize: 14, color: inkSoft }}>{value}</div>
+      <div style={{ fontSize: 15, color: ink }}>{value}</div>
     </div>
   );
 }

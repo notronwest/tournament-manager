@@ -186,11 +186,11 @@ export default function TournamentContactsPage() {
         >
           {tournament.name}
         </Link>
-        {" / Contacts"}
+        {" / Tournament Contacts"}
       </nav>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Contacts</h1>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Tournament Contacts</h1>
         {!showAdd && (
           <button
             onClick={() => { setShowAdd(true); setAddDraft(emptyDraft()); setAddError(null); }}
@@ -339,6 +339,13 @@ function ContactForm({
           />
           {" Show on public tournament page"}
         </label>
+        {draft.is_public && (
+          <div style={spamWarningStyle}>
+            Publicly displayed names, emails, and phone numbers can be collected
+            by spam bots. Consider using a role-based address (e.g.{" "}
+            <em>info@example.com</em>) instead of a personal one.
+          </div>
+        )}
         <label style={checkboxLabelStyle}>
           <input
             type="checkbox"
@@ -576,4 +583,14 @@ const msgBadgeStyle: CSSProperties = {
   borderRadius: 4,
   fontSize: 11,
   fontWeight: 500,
+};
+
+const spamWarningStyle: CSSProperties = {
+  padding: "8px 12px",
+  background: "#fffbeb",
+  border: "1px solid #fcd34d",
+  borderRadius: 4,
+  color: "#92400e",
+  fontSize: 12,
+  lineHeight: 1.5,
 };

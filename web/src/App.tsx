@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import FeedbackWidget from "./components/FeedbackWidget";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
 import PendingPaymentsBar from "./components/PendingPaymentsBar";
@@ -14,6 +15,7 @@ import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
+import PlatformSettingsPage from "./pages/admin/PlatformSettingsPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
@@ -24,6 +26,7 @@ import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
 import HomePage from "./pages/public/HomePage";
+import PrivacyPage from "./pages/public/PrivacyPage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
@@ -143,6 +146,17 @@ export default function App() {
         }
       />
 
+      {/* Platform-admin-only settings (fee config). Defined before
+          the :orgSlug catch-all so "platform" isn't treated as a slug. */}
+      <Route
+        path="/admin/platform"
+        element={
+          <RequireAuth>
+            <PlatformSettingsPage />
+          </RequireAuth>
+        }
+      />
+
       {/* Stripe Connect OAuth callback. Fixed path (no org slug) so a
           single redirect_uri can be registered in Stripe Connect
           platform settings. The org comes through the OAuth state
@@ -254,6 +268,7 @@ export default function App() {
         />
       </Route>
 
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {/* Persistent pending-payments bar — sticky at the bottom of
@@ -261,6 +276,10 @@ export default function App() {
           registrations anywhere. Hides itself otherwise (and on
           the checkout page where its CTA would be redundant). */}
       <PendingPaymentsBar />
+      {/* Global feedback launcher — fixed bottom-right corner,
+          present on every page. Opens a form that files a GitHub
+          issue with the user's context (page, identity, message). */}
+      <FeedbackWidget />
     </PendingPaymentsProvider>
     </PartnerInvitesProvider>
   );
