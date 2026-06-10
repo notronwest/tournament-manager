@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Menu, X } from "lucide-react";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import { useAuth } from "../../auth/AuthProvider";
@@ -25,9 +26,8 @@ const SIDEBAR_CHIP_BG = "rgba(250, 250, 247, 0.08)";
 type OrgSummary = { slug: string; name: string };
 
 // Two-column layout: org-scoped sidebar nav on the left, route content on
-// the right. The class names (`admin-layout`, `admin-sidebar`,
-// `admin-sidebar-chrome`, `admin-sidebar-nav`, `admin-main`) are kept stable
-// so index.css media-query overrides can target them for responsive layouts.
+// the right. On mobile (< 768px) the sidebar becomes a slide-in drawer
+// triggered by a hamburger button in the mobile top bar.
 //
 // Identity (who am I, sign-out) is owned by the global SiteHeader at the App
 // level — this sidebar owns in-org navigation and org context only.
@@ -40,6 +40,8 @@ export default function AdminLayout() {
   const [memberOrgs, setMemberOrgs] = useState<OrgSummary[]>([]);
   const [overrideOrgs, setOverrideOrgs] = useState<OrgSummary[]>([]);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const closeDrawer = () => setDrawerOpen(false);
 
   // Fetch the org list once the platform-admin check resolves to true.
   // Only platform admins get the switcher, so non-admins never fetch.
@@ -130,8 +132,64 @@ export default function AdminLayout() {
       className="admin-layout"
       style={{ display: "flex", minHeight: "calc(100vh - 61px)" }}
     >
+      {/* Mobile-only top bar. Hidden on desktop via index.css. */}
+      <div
+        className="admin-mobile-topbar"
+        style={{ background: SIDEBAR_BG }}
+      >
+        <button
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Open navigation menu"
+          aria-expanded={drawerOpen}
+          aria-controls="admin-drawer"
+          style={{
+            width: 44,
+            height: 44,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "transparent",
+            border: "none",
+            borderRadius: 6,
+            cursor: "pointer",
+            color: SIDEBAR_FG,
+            flexShrink: 0,
+          }}
+        >
+          <Menu size={22} />
+        </button>
+        <span
+          style={{
+            fontFamily: monoFontStack,
+            fontSize: 13,
+            color: SIDEBAR_FG,
+            fontWeight: 500,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {org.name}
+        </span>
+      </div>
+
+      {/* Drawer backdrop — only rendered when open; tap to close. */}
+      {drawerOpen && (
+        <div
+          onClick={closeDrawer}
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            zIndex: 199,
+          }}
+        />
+      )}
+
       <aside
-        className="admin-sidebar"
+        id="admin-drawer"
+        className={`admin-sidebar${drawerOpen ? " admin-drawer-open" : ""}`}
         style={{
           width: 240,
           background: SIDEBAR_BG,
@@ -140,7 +198,29 @@ export default function AdminLayout() {
           flexShrink: 0,
         }}
       >
-        {/* Org identity — hidden on mobile via index.css */}
+        {/* Mobile-only close button. Hidden on desktop via index.css. */}
+        <div className="admin-drawer-close">
+          <button
+            onClick={closeDrawer}
+            aria-label="Close navigation menu"
+            style={{
+              width: 44,
+              height: 44,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "transparent",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              color: SIDEBAR_FG,
+            }}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Brand chip + org identity */}
         <div className="admin-sidebar-chrome">
           {/* Org chip */}
           <div
@@ -318,20 +398,20 @@ export default function AdminLayout() {
           className="admin-sidebar-nav"
           style={{ flex: 1, padding: "8px 0" }}
         >
-          <SideLink to={`/admin/${org.slug}/tournaments`}>
+          <SideLink to={`/admin/${org.slug}/tournaments`} onNavigate={closeDrawer}>
             Tournaments
           </SideLink>
-          <SideLink to={`/admin/${org.slug}/locations`}>Venues</SideLink>
-          <SideLink to={`/admin/${org.slug}/tools/round-robin`}>
+          <SideLink to={`/admin/${org.slug}/locations`} onNavigate={closeDrawer}>Venues</SideLink>
+          <SideLink to={`/admin/${org.slug}/tools/round-robin`} onNavigate={closeDrawer}>
             RR estimator
           </SideLink>
-          <SideLink to={`/admin/${org.slug}/tools/seed-event`}>
+          <SideLink to={`/admin/${org.slug}/tools/seed-event`} onNavigate={closeDrawer}>
             Seed test data
           </SideLink>
-          <SideLink to={`/admin/${org.slug}/tools/test-players`}>
+          <SideLink to={`/admin/${org.slug}/tools/test-players`} onNavigate={closeDrawer}>
             Test players
           </SideLink>
-          <SideLink to={`/admin/${org.slug}/settings/stripe`}>
+          <SideLink to={`/admin/${org.slug}/settings/stripe`} onNavigate={closeDrawer}>
             Stripe Connect
           </SideLink>
         </nav>
@@ -417,16 +497,19 @@ function OrgSwitcherItem({
 function SideLink({
   to,
   end,
+  onNavigate,
   children,
 }: {
   to: string;
   end?: boolean;
+  onNavigate?: () => void;
   children: ReactNode;
 }) {
   return (
     <NavLink
       to={to}
       end={end}
+      onClick={onNavigate}
       style={({ isActive }) => ({
         display: "block",
         padding: "8px 12px",
