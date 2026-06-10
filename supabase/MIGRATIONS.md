@@ -9,12 +9,52 @@ caused drift — see PR #71/#77 "Reconcile migration drift".)
 ## How it works
 
 - Migration `.sql` files live in `supabase/migrations/`.
-- A PR that adds one leads with **"⚠️ Contains a DB migration."**
+- A migration ships in its **own DB PR, separate from the UX that depends on
+  it** (the regenerated `types` ride with the migration; the dependent app
+  code is a second PR). The DB PR is **marked** (see below) and leads with
+  **"⚠️ Contains a DB migration."**
 - On merge to `main`, `.github/workflows/migrations.yml` runs
-  `supabase db push` against the `tournament-manager` Supabase project.
+  `supabase db push --include-all` against the `tournament-manager`
+  Supabase project.
 - The Builder may **draft** additive/reversible migrations; risky ones
   (destructive DDL, RLS, `SECURITY DEFINER`, money, backfills) it Blocks for
   Ron to design.
+
+## Schema first, UX second
+
+The preview deploys only the frontend, against the **live** DB, and a
+migration applies **only on merge** — so a bundled schema+UI PR can't be
+validated before merge (the new UI calls a column that isn't there yet; this
+is what made #167 untestable). Split it (expand/contract):
+
+1. **DB PR** — migration (+ types) only → merge → schema is live.
+2. **UX PR** — dependent code, now testable on the preview against the real
+   schema → validate → merge.
+
+Safe because migrations here are additive/backward-compatible (the old UI
+ignores the new column). It makes the **UX** testable pre-merge, not the
+**migration** itself (no staging DB) — see the canonical convention.
+
+## Spotting & ordering DB PRs on the Review board
+
+A migration is the one kind of merge that touches shared state and applies in
+a fixed sequence, so DB PRs are flagged and merged **first, in order**, before
+UX work:
+
+- **Marked two ways** so they're unmissable on the board and in the PR list:
+  - the **`db-migration`** label (filter/group the board by it), and
+  - a **`[DB]`** prefix on the PR title.
+- **Merge in migration-timestamp order.** The order key is the migration
+  filename's `YYYYMMDDHHMMSS` prefix (e.g. `20260609000001_…`). When two DB
+  PRs sit in Review, merge the **lower** timestamp first. That keeps the
+  remote migration history linear and matches how `db push` orders files.
+- **The backstop:** `db push --include-all` will still apply an out-of-order
+  file rather than wedging the pipeline (see the workflow comment). Order is
+  the convention for a clean history; `--include-all` is the safety net so a
+  slip doesn't halt every later migration — which is exactly what happened to
+  `20260609000001_feedback_submissions` on 2026-06-09.
+
+Shared canonical rule: [`../../wmpc-meta/conventions/migrations.md`](../../wmpc-meta/conventions/migrations.md).
 
 ## Turn-on checklist — currently INERT (fail-closed)
 

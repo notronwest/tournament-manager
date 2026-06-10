@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import FeedbackWidget from "./components/FeedbackWidget";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
 import PendingPaymentsBar from "./components/PendingPaymentsBar";
@@ -25,6 +26,7 @@ import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
 import HomePage from "./pages/public/HomePage";
+import PrivacyPage from "./pages/public/PrivacyPage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
@@ -266,6 +268,7 @@ export default function App() {
         />
       </Route>
 
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {/* Persistent pending-payments bar — sticky at the bottom of
@@ -273,6 +276,10 @@ export default function App() {
           registrations anywhere. Hides itself otherwise (and on
           the checkout page where its CTA would be redundant). */}
       <PendingPaymentsBar />
+      {/* Global feedback launcher — fixed bottom-right corner,
+          present on every page. Opens a form that files a GitHub
+          issue with the user's context (page, identity, message). */}
+      <FeedbackWidget />
     </PendingPaymentsProvider>
     </PartnerInvitesProvider>
   );
