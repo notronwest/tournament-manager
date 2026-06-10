@@ -13,9 +13,14 @@ import {
   estimatePoolPlay,
   fmtDuration,
 } from "../../lib/estimator";
+import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
 import type { Database } from "../../types/supabase";
 
-type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+// Court count now lives on the selected venue (locations.court_count),
+// joined in on the tournament fetch below.
+type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
+  locations: { court_count: number | null } | null;
+};
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type EventCourt = Database["public"]["Tables"]["event_courts"]["Row"];
 
@@ -111,7 +116,7 @@ export default function SchedulePage() {
 
       const { data: t, error: tErr } = await supabase
         .from("tournaments")
-        .select("*")
+        .select("*, locations(court_count)")
         .eq("organization_id", org.id)
         .eq("slug", tournamentSlug)
         .is("deleted_at", null)
@@ -563,6 +568,17 @@ export default function SchedulePage() {
   }
   if (!tournament) return null;
 
+  const courtCount = tournament.locations?.court_count ?? null;
+  if (courtCount == null || courtCount < 1) {
+    return (
+      <NoCourtCountNotice
+        orgSlug={org.slug}
+        tournamentSlug={tournament.slug}
+        hasVenue={tournament.location_id != null}
+      />
+    );
+  }
+
   const totalSequentialMinutes = rows.reduce(
     (sum, r) => sum + r.totalMinutes,
     0,
@@ -739,7 +755,7 @@ export default function SchedulePage() {
 
           {view === "calendar" && (
             <CourtTimeline
-              courtCount={tournament.court_count}
+              courtCount={courtCount}
               rows={rows}
             />
           )}
@@ -847,7 +863,7 @@ export default function SchedulePage() {
                     }
                   >
                     <CourtPills
-                      total={tournament.court_count}
+                      total={courtCount}
                       assigned={r.courtNumbers}
                     />
                   </td>

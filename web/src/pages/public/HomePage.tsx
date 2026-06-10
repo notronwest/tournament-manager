@@ -98,7 +98,7 @@ export default function HomePage() {
       const { data, error: err } = await supabase
         .from("tournaments")
         .select(
-          "id, name, slug, starts_at, ends_at, location_name, location_address, status, organization_id, court_count, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at), events (id, min_rating, max_rating, deleted_at)",
+          "id, name, slug, starts_at, ends_at, location_name, location_address, status, organization_id, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at), events (id, min_rating, max_rating, deleted_at)",
         )
         .eq("status", "published")
         .gte("ends_at", todayIso)
@@ -265,22 +265,24 @@ export default function HomePage() {
             />
           </FilterControl>
 
-          <FilterControl label="Organizer">
-            <select
-              value={organizerFilter}
-              onChange={(e) => setOrganizerFilter(e.target.value)}
-              style={filterSelectStyle}
-              aria-label="Filter by organizer"
-              disabled={organizerOptions.length === 0}
-            >
-              <option value="">All organizers</option>
-              {organizerOptions.map((o) => (
-                <option key={o.slug} value={o.slug}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </FilterControl>
+          {false && (
+            <FilterControl label="Organizer">
+              <select
+                value={organizerFilter}
+                onChange={(e) => setOrganizerFilter(e.target.value)}
+                style={filterSelectStyle}
+                aria-label="Filter by organizer"
+                disabled={organizerOptions.length === 0}
+              >
+                <option value="">All organizers</option>
+                {organizerOptions.map((o) => (
+                  <option key={o.slug} value={o.slug}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </FilterControl>
+          )}
 
           <FilterControl label="From">
             <input
@@ -302,19 +304,21 @@ export default function HomePage() {
             />
           </FilterControl>
 
-          <FilterControl label="My rating">
-            <input
-              type="number"
-              placeholder="e.g. 3.5"
-              value={skillLevel}
-              min={1}
-              max={6}
-              step={0.5}
-              onChange={(e) => setSkillLevel(e.target.value)}
-              style={{ ...filterInputStyle, width: 90 }}
-              aria-label="Filter by skill level"
-            />
-          </FilterControl>
+          {false && (
+            <FilterControl label="My rating">
+              <input
+                type="number"
+                placeholder="e.g. 3.5"
+                value={skillLevel}
+                min={1}
+                max={6}
+                step={0.5}
+                onChange={(e) => setSkillLevel(e.target.value)}
+                style={{ ...filterInputStyle, width: 90 }}
+                aria-label="Filter by skill level"
+              />
+            </FilterControl>
+          )}
 
           {(hasActiveFilters || query) && (
             <button

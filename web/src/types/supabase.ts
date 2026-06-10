@@ -871,6 +871,7 @@ export type Database = {
       players: {
         Row: {
           auth_user_id: string | null
+          avatar_path: string | null
           city: string | null
           created_at: string
           deleted_at: string | null
@@ -889,6 +890,7 @@ export type Database = {
         }
         Insert: {
           auth_user_id?: string | null
+          avatar_path?: string | null
           city?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -907,6 +909,7 @@ export type Database = {
         }
         Update: {
           auth_user_id?: string | null
+          avatar_path?: string | null
           city?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -1288,6 +1291,8 @@ export type Database = {
           event_id: string
           first_name: string
           gender: Database["public"]["Enums"]["player_gender"]
+          invited_partner_first_name: string | null
+          invited_partner_last_name: string | null
           last_name: string
           partner_registration_id: string
           partner_status: Database["public"]["Enums"]["partner_status"]
