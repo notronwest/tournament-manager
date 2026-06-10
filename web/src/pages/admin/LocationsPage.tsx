@@ -32,6 +32,10 @@ export default function LocationsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [addName, setAddName] = useState("");
   const [addAddress, setAddAddress] = useState("");
+  const [addLine2, setAddLine2] = useState("");
+  const [addCity, setAddCity] = useState("");
+  const [addState, setAddState] = useState("");
+  const [addPostalCode, setAddPostalCode] = useState("");
   const [addIsDefault, setAddIsDefault] = useState(false);
   const [addCourtCount, setAddCourtCount] = useState("");
   const [addNetType, setAddNetType] = useState<NetType | "">("");
@@ -46,6 +50,10 @@ export default function LocationsPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const [editLine2, setEditLine2] = useState("");
+  const [editCity, setEditCity] = useState("");
+  const [editState, setEditState] = useState("");
+  const [editPostalCode, setEditPostalCode] = useState("");
   const [editIsDefault, setEditIsDefault] = useState(false);
   const [editCourtCount, setEditCourtCount] = useState("");
   const [editNetType, setEditNetType] = useState<NetType | "">("");
@@ -87,6 +95,10 @@ export default function LocationsPage() {
     setEditId(loc.id);
     setEditName(loc.name);
     setEditAddress(loc.address ?? "");
+    setEditLine2(loc.address_line2 ?? "");
+    setEditCity(loc.city ?? "");
+    setEditState(loc.state ?? "");
+    setEditPostalCode(loc.postal_code ?? "");
     setEditIsDefault(loc.is_default);
     setEditCourtCount(loc.court_count != null ? String(loc.court_count) : "");
     setEditNetType(loc.net_type ?? "");
@@ -117,6 +129,10 @@ export default function LocationsPage() {
       .update({
         name: editName.trim(),
         address: editAddress.trim() || null,
+        address_line2: editLine2.trim() || null,
+        city: editCity.trim() || null,
+        state: editState.trim() || null,
+        postal_code: editPostalCode.trim() || null,
         is_default: editIsDefault,
         court_count: editCourtCount !== "" ? parseInt(editCourtCount, 10) : null,
         net_type: editNetType || null,
@@ -197,6 +213,10 @@ export default function LocationsPage() {
         organization_id: org.id,
         name: addName.trim(),
         address: addAddress.trim() || null,
+        address_line2: addLine2.trim() || null,
+        city: addCity.trim() || null,
+        state: addState.trim() || null,
+        postal_code: addPostalCode.trim() || null,
         is_default: addIsDefault,
         court_count: addCourtCount !== "" ? parseInt(addCourtCount, 10) : null,
         net_type: addNetType || null,
@@ -217,6 +237,10 @@ export default function LocationsPage() {
     );
     setAddName("");
     setAddAddress("");
+    setAddLine2("");
+    setAddCity("");
+    setAddState("");
+    setAddPostalCode("");
     setAddIsDefault(false);
     setAddCourtCount("");
     setAddNetType("");
@@ -265,12 +289,52 @@ export default function LocationsPage() {
                 autoFocus
               />
             </Field>
-            <Field label="Address">
+            <Field label="Street address">
               <input
                 type="text"
                 value={addAddress}
                 onChange={(e) => setAddAddress(e.target.value)}
-                placeholder="e.g. 123 Main St, City, State"
+                placeholder="e.g. 123 Main St"
+                style={inputStyle}
+              />
+            </Field>
+          </FieldRow>
+          <FieldRow>
+            <Field label="Suite / unit">
+              <input
+                type="text"
+                value={addLine2}
+                onChange={(e) => setAddLine2(e.target.value)}
+                placeholder="e.g. Suite 100"
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="City">
+              <input
+                type="text"
+                value={addCity}
+                onChange={(e) => setAddCity(e.target.value)}
+                placeholder="e.g. Portland"
+                style={inputStyle}
+              />
+            </Field>
+          </FieldRow>
+          <FieldRow>
+            <Field label="State">
+              <input
+                type="text"
+                value={addState}
+                onChange={(e) => setAddState(e.target.value)}
+                placeholder="e.g. OR"
+                style={inputStyle}
+              />
+            </Field>
+            <Field label="ZIP code">
+              <input
+                type="text"
+                value={addPostalCode}
+                onChange={(e) => setAddPostalCode(e.target.value)}
+                placeholder="e.g. 97201"
                 style={inputStyle}
               />
             </Field>
@@ -303,7 +367,7 @@ export default function LocationsPage() {
             </button>
             <button
               type="button"
-              onClick={() => { setShowAdd(false); setAddName(""); setAddAddress(""); setAddIsDefault(false); setAddCourtCount(""); setAddNetType(""); setAddSurfaceType(""); setAddSurfaceNotes(""); setAddCeilingMin(""); setAddCeilingMax(""); setAddError(null); }}
+              onClick={() => { setShowAdd(false); setAddName(""); setAddAddress(""); setAddLine2(""); setAddCity(""); setAddState(""); setAddPostalCode(""); setAddIsDefault(false); setAddCourtCount(""); setAddNetType(""); setAddSurfaceType(""); setAddSurfaceNotes(""); setAddCeilingMin(""); setAddCeilingMax(""); setAddError(null); }}
               style={ghostBtn}
             >
               Cancel
@@ -331,11 +395,52 @@ export default function LocationsPage() {
                   autoFocus
                 />
               </Field>
-              <Field label="Address">
+              <Field label="Street address">
                 <input
                   type="text"
                   value={editAddress}
                   onChange={(e) => setEditAddress(e.target.value)}
+                  placeholder="e.g. 123 Main St"
+                  style={inputStyle}
+                />
+              </Field>
+            </FieldRow>
+            <FieldRow>
+              <Field label="Suite / unit">
+                <input
+                  type="text"
+                  value={editLine2}
+                  onChange={(e) => setEditLine2(e.target.value)}
+                  placeholder="e.g. Suite 100"
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="City">
+                <input
+                  type="text"
+                  value={editCity}
+                  onChange={(e) => setEditCity(e.target.value)}
+                  placeholder="e.g. Portland"
+                  style={inputStyle}
+                />
+              </Field>
+            </FieldRow>
+            <FieldRow>
+              <Field label="State">
+                <input
+                  type="text"
+                  value={editState}
+                  onChange={(e) => setEditState(e.target.value)}
+                  placeholder="e.g. OR"
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="ZIP code">
+                <input
+                  type="text"
+                  value={editPostalCode}
+                  onChange={(e) => setEditPostalCode(e.target.value)}
+                  placeholder="e.g. 97201"
                   style={inputStyle}
                 />
               </Field>
@@ -378,8 +483,8 @@ export default function LocationsPage() {
               {loc.is_default && (
                 <span style={defaultBadge}>default</span>
               )}
-              {loc.address && (
-                <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>{loc.address}</div>
+              {composeAddress(loc) && (
+                <div style={{ fontSize: 13, color: "#666", marginTop: 2 }}>{composeAddress(loc)}</div>
               )}
               <VenueDetailSummary loc={loc} />
             </div>
@@ -413,6 +518,25 @@ export default function LocationsPage() {
       )}
     </div>
   );
+}
+
+function composeAddress(loc: {
+  address?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+}): string | null {
+  const parts: string[] = [];
+  if (loc.address) parts.push(loc.address);
+  if (loc.address_line2) parts.push(loc.address_line2);
+  const stateZip =
+    loc.state && loc.postal_code
+      ? `${loc.state} ${loc.postal_code}`
+      : (loc.state ?? loc.postal_code ?? null);
+  const cityStateZip = [loc.city, stateZip].filter(Boolean).join(", ");
+  if (cityStateZip) parts.push(cityStateZip);
+  return parts.length > 0 ? parts.join(", ") : null;
 }
 
 function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {

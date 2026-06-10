@@ -57,6 +57,10 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
     id: string;
     name: string;
     address: string | null;
+    address_line2: string | null;
+    city: string | null;
+    state: string | null;
+    postal_code: string | null;
     court_count: number | null;
     net_type: Database["public"]["Enums"]["net_type"] | null;
     surface_type: Database["public"]["Enums"]["surface_type"] | null;
@@ -65,6 +69,25 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
     ceiling_height_max_ft: number | null;
   } | null;
 };
+function composeLocationAddress(loc: {
+  address?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+}): string | null {
+  const parts: string[] = [];
+  if (loc.address) parts.push(loc.address);
+  if (loc.address_line2) parts.push(loc.address_line2);
+  const stateZip =
+    loc.state && loc.postal_code
+      ? `${loc.state} ${loc.postal_code}`
+      : (loc.state ?? loc.postal_code ?? null);
+  const cityStateZip = [loc.city, stateZip].filter(Boolean).join(", ");
+  if (cityStateZip) parts.push(cityStateZip);
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
 type Event = Database["public"]["Tables"]["events"]["Row"];
 // Public-visible contact (is_public, not deleted) for the Contacts
 // section + contact form (#38). RLS only returns these to anon.
@@ -221,7 +244,7 @@ export default function PublicTournamentPage() {
 
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("*, locations(id, name, address, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft)")
+      .select("*, locations(id, name, address, address_line2, city, state, postal_code, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .in("status", ["published", "closed", "completed"])
@@ -620,15 +643,17 @@ export default function PublicTournamentPage() {
           {(tournament.locations ?? tournament.location_name) && (
             <Meta
               label="Where"
-              value={
-                tournament.locations
-                  ? tournament.locations.address
-                    ? `${tournament.locations.name} · ${tournament.locations.address}`
-                    : tournament.locations.name
-                  : tournament.location_address
-                    ? `${tournament.location_name} · ${tournament.location_address}`
-                    : tournament.location_name!
-              }
+              value={(() => {
+                if (tournament.locations) {
+                  const addrStr = composeLocationAddress(tournament.locations);
+                  return addrStr
+                    ? `${tournament.locations.name} · ${addrStr}`
+                    : tournament.locations.name;
+                }
+                return tournament.location_address
+                  ? `${tournament.location_name} · ${tournament.location_address}`
+                  : tournament.location_name!;
+              })()}
             />
           )}
           {tournament.locations?.court_count != null && (

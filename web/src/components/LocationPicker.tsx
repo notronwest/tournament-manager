@@ -34,6 +34,10 @@ export function LocationPicker({
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newAddress, setNewAddress] = useState("");
+  const [newLine2, setNewLine2] = useState("");
+  const [newCity, setNewCity] = useState("");
+  const [newState, setNewState] = useState("");
+  const [newPostalCode, setNewPostalCode] = useState("");
   const [newIsDefault, setNewIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -95,6 +99,10 @@ export function LocationPicker({
         organization_id: orgId,
         name: newName.trim(),
         address: newAddress.trim() || null,
+        address_line2: newLine2.trim() || null,
+        city: newCity.trim() || null,
+        state: newState.trim() || null,
+        postal_code: newPostalCode.trim() || null,
         is_default: newIsDefault,
       })
       .select()
@@ -111,6 +119,10 @@ export function LocationPicker({
     setShowCreate(false);
     setNewName("");
     setNewAddress("");
+    setNewLine2("");
+    setNewCity("");
+    setNewState("");
+    setNewPostalCode("");
     setNewIsDefault(false);
   };
 
@@ -130,13 +142,16 @@ export function LocationPicker({
         {locations.length === 0 && (
           <option value={MANUAL_SENTINEL}>No saved venues yet</option>
         )}
-        {locations.map((loc) => (
-          <option key={loc.id} value={loc.id}>
-            {loc.name}
-            {loc.is_default ? " (default)" : ""}
-            {loc.address ? ` — ${loc.address}` : ""}
-          </option>
-        ))}
+        {locations.map((loc) => {
+          const addrStr = composeAddress(loc);
+          return (
+            <option key={loc.id} value={loc.id}>
+              {loc.name}
+              {loc.is_default ? " (default)" : ""}
+              {addrStr ? ` — ${addrStr}` : ""}
+            </option>
+          );
+        })}
         {locations.length > 0 && (
           <option value={MANUAL_SENTINEL}>— Enter address manually (one-time)</option>
         )}
@@ -145,7 +160,7 @@ export function LocationPicker({
 
       {selectedLoc && !showCreate && (
         <div style={{ fontSize: 13, color: "#555" }}>
-          {selectedLoc.address || "(no address on file)"}
+          {composeAddress(selectedLoc) || "(no address on file)"}
         </div>
       )}
 
@@ -194,12 +209,56 @@ export function LocationPicker({
               />
             </label>
             <label style={labelStyle}>
-              <span>Address</span>
+              <span>Street address</span>
               <input
                 type="text"
                 value={newAddress}
                 onChange={(e) => setNewAddress(e.target.value)}
-                placeholder="e.g. 123 Main St, City, State"
+                placeholder="e.g. 123 Main St"
+                style={inputStyle}
+              />
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <label style={labelStyle}>
+              <span>Suite / unit</span>
+              <input
+                type="text"
+                value={newLine2}
+                onChange={(e) => setNewLine2(e.target.value)}
+                placeholder="e.g. Suite 100"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              <span>City</span>
+              <input
+                type="text"
+                value={newCity}
+                onChange={(e) => setNewCity(e.target.value)}
+                placeholder="e.g. Portland"
+                style={inputStyle}
+              />
+            </label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <label style={labelStyle}>
+              <span>State</span>
+              <input
+                type="text"
+                value={newState}
+                onChange={(e) => setNewState(e.target.value)}
+                placeholder="e.g. OR"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>
+              <span>ZIP code</span>
+              <input
+                type="text"
+                value={newPostalCode}
+                onChange={(e) => setNewPostalCode(e.target.value)}
+                placeholder="e.g. 97201"
                 style={inputStyle}
               />
             </label>
@@ -230,6 +289,10 @@ export function LocationPicker({
                 setShowCreate(false);
                 setNewName("");
                 setNewAddress("");
+                setNewLine2("");
+                setNewCity("");
+                setNewState("");
+                setNewPostalCode("");
                 setNewIsDefault(false);
                 setSaveError(null);
               }}
@@ -242,6 +305,25 @@ export function LocationPicker({
       )}
     </div>
   );
+}
+
+function composeAddress(loc: {
+  address?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+}): string | null {
+  const parts: string[] = [];
+  if (loc.address) parts.push(loc.address);
+  if (loc.address_line2) parts.push(loc.address_line2);
+  const stateZip =
+    loc.state && loc.postal_code
+      ? `${loc.state} ${loc.postal_code}`
+      : (loc.state ?? loc.postal_code ?? null);
+  const cityStateZip = [loc.city, stateZip].filter(Boolean).join(", ");
+  if (cityStateZip) parts.push(cityStateZip);
+  return parts.length > 0 ? parts.join(", ") : null;
 }
 
 const selectStyle: CSSProperties = {
