@@ -46,18 +46,31 @@ function defaultRedirectTo(): string {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  // Kept as a separate state so its reference only changes when the user's
+  // identity changes. TOKEN_REFRESHED hands back a new session object with
+  // the same user.id, and without this the new reference would invalidate
+  // every [user] dependency array in the ~13 consumers, causing an app-wide
+  // data refetch every time the tab regains focus.
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Restore session on mount.
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      setUser(data.session?.user ?? null);
       setLoading(false);
     });
 
     // Subscribe to changes — sign-in, sign-out, token refresh, etc.
     const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
+      // Only swap the user ref when the identity actually changes so that a
+      // background TOKEN_REFRESHED doesn't trigger downstream effect re-runs.
+      setUser((prev) => {
+        const next = newSession?.user ?? null;
+        return prev?.id === next?.id ? prev : next;
+      });
     });
 
     return () => data.subscription.unsubscribe();
@@ -117,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user: session?.user ?? null,
+        user,
         session,
         loading,
         signInWithPassword,
