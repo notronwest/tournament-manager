@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -31,6 +32,15 @@ import {
 
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type PlayerGender = Database["public"]["Enums"]["player_gender"];
+
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function extFor(mimeType: string): string {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
 
 // One-time (mostly) profile screen. Reached either:
 //   * Automatically via RequireProfile after a fresh signup when
@@ -80,6 +90,22 @@ export default function ProfilePage() {
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwNewVisible, setPwNewVisible] = useState(false);
   const [pwConfirmVisible, setPwConfirmVisible] = useState(false);
+
+  // Avatar upload state
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clean up blob URL when it changes (avoids leaking object URLs)
+  useEffect(() => {
+    return () => {
+      if (avatarPreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
+    };
+  }, [avatarPreviewUrl]);
 
   useEffect(() => {
     if (!user) return;
@@ -134,6 +160,12 @@ export default function ProfilePage() {
             ? String(me.self_rating_singles)
             : "",
         );
+        if (me.avatar_path) {
+          const { data: urlData } = supabase.storage
+            .from("avatars")
+            .getPublicUrl(me.avatar_path);
+          if (!cancelled) setAvatarPreviewUrl(urlData.publicUrl);
+        }
       }
       setLoading(false);
     })();
@@ -141,6 +173,35 @@ export default function ProfilePage() {
       cancelled = true;
     };
   }, [user]);
+
+  const handleAvatarClick = () => {
+    if (!busy) fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarError(null);
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setAvatarError("Only JPG, PNG, or WebP images are allowed.");
+      return;
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      setAvatarError("Image must be 5 MB or smaller.");
+      return;
+    }
+    setAvatarFile(file);
+    setPendingRemove(false);
+    setAvatarPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarFile(null);
+    setAvatarPreviewUrl(null);
+    setAvatarError(null);
+    setPendingRemove(true);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -178,6 +239,35 @@ export default function ProfilePage() {
       }
     }
 
+    // Handle avatar storage operations before updating the player row
+    let resolvedAvatarPath: string | null = existingPlayer?.avatar_path ?? null;
+
+    if (avatarFile) {
+      const ext = extFor(avatarFile.type);
+      const newPath = `${user.id}/avatar.${ext}`;
+      const oldPath = existingPlayer?.avatar_path ?? null;
+
+      // Delete old object if the path changed (e.g. jpg → png) to avoid orphans
+      if (oldPath && oldPath !== newPath) {
+        await supabase.storage.from("avatars").remove([oldPath]);
+      }
+
+      const { error: uploadErr } = await supabase.storage
+        .from("avatars")
+        .upload(newPath, avatarFile, { upsert: true, contentType: avatarFile.type });
+
+      if (uploadErr) {
+        setError(`Photo upload failed: ${uploadErr.message}`);
+        setBusy(false);
+        return;
+      }
+      resolvedAvatarPath = newPath;
+    } else if (pendingRemove && existingPlayer?.avatar_path) {
+      // Best-effort delete — don't block the profile save if storage delete fails
+      await supabase.storage.from("avatars").remove([existingPlayer.avatar_path]);
+      resolvedAvatarPath = null;
+    }
+
     const payload = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
@@ -186,6 +276,7 @@ export default function ProfilePage() {
       self_rating_doubles: parseRating(ratingDoubles),
       self_rating_mixed: parseRating(ratingMixed),
       self_rating_singles: parseRating(ratingSingles),
+      avatar_path: resolvedAvatarPath,
     };
 
     // Three save paths: update auth-linked row, claim an email-
@@ -286,6 +377,11 @@ export default function ProfilePage() {
     ? "Before you register, we need a few things about you. You only have to do this once — every future tournament uses the same profile."
     : "Anything you update here flows into every event you've registered for.";
 
+  const initials = [firstName.trim()[0], lastName.trim()[0]]
+    .filter(Boolean)
+    .join("")
+    .toUpperCase() || "?";
+
   return (
     <Shell>
       {isFirstFill && (
@@ -298,6 +394,61 @@ export default function ProfilePage() {
       <p style={pageSubStyle}>{subhead}</p>
 
       <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {/* Avatar upload */}
+        <div style={avatarSectionStyle}>
+          <button
+            type="button"
+            onClick={handleAvatarClick}
+            disabled={busy}
+            style={avatarCircleStyle(!!avatarPreviewUrl)}
+            title="Click to change photo"
+            aria-label="Change profile photo"
+          >
+            {avatarPreviewUrl ? (
+              <img
+                src={avatarPreviewUrl}
+                alt="Your profile photo"
+                style={avatarImgStyle}
+              />
+            ) : (
+              <span style={avatarInitialsStyle}>{initials}</span>
+            )}
+          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <button
+              type="button"
+              style={changePhotoStyle}
+              onClick={handleAvatarClick}
+              disabled={busy}
+            >
+              {avatarPreviewUrl ? "Change photo" : "Upload photo"}
+            </button>
+            {avatarPreviewUrl && (
+              <button
+                type="button"
+                style={removePhotoStyle}
+                onClick={handleRemoveAvatar}
+                disabled={busy}
+              >
+                Remove photo
+              </button>
+            )}
+            <span style={{ fontSize: 11, color: inkMuted }}>
+              JPG, PNG or WebP · max 5 MB
+            </span>
+            {avatarError && (
+              <span style={{ fontSize: 12, color: courtRed }}>{avatarError}</span>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: "none" }}
+            onChange={handleFileChange}
+          />
+        </div>
+
         <FieldRow>
           <Field label="First name" required>
             <input
@@ -670,4 +821,67 @@ const eyeButtonStyle: CSSProperties = {
   color: inkMuted,
   display: "flex",
   alignItems: "center",
+};
+
+const avatarSectionStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+  paddingBottom: 4,
+};
+
+function avatarCircleStyle(hasImage: boolean): CSSProperties {
+  return {
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    background: hasImage ? "transparent" : ink,
+    border: `2px solid ${rule}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    padding: 0,
+    overflow: "hidden",
+    flexShrink: 0,
+    transition: "border-color 0.15s",
+  };
+}
+
+const avatarImgStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  borderRadius: "50%",
+  display: "block",
+};
+
+const avatarInitialsStyle: CSSProperties = {
+  fontSize: 22,
+  fontWeight: 600,
+  color: "#fff",
+  letterSpacing: 1,
+  userSelect: "none",
+};
+
+const changePhotoStyle: CSSProperties = {
+  background: "none",
+  border: `1px solid ${rule}`,
+  borderRadius: 6,
+  padding: "4px 12px",
+  fontSize: 13,
+  color: ink,
+  cursor: "pointer",
+  alignSelf: "flex-start",
+};
+
+const removePhotoStyle: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  fontSize: 12,
+  color: courtRed,
+  cursor: "pointer",
+  textDecoration: "underline",
+  textAlign: "left",
 };
