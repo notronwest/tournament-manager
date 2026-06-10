@@ -2559,7 +2559,7 @@ function RosterPanel({
           >
             {isDoubles ? "Registered teams" : "Registered players"}
           </div>
-          <div style={{ background: "#fafafa" }}>
+          <div style={{ background: "#fafafa", padding: "8px 8px 0" }}>
             {teams.map((team, i) => {
               const isMyTeam = team.some((r) => r.registration_id === myRegId);
               const isPair = team.length === 2;
@@ -2567,38 +2567,15 @@ function RosterPanel({
                 <div
                   key={i}
                   style={{
-                    // Pairs get a blue bracket; singles reserve the same
-                    // 3px with a transparent border so their columns stay
-                    // aligned with the bracketed teams.
-                    borderLeft: isPair
-                      ? "3px solid #93c5fd"
-                      : "3px solid transparent",
-                    background: isMyTeam ? "#f0fdf4" : undefined,
-                    borderBottom:
-                      i < teams.length - 1 ? "1px solid #e5e7eb" : undefined,
+                    background: "#fff",
+                    border: isMyTeam ? "1px solid #bbf7d0" : "1px solid #e5e7eb",
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    marginBottom: 8,
                   }}
                 >
                   <table style={tableStyle}>
                     <RosterCols />
-                    {isPair && (
-                      <thead>
-                        <tr>
-                          <td
-                            colSpan={5}
-                            style={{
-                              padding: "3px 6px 2px",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: isMyTeam ? "#166534" : "#1e40af",
-                              background: isMyTeam ? "#dcfce7" : "#dbeafe",
-                              borderBottom: "1px solid #e5e7eb",
-                            }}
-                          >
-                            {team[0].first_name} & {team[1].first_name}
-                          </td>
-                        </tr>
-                      </thead>
-                    )}
                     <tbody>
                       {team.map((row, ri) => {
                         const isMe = row.registration_id === myRegId;
@@ -2610,13 +2587,14 @@ function RosterPanel({
                           <tr
                             key={row.registration_id}
                             style={{
+                              background: isMe ? "#f0fdf4" : undefined,
                               borderBottom:
                                 isPair && ri === 0
                                   ? "1px solid #e5e7eb"
                                   : undefined,
                             }}
                           >
-                            <td style={{ ...colStyle, fontWeight: isMe ? 600 : undefined }}>
+                            <td style={{ ...colStyle, fontSize: 15, fontWeight: isMe ? 600 : undefined }}>
                               {row.first_name} {row.last_name}
                               {isMe && (
                                 <span
