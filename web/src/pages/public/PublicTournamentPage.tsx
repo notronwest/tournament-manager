@@ -1139,13 +1139,17 @@ function EventCard({
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
   const isPending = myStatus?.state === "pending_payment";
+  // #194 a11y: all three "action needed" states get the amber wash
+  // (pending_payment, awaiting_partner, invited) — amber bg + amber border
+  // color, with dark-ink text/pills (handled below) for contrast.
+  const isAmberCard =
+    isPending ||
+    myStatus?.state === "awaiting_partner" ||
+    myStatus?.state === "invited";
+  // Left border encodes the EVENT TYPE (#152), independent of status.
   const cardBorderLeft = `6px solid ${eventTypeColor(event.format, event.gender)}`;
-  const cardBorderColor = isPending
-    ? courtYellow
-    : isPaid
-      ? courtGreen
-      : rule;
-  const cardBg = isPending ? warnBg : "#fff";
+  const cardBorderColor = isAmberCard ? courtYellow : isPaid ? courtGreen : rule;
+  const cardBg = isAmberCard ? warnBg : "#fff";
 
   // ─── Handlers ────────────────────────────────────────────────────
   const startRegister = () => {
@@ -1887,13 +1891,13 @@ function EventCard({
               <Pill bg={successBg} fg={successFg}>Registered</Pill>
             )}
             {myStatus?.state === "pending_payment" && (
-              <Pill bg={warnBg} fg={warnFg}>Pending payment</Pill>
+              <Pill bg={ink} fg={courtYellow}>Pending payment</Pill>
             )}
             {myStatus?.state === "awaiting_partner" && (
-              <Pill bg={warnBg} fg={warnFg}>Awaiting partner</Pill>
+              <Pill bg={ink} fg={courtYellow}>Awaiting partner</Pill>
             )}
             {myStatus?.state === "invited" && (
-              <Pill bg={warnBg} fg={warnFg}>You're invited</Pill>
+              <Pill bg={ink} fg={courtYellow}>You're invited</Pill>
             )}
             {myStatus?.isSeekingPartner && (
               <Pill bg={cream} fg={courtBlue}>Looking for partner</Pill>
@@ -1901,14 +1905,14 @@ function EventCard({
           </div>
           {/* Partner label */}
           {myStatus?.state === "invited" && myStatus.inviterName ? (
-            <div style={{ color: warnFg, fontSize: 12, marginTop: 4 }}>
+            <div style={{ color: ink, fontSize: 12, marginTop: 4 }}>
               <strong>{myStatus.inviterName}</strong> picked you as their
               partner
             </div>
           ) : myStatus?.partnerLabel ? (
             <div
               style={{
-                color: isPending ? warnFg : successFg,
+                color: isAmberCard ? ink : successFg,
                 fontSize: 12,
                 marginTop: 4,
               }}
@@ -1924,11 +1928,11 @@ function EventCard({
               style={{
                 marginTop: 5,
                 padding: "5px 10px",
-                background: warnBg,
-                border: `1px solid ${courtYellow}`,
+                background: "#fff",
+                border: `2px solid ${warnFg}`,
                 borderRadius: 5,
                 fontSize: 11,
-                color: warnFg,
+                color: ink,
                 display: "inline-block",
               }}
             >
@@ -2117,7 +2121,18 @@ function EventCard({
                     ]}
                   />
                   {partnerPicked && (
-                    <div style={{ ...statusPanelStyle("warn"), marginTop: 8, fontSize: 12 }}>
+                    <div
+                      style={{
+                        background: "#fff",
+                        border: `2px solid ${warnFg}`,
+                        borderRadius: 8,
+                        padding: "10px 14px",
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: ink,
+                        marginTop: 8,
+                      }}
+                    >
                       Your partner won't be notified until you check out.
                     </div>
                   )}
