@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import SiteFooter from "../../components/SiteFooter";
 import { supabase } from "../../supabase";
 import {
   compactTierPriceLabel,
@@ -20,6 +21,7 @@ import {
   ghostButtonStyle,
   headingFontStack,
   ink,
+  inkMuted,
   inkSoft,
   inputStyle,
   pillStyle,
@@ -30,14 +32,17 @@ import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Organization = Database["public"]["Tables"]["organizations"]["Row"];
+type EventRow = Database["public"]["Tables"]["events"]["Row"];
 
-// A tournament joined to its org + its pricing tiers. PostgREST returns
-// the related org as a single object on to-one relations, but the
-// generated TS thinks it could be an array — cast through unknown on
-// receipt.
+type EventForFilter = Pick<EventRow, "id" | "min_rating" | "max_rating" | "deleted_at">;
+
+// A tournament joined to its org, pricing tiers, and events. PostgREST
+// returns the related org as a single object on to-one relations, but the
+// generated TS thinks it could be an array — cast through unknown on receipt.
 type TournamentWithOrg = Tournament & {
   organizations: Pick<Organization, "name" | "slug"> | null;
   tournament_pricing_tiers: PricingTier[] | null;
+  events: EventForFilter[] | null;
 };
 
 // Public homepage at `/`. Built to mockup 01 (mockups/layouts-v5.html):
@@ -47,6 +52,7 @@ type TournamentWithOrg = Tournament & {
 //   │  headline (red accent line), two CTAs.                       │
 //   ├──────────────────────────────────────────────────────────────┤
 //   │  Section head: "Upcoming Tournaments" (Anton) + search box.  │
+//   │  Filter bar: location · organizer · date range · skill.      │
 //   │  3-up card grid, colored top stripes cycle G/Y/R, each card  │
 //   │  surfaces pill + Alfa Slab title + meta + price.             │
 //   └──────────────────────────────────────────────────────────────┘
@@ -59,15 +65,22 @@ type TournamentWithOrg = Tournament & {
 // Hero-specific styles (oversized H1, hero CTAs) are built locally by
 // spreading the theme bases.
 //
-// Data: same query as the prior list-style homepage — every published
-// tournament whose ends_at hasn't passed, RLS-anon-readable. Volumes
-// stay small (low-double-digit published tournaments at any moment)
-// so we filter in-memory.
+// Data: every published tournament whose ends_at hasn't passed,
+// RLS-anon-readable. Volumes stay small (low-double-digit published
+// tournaments at any moment) so all filtering happens in-memory.
+// Events are included to support skill-level filtering.
 export default function HomePage() {
   const [tournaments, setTournaments] = useState<TournamentWithOrg[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+
+  // Filter state
+  const [locationFilter, setLocationFilter] = useState("");
+  const [organizerFilter, setOrganizerFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [skillLevel, setSkillLevel] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +99,7 @@ export default function HomePage() {
       const { data, error: err } = await supabase
         .from("tournaments")
         .select(
-          "id, name, slug, starts_at, ends_at, location_name, location_address, status, organization_id, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at)",
+          "id, name, slug, starts_at, ends_at, location_name, location_address, status, organization_id, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at), events (id, min_rating, max_rating, deleted_at)",
         )
         .eq("status", "published")
         .gte("ends_at", todayIso)
@@ -109,20 +122,96 @@ export default function HomePage() {
     };
   }, []);
 
+  // Unique organizer list derived from loaded data for the dropdown.
+  const organizerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const opts: { slug: string; name: string }[] = [];
+    for (const t of tournaments) {
+      if (t.organizations && !seen.has(t.organizations.slug)) {
+        seen.add(t.organizations.slug);
+        opts.push({ slug: t.organizations.slug, name: t.organizations.name });
+      }
+    }
+    return opts.sort((a, b) => a.name.localeCompare(b.name));
+  }, [tournaments]);
+
+  const hasActiveFilters =
+    locationFilter.trim() !== "" ||
+    organizerFilter !== "" ||
+    dateFrom !== "" ||
+    dateTo !== "" ||
+    skillLevel !== "";
+
   const filtered = useMemo(() => {
+    let result = tournaments;
+
+    // Text search
     const q = query.trim().toLowerCase();
-    if (!q) return tournaments;
-    return tournaments.filter((t) => {
-      const haystack = [
-        t.name,
-        t.organizations?.name ?? "",
-        t.location_name ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [tournaments, query]);
+    if (q) {
+      result = result.filter((t) => {
+        const haystack = [t.name, t.organizations?.name ?? "", t.location_name ?? ""]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    // Location text filter — matches location_name or location_address.
+    // (Full radius search would require geocoordinates in the schema.)
+    const loc = locationFilter.trim().toLowerCase();
+    if (loc) {
+      result = result.filter(
+        (t) =>
+          (t.location_name ?? "").toLowerCase().includes(loc) ||
+          (t.location_address ?? "").toLowerCase().includes(loc),
+      );
+    }
+
+    // Organizer filter
+    if (organizerFilter) {
+      result = result.filter((t) => t.organizations?.slug === organizerFilter);
+    }
+
+    // Date-from: tournament starts on or after this date
+    if (dateFrom) {
+      result = result.filter((t) => t.starts_at.slice(0, 10) >= dateFrom);
+    }
+
+    // Date-to: tournament starts on or before this date
+    if (dateTo) {
+      result = result.filter((t) => t.starts_at.slice(0, 10) <= dateTo);
+    }
+
+    // Skill-level filter: show tournaments that have at least one active
+    // event where the player's rating falls within [min_rating, max_rating].
+    // Events with null bounds are open to any level for that bound.
+    // Tournaments with no events are shown (not yet configured).
+    if (skillLevel !== "") {
+      const rating = parseFloat(skillLevel);
+      if (!isNaN(rating)) {
+        result = result.filter((t) => {
+          const events = (t.events ?? []).filter((ev) => ev.deleted_at === null);
+          if (events.length === 0) return true;
+          return events.some(
+            (ev) =>
+              (ev.min_rating === null || ev.min_rating <= rating) &&
+              (ev.max_rating === null || ev.max_rating >= rating),
+          );
+        });
+      }
+    }
+
+    return result;
+  }, [tournaments, query, locationFilter, organizerFilter, dateFrom, dateTo, skillLevel]);
+
+  function clearAllFilters() {
+    setQuery("");
+    setLocationFilter("");
+    setOrganizerFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setSkillLevel("");
+  }
 
   return (
     <main style={{ background: bg, color: ink, fontFamily: bodyFontStack }}>
@@ -150,6 +239,7 @@ export default function HomePage() {
 
       {/* ─── Tournaments grid ───────────────────────────────────── */}
       <section id="tournaments" style={tournamentsSectionStyle}>
+        {/* Row 1: heading + search */}
         <div style={sectionHeadStyle}>
           <h2 style={sectionH2Style}>Upcoming Tournaments</h2>
           <div style={searchWrapStyle}>
@@ -164,15 +254,94 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Row 2: filter bar */}
+        <div style={filterBarStyle}>
+          <FilterControl label="Location">
+            <input
+              type="text"
+              placeholder="City or venue…"
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              style={filterInputStyle}
+              aria-label="Filter by location"
+            />
+          </FilterControl>
+
+          {false && (
+            <FilterControl label="Organizer">
+              <select
+                value={organizerFilter}
+                onChange={(e) => setOrganizerFilter(e.target.value)}
+                style={filterSelectStyle}
+                aria-label="Filter by organizer"
+                disabled={organizerOptions.length === 0}
+              >
+                <option value="">All organizers</option>
+                {organizerOptions.map((o) => (
+                  <option key={o.slug} value={o.slug}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+            </FilterControl>
+          )}
+
+          <FilterControl label="From">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={filterInputStyle}
+              aria-label="Start date from"
+            />
+          </FilterControl>
+
+          <FilterControl label="To">
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={filterInputStyle}
+              aria-label="Start date to"
+            />
+          </FilterControl>
+
+          {false && (
+            <FilterControl label="My rating">
+              <input
+                type="number"
+                placeholder="e.g. 3.5"
+                value={skillLevel}
+                min={1}
+                max={6}
+                step={0.5}
+                onChange={(e) => setSkillLevel(e.target.value)}
+                style={{ ...filterInputStyle, width: 90 }}
+                aria-label="Filter by skill level"
+              />
+            </FilterControl>
+          )}
+
+          {(hasActiveFilters || query) && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              style={clearFiltersStyle}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         {loading ? (
           <p style={statusTextStyle}>Loading tournaments…</p>
         ) : error ? (
           <ErrorPanel>{error}</ErrorPanel>
         ) : filtered.length === 0 ? (
           <EmptyState
-            queryText={query}
             hasAny={tournaments.length > 0}
-            onClear={() => setQuery("")}
+            hasFilters={hasActiveFilters || query.trim() !== ""}
+            onClearAll={clearAllFilters}
           />
         ) : (
           <div style={gridStyle}>
@@ -186,7 +355,21 @@ export default function HomePage() {
           </div>
         )}
       </section>
+      <SiteFooter />
     </main>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Filter control wrapper — label + input stacked vertically.
+// ─────────────────────────────────────────────────────────────────────
+
+function FilterControl({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={filterControlStyle}>
+      <span style={filterLabelStyle}>{label}</span>
+      {children}
+    </div>
   );
 }
 
@@ -260,21 +443,21 @@ function TournamentCard({
 // ─────────────────────────────────────────────────────────────────────
 
 function EmptyState({
-  queryText,
   hasAny,
-  onClear,
+  hasFilters,
+  onClearAll,
 }: {
-  queryText: string;
   hasAny: boolean;
-  onClear: () => void;
+  hasFilters: boolean;
+  onClearAll: () => void;
 }) {
   return (
     <div style={emptyStyle}>
-      {queryText ? (
+      {hasFilters ? (
         <>
-          No tournaments match <strong>"{queryText}"</strong>.{" "}
-          <button type="button" onClick={onClear} style={ghostButtonStyle}>
-            Clear search
+          No tournaments match your filters.{" "}
+          <button type="button" onClick={onClearAll} style={ghostButtonStyle}>
+            Clear filters
           </button>
         </>
       ) : hasAny ? (
@@ -387,7 +570,7 @@ const sectionHeadStyle: CSSProperties = {
   justifyContent: "space-between",
   flexWrap: "wrap",
   gap: 12,
-  marginBottom: 22,
+  marginBottom: 14,
 };
 
 // Bigger than the shared sectionH2Style — that one is sized for inline
@@ -412,6 +595,54 @@ const searchInputStyle: CSSProperties = {
   ...inputStyle,
   padding: "10px 14px",
   borderRadius: 8,
+};
+
+// Filter bar sits below the section head, above the grid.
+const filterBarStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "flex-end",
+  gap: "8px 16px",
+  marginBottom: 22,
+  padding: "12px 16px",
+  background: cream,
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+};
+
+const filterControlStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 4,
+};
+
+const filterLabelStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  color: inkMuted,
+};
+
+const filterInputStyle: CSSProperties = {
+  ...inputStyle,
+  padding: "7px 10px",
+  fontSize: 13,
+  borderRadius: 6,
+  minWidth: 130,
+};
+
+const filterSelectStyle: CSSProperties = {
+  ...filterInputStyle,
+  minWidth: 160,
+  cursor: "pointer",
+};
+
+const clearFiltersStyle: CSSProperties = {
+  ...ghostButtonStyle,
+  alignSelf: "flex-end",
+  fontSize: 13,
+  padding: "7px 10px",
 };
 
 const gridStyle: CSSProperties = {
