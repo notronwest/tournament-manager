@@ -2003,6 +2003,13 @@ function EventCard({
               myStatus.state === "pending_payment" ||
               myStatus.state === "awaiting_partner")
           }
+          pendingInviteeName={
+            (myStatus?.state === "awaiting_partner" ||
+              myStatus?.state === "pending_payment") &&
+            myStatus.partnerLabel
+              ? myStatus.partnerLabel
+              : null
+          }
           onPartnerUp={handlePartnerUp}
         />
       )}
@@ -2361,6 +2368,7 @@ function RosterPanel({
   isDoubles,
   myRegId,
   myIsRegistered,
+  pendingInviteeName,
   onPartnerUp,
 }: {
   rosterRows: RosterRow[];
@@ -2370,6 +2378,10 @@ function RosterPanel({
   // True when the current user already has any active reg for this event
   // (paid/pending_payment/awaiting_partner). Hides "Partner up →" on seekers.
   myIsRegistered: boolean;
+  // Name of a pending invitee who hasn't registered yet. When set and the
+  // current user's team renders as a solo, we inject a synthetic row beneath
+  // their name marked "Not registered yet" so the team reads as a pair.
+  pendingInviteeName: string | null;
   onPartnerUp: (seeker: { first_name: string; last_name: string }) => void;
 }) {
   const seekers = rosterRows.filter((r) => r.partner_status === "seeking");
@@ -2577,7 +2589,11 @@ function RosterPanel({
           <div style={{ background: "#fafafa", padding: "8px 8px 0" }}>
             {teams.map((team, i) => {
               const isMyTeam = team.some((r) => r.registration_id === myRegId);
-              const isPair = team.length === 2;
+              // My solo team with a pending outbound invite: treat as a pair
+              // so the invited (not-yet-registered) partner appears beneath.
+              const hasPendingInvitee =
+                isMyTeam && team.length === 1 && isDoubles && pendingInviteeName != null;
+              const isPair = team.length === 2 || hasPendingInvitee;
               return (
                 <div
                   key={i}
@@ -2639,6 +2655,31 @@ function RosterPanel({
                           </tr>
                         );
                       })}
+                      {hasPendingInvitee && (
+                        <tr style={{ background: "#fefce8" }}>
+                          <td style={{ ...colStyle, fontSize: 15 }}>
+                            {pendingInviteeName}
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: "#92400e",
+                                background: "#fef3c7",
+                                border: "1px solid #fde68a",
+                                borderRadius: 3,
+                                padding: "1px 4px",
+                              }}
+                            >
+                              Not registered yet
+                            </span>
+                          </td>
+                          <td style={colStyle}>--</td>
+                          <td style={colStyle}>--</td>
+                          <td style={colStyle}>--</td>
+                          <td style={{ ...colStyle, color: "#888" }}>--</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
