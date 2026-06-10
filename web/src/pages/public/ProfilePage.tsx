@@ -19,6 +19,7 @@ import {
   ctaPrimaryStyle,
   ctaSecondaryStyle,
   dangerFg,
+  ghostButtonStyle,
   ink,
   inkMuted,
   inkSoft,
@@ -26,6 +27,7 @@ import {
   pageH1Style,
   pageSubStyle,
   pageWrapStyle,
+  panelStyle,
   rule,
   statusPanelStyle,
 } from "../../lib/publicTheme";
@@ -80,6 +82,13 @@ export default function ProfilePage() {
   // means "I'll keep using magic links."
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Email-change request state — separate from the profile save flow.
+  const [requestState, setRequestState] = useState<
+    "idle" | "open" | "sending" | "sent"
+  >("idle");
+  const [requestedEmail, setRequestedEmail] = useState("");
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   // Account section — change-password form (non-first-fill only).
   // Has its own state so it doesn't interfere with the profile form.
@@ -334,6 +343,30 @@ export default function ProfilePage() {
     }
   };
 
+  const onRequestSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setRequestError(null);
+    setRequestState("sending");
+    const { error: fnErr } = await supabase.functions.invoke(
+      "request-email-change",
+      { body: { requestedEmail } },
+    );
+    if (fnErr) {
+      let msg = "Something went wrong. Please try again.";
+      try {
+        const ctx = (fnErr as unknown as { context?: Response }).context;
+        if (ctx) {
+          const body = (await ctx.json()) as { error?: string };
+          if (body.error) msg = body.error;
+        }
+      } catch { /* use default */ }
+      setRequestError(msg);
+      setRequestState("open");
+      return;
+    }
+    setRequestState("sent");
+  };
+
   const onPasswordSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setPwError(null);
@@ -371,6 +404,9 @@ export default function ProfilePage() {
   // try to greet by name here: on first fill we don't have one yet,
   // and falling back to the email local-part (e.g. "Welcome,
   // ronaldwest123 👋") reads worse than just "Welcome 👋".
+  const requestSending = requestState === "sending";
+  const requestFormVisible =
+    requestState === "open" || requestState === "sending";
   const isFirstFill = !existingPlayer || !existingPlayer.first_name;
   const heading = isFirstFill ? "Welcome 👋" : "Your profile";
   const subhead = isFirstFill
@@ -392,6 +428,76 @@ export default function ProfilePage() {
       )}
       <h1 style={pageH1Style}>{heading}</h1>
       <p style={pageSubStyle}>{subhead}</p>
+
+      {/* ── Account email + change request ──────────────────────── */}
+      <div style={{ ...panelStyle, marginBottom: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 12, color: inkSoft, marginBottom: 2 }}>Account email</div>
+            <div style={{ fontSize: 14, color: ink }}>{user?.email ?? "—"}</div>
+          </div>
+          {requestState === "idle" && (
+            <button
+              type="button"
+              onClick={() => setRequestState("open")}
+              style={ghostButtonStyle}
+            >
+              Request a change
+            </button>
+          )}
+        </div>
+        {requestFormVisible && (
+          <form
+            onSubmit={onRequestSubmit}
+            style={{ borderTop: `1px solid ${rule}`, paddingTop: 12, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}
+          >
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft }}
+            >
+              New email address
+              <input
+                type="email"
+                required
+                value={requestedEmail}
+                onChange={(e) => setRequestedEmail(e.target.value)}
+                style={inputStyle}
+                disabled={requestSending}
+                placeholder="new@example.com"
+              />
+            </label>
+            <p style={{ fontSize: 12, color: inkMuted, margin: 0 }}>
+              Your request will be forwarded to the site administrator, who will
+              update your account and follow up by email.
+            </p>
+            {requestError && (
+              <div style={statusPanelStyle("danger")}>{requestError}</div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="submit"
+                disabled={requestSending}
+                style={requestSending ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                {requestSending ? "Sending…" : "Send request"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setRequestState("idle"); setRequestedEmail(""); setRequestError(null); }}
+                style={ctaSecondaryStyle}
+                disabled={requestSending}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+        {requestState === "sent" && (
+          <div style={{ ...statusPanelStyle("success"), marginTop: 12 }}>
+            Your request has been sent to the site administrator. They&rsquo;ll
+            be in touch once your email has been updated.
+          </div>
+        )}
+      </div>
 
       <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* Avatar upload */}

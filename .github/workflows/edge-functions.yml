@@ -1,0 +1,70 @@
+name: Deploy edge functions (on merge)
+
+# Edge functions are CODE: drafted in a PR, reviewed by Ron, and deployed HERE
+# on merge to main — never by a hand-run `supabase functions deploy` (the same
+# "forgot the manual step" gap that bit migrations, but worse: there was NO
+# automation at all, so a merged function never reached prod until someone
+# remembered). This makes functions behave like migrations + the frontend:
+# merge = live. Per-function settings (e.g. stripe-webhook's verify_jwt=false)
+# come from supabase/config.toml, which `functions deploy` honors.
+#
+# NOT covered here (can't be — they're secret): per-function secrets like
+# SITE_ADMIN_EMAIL. A PR that needs a new secret must say so and the secret
+# must be set in the Supabase dashboard before merge, or the function 500s.
+# See supabase/FUNCTIONS.md.
+#
+# FAIL-CLOSED / INERT: if the Supabase deploy secrets aren't set, this exits
+# green doing nothing (matches migrations.yml). It deploys ALL functions, not
+# just the changed ones — deploy is idempotent and this keeps prod in lockstep
+# with the repo with no per-function diffing to get wrong.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - "supabase/config.toml"   # verify_jwt / per-function settings live here
+  workflow_dispatch: {}
+
+concurrency:
+  group: edge-functions-deploy-${{ github.ref }}
+  cancel-in-progress: false   # never interrupt an in-flight deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Are deploy secrets configured?
+        id: cfg
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$REF" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy secrets not set — skipping edge-function deploy. See supabase/FUNCTIONS.md."
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.cfg.outputs.ready == 'true'
+        with: { version: latest }
+
+      - name: Deploy all edge functions
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+
+      - name: Alert on failure (fail-closed)
+        if: failure() && steps.cfg.outputs.ready == 'true'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          [ -n "$DISCORD_WEBHOOK" ] || exit 0
+          msg="❌ Edge-function deploy FAILED on merge to main (${{ github.repository }}). A function in the repo is NOT live in prod — check before relying on it. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST -H "Content-Type: application/json" -d "$(jq -Rn --arg m "$msg" '{content:$m}')" "$DISCORD_WEBHOOK" || true
