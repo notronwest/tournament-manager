@@ -2847,9 +2847,18 @@ function ContactSection({
     }
   }, [me]);
   const [message, setMessage] = useState("");
-  const [targetContactId, setTargetContactId] = useState<string>(
-    selectableContacts[0]?.id ?? "",
-  );
+  // The user's explicit recipient pick ("" until they choose one).
+  const [targetContactId, setTargetContactId] = useState<string>("");
+  // Effective recipient, DERIVED during render (not synced via an effect):
+  // the user's pick if still valid, else the first selectable contact. This
+  // matters because `contacts` load async — a state+effect default could leave
+  // the dropdown SHOWING a recipient while submitting an empty id, which makes
+  // the server silently fan the message out to every contact instead.
+  const effectiveTargetId = selectableContacts.some(
+    (c) => c.id === targetContactId,
+  )
+    ? targetContactId
+    : selectableContacts[0]?.id ?? "";
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
     "idle",
   );
@@ -2867,7 +2876,7 @@ function ContactSection({
       senderEmail: email.trim(),
       message: message.trim(),
     };
-    if (targetContactId) body.targetContactId = targetContactId;
+    if (effectiveTargetId) body.targetContactId = effectiveTargetId;
 
     const { data, error } = await supabase.functions.invoke(
       "submit-contact-form",
@@ -2937,7 +2946,7 @@ function ContactSection({
         >
           {(() => {
             const recipient = selectableContacts.find(
-              (c) => c.id === targetContactId,
+              (c) => c.id === effectiveTargetId,
             );
             return recipient
               ? `Thanks — your message was sent to ${recipient.name}. They'll reply to the email you provided.`
@@ -2953,7 +2962,7 @@ function ContactSection({
             <label style={labelStyle}>
               Direct your question to…
               <select
-                value={targetContactId}
+                value={effectiveTargetId}
                 onChange={(e) => setTargetContactId(e.target.value)}
                 style={{ ...inputStyle, background: "#fff" }}
               >
