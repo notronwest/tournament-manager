@@ -156,7 +156,6 @@ export default function LoginPage() {
         style={{
           background: ink,
           padding: "12px 20px",
-          display: "flex",
           alignItems: "center",
         }}
       >
@@ -175,7 +174,6 @@ export default function LoginPage() {
           background: ink,
           color: "#ffffff",
           position: "relative",
-          display: "flex",
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "flex-start",
