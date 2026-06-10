@@ -927,7 +927,7 @@ export default function PublicTournamentPage() {
         </TournamentContentSection>
       )}
 
-      <ContactSection tournamentId={tournament.id} contacts={contacts} />
+      <ContactSection tournamentId={tournament.id} contacts={contacts} me={me} />
     </Shell>
     {myPendingGroup && (
       <StickyCheckoutBar
@@ -2821,16 +2821,20 @@ function TournamentContentSection({
   );
 }
 
-// #38 — public Contacts list + "Contact the organizers" form. The form
-// posts to the submit-contact-form edge function (salted-IP throttle +
-// Resend fan-out to contacts flagged receives_form_messages). Always
-// shown; the contacts list only renders when the org has public contacts.
+// #38/#148 — "Contact the organizers" form with recipient picker.
+// Posts to the submit-contact-form edge function. When the signed-in
+// user's player record is passed, the name + email fields are pre-filled
+// (they can still edit). When selectable contacts exist, a recipient
+// dropdown lets the sender direct their message to one contact; the
+// edge function routes the email to that contact only.
 function ContactSection({
   tournamentId,
   contacts,
+  me,
 }: {
   tournamentId: string;
   contacts: PublicContact[];
+  me: Player | null;
 }) {
   // Contacts eligible to appear in the recipient picker: public,
   // flagged receives_form_messages, and have an email address.
@@ -2840,6 +2844,15 @@ function ContactSection({
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+
+  // Pre-fill from signed-in user's player record. useEffect so it
+  // still runs if me arrives after first render.
+  useEffect(() => {
+    if (me) {
+      setName([me.first_name, me.last_name].filter(Boolean).join(" "));
+      setEmail(me.email ?? "");
+    }
+  }, [me]);
   const [message, setMessage] = useState("");
   const [targetContactId, setTargetContactId] = useState<string>(
     selectableContacts[0]?.id ?? "",
@@ -2916,38 +2929,6 @@ function ContactSection({
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>Contact the organizers</h2>
-
-      {contacts.length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          {contacts.map((c) => (
-            <div
-              key={c.id}
-              style={{
-                fontSize: 14,
-                color: "#444",
-                lineHeight: 1.5,
-                marginBottom: 8,
-              }}
-            >
-              <strong>{c.name}</strong>
-              {c.role && <span style={{ color: "#666" }}> · {c.role}</span>}
-              <div style={{ color: "#666", fontSize: 13 }}>
-                {c.email && (
-                  <a href={`mailto:${c.email}`} style={{ color: "#2563eb" }}>
-                    {c.email}
-                  </a>
-                )}
-                {c.email && c.phone && " · "}
-                {c.phone && (
-                  <a href={`tel:${c.phone}`} style={{ color: "#2563eb" }}>
-                    {c.phone}
-                  </a>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {status === "sent" ? (
         <div
