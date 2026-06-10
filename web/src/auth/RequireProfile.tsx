@@ -35,19 +35,38 @@ export function RequireProfile({ children }: { children: ReactNode }) {
     (async () => {
       const { data } = await supabase
         .from("players")
-        .select("first_name, last_name, email")
+        .select("id, first_name, last_name, email")
         .eq("auth_user_id", user.id)
         .is("deleted_at", null)
         .maybeSingle();
       if (cancelled) return;
-      setHasProfile(
-        !!(
-          data &&
-          data.first_name?.trim() &&
-          data.last_name?.trim() &&
-          data.email?.trim()
-        ),
-      );
+
+      // If the player row has names but no email and the auth session
+      // already has one (e.g. Google OAuth supplied it), backfill
+      // silently rather than bouncing the user to the profile form.
+      if (
+        data &&
+        data.first_name?.trim() &&
+        data.last_name?.trim() &&
+        !data.email?.trim() &&
+        user.email
+      ) {
+        await supabase
+          .from("players")
+          .update({ email: user.email })
+          .eq("id", data.id);
+        if (cancelled) return;
+        setHasProfile(true);
+      } else {
+        setHasProfile(
+          !!(
+            data &&
+            data.first_name?.trim() &&
+            data.last_name?.trim() &&
+            data.email?.trim()
+          ),
+        );
+      }
       setChecking(false);
     })();
     return () => {
