@@ -11,6 +11,7 @@ import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
+import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
@@ -165,6 +166,17 @@ export default function App() {
         element={
           <RequireAuth>
             <StripeOauthCallbackPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only site-wide attendees list. Defined before
+          the :orgSlug catch-all so "attendees" isn't treated as a slug. */}
+      <Route
+        path="/admin/attendees"
+        element={
+          <RequireAuth>
+            <SiteAttendeesPage />
           </RequireAuth>
         }
       />
