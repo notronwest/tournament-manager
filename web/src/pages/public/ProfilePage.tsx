@@ -46,13 +46,16 @@ function extFor(mimeType: string): string {
 
 // One-time (mostly) profile screen. Reached either:
 //   * Automatically via RequireProfile after a fresh signup when
-//     the user hasn't filled out a name yet, OR
+//     the user hasn't filled out a name or email yet, OR
 //   * Manually via an "Edit profile" link.
 //
-// Required: first_name + last_name. Everything else is encouraged
-// but optional. The save handler also reclaims an unlinked players
-// row whose email matches the auth user — covers the case where an
-// admin pre-created the player record before the user signed up.
+// Required: first_name + last_name. Email is also required when the
+// player record has no email on file (e.g. Google OAuth where the
+// provider didn't share it, or an admin-pre-created row). Everything
+// else is encouraged but optional. The save handler also reclaims an
+// unlinked players row whose email matches the auth user — covers the
+// case where an admin pre-created the player record before the user
+// signed up.
 //
 // `?return=<path>` query param: where to navigate after saving.
 // Defaults to /admin so an "Edit profile" link from anywhere lands
@@ -68,6 +71,7 @@ export default function ProfilePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -151,6 +155,12 @@ export default function ProfilePage() {
       }
 
       setExistingPlayer(me);
+      // Pre-fill email: player row email → auth session email → blank.
+      // The auth-session fallback handles both the "player row has no
+      // email" case (Google OAuth where the email wasn't written to the
+      // row yet) AND the "no player row at all" case (fresh signup
+      // visiting /profile directly before any gated route fires).
+      setEmail(me?.email ?? user.email ?? "");
       if (me) {
         setFirstName(me.first_name ?? "");
         setLastName(me.last_name ?? "");
@@ -220,6 +230,10 @@ export default function ProfilePage() {
       setError("First and last name are required.");
       return;
     }
+    if (needsEmail && !email.trim()) {
+      setError("Email address is required to receive receipts and partner invites.");
+      return;
+    }
     // Password fields are entirely optional but, if one is filled,
     // both must be filled and they must match. Validate before
     // touching the database so we don't half-save.
@@ -286,6 +300,11 @@ export default function ProfilePage() {
       self_rating_mixed: parseRating(ratingMixed),
       self_rating_singles: parseRating(ratingSingles),
       avatar_path: resolvedAvatarPath,
+      // Include email in the payload only when the player record
+      // currently has none — captures the missing email without
+      // overwriting an email the player may have set via a separate
+      // change-request flow.
+      ...(needsEmail ? { email: email.trim() || null } : {}),
     };
 
     // Three save paths: update auth-linked row, claim an email-
@@ -325,7 +344,11 @@ export default function ProfilePage() {
         .insert({
           ...payload,
           auth_user_id: user.id,
-          email: user.email ?? null,
+          // For new inserts, use the email state (which was pre-filled
+          // from user.email if available). payload may already include
+          // it via the needsEmail spread, but the insert always needs
+          // an email column value so we set it explicitly here.
+          email: email.trim() || user.email || null,
         })
         .select()
         .single();
@@ -398,6 +421,10 @@ export default function ProfilePage() {
       </Shell>
     );
   }
+
+  // Show the email capture field when the player record has no email.
+  // Hidden for users who already have one (AC#3).
+  const needsEmail = !existingPlayer?.email;
 
   // First-fill heading vs. edit heading — small touch but tells the
   // returning user "you've been here before." We deliberately don't
@@ -500,6 +527,25 @@ export default function ProfilePage() {
       </div>
 
       <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {needsEmail && (
+          <div>
+            <div style={{ fontSize: 13, color: inkMuted, marginBottom: 8 }}>
+              We need your email address to send registration receipts, partner
+              invitations, and account notifications.
+            </div>
+            <Field label="Email address" required>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={inputStyle}
+                disabled={busy}
+                placeholder="you@example.com"
+              />
+            </Field>
+          </div>
+        )}
         {/* Avatar upload */}
         <div style={avatarSectionStyle}>
           <button
