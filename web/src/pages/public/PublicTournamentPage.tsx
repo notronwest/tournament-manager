@@ -2724,6 +2724,37 @@ function RosterPanel({
                           </tr>
                         );
                       })}
+                      {/* Ghost row: invited partner who hasn't registered yet.
+                          Visible only in doubles when the player sent an invite
+                          (partner_status='pending') that hasn't been accepted. */}
+                      {isDoubles && !isPair && team[0].invited_partner_first_name && (
+                        <tr style={{ borderTop: "1px dashed #e5e7eb" }}>
+                          <td
+                            style={{
+                              ...colStyle,
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                            }}
+                          >
+                            {team[0].invited_partner_first_name}{" "}
+                            {team[0].invited_partner_last_name}
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                color: "#9ca3af",
+                                fontStyle: "normal",
+                              }}
+                            >
+                              invited — hasn't registered
+                            </span>
+                          </td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
