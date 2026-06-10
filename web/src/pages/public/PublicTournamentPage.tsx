@@ -749,20 +749,20 @@ export default function PublicTournamentPage() {
               >
                 ${(regFeeCents / 100).toFixed(0)}
               </div>
-              <div style={{ fontSize: 12, color: inkSoft, marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: inkSoft, marginTop: 2 }}>
                 to register · includes 1 event
               </div>
               {additionalFeeCents > 0 && (
-                <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
+                <div style={{ fontSize: 13, color: inkMuted, marginTop: 1 }}>
                   +${(additionalFeeCents / 100).toFixed(0)} each additional event
                 </div>
               )}
-              {/* Multi-tier: active stage label + date window */}
+              {/* Multi-tier: active stage label + when it ends */}
               {isMultiTier && activeTier && (
                 <div
                   style={{
                     fontFamily: monoFontStack,
-                    fontSize: 10,
+                    fontSize: 11,
                     color: courtBlue,
                     marginTop: 4,
                     textTransform: "uppercase",
@@ -770,14 +770,9 @@ export default function PublicTournamentPage() {
                   }}
                 >
                   {activeTier.label}
-                  {activeTier.starts_at
-                    ? ` · ${fmtShortDate(activeTier.starts_at)}`
-                    : ""}
                   {activeTier.ends_at
-                    ? ` – ${fmtShortDate(activeTier.ends_at)}`
-                    : activeTier.starts_at
-                    ? " – ongoing"
-                    : ""}
+                    ? ` · ends ${fmtShortDate(activeTier.ends_at)}`
+                    : " · ongoing"}
                 </div>
               )}
               {/* Multi-tier: expand/collapse toggle for full schedule */}
@@ -789,7 +784,7 @@ export default function PublicTournamentPage() {
                     border: "none",
                     padding: "4px 0 0",
                     cursor: "pointer",
-                    fontSize: 11,
+                    fontSize: 12,
                     color: courtBlue,
                     textDecoration: "underline",
                     textUnderlineOffset: 2,
