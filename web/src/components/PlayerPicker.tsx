@@ -367,11 +367,14 @@ export async function persistPlayerSelection(
       .update(updates)
       .eq("id", s.player.id)
       .select()
-      .single();
-    if (error || !data) {
-      return { player: null, error: error?.message ?? "Update failed." };
+      .maybeSingle();
+    if (error) {
+      return { player: null, error: error.message };
     }
-    return { player: data, error: null };
+    // data is null when RLS blocked the UPDATE (0 rows affected — e.g.
+    // picking someone else's player record as a partner). Fall back to
+    // the existing player row rather than failing the registration.
+    return { player: data ?? s.player, error: null };
   }
   // new
   const first = s.firstName.trim();
