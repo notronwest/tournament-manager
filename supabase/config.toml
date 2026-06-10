@@ -193,3 +193,8 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # authentication is the webhook signature check inside the function.
 [functions.stripe-webhook]
 verify_jwt = false
+
+# Feedback widget is open to anonymous visitors; auth is extracted
+# from the Authorization header when present (optional sign-in context).
+[functions.submit-feedback]
+verify_jwt = false
