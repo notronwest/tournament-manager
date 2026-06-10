@@ -155,13 +155,13 @@ export default function ProfilePage() {
       }
 
       setExistingPlayer(me);
+      // Pre-fill email: player row email → auth session email → blank.
+      // The auth-session fallback handles both the "player row has no
+      // email" case (Google OAuth where the email wasn't written to the
+      // row yet) AND the "no player row at all" case (fresh signup
+      // visiting /profile directly before any gated route fires).
+      setEmail(me?.email ?? user.email ?? "");
       if (me) {
-        // Pre-fill email from the player row; fall back to the auth
-        // user's email only when the player row has none (the case
-        // this feature addresses — Google OAuth where the provider
-        // shared the email with Supabase but it wasn't written to
-        // the player row).
-        setEmail(me.email ?? user.email ?? "");
         setFirstName(me.first_name ?? "");
         setLastName(me.last_name ?? "");
         setPhone(me.phone ?? "");

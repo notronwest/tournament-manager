@@ -12,8 +12,17 @@
 -- This is a pure SECURITY DEFINER function; the join to partner_invites
 -- is safe because it runs as the function owner (bypasses RLS), and
 -- only exposes name fields already in scope for a public roster.
+--
+-- NOTE: this adds two columns to the function's RETURNS TABLE, which
+-- changes its return type. Postgres rejects that via CREATE OR REPLACE
+-- alone (ERROR 42P13: cannot change return type of existing function),
+-- so we DROP the old signature first. The function is an app-facing RPC
+-- with no in-DB dependents, so a plain DROP (no CASCADE) is safe; the
+-- grant at the end re-establishes execute access dropped with it.
 
 set search_path = public;
+
+drop function if exists public.event_roster(uuid[]);
 
 create or replace function public.event_roster(
   p_event_ids uuid[]
