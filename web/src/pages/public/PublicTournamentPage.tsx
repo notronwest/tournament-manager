@@ -1139,13 +1139,17 @@ function EventCard({
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
   const isPending = myStatus?.state === "pending_payment";
+  // #194 a11y: all three "action needed" states get the amber wash
+  // (pending_payment, awaiting_partner, invited) — amber bg + amber border
+  // color, with dark-ink text/pills (handled below) for contrast.
+  const isAmberCard =
+    isPending ||
+    myStatus?.state === "awaiting_partner" ||
+    myStatus?.state === "invited";
+  // Left border encodes the EVENT TYPE (#152), independent of status.
   const cardBorderLeft = `6px solid ${eventTypeColor(event.format, event.gender)}`;
-  const cardBorderColor = isPending
-    ? courtYellow
-    : isPaid
-      ? courtGreen
-      : rule;
-  const cardBg = isPending ? warnBg : "#fff";
+  const cardBorderColor = isAmberCard ? courtYellow : isPaid ? courtGreen : rule;
+  const cardBg = isAmberCard ? warnBg : "#fff";
 
   // ─── Handlers ────────────────────────────────────────────────────
   const startRegister = () => {
@@ -1887,13 +1891,13 @@ function EventCard({
               <Pill bg={successBg} fg={successFg}>Registered</Pill>
             )}
             {myStatus?.state === "pending_payment" && (
-              <Pill bg={warnBg} fg={warnFg}>Pending payment</Pill>
+              <Pill bg={ink} fg={courtYellow}>Pending payment</Pill>
             )}
             {myStatus?.state === "awaiting_partner" && (
-              <Pill bg={warnBg} fg={warnFg}>Awaiting partner</Pill>
+              <Pill bg={ink} fg={courtYellow}>Awaiting partner</Pill>
             )}
             {myStatus?.state === "invited" && (
-              <Pill bg={warnBg} fg={warnFg}>You're invited</Pill>
+              <Pill bg={ink} fg={courtYellow}>You're invited</Pill>
             )}
             {myStatus?.isSeekingPartner && (
               <Pill bg={cream} fg={courtBlue}>Looking for partner</Pill>
@@ -1901,14 +1905,14 @@ function EventCard({
           </div>
           {/* Partner label */}
           {myStatus?.state === "invited" && myStatus.inviterName ? (
-            <div style={{ color: warnFg, fontSize: 12, marginTop: 4 }}>
+            <div style={{ color: ink, fontSize: 12, marginTop: 4 }}>
               <strong>{myStatus.inviterName}</strong> picked you as their
               partner
             </div>
           ) : myStatus?.partnerLabel ? (
             <div
               style={{
-                color: isPending ? warnFg : successFg,
+                color: isAmberCard ? ink : successFg,
                 fontSize: 12,
                 marginTop: 4,
               }}
@@ -1924,11 +1928,11 @@ function EventCard({
               style={{
                 marginTop: 5,
                 padding: "5px 10px",
-                background: warnBg,
-                border: `1px solid ${courtYellow}`,
+                background: "#fff",
+                border: `2px solid ${warnFg}`,
                 borderRadius: 5,
                 fontSize: 11,
-                color: warnFg,
+                color: ink,
                 display: "inline-block",
               }}
             >
@@ -2117,7 +2121,18 @@ function EventCard({
                     ]}
                   />
                   {partnerPicked && (
-                    <div style={{ ...statusPanelStyle("warn"), marginTop: 8, fontSize: 12 }}>
+                    <div
+                      style={{
+                        background: "#fff",
+                        border: `2px solid ${warnFg}`,
+                        borderRadius: 8,
+                        padding: "10px 14px",
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: ink,
+                        marginTop: 8,
+                      }}
+                    >
                       Your partner won't be notified until you check out.
                     </div>
                   )}
@@ -2559,7 +2574,7 @@ function RosterPanel({
           >
             {isDoubles ? "Registered teams" : "Registered players"}
           </div>
-          <div style={{ background: "#fafafa" }}>
+          <div style={{ background: "#fafafa", padding: "8px 8px 0" }}>
             {teams.map((team, i) => {
               const isMyTeam = team.some((r) => r.registration_id === myRegId);
               const isPair = team.length === 2;
@@ -2567,38 +2582,15 @@ function RosterPanel({
                 <div
                   key={i}
                   style={{
-                    // Pairs get a blue bracket; singles reserve the same
-                    // 3px with a transparent border so their columns stay
-                    // aligned with the bracketed teams.
-                    borderLeft: isPair
-                      ? "3px solid #93c5fd"
-                      : "3px solid transparent",
-                    background: isMyTeam ? "#f0fdf4" : undefined,
-                    borderBottom:
-                      i < teams.length - 1 ? "1px solid #e5e7eb" : undefined,
+                    background: "#fff",
+                    border: isMyTeam ? "1px solid #bbf7d0" : "1px solid #e5e7eb",
+                    borderRadius: 6,
+                    overflow: "hidden",
+                    marginBottom: 8,
                   }}
                 >
                   <table style={tableStyle}>
                     <RosterCols />
-                    {isPair && (
-                      <thead>
-                        <tr>
-                          <td
-                            colSpan={5}
-                            style={{
-                              padding: "3px 6px 2px",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: isMyTeam ? "#166534" : "#1e40af",
-                              background: isMyTeam ? "#dcfce7" : "#dbeafe",
-                              borderBottom: "1px solid #e5e7eb",
-                            }}
-                          >
-                            {team[0].first_name} & {team[1].first_name}
-                          </td>
-                        </tr>
-                      </thead>
-                    )}
                     <tbody>
                       {team.map((row, ri) => {
                         const isMe = row.registration_id === myRegId;
@@ -2610,13 +2602,14 @@ function RosterPanel({
                           <tr
                             key={row.registration_id}
                             style={{
+                              background: isMe ? "#f0fdf4" : undefined,
                               borderBottom:
                                 isPair && ri === 0
                                   ? "1px solid #e5e7eb"
                                   : undefined,
                             }}
                           >
-                            <td style={{ ...colStyle, fontWeight: isMe ? 600 : undefined }}>
+                            <td style={{ ...colStyle, fontSize: 15, fontWeight: isMe ? 600 : undefined }}>
                               {row.first_name} {row.last_name}
                               {isMe && (
                                 <span
@@ -2646,6 +2639,37 @@ function RosterPanel({
                           </tr>
                         );
                       })}
+                      {/* Ghost row: invited partner who hasn't registered yet.
+                          Visible only in doubles when the player sent an invite
+                          (partner_status='pending') that hasn't been accepted. */}
+                      {isDoubles && !isPair && team[0].invited_partner_first_name && (
+                        <tr style={{ borderTop: "1px dashed #e5e7eb" }}>
+                          <td
+                            style={{
+                              ...colStyle,
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                            }}
+                          >
+                            {team[0].invited_partner_first_name}{" "}
+                            {team[0].invited_partner_last_name}
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                color: "#9ca3af",
+                                fontStyle: "normal",
+                              }}
+                            >
+                              invited — hasn't registered
+                            </span>
+                          </td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

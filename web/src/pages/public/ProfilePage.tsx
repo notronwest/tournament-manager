@@ -1,10 +1,12 @@
 import {
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
@@ -16,6 +18,8 @@ import {
   ctaPrimaryDisabledStyle,
   ctaPrimaryStyle,
   ctaSecondaryStyle,
+  dangerFg,
+  ghostButtonStyle,
   ink,
   inkMuted,
   inkSoft,
@@ -23,12 +27,22 @@ import {
   pageH1Style,
   pageSubStyle,
   pageWrapStyle,
+  panelStyle,
   rule,
   statusPanelStyle,
 } from "../../lib/publicTheme";
 
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type PlayerGender = Database["public"]["Enums"]["player_gender"];
+
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function extFor(mimeType: string): string {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
 
 // One-time (mostly) profile screen. Reached either:
 //   * Automatically via RequireProfile after a fresh signup when
@@ -72,6 +86,39 @@ export default function ProfilePage() {
   // means "I'll keep using magic links."
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Email-change request state — separate from the profile save flow.
+  const [requestState, setRequestState] = useState<
+    "idle" | "open" | "sending" | "sent"
+  >("idle");
+  const [requestedEmail, setRequestedEmail] = useState("");
+  const [requestError, setRequestError] = useState<string | null>(null);
+
+  // Account section — change-password form (non-first-fill only).
+  // Has its own state so it doesn't interfere with the profile form.
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwNewVisible, setPwNewVisible] = useState(false);
+  const [pwConfirmVisible, setPwConfirmVisible] = useState(false);
+
+  // Avatar upload state
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [pendingRemove, setPendingRemove] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clean up blob URL when it changes (avoids leaking object URLs)
+  useEffect(() => {
+    return () => {
+      if (avatarPreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
+    };
+  }, [avatarPreviewUrl]);
 
   useEffect(() => {
     if (!user) return;
@@ -132,6 +179,12 @@ export default function ProfilePage() {
             ? String(me.self_rating_singles)
             : "",
         );
+        if (me.avatar_path) {
+          const { data: urlData } = supabase.storage
+            .from("avatars")
+            .getPublicUrl(me.avatar_path);
+          if (!cancelled) setAvatarPreviewUrl(urlData.publicUrl);
+        }
       }
       setLoading(false);
     })();
@@ -139,6 +192,35 @@ export default function ProfilePage() {
       cancelled = true;
     };
   }, [user]);
+
+  const handleAvatarClick = () => {
+    if (!busy) fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarError(null);
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setAvatarError("Only JPG, PNG, or WebP images are allowed.");
+      return;
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      setAvatarError("Image must be 5 MB or smaller.");
+      return;
+    }
+    setAvatarFile(file);
+    setPendingRemove(false);
+    setAvatarPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarFile(null);
+    setAvatarPreviewUrl(null);
+    setAvatarError(null);
+    setPendingRemove(true);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -180,6 +262,35 @@ export default function ProfilePage() {
       }
     }
 
+    // Handle avatar storage operations before updating the player row
+    let resolvedAvatarPath: string | null = existingPlayer?.avatar_path ?? null;
+
+    if (avatarFile) {
+      const ext = extFor(avatarFile.type);
+      const newPath = `${user.id}/avatar.${ext}`;
+      const oldPath = existingPlayer?.avatar_path ?? null;
+
+      // Delete old object if the path changed (e.g. jpg → png) to avoid orphans
+      if (oldPath && oldPath !== newPath) {
+        await supabase.storage.from("avatars").remove([oldPath]);
+      }
+
+      const { error: uploadErr } = await supabase.storage
+        .from("avatars")
+        .upload(newPath, avatarFile, { upsert: true, contentType: avatarFile.type });
+
+      if (uploadErr) {
+        setError(`Photo upload failed: ${uploadErr.message}`);
+        setBusy(false);
+        return;
+      }
+      resolvedAvatarPath = newPath;
+    } else if (pendingRemove && existingPlayer?.avatar_path) {
+      // Best-effort delete — don't block the profile save if storage delete fails
+      await supabase.storage.from("avatars").remove([existingPlayer.avatar_path]);
+      resolvedAvatarPath = null;
+    }
+
     const payload = {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
@@ -188,6 +299,7 @@ export default function ProfilePage() {
       self_rating_doubles: parseRating(ratingDoubles),
       self_rating_mixed: parseRating(ratingMixed),
       self_rating_singles: parseRating(ratingSingles),
+      avatar_path: resolvedAvatarPath,
       // Include email in the payload only when the player record
       // currently has none — captures the missing email without
       // overwriting an email the player may have set via a separate
@@ -254,6 +366,54 @@ export default function ProfilePage() {
     }
   };
 
+  const onRequestSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setRequestError(null);
+    setRequestState("sending");
+    const { error: fnErr } = await supabase.functions.invoke(
+      "request-email-change",
+      { body: { requestedEmail } },
+    );
+    if (fnErr) {
+      let msg = "Something went wrong. Please try again.";
+      try {
+        const ctx = (fnErr as unknown as { context?: Response }).context;
+        if (ctx) {
+          const body = (await ctx.json()) as { error?: string };
+          if (body.error) msg = body.error;
+        }
+      } catch { /* use default */ }
+      setRequestError(msg);
+      setRequestState("open");
+      return;
+    }
+    setRequestState("sent");
+  };
+
+  const onPasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(false);
+    if (pwNew.length < 6) {
+      setPwError("Password must be at least 6 characters.");
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      setPwError("Passwords don't match.");
+      return;
+    }
+    setPwBusy(true);
+    const { error: pwErr } = await updatePassword(pwNew);
+    setPwBusy(false);
+    if (pwErr) {
+      setPwError(pwErr.message);
+      return;
+    }
+    setPwNew("");
+    setPwConfirm("");
+    setPwSuccess(true);
+  };
+
   if (loading) {
     return (
       <Shell>
@@ -271,11 +431,19 @@ export default function ProfilePage() {
   // try to greet by name here: on first fill we don't have one yet,
   // and falling back to the email local-part (e.g. "Welcome,
   // ronaldwest123 👋") reads worse than just "Welcome 👋".
+  const requestSending = requestState === "sending";
+  const requestFormVisible =
+    requestState === "open" || requestState === "sending";
   const isFirstFill = !existingPlayer || !existingPlayer.first_name;
   const heading = isFirstFill ? "Welcome 👋" : "Your profile";
   const subhead = isFirstFill
     ? "Before you register, we need a few things about you. You only have to do this once — every future tournament uses the same profile."
     : "Anything you update here flows into every event you've registered for.";
+
+  const initials = [firstName.trim()[0], lastName.trim()[0]]
+    .filter(Boolean)
+    .join("")
+    .toUpperCase() || "?";
 
   return (
     <Shell>
@@ -287,6 +455,76 @@ export default function ProfilePage() {
       )}
       <h1 style={pageH1Style}>{heading}</h1>
       <p style={pageSubStyle}>{subhead}</p>
+
+      {/* ── Account email + change request ──────────────────────── */}
+      <div style={{ ...panelStyle, marginBottom: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 12, color: inkSoft, marginBottom: 2 }}>Account email</div>
+            <div style={{ fontSize: 14, color: ink }}>{user?.email ?? "—"}</div>
+          </div>
+          {requestState === "idle" && (
+            <button
+              type="button"
+              onClick={() => setRequestState("open")}
+              style={ghostButtonStyle}
+            >
+              Request a change
+            </button>
+          )}
+        </div>
+        {requestFormVisible && (
+          <form
+            onSubmit={onRequestSubmit}
+            style={{ borderTop: `1px solid ${rule}`, paddingTop: 12, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}
+          >
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft }}
+            >
+              New email address
+              <input
+                type="email"
+                required
+                value={requestedEmail}
+                onChange={(e) => setRequestedEmail(e.target.value)}
+                style={inputStyle}
+                disabled={requestSending}
+                placeholder="new@example.com"
+              />
+            </label>
+            <p style={{ fontSize: 12, color: inkMuted, margin: 0 }}>
+              Your request will be forwarded to the site administrator, who will
+              update your account and follow up by email.
+            </p>
+            {requestError && (
+              <div style={statusPanelStyle("danger")}>{requestError}</div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="submit"
+                disabled={requestSending}
+                style={requestSending ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                {requestSending ? "Sending…" : "Send request"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setRequestState("idle"); setRequestedEmail(""); setRequestError(null); }}
+                style={ctaSecondaryStyle}
+                disabled={requestSending}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+        {requestState === "sent" && (
+          <div style={{ ...statusPanelStyle("success"), marginTop: 12 }}>
+            Your request has been sent to the site administrator. They&rsquo;ll
+            be in touch once your email has been updated.
+          </div>
+        )}
+      </div>
 
       <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {needsEmail && (
@@ -308,6 +546,60 @@ export default function ProfilePage() {
             </Field>
           </div>
         )}
+        {/* Avatar upload */}
+        <div style={avatarSectionStyle}>
+          <button
+            type="button"
+            onClick={handleAvatarClick}
+            disabled={busy}
+            style={avatarCircleStyle(!!avatarPreviewUrl)}
+            title="Click to change photo"
+            aria-label="Change profile photo"
+          >
+            {avatarPreviewUrl ? (
+              <img
+                src={avatarPreviewUrl}
+                alt="Your profile photo"
+                style={avatarImgStyle}
+              />
+            ) : (
+              <span style={avatarInitialsStyle}>{initials}</span>
+            )}
+          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <button
+              type="button"
+              style={changePhotoStyle}
+              onClick={handleAvatarClick}
+              disabled={busy}
+            >
+              {avatarPreviewUrl ? "Change photo" : "Upload photo"}
+            </button>
+            {avatarPreviewUrl && (
+              <button
+                type="button"
+                style={removePhotoStyle}
+                onClick={handleRemoveAvatar}
+                disabled={busy}
+              >
+                Remove photo
+              </button>
+            )}
+            <span style={{ fontSize: 11, color: inkMuted }}>
+              JPG, PNG or WebP · max 5 MB
+            </span>
+            {avatarError && (
+              <span style={{ fontSize: 12, color: courtRed }}>{avatarError}</span>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: "none" }}
+            onChange={handleFileChange}
+          />
+        </div>
 
         <FieldRow>
           <Field label="First name" required>
@@ -481,6 +773,98 @@ export default function ProfilePage() {
           </button>
         </div>
       </form>
+
+      {!isFirstFill && (
+        <>
+          <div style={sectionDivider} />
+          <h2 style={sectionHeadingStyle}>Account</h2>
+          <form
+            onSubmit={onPasswordSubmit}
+            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            <div>
+              <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
+                <strong>Change password</strong>{" "}
+                <span style={{ color: inkMuted }}>
+                  (leave blank to keep your current sign-in method)
+                </span>
+              </div>
+              <FieldRow>
+                <Field label="New password">
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={pwNewVisible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={pwNew}
+                      onChange={(e) => { setPwNew(e.target.value); setPwSuccess(false); setPwError(null); }}
+                      style={{ ...inputStyle, paddingRight: 36 }}
+                      disabled={pwBusy}
+                      placeholder="At least 6 characters"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPwNewVisible((v) => !v)}
+                      disabled={pwBusy}
+                      style={eyeButtonStyle}
+                      aria-label={pwNewVisible ? "Hide password" : "Show password"}
+                    >
+                      {pwNewVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {pwNew.length > 0 && pwNew.length < 6 && (
+                    <span style={{ fontSize: 11, color: dangerFg, marginTop: 2 }}>
+                      At least 6 characters
+                    </span>
+                  )}
+                </Field>
+                <Field label="Confirm new password">
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={pwConfirmVisible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={pwConfirm}
+                      onChange={(e) => { setPwConfirm(e.target.value); setPwSuccess(false); setPwError(null); }}
+                      style={{ ...inputStyle, paddingRight: 36 }}
+                      disabled={pwBusy}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPwConfirmVisible((v) => !v)}
+                      disabled={pwBusy}
+                      style={eyeButtonStyle}
+                      aria-label={pwConfirmVisible ? "Hide password" : "Show password"}
+                    >
+                      {pwConfirmVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {pwConfirm.length > 0 && pwNew !== pwConfirm && (
+                    <span style={{ fontSize: 11, color: dangerFg, marginTop: 2 }}>
+                      Passwords don't match
+                    </span>
+                  )}
+                </Field>
+              </FieldRow>
+            </div>
+
+            {pwError && (
+              <div style={statusPanelStyle("danger")}>{pwError}</div>
+            )}
+            {pwSuccess && (
+              <div style={statusPanelStyle("success")}>Password updated.</div>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={pwBusy}
+                style={pwBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                {pwBusy ? "Updating…" : "Update password"}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
     </Shell>
   );
 }
@@ -563,4 +947,93 @@ const progressStep: CSSProperties = {
 const progressStepActive: CSSProperties = {
   ...progressStep,
   background: courtYellow,
+};
+
+const sectionDivider: CSSProperties = {
+  borderTop: `1px solid ${rule}`,
+  margin: "28px 0 24px",
+};
+
+const sectionHeadingStyle: CSSProperties = {
+  fontSize: 16,
+  fontWeight: 600,
+  color: ink,
+  margin: "0 0 16px",
+};
+
+const eyeButtonStyle: CSSProperties = {
+  position: "absolute",
+  right: 8,
+  top: "50%",
+  transform: "translateY(-50%)",
+  background: "none",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  color: inkMuted,
+  display: "flex",
+  alignItems: "center",
+};
+
+const avatarSectionStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 16,
+  paddingBottom: 4,
+};
+
+function avatarCircleStyle(hasImage: boolean): CSSProperties {
+  return {
+    width: 72,
+    height: 72,
+    borderRadius: "50%",
+    background: hasImage ? "transparent" : ink,
+    border: `2px solid ${rule}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: "pointer",
+    padding: 0,
+    overflow: "hidden",
+    flexShrink: 0,
+    transition: "border-color 0.15s",
+  };
+}
+
+const avatarImgStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  borderRadius: "50%",
+  display: "block",
+};
+
+const avatarInitialsStyle: CSSProperties = {
+  fontSize: 22,
+  fontWeight: 600,
+  color: "#fff",
+  letterSpacing: 1,
+  userSelect: "none",
+};
+
+const changePhotoStyle: CSSProperties = {
+  background: "none",
+  border: `1px solid ${rule}`,
+  borderRadius: 6,
+  padding: "4px 12px",
+  fontSize: 13,
+  color: ink,
+  cursor: "pointer",
+  alignSelf: "flex-start",
+};
+
+const removePhotoStyle: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  fontSize: 12,
+  color: courtRed,
+  cursor: "pointer",
+  textDecoration: "underline",
+  textAlign: "left",
 };
