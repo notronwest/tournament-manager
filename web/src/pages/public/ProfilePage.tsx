@@ -6,6 +6,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
@@ -17,6 +18,7 @@ import {
   ctaPrimaryDisabledStyle,
   ctaPrimaryStyle,
   ctaSecondaryStyle,
+  dangerFg,
   ink,
   inkMuted,
   inkSoft,
@@ -78,6 +80,16 @@ export default function ProfilePage() {
   // means "I'll keep using magic links."
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Account section — change-password form (non-first-fill only).
+  // Has its own state so it doesn't interfere with the profile form.
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwNewVisible, setPwNewVisible] = useState(false);
+  const [pwConfirmVisible, setPwConfirmVisible] = useState(false);
 
   // Avatar upload state
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -320,6 +332,30 @@ export default function ProfilePage() {
     if (saved) {
       navigate(returnTo, { replace: true });
     }
+  };
+
+  const onPasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setPwError(null);
+    setPwSuccess(false);
+    if (pwNew.length < 6) {
+      setPwError("Password must be at least 6 characters.");
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      setPwError("Passwords don't match.");
+      return;
+    }
+    setPwBusy(true);
+    const { error: pwErr } = await updatePassword(pwNew);
+    setPwBusy(false);
+    if (pwErr) {
+      setPwError(pwErr.message);
+      return;
+    }
+    setPwNew("");
+    setPwConfirm("");
+    setPwSuccess(true);
   };
 
   if (loading) {
@@ -585,6 +621,98 @@ export default function ProfilePage() {
           </button>
         </div>
       </form>
+
+      {!isFirstFill && (
+        <>
+          <div style={sectionDivider} />
+          <h2 style={sectionHeadingStyle}>Account</h2>
+          <form
+            onSubmit={onPasswordSubmit}
+            style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          >
+            <div>
+              <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
+                <strong>Change password</strong>{" "}
+                <span style={{ color: inkMuted }}>
+                  (leave blank to keep your current sign-in method)
+                </span>
+              </div>
+              <FieldRow>
+                <Field label="New password">
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={pwNewVisible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={pwNew}
+                      onChange={(e) => { setPwNew(e.target.value); setPwSuccess(false); setPwError(null); }}
+                      style={{ ...inputStyle, paddingRight: 36 }}
+                      disabled={pwBusy}
+                      placeholder="At least 6 characters"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPwNewVisible((v) => !v)}
+                      disabled={pwBusy}
+                      style={eyeButtonStyle}
+                      aria-label={pwNewVisible ? "Hide password" : "Show password"}
+                    >
+                      {pwNewVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {pwNew.length > 0 && pwNew.length < 6 && (
+                    <span style={{ fontSize: 11, color: dangerFg, marginTop: 2 }}>
+                      At least 6 characters
+                    </span>
+                  )}
+                </Field>
+                <Field label="Confirm new password">
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={pwConfirmVisible ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={pwConfirm}
+                      onChange={(e) => { setPwConfirm(e.target.value); setPwSuccess(false); setPwError(null); }}
+                      style={{ ...inputStyle, paddingRight: 36 }}
+                      disabled={pwBusy}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPwConfirmVisible((v) => !v)}
+                      disabled={pwBusy}
+                      style={eyeButtonStyle}
+                      aria-label={pwConfirmVisible ? "Hide password" : "Show password"}
+                    >
+                      {pwConfirmVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {pwConfirm.length > 0 && pwNew !== pwConfirm && (
+                    <span style={{ fontSize: 11, color: dangerFg, marginTop: 2 }}>
+                      Passwords don't match
+                    </span>
+                  )}
+                </Field>
+              </FieldRow>
+            </div>
+
+            {pwError && (
+              <div style={statusPanelStyle("danger")}>{pwError}</div>
+            )}
+            {pwSuccess && (
+              <div style={statusPanelStyle("success")}>Password updated.</div>
+            )}
+
+            <div>
+              <button
+                type="submit"
+                disabled={pwBusy}
+                style={pwBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                {pwBusy ? "Updating…" : "Update password"}
+              </button>
+            </div>
+          </form>
+        </>
+      )}
     </Shell>
   );
 }
@@ -667,6 +795,32 @@ const progressStep: CSSProperties = {
 const progressStepActive: CSSProperties = {
   ...progressStep,
   background: courtYellow,
+};
+
+const sectionDivider: CSSProperties = {
+  borderTop: `1px solid ${rule}`,
+  margin: "28px 0 24px",
+};
+
+const sectionHeadingStyle: CSSProperties = {
+  fontSize: 16,
+  fontWeight: 600,
+  color: ink,
+  margin: "0 0 16px",
+};
+
+const eyeButtonStyle: CSSProperties = {
+  position: "absolute",
+  right: 8,
+  top: "50%",
+  transform: "translateY(-50%)",
+  background: "none",
+  border: "none",
+  padding: 0,
+  cursor: "pointer",
+  color: inkMuted,
+  display: "flex",
+  alignItems: "center",
 };
 
 const avatarSectionStyle: CSSProperties = {
