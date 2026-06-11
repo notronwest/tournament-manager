@@ -20,9 +20,9 @@
 //   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — auto-injected.
 
 // @ts-expect-error remote import resolved at runtime by Deno
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 // @ts-expect-error remote import resolved at runtime by Deno
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import Stripe from "npm:stripe@14.21.0";
 
 // @ts-expect-error Deno global
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
