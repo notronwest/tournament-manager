@@ -1,0 +1,37 @@
+name: Migration lint (unique versions)
+
+# Guards against the failure that wedged prod on 2026-06-11: two migration
+# files sharing the same YYYYMMDDHHMMSS version. `schema_migrations.version`
+# is a primary key, so a duplicate makes one migration silently skip and the
+# other collide on apply — halting the whole pipeline. Catch it in the PR,
+# before it can reach `main` (which auto-applies).
+
+on:
+  pull_request:
+    paths: ["supabase/migrations/**"]
+  push:
+    branches: [main]
+    paths: ["supabase/migrations/**"]
+
+jobs:
+  unique-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No duplicate migration versions
+        run: |
+          # Version = the leading 14-digit timestamp of each migration filename.
+          dups=$(ls supabase/migrations/*.sql 2>/dev/null \
+            | xargs -n1 basename \
+            | sed -E 's/^([0-9]{14})_.*/\1/' \
+            | sort | uniq -d)
+          if [ -n "$dups" ]; then
+            echo "::error::Duplicate migration version(s) found — each must be unique:"
+            for v in $dups; do
+              echo "::error::  version $v is used by:"
+              ls supabase/migrations/${v}_*.sql | sed 's/^/    /'
+            done
+            echo "Renumber one of them to a later, unique YYYYMMDDHHMMSS."
+            exit 1
+          fi
+          echo "✅ All migration versions are unique."
