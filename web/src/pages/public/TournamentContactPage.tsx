@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { useAuth } from "../../auth/AuthProvider";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -16,7 +17,7 @@ import {
 
 type PublicContact = Pick<
   Database["public"]["Tables"]["tournament_contacts"]["Row"],
-  "id" | "name" | "role" | "phone" | "email"
+  "id" | "name" | "role" | "phone" | "email" | "receives_form_messages"
 >;
 
 export default function TournamentContactPage() {
@@ -65,7 +66,7 @@ export default function TournamentContactPage() {
 
       const { data: contactRows } = await supabase
         .from("tournament_contacts")
-        .select("id, name, role, phone, email")
+        .select("id, name, role, phone, email, receives_form_messages")
         .eq("tournament_id", t.id)
         .eq("is_public", true)
         .is("deleted_at", null)
@@ -158,13 +159,55 @@ function ContactForm({
   tournamentId: string;
   contacts: PublicContact[];
 }) {
+  const { user } = useAuth();
+
+  // Contacts eligible for the recipient picker: flagged
+  // receives_form_messages and have an email address (#148 AC#3).
+  const selectableContacts = contacts.filter(
+    (c) => c.receives_form_messages && c.email,
+  );
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  // The sender's explicit recipient pick ("" until they choose one).
+  const [targetContactId, setTargetContactId] = useState<string>("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
     "idle",
   );
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Prefill name + email for signed-in users from their player record
+  // (#148 AC#2). Still editable. Runs when the user resolves.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("players")
+        .select("first_name, last_name, email")
+        .eq("auth_user_id", user.id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      setName([data.first_name, data.last_name].filter(Boolean).join(" "));
+      setEmail(data.email ?? "");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // Effective recipient, DERIVED during render (not synced via an effect):
+  // the user's pick if still valid, else the first selectable contact. This
+  // matters because `contacts` load async — a state+effect default could
+  // leave the dropdown SHOWING a recipient while submitting an empty id,
+  // which makes the server silently fan the message out to every contact.
+  const effectiveTargetId = selectableContacts.some(
+    (c) => c.id === targetContactId,
+  )
+    ? targetContactId
+    : selectableContacts[0]?.id ?? "";
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -172,16 +215,17 @@ function ContactForm({
     setStatus("sending");
     setErrorMsg(null);
 
+    const body: Record<string, string> = {
+      tournamentId,
+      senderName: name.trim(),
+      senderEmail: email.trim(),
+      message: message.trim(),
+    };
+    if (effectiveTargetId) body.targetContactId = effectiveTargetId;
+
     const { data, error } = await supabase.functions.invoke(
       "submit-contact-form",
-      {
-        body: {
-          tournamentId,
-          senderName: name.trim(),
-          senderEmail: email.trim(),
-          message: message.trim(),
-        },
-      },
+      { body },
     );
 
     if (error) {
@@ -276,8 +320,14 @@ function ContactForm({
             lineHeight: 1.5,
           }}
         >
-          Thanks — your message was sent to the organizers. They'll reply to
-          the email you provided.
+          {(() => {
+            const recipient = selectableContacts.find(
+              (c) => c.id === effectiveTargetId,
+            );
+            return recipient
+              ? `Thanks — your message was sent to ${recipient.name}. They'll reply to the email you provided.`
+              : "Thanks — your message was sent to the organizers. They'll reply to the email you provided.";
+          })()}
         </div>
       ) : (
         <form onSubmit={onSubmit} style={{ maxWidth: 520 }}>
@@ -291,6 +341,23 @@ function ContactForm({
           >
             Have a question about this tournament? Send the organizers a note.
           </p>
+          {selectableContacts.length > 0 && (
+            <label style={labelStyle}>
+              Direct your question to…
+              <select
+                value={effectiveTargetId}
+                onChange={(e) => setTargetContactId(e.target.value)}
+                style={{ ...inputStyle, background: "#fff" }}
+              >
+                {selectableContacts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.role ? ` · ${c.role}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label style={labelStyle}>
             Your name
             <input
