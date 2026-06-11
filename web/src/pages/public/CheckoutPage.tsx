@@ -121,6 +121,18 @@ export default function CheckoutPage() {
   // pricing path in computeLineItems.
   const [alreadyHasPaidEvent, setAlreadyHasPaidEvent] = useState(false);
 
+  // Coupon code (#30). validate_coupon is a read-only RPC for the live
+  // preview; create-payment-intent re-validates + applies the code
+  // authoritatively at pay-time (and redeem_coupon increments uses via
+  // the webhook), so this client-side number is UX only — never trusted
+  // for the actual charge.
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<
+    { code: string; discountCents: number } | null
+  >(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
+
   // After Pay succeeds we render the receipt view. doneEventNames
   // carries the confirmed events; receiptItems holds the server-side
   // line-item breakdown loaded from payment_line_items.
@@ -340,6 +352,13 @@ export default function CheckoutPage() {
       )
     : { items: [] as LineItem[], totalCents: 0 };
 
+  // Coupon discount applied to the post-tier subtotal. Capped at the
+  // subtotal so the payable amount never goes below zero.
+  const discountCents = appliedCoupon
+    ? Math.min(appliedCoupon.discountCents, totalCents)
+    : 0;
+  const payableCents = Math.max(0, totalCents - discountCents);
+
   // Block Pay if any doubles row is missing a partner AND is not a
   // seeker — seekers intentionally have no partner yet; they can pay
   // and get matched later.
@@ -354,6 +373,38 @@ export default function CheckoutPage() {
   // computes the authoritative amount (compute_checkout_total), applies
   // the Connect destination charge + platform fee, records a pending
   // payment, and returns a clientSecret. We never send the amount.
+  // Apply a coupon: validate (read-only) against the current subtotal and
+  // show the discount. The server re-validates at pay-time, so a stale or
+  // tampered client value can't change what's actually charged.
+  const applyCoupon = async () => {
+    const code = couponInput.trim();
+    if (!code || !tournament) return;
+    setCouponChecking(true);
+    setCouponError(null);
+    const { data, error: rpcErr } = await supabase.rpc("validate_coupon", {
+      p_tournament_id: tournament.id,
+      p_code: code,
+      p_subtotal_cents: totalCents,
+    });
+    setCouponChecking(false);
+    const res = data as
+      | { valid?: boolean; error?: string; discount_cents?: number }
+      | null;
+    if (rpcErr || !res?.valid) {
+      setAppliedCoupon(null);
+      setCouponError(couponErrorMessage(res?.error ?? rpcErr?.message));
+      return;
+    }
+    setAppliedCoupon({ code, discountCents: res.discount_cents ?? 0 });
+    setCouponError(null);
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponInput("");
+    setCouponError(null);
+  };
+
   const startPayment = async () => {
     if (!tournament || rows.length === 0) return;
     setPaymentError(null);
@@ -362,7 +413,14 @@ export default function CheckoutPage() {
       "create-payment-intent",
       // baseUrl is stashed in the PaymentIntent metadata so the webhook
       // can build partner-invite accept links from this same origin (#191).
-      { body: { orgSlug, tournamentSlug, baseUrl: window.location.origin } },
+      {
+        body: {
+          orgSlug,
+          tournamentSlug,
+          baseUrl: window.location.origin,
+          couponCode: appliedCoupon?.code,
+        },
+      },
     );
     setCreatingIntent(false);
     const res = data as {
@@ -665,10 +723,73 @@ export default function CheckoutPage() {
               </div>
             );
           })}
+          {discountCents > 0 && appliedCoupon && (
+            <div style={{ ...summaryRow, color: courtGreen, marginTop: 8 }}>
+              <span>Discount ({appliedCoupon.code})</span>
+              <span>−{formatUsd(discountCents)}</span>
+            </div>
+          )}
           <div style={summaryTotal}>
             <span>Total</span>
-            <span>{formatUsd(totalCents)}</span>
+            <span>{formatUsd(payableCents)}</span>
           </div>
+
+          {/* "Have a code?" — coupon entry (#30). Hidden once a code is on. */}
+          {!clientSecret && (
+            <div style={{ marginTop: 14 }}>
+              {appliedCoupon ? (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: 13,
+                  }}
+                >
+                  <span style={{ color: courtGreen }}>
+                    Code <strong>{appliedCoupon.code}</strong> applied
+                  </span>
+                  <button type="button" onClick={removeCoupon} style={couponLinkBtn}>
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) => {
+                      setCouponInput(e.target.value);
+                      setCouponError(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void applyCoupon();
+                      }
+                    }}
+                    placeholder="Have a code?"
+                    style={couponInputStyle}
+                    disabled={couponChecking}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void applyCoupon()}
+                    disabled={couponChecking || !couponInput.trim()}
+                    style={couponApplyBtn(couponChecking || !couponInput.trim())}
+                  >
+                    {couponChecking ? "Checking…" : "Apply"}
+                  </button>
+                </div>
+              )}
+              {couponError && (
+                <div style={{ fontSize: 12, color: courtRed, marginTop: 6 }}>
+                  {couponError}
+                </div>
+              )}
+            </div>
+          )}
+
           {paymentError && (
             <div
               style={{
@@ -761,7 +882,7 @@ export default function CheckoutPage() {
                   ? "Starting…"
                   : blockingError
                     ? "Fix the partner issue above"
-                    : `Continue to payment · ${formatUsd(totalCents)} →`}
+                    : `Continue to payment · ${formatUsd(payableCents)} →`}
               </button>
               {!stripeConfigured && (
                 <div
@@ -803,7 +924,7 @@ export default function CheckoutPage() {
                 options={{ clientSecret, appearance: { theme: "stripe" } }}
               >
                 <PaymentSection
-                  totalCents={totalCents}
+                  totalCents={payableCents}
                   finalizing={finalizing}
                   onConfirmed={() => void onConfirmed()}
                   onPaymentError={setPaymentError}
@@ -943,6 +1064,61 @@ function PaymentSection({
 // ─────────────────────────────────────────────────────────────────────
 // Bits
 // ─────────────────────────────────────────────────────────────────────
+
+// Maps a validate_coupon error code to a friendly message.
+function couponErrorMessage(code?: string): string {
+  switch (code) {
+    case "not_found":
+      return "That code isn't valid for this tournament.";
+    case "inactive":
+      return "That code is no longer active.";
+    case "expired":
+      return "That code has expired.";
+    case "not_started":
+      return "That code isn't active yet.";
+    case "exhausted":
+      return "That code has reached its usage limit.";
+    default:
+      return "Couldn't apply that code. Please try again.";
+  }
+}
+
+const couponInputStyle: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: "9px 11px",
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  fontSize: 13,
+  fontFamily: "inherit",
+};
+
+function couponApplyBtn(disabled: boolean): CSSProperties {
+  return {
+    padding: "9px 16px",
+    background: disabled ? "#e5e7eb" : ink,
+    color: disabled ? "#9ca3af" : "#fff",
+    border: "none",
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  };
+}
+
+const couponLinkBtn: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  color: courtRed,
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  textDecoration: "underline",
+  fontFamily: "inherit",
+};
 
 function Shell({
   children,
