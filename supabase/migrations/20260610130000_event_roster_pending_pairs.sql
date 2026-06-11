@@ -1,4 +1,4 @@
--- 20260610120000_event_roster_pending_pairs.sql
+-- 20260610130000_event_roster_pending_pairs.sql
 --
 -- Extends event_roster to expose pending-invite pairing data for the
 -- unified roster list (issue #225). Builds on the invited_partner_*
