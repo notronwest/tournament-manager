@@ -23,9 +23,9 @@
 //                                      — auto-injected by the runtime.
 
 // @ts-expect-error remote import resolved at runtime by Deno
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 // @ts-expect-error remote import resolved at runtime by Deno
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+import Stripe from "npm:stripe@14.21.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

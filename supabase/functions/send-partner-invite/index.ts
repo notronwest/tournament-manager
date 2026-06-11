@@ -28,7 +28,7 @@
 // matters.
 
 // @ts-expect-error remote import resolved at runtime by Deno
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
