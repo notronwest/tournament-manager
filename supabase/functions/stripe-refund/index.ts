@@ -19,9 +19,10 @@
 // Env (all already set): STRIPE_SECRET_KEY, SUPABASE_URL,
 // SUPABASE_SERVICE_ROLE_KEY (auto-injected).
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// @ts-expect-error esm.sh Deno target
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+// @ts-expect-error remote import resolved at runtime by Deno
+import { createClient } from "npm:@supabase/supabase-js@2";
+// @ts-expect-error remote import resolved at runtime by Deno
+import Stripe from "npm:stripe@14.21.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

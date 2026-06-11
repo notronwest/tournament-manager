@@ -132,11 +132,24 @@ already withdrawn/refunded/cancelled), `refund_failed` (502, Stripe error).
 
 ---
 
-## Deploy (Ron)
+## Deploy — happens on merge (do NOT hand-run)
 
-1. Apply the migration: `supabase db push` (adds `refund_compute`).
-2. Regenerate types: `npx supabase gen types typescript --linked > web/src/types/supabase.ts` (so #199's UI can `rpc` / read the new shapes).
-3. Deploy the function: `supabase functions deploy stripe-refund`.
-   - Uses existing secrets: `STRIPE_SECRET_KEY`, `SUPABASE_URL`,
-     `SUPABASE_SERVICE_ROLE_KEY` (auto-injected). No new secrets.
-4. Verify with a **test-mode** payment → withdraw, before real use.
+Per the WMPC convention, schema and edge functions deploy via **CI on merge to
+`main`** — never a hand-run `supabase db push` / `functions deploy` (that's what
+caused drift). So **merging this PR is the deploy:**
+
+1. **Migration** → applied to prod by `.github/workflows/migrations.yml`
+   (`db push --include-all`) on merge.
+2. **`stripe-refund` function** → deployed by
+   `.github/workflows/edge-functions.yml` on merge. **No new secrets** —
+   `STRIPE_SECRET_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` are already
+   set and auto-injected.
+3. **Types** → `refund_compute` is `service_role`-only and called by the edge
+   function (not the browser), so the frontend `supabase.ts` does **not** need
+   regenerating for it.
+
+**The one human step (Ron):** verify a **test-mode** payment → withdraw before
+relying on it in prod. There's no safe pre-prod Stripe path yet — that's what
+the `.test` environment + Stripe-test-mode enabler (#255) and the staging
+release process (#227) are for; until then this can only be exercised carefully
+against prod.
