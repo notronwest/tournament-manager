@@ -4,6 +4,28 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { useAuth } from "../../auth/AuthProvider";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  rule,
+  courtBlue,
+  courtRed,
+  successBg,
+  successFg,
+  dangerBg,
+  dangerFg,
+  warnBg,
+  warnFg,
+  breadcrumbLinkStyle,
+  pageH1Style,
+  panelMutedStyle,
+  ctaPrimaryStyle,
+  ctaSecondaryStyle,
+  inputStyle,
+  statusPanelStyle,
+  bodyFontStack,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type ChangeRequest =

@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import {
+  inkSoft,
+  pageH1Style,
+  ctaSecondaryStyle,
+  statusPanelStyle,
+  bodyFontStack,
+} from "../../lib/publicTheme";
 
 // Lands here after the user authorizes Tournament Manager on Stripe's
 // hosted OAuth page. URL carries ?code + ?state (state is base64url
@@ -79,47 +86,27 @@ export default function StripeOauthCallbackPage() {
   }, [code, state, stripeError, stripeErrorDescription, navigate]);
 
   return (
-    <main style={{ padding: 32, maxWidth: 560, margin: "0 auto" }}>
+    <main style={{ padding: 32, maxWidth: 560, margin: "0 auto", fontFamily: bodyFontStack }}>
       {error ? (
         <>
-          <h1 style={{ fontSize: 22, marginTop: 0 }}>
+          <h1 style={{ ...pageH1Style, marginTop: 0 }}>
             Couldn't finish connecting Stripe
           </h1>
-          <div
-            style={{
-              padding: 12,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: 6,
-              color: "#991b1b",
-              fontSize: 13,
-              lineHeight: 1.55,
-              marginBottom: 16,
-            }}
-          >
+          <div style={{ ...statusPanelStyle("danger"), marginBottom: 16 }}>
             {error}
           </div>
           <button
             type="button"
             onClick={() => navigate("/admin")}
-            style={{
-              padding: "9px 18px",
-              background: "#fff",
-              color: "#555",
-              border: "1px solid #e2e2e2",
-              borderRadius: 6,
-              fontSize: 13,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
+            style={ctaSecondaryStyle}
           >
             Back to organizations
           </button>
         </>
       ) : (
         <>
-          <h1 style={{ fontSize: 22, marginTop: 0 }}>Connecting Stripe…</h1>
-          <p style={{ color: "#666", fontSize: 14 }}>
+          <h1 style={{ ...pageH1Style, marginTop: 0 }}>Connecting Stripe…</h1>
+          <p style={{ color: inkSoft, fontSize: 14 }}>
             Finishing up the handshake with Stripe — this takes a couple
             of seconds.
           </p>
