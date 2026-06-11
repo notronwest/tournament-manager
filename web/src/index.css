@@ -164,6 +164,18 @@ canvas {
   }
 }
 
+/* Partner picker bottom sheet — slide-up entry animation. The sheet
+   itself is position:fixed via inline styles; only the animation
+   keyframe needs to live in CSS. Class applied directly in
+   PartnerSearch.tsx. */
+@keyframes partner-sheet-slidein {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+.partner-sheet-enter {
+  animation: partner-sheet-slidein 0.28s ease-out;
+}
+
 /* Print rules: hide app chrome (sidebar + page padding) so a route can
    render to-paper exactly. Pages that print add their own per-card
    styles inside a <style> tag scoped via a wrapper class. */
