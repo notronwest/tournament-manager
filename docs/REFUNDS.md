@@ -85,8 +85,21 @@ against `tournaments.starts_at` ("before start") and the registration's
 **Request**
 
 ```jsonc
+// mode "self" (default) — the PLAYER withdraws (owner-authorized)
 { "eventRegistrationId": "uuid", "dryRun": true }   // preview
-{ "eventRegistrationId": "uuid", "dryRun": false }  // execute (mode auto)
+{ "eventRegistrationId": "uuid", "dryRun": false, "reason": "..." }  // execute
+//   On execute, if the policy can't auto-decide (manual_required), this FILES
+//   a withdrawal request (withdrawal_requested_at + withdrawal_reason) for the
+//   organizer queue (#200) and returns { applied:false, requested:true }.
+
+// mode "resolve" — an ORGANIZER resolves a queued request (#200).
+//   Authorized as has_org_role(<reg's tournament org>, 'admin').
+{ "eventRegistrationId": "uuid", "mode": "resolve",
+  "decision": "approve", "amountCents": 1500, "dryRun": false }  // refund $15
+{ "eventRegistrationId": "uuid", "mode": "resolve", "decision": "deny" }
+//   approve + amount>0 → refund that amount → 'refunded'; approve+$0 or deny →
+//   'withdrawn'. Either stamps withdrawal_decided_at + withdrawal_decision.
+//   amountCents is server-clamped to [0, paid_cents].
 ```
 
 **Response (200)**
