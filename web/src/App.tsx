@@ -31,6 +31,7 @@ import PrivacyPage from "./pages/public/PrivacyPage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
+import TournamentContactPage from "./pages/public/TournamentContactPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import SchedulePage from "./pages/admin/SchedulePage";
@@ -114,6 +115,11 @@ export default function App() {
             </RequireProfile>
           </RequireAuth>
         }
+      />
+      {/* Public contact page — anonymous-readable, no auth required. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/contact"
+        element={<TournamentContactPage />}
       />
       {/* Partner invite accept page. NOT wrapped in RequireAuth /
           RequireProfile — the page handles those states internally so
