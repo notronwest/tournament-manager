@@ -58,7 +58,21 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase functions deploy --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"
+          # Retry with backoff. `functions deploy` bundles each function, which
+          # fetches remote imports (esm.sh, etc.) at deploy time — so a TRANSIENT
+          # CDN hiccup (e.g. esm.sh returning 522) fails the whole prod deploy and
+          # leaves a function NOT live until someone reruns. (Happened 2026-06-11.)
+          # Retrying absorbs those transient failures; a real error still fails
+          # after the last attempt (fail-closed → Discord alert below).
+          n=0; max=3
+          until supabase functions deploy --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"; do
+            n=$((n+1))
+            if [ "$n" -ge "$max" ]; then
+              echo "::error::functions deploy failed after $max attempts"; exit 1
+            fi
+            echo "::warning::functions deploy attempt $n failed — retrying in $((n*20))s"
+            sleep $((n*20))
+          done
 
       - name: Alert on failure (fail-closed)
         if: failure() && steps.cfg.outputs.ready == 'true'
