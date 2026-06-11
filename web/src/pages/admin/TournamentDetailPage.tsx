@@ -20,8 +20,35 @@ import type { Database } from "../../types/supabase";
 // Court count + venue details now live on the selected venue
 // (locations), joined in on the tournament fetch below.
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
-  locations: { name: string; address: string | null; court_count: number | null } | null;
+  locations: {
+    name: string;
+    address: string | null;
+    address_line2: string | null;
+    city: string | null;
+    state: string | null;
+    postal_code: string | null;
+    court_count: number | null;
+  } | null;
 };
+
+function composeAddress(loc: {
+  address?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+}): string | null {
+  const parts: string[] = [];
+  if (loc.address) parts.push(loc.address);
+  if (loc.address_line2) parts.push(loc.address_line2);
+  const stateZip =
+    loc.state && loc.postal_code
+      ? `${loc.state} ${loc.postal_code}`
+      : (loc.state ?? loc.postal_code ?? null);
+  const cityStateZip = [loc.city, stateZip].filter(Boolean).join(", ");
+  if (cityStateZip) parts.push(cityStateZip);
+  return parts.length > 0 ? parts.join(", ") : null;
+}
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type EventStatus = Database["public"]["Enums"]["event_status"];
 type TournamentStatus = Database["public"]["Enums"]["tournament_status"];
@@ -61,7 +88,7 @@ export default function TournamentDetailPage() {
 
     const { data: tData, error: tErr } = await supabase
       .from("tournaments")
-      .select("*, locations(name, address, court_count)")
+      .select("*, locations(name, address, address_line2, city, state, postal_code, court_count)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .is("deleted_at", null)
@@ -483,7 +510,7 @@ export default function TournamentDetailPage() {
         />
         <DtDd
           label="Address"
-          value={t.locations?.address || t.location_address || "—"}
+          value={(t.locations ? composeAddress(t.locations) : null) || t.location_address || "—"}
         />
         <dt style={{ color: "#888" }}>Courts at venue</dt>
         <dd style={{ margin: 0 }}>
