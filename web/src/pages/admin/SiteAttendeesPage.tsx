@@ -1,7 +1,25 @@
-import { Fragment, useState, useEffect, type CSSProperties } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  rule,
+  ruleSoft,
+  bg,
+  courtBlue,
+  successBg,
+  successFg,
+bodyFontStack,
+  breadcrumbLinkStyle,
+  pageH1Style,
+  ctaPrimaryStyle,
+  ctaSecondaryStyle,
+  inputStyle,
+  statusPanelStyle,
+} from "../../lib/publicTheme";
 
 type Player = {
   id: string;
@@ -71,17 +89,17 @@ export default function SiteAttendeesPage() {
   }, [isPlatformAdmin, debouncedSearch, page]);
 
   if (isPlatformAdmin === null) {
-    return <div style={{ padding: 24, color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ padding: 24, color: inkMuted, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
   }
 
   if (!isPlatformAdmin) {
     return (
-      <main style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 20, marginTop: 0 }}>Access denied</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>
+      <main style={{ padding: "24px 32px", maxWidth: 600, margin: "0 auto", fontFamily: bodyFontStack }}>
+        <h1 style={{ ...pageH1Style, fontSize: 20, marginTop: 0 }}>Access denied</h1>
+        <p style={{ color: inkSoft, fontSize: 14 }}>
           This page is restricted to platform administrators.
         </p>
-        <Link to="/admin" style={linkStyle}>
+        <Link to="/admin" style={breadcrumbLinkStyle}>
           ← Back to admin
         </Link>
       </main>
@@ -91,14 +109,14 @@ export default function SiteAttendeesPage() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+    <main style={{ padding: "24px 32px", maxWidth: 900, margin: "0 auto", fontFamily: bodyFontStack }}>
       <div style={{ marginBottom: 16 }}>
-        <Link to="/admin" style={linkStyle}>
+        <Link to="/admin" style={breadcrumbLinkStyle}>
           ← Back to admin
         </Link>
       </div>
-      <h1 style={{ fontSize: 22, margin: "0 0 4px" }}>All players</h1>
-      <p style={{ fontSize: 13, color: "#666", margin: "0 0 20px" }}>
+      <h1 style={{ ...pageH1Style, fontSize: 22, marginBottom: 4 }}>All players</h1>
+      <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 20px" }}>
         Site-wide — every player across all organizations.
       </p>
 
@@ -117,21 +135,21 @@ export default function SiteAttendeesPage() {
           style={{ ...inputStyle, width: 300 }}
         />
         {!loading && total > 0 && (
-          <span style={{ fontSize: 13, color: "#888" }}>
+          <span style={{ fontSize: 13, color: inkMuted }}>
             {total.toLocaleString()} player{total !== 1 ? "s" : ""}
           </span>
         )}
       </div>
 
-      {loadError && <div style={errorPanelStyle}>{loadError}</div>}
+      {loadError && <div style={statusPanelStyle("danger")}>{loadError}</div>}
 
       {!loadError && (
         <div
-          style={{ border: "1px solid #e2e2e2", borderRadius: 8, overflow: "hidden" }}
+          style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: "hidden" }}
         >
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: "#f9fafb", borderBottom: "1px solid #e2e2e2" }}>
+              <tr style={{ background: bg, borderBottom: `1px solid ${rule}` }}>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Contact email</th>
                 <th style={thStyle}>Account</th>
@@ -143,7 +161,7 @@ export default function SiteAttendeesPage() {
                 <tr>
                   <td
                     colSpan={4}
-                    style={{ padding: "20px 16px", color: "#888", textAlign: "center" }}
+                    style={{ padding: "20px 16px", color: inkMuted, textAlign: "center" }}
                   >
                     Loading…
                   </td>
@@ -152,7 +170,7 @@ export default function SiteAttendeesPage() {
                 <tr>
                   <td
                     colSpan={4}
-                    style={{ padding: "20px 16px", color: "#888", textAlign: "center" }}
+                    style={{ padding: "20px 16px", color: inkMuted, textAlign: "center" }}
                   >
                     {debouncedSearch ? "No players match that search." : "No players yet."}
                   </td>
@@ -163,7 +181,7 @@ export default function SiteAttendeesPage() {
                     <tr
                       style={{
                         borderBottom:
-                          editingId === p.id ? "none" : "1px solid #f0f0f0",
+                          editingId === p.id ? "none" : `1px solid ${ruleSoft}`,
                       }}
                     >
                       <td style={tdStyle}>
@@ -171,7 +189,7 @@ export default function SiteAttendeesPage() {
                       </td>
                       <td style={tdStyle}>
                         {p.email ?? (
-                          <span style={{ color: "#aaa" }}>—</span>
+                          <span style={{ color: inkMuted }}>—</span>
                         )}
                       </td>
                       <td style={tdStyle}>
@@ -193,7 +211,7 @@ export default function SiteAttendeesPage() {
                       </td>
                     </tr>
                     {editingId === p.id && (
-                      <tr style={{ borderBottom: "1px solid #e2e2e2" }}>
+                      <tr style={{ borderBottom: `1px solid ${rule}` }}>
                         <td colSpan={4} style={{ padding: 0 }}>
                           <EditEmailPanel
                             player={p}
@@ -235,7 +253,7 @@ export default function SiteAttendeesPage() {
           >
             ← Previous
           </button>
-          <span style={{ color: "#666" }}>
+          <span style={{ color: inkSoft }}>
             Page {page + 1} of {totalPages}
           </span>
           <button
@@ -317,8 +335,8 @@ function EditEmailPanel({
     <div
       style={{
         padding: "12px 16px",
-        background: "#fafafa",
-        borderTop: "1px solid #e2e2e2",
+        background: bg,
+        borderTop: `1px solid ${rule}`,
       }}
     >
       <div
@@ -330,7 +348,7 @@ function EditEmailPanel({
         }}
       >
         <label
-          style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "#555" }}
+          style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft }}
         >
           Contact email
           <input
@@ -351,7 +369,7 @@ function EditEmailPanel({
               flexDirection: "column",
               gap: 4,
               fontSize: 12,
-              color: "#555",
+              color: inkSoft,
             }}
           >
             Login email (auth)
@@ -372,58 +390,39 @@ function EditEmailPanel({
           <button
             onClick={onSave}
             disabled={saving}
-            style={{
-              ...btnPrimaryStyle,
-              opacity: saving ? 0.6 : 1,
-              cursor: saving ? "not-allowed" : "pointer",
-            }}
+            style={saving ? { ...ctaPrimaryStyle, opacity: 0.6, cursor: "not-allowed" } : ctaPrimaryStyle}
           >
             {saving ? "Saving…" : "Save"}
           </button>
-          <button onClick={onCancel} disabled={saving} style={btnSecondaryStyle}>
+          <button onClick={onCancel} disabled={saving} style={ctaSecondaryStyle}>
             Cancel
           </button>
         </div>
       </div>
 
-      {error && <div style={{ ...errorPanelStyle, marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ ...statusPanelStyle("danger"), marginTop: 10 }}>{error}</div>}
     </div>
   );
 }
 
 // ─── styles ───────────────────────────────────────────────────────────────────
 
-const linkStyle: CSSProperties = {
-  fontSize: 13,
-  color: "#2563eb",
-  textDecoration: "none",
-};
-
-const inputStyle: CSSProperties = {
-  padding: "7px 10px",
-  border: "1px solid #d1d5db",
-  borderRadius: 5,
-  fontSize: 13,
-  fontFamily: "inherit",
-  outline: "none",
-  boxSizing: "border-box",
-};
-
-const thStyle: CSSProperties = {
+const thStyle = {
   padding: "10px 14px",
-  textAlign: "left",
+  textAlign: "left" as const,
   fontSize: 12,
   fontWeight: 600,
-  color: "#555",
-  whiteSpace: "nowrap",
+  color: inkSoft,
+  whiteSpace: "nowrap" as const,
 };
 
-const tdStyle: CSSProperties = {
+const tdStyle = {
   padding: "10px 14px",
-  verticalAlign: "middle",
+  verticalAlign: "middle" as const,
+  color: ink,
 };
 
-const badgeBase: CSSProperties = {
+const badgeBase = {
   display: "inline-block",
   padding: "2px 8px",
   borderRadius: 10,
@@ -431,71 +430,40 @@ const badgeBase: CSSProperties = {
   fontWeight: 500,
 };
 
-const linkedBadgeStyle: CSSProperties = {
+const linkedBadgeStyle = {
   ...badgeBase,
-  background: "#f0fdf4",
-  color: "#166534",
-  border: "1px solid #bbf7d0",
+  background: successBg,
+  color: successFg,
+  border: `1px solid ${courtBlue}20`,
 };
 
-const noAccountBadgeStyle: CSSProperties = {
+const noAccountBadgeStyle = {
   ...badgeBase,
-  background: "#f9fafb",
-  color: "#888",
-  border: "1px solid #e2e2e2",
+  background: bg,
+  color: inkMuted,
+  border: `1px solid ${rule}`,
 };
 
-const editBtnStyle: CSSProperties = {
+const editBtnStyle = {
   padding: "4px 10px",
   background: "#fff",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 5,
   fontSize: 12,
-  color: "#555",
+  color: inkSoft,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
 };
 
-const btnPrimaryStyle: CSSProperties = {
-  padding: "7px 16px",
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  borderRadius: 5,
-  fontSize: 13,
-  fontWeight: 500,
-  fontFamily: "inherit",
-};
-
-const btnSecondaryStyle: CSSProperties = {
-  padding: "7px 14px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
-  borderRadius: 5,
-  fontSize: 13,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const errorPanelStyle: CSSProperties = {
-  padding: "8px 12px",
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  borderRadius: 5,
-  fontSize: 13,
-  color: "#dc2626",
-};
-
-function paginationBtnStyle(disabled: boolean): CSSProperties {
+function paginationBtnStyle(disabled: boolean) {
   return {
     padding: "6px 12px",
     background: "#fff",
-    border: "1px solid #e2e2e2",
+    border: `1px solid ${rule}`,
     borderRadius: 5,
     fontSize: 12,
-    color: disabled ? "#bbb" : "#555",
+    color: disabled ? inkMuted : inkSoft,
     cursor: disabled ? "default" : "pointer",
-    fontFamily: "inherit",
+    fontFamily: bodyFontStack,
   };
 }
