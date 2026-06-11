@@ -3,6 +3,26 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import type { Database } from "../../types/supabase";
+import {
+  bg,
+  bodyFontStack,
+  contentColStyle,
+  courtBlue,
+  courtRed,
+  ctaPrimaryStyle,
+  ink,
+  inkMuted,
+  inkSoft,
+  pageH1Style,
+  pageWrapStyle,
+  rule,
+  ruleSoft,
+  sectionH2Style,
+  successBg,
+  successFg,
+  warnBg,
+  warnFg,
+} from "../../lib/publicTheme";
 
 type RegistrationStatus = Database["public"]["Enums"]["registration_status"];
 type PartnerStatus = Database["public"]["Enums"]["partner_status"];
@@ -42,20 +62,23 @@ function statusLabel(
   return "Paid";
 }
 
-function statusColor(
+type StatusTone = { color: string; background: string };
+
+function statusTone(
   regStatus: RegistrationStatus,
   partnerStatus: PartnerStatus
-): string {
+): StatusTone {
   if (
     regStatus === "cancelled" ||
     regStatus === "withdrawn" ||
     regStatus === "refunded"
   )
-    return "#6b7280";
-  if (regStatus === "pending_payment") return "#d97706";
+    return { color: inkMuted, background: `${inkMuted}18` };
+  if (regStatus === "pending_payment")
+    return { color: warnFg, background: warnBg };
   if (partnerStatus === "seeking" || partnerStatus === "pending")
-    return "#2563eb";
-  return "#16a34a";
+    return { color: courtBlue, background: `${courtBlue}18` };
+  return { color: successFg, background: successBg };
 }
 
 function formatDateRange(startsAt: string, endsAt: string): string {
@@ -220,24 +243,24 @@ export default function MyTournamentsPage() {
     );
 
   return (
-    <div style={pageStyle}>
-      <div style={contentStyle}>
-        <h1 style={headingStyle}>My Tournaments</h1>
+    <div style={pageWrapStyle}>
+      <div style={contentColStyle(720)}>
+        <h1 style={pageH1Style}>My Tournaments</h1>
 
         {loading && (
-          <p style={{ color: "#6b7280", marginTop: 24 }}>Loading…</p>
+          <p style={{ color: inkMuted, marginTop: 24, fontFamily: bodyFontStack }}>Loading…</p>
         )}
 
         {error && (
-          <p style={{ color: "#dc2626", marginTop: 24 }}>{error}</p>
+          <p style={{ color: courtRed, marginTop: 24, fontFamily: bodyFontStack }}>{error}</p>
         )}
 
         {!loading && !error && groups.length === 0 && (
           <div style={emptyStyle}>
-            <p style={{ margin: 0, fontSize: 16, color: "#374151" }}>
+            <p style={{ margin: 0, fontSize: 16, color: inkSoft, fontFamily: bodyFontStack }}>
               You haven't registered for any tournaments yet.
             </p>
-            <Link to="/" style={browseLinkStyle}>
+            <Link to="/" style={ctaPrimaryStyle}>
               Browse upcoming events
             </Link>
           </div>
@@ -264,7 +287,7 @@ function Section({
 }) {
   return (
     <section style={{ marginTop: 32 }}>
-      <h2 style={sectionHeadingStyle}>{title}</h2>
+      <h2 style={sectionH2Style}>{title}</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {groups.map((g) => (
           <TournamentCard key={g.tournament_id} group={g} />
@@ -298,20 +321,23 @@ function TournamentCard({ group }: { group: TournamentGroup }) {
         </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {group.regs.map((reg) => (
-          <div key={reg.id} style={regRowStyle}>
-            <span style={eventNameStyle}>{reg.event_name}</span>
-            <span
-              style={{
-                ...statusPillStyle,
-                color: statusColor(reg.status, reg.partner_status),
-                background: statusColor(reg.status, reg.partner_status) + "18",
-              }}
-            >
-              {statusLabel(reg.status, reg.partner_status)}
-            </span>
-          </div>
-        ))}
+        {group.regs.map((reg) => {
+          const tone = statusTone(reg.status, reg.partner_status);
+          return (
+            <div key={reg.id} style={regRowStyle}>
+              <span style={eventNameStyle}>{reg.event_name}</span>
+              <span
+                style={{
+                  ...statusPillStyle,
+                  color: tone.color,
+                  background: tone.background,
+                }}
+              >
+                {statusLabel(reg.status, reg.partner_status)}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div style={cardFooterStyle}>
         <Link
@@ -328,43 +354,25 @@ function TournamentCard({ group }: { group: TournamentGroup }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  minHeight: "100vh",
-  background: "#f9fafb",
-  paddingBottom: 64,
-};
-
-const contentStyle: CSSProperties = {
-  maxWidth: 720,
-  margin: "0 auto",
-  padding: "40px 24px 0",
-};
-
-const headingStyle: CSSProperties = {
-  fontSize: 28,
-  fontWeight: 700,
-  color: "#111827",
-  margin: 0,
-};
-
-const sectionHeadingStyle: CSSProperties = {
-  fontSize: 16,
-  fontWeight: 600,
-  color: "#6b7280",
-  textTransform: "uppercase",
-  letterSpacing: "0.05em",
-  margin: "0 0 12px",
+const emptyStyle: CSSProperties = {
+  marginTop: 48,
+  textAlign: "center",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 16,
 };
 
 const cardStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 12,
+  background: "#ffffff",
+  border: `1px solid ${rule}`,
+  borderRadius: 10,
   padding: "20px 24px",
   display: "flex",
   flexDirection: "column",
   gap: 12,
   cursor: "pointer",
+  fontFamily: bodyFontStack,
 };
 
 const cardHeaderStyle: CSSProperties = {
@@ -376,13 +384,13 @@ const cardHeaderStyle: CSSProperties = {
 const cardTitleStyle: CSSProperties = {
   fontSize: 17,
   fontWeight: 600,
-  color: "#111827",
+  color: ink,
   textDecoration: "none",
 };
 
 const cardMetaStyle: CSSProperties = {
   fontSize: 13,
-  color: "#6b7280",
+  color: inkMuted,
   margin: "2px 0 0",
 };
 
@@ -392,12 +400,12 @@ const regRowStyle: CSSProperties = {
   justifyContent: "space-between",
   gap: 12,
   padding: "6px 0",
-  borderTop: "1px solid #f3f4f6",
+  borderTop: `1px solid ${bg}`,
 };
 
 const eventNameStyle: CSSProperties = {
   fontSize: 14,
-  color: "#374151",
+  color: inkSoft,
 };
 
 const statusPillStyle: CSSProperties = {
@@ -408,17 +416,8 @@ const statusPillStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const emptyStyle: CSSProperties = {
-  marginTop: 48,
-  textAlign: "center",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  gap: 16,
-};
-
 const cardFooterStyle: CSSProperties = {
-  borderTop: "1px solid #f3f4f6",
+  borderTop: `1px solid ${ruleSoft}`,
   paddingTop: 10,
   marginTop: 2,
 };
@@ -426,17 +425,6 @@ const cardFooterStyle: CSSProperties = {
 const viewLinkStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 500,
-  color: "#2563eb",
+  color: courtBlue,
   textDecoration: "none",
-};
-
-const browseLinkStyle: CSSProperties = {
-  display: "inline-block",
-  padding: "10px 20px",
-  background: "#f3d111",
-  color: "#14181f",
-  borderRadius: 8,
-  textDecoration: "none",
-  fontWeight: 600,
-  fontSize: 14,
 };
