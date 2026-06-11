@@ -14,8 +14,7 @@ caused drift — see PR #71/#77 "Reconcile migration drift".)
   code is a second PR). The DB PR is **marked** (see below) and leads with
   **"⚠️ Contains a DB migration."**
 - On merge to `main`, `.github/workflows/migrations.yml` runs
-  `supabase db push --include-all` against the `tournament-manager`
-  Supabase project.
+  `supabase db push` against the `tournament-manager` Supabase project.
 - The Builder may **draft** additive/reversible migrations; risky ones
   (destructive DDL, RLS, `SECURITY DEFINER`, money, backfills) it Blocks for
   Ron to design.
@@ -44,15 +43,18 @@ UX work:
 - **Marked two ways** so they're unmissable on the board and in the PR list:
   - the **`db-migration`** label (filter/group the board by it), and
   - a **`[DB]`** prefix on the PR title.
-- **Merge in migration-timestamp order.** The order key is the migration
-  filename's `YYYYMMDDHHMMSS` prefix (e.g. `20260609000001_…`). When two DB
-  PRs sit in Review, merge the **lower** timestamp first. That keeps the
-  remote migration history linear and matches how `db push` orders files.
-- **The backstop:** `db push --include-all` will still apply an out-of-order
-  file rather than wedging the pipeline (see the workflow comment). Order is
-  the convention for a clean history; `--include-all` is the safety net so a
-  slip doesn't halt every later migration — which is exactly what happened to
-  `20260609000001_feedback_submissions` on 2026-06-09.
+- **Merge in migration-timestamp order — this is the protection, not a flag.**
+  The order key is the migration filename's `YYYYMMDDHHMMSS` prefix. When two DB
+  PRs sit in Review, merge the **lower** timestamp first, so the remote history
+  stays linear and `db push` never sees an out-of-order file. (We briefly ran
+  `db push --include-all` as an auto-backstop; it backfired by re-applying
+  already-recorded migrations → `schema_migrations` duplicate-key wedge on
+  2026-06-11, so it was removed.)
+- **Write idempotent DDL** so a re-run is harmless: `add column if not exists`,
+  `create or replace function`, `drop … if exists`.
+- **If a migration genuinely lands out of order**, the run fails closed (Discord
+  alert) → fix forward by renumbering the file's timestamp to after the head, or
+  `supabase migration repair` from a linked machine.
 
 Shared canonical rule: [`../../wmpc-meta/conventions/migrations.md`](../../wmpc-meta/conventions/migrations.md).
 

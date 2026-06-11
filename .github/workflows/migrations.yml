@@ -50,18 +50,22 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
-          # --include-all: apply EVERY pending local migration, even one whose
-          # timestamp sorts *before* the remote head. Without it, an
-          # out-of-order merge (a DB PR merged after a later-timestamped one)
-          # wedges db push — it refuses the older file and fails the whole run,
-          # halting all future migrations until a human intervenes (this is
-          # what happened to 20260609000001_feedback_submissions on 2026-06-09).
-          # Migrations here are additive/independent, so applying in filename
-          # order regardless of merge order is safe — and self-healing, per the
-          # WMPC infra invariant. Merge-in-order is still the convention
-          # (see supabase/MIGRATIONS.md); this is the backstop that keeps a
-          # mistake from stopping the pipeline.
-          supabase db push --include-all --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
+          # Plain `db push` (NOT --include-all): apply only migrations the remote
+          # history hasn't recorded, in order, respecting that history.
+          #
+          # We TRIED --include-all (2026-06-10) to survive an out-of-order merge
+          # (feedback_submissions). It backfired: once the history was out of
+          # order, --include-all RE-APPLIED already-recorded migrations, hitting
+          # `schema_migrations` duplicate-key errors and wedging the pipeline
+          # (2026-06-11, the refund-engine merge). The flag forces re-application
+          # of versions already in the history — wrong for steady state.
+          #
+          # Out-of-order protection now comes from DISCIPLINE, not the flag:
+          # merge DB PRs in migration-timestamp order (see supabase/MIGRATIONS.md)
+          # and write idempotent DDL (`if not exists`, `create or replace`,
+          # `drop ... if exists`). A genuine out-of-order merge fails closed
+          # (Discord alert) → renumber the file or `supabase migration repair`.
+          supabase db push --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
 
       - name: Alert on failure (fail-closed)
         if: failure() && steps.cfg.outputs.ready == 'true'
