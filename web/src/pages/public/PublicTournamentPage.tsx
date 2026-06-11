@@ -101,6 +101,11 @@ type MyRegStatus = {
   // a secondary "Looking for a partner" badge alongside the
   // state pill so the user sees both bits of info.
   isSeekingPartner: boolean;
+  // Set when I have a pending outbound invite to a named player
+  // (invitee_player_id filled). Used by RosterPanel to suppress
+  // that seeker from "Looking for a partner" and show them as my
+  // pending partner instead (viewer-specific, #212).
+  pendingInviteeName: { first_name: string; last_name: string } | null;
 };
 
 // Top-of-page banner content for a pending inbound invite.
@@ -420,10 +425,13 @@ export default function PublicTournamentPage() {
         inviteToken: null,
         inviterName: null,
         isSeekingPartner: r.partner_status === "seeking",
+        pendingInviteeName: null,
       });
     }
     // Outbound invites: fill in invitee names for pending state
     // where we didn't already have a partnerLabel from the reg join.
+    // Also capture the invitee's first/last name so RosterPanel can
+    // suppress that seeker from "Looking for a partner" (#212).
     for (const inv of (outboundRes.data ?? []) as unknown as OutboundRow[]) {
       const cur = map.get(inv.event_id);
       const label = inv.invitee
@@ -433,6 +441,7 @@ export default function PublicTournamentPage() {
         map.set(inv.event_id, {
           ...cur,
           partnerLabel: label,
+          pendingInviteeName: inv.invitee ?? null,
           partnerEmail: inv.invitee?.email ?? null,
           partnerPhone: inv.invitee?.phone ?? null,
         });
@@ -465,6 +474,7 @@ export default function PublicTournamentPage() {
         inviteToken: inv.token,
         inviterName,
         isSeekingPartner: cur?.isSeekingPartner ?? false,
+        pendingInviteeName: cur?.pendingInviteeName ?? null,
       });
     }
     setMyStatus(map);
@@ -2126,6 +2136,7 @@ function EventCard({
               myStatus.state === "pending_payment" ||
               myStatus.state === "awaiting_partner")
           }
+          pendingInviteeName={myStatus?.pendingInviteeName ?? null}
           onPartnerUp={handlePartnerUp}
         />
       )}
@@ -2484,6 +2495,7 @@ function RosterPanel({
   isDoubles,
   myRegId,
   myIsRegistered,
+  pendingInviteeName,
   onPartnerUp,
 }: {
   rosterRows: RosterRow[];
@@ -2493,9 +2505,33 @@ function RosterPanel({
   // True when the current user already has any active reg for this event
   // (paid/pending_payment/awaiting_partner). Hides "Partner up →" on seekers.
   myIsRegistered: boolean;
+  // When the signed-in user has a pending outbound invite to a named
+  // player, that player's name is passed here. RosterPanel uses it to
+  // suppress the seeker from "Looking for a partner" (they already
+  // received an invite) and surface them as a pending partner instead.
+  // Viewer-specific: only affects the inviting user's view (#212).
+  pendingInviteeName: { first_name: string; last_name: string } | null;
   onPartnerUp: (seeker: { first_name: string; last_name: string }) => void;
 }) {
-  const seekers = rosterRows.filter((r) => r.partner_status === "seeking");
+  // The seeker the current user invited via "Partner up" — suppress
+  // from the seekers list and inject as a pending partner row instead.
+  const invitedSeekerRow = pendingInviteeName
+    ? rosterRows.find(
+        (r) =>
+          r.partner_status === "seeking" &&
+          r.first_name === pendingInviteeName.first_name &&
+          r.last_name === pendingInviteeName.last_name,
+      ) ?? null
+    : null;
+
+  const seekers = rosterRows.filter(
+    (r) =>
+      r.partner_status === "seeking" &&
+      !(
+        invitedSeekerRow &&
+        r.registration_id === invitedSeekerRow.registration_id
+      ),
+  );
   const nonSeekers = rosterRows.filter((r) => r.partner_status !== "seeking");
 
   // Group doubles non-seekers into pairs. Each confirmed pair has two
@@ -2530,6 +2566,20 @@ function RosterPanel({
   if (myTeamIdx > 0) {
     const [myTeam] = teams.splice(myTeamIdx, 1);
     teams.unshift(myTeam);
+  }
+
+  // If the current user has a pending outbound invite to a seeker,
+  // inject that seeker row as the second member of their team so the
+  // pending pair appears under the inviter's name rather than in
+  // "Looking for a partner". Only applies when the team is still a
+  // single row (the invite hasn't been accepted / linked yet).
+  if (invitedSeekerRow && myRegId) {
+    const myIdx = teams.findIndex((t) =>
+      t.some((r) => r.registration_id === myRegId),
+    );
+    if (myIdx !== -1 && teams[myIdx].length === 1) {
+      teams[myIdx] = [teams[myIdx][0], invitedSeekerRow];
+    }
   }
 
   // Sort seekers: current user first.
@@ -2701,12 +2751,24 @@ function RosterPanel({
             {teams.map((team, i) => {
               const isMyTeam = team.some((r) => r.registration_id === myRegId);
               const isPair = team.length === 2;
+              // A "pending pair" is one where the second row is the seeker
+              // the current viewer invited — not yet confirmed.
+              const isPendingPair =
+                isPair &&
+                !!invitedSeekerRow &&
+                team.some(
+                  (r) => r.registration_id === invitedSeekerRow.registration_id,
+                );
               return (
                 <div
                   key={i}
                   style={{
                     background: "#fff",
-                    border: isMyTeam ? "1px solid #bbf7d0" : "1px solid #e5e7eb",
+                    border: isPendingPair
+                      ? `1px solid ${courtYellow}`
+                      : isMyTeam
+                        ? "1px solid #bbf7d0"
+                        : "1px solid #e5e7eb",
                     borderRadius: 6,
                     overflow: "hidden",
                     marginBottom: 8,
@@ -2717,6 +2779,10 @@ function RosterPanel({
                     <tbody>
                       {team.map((row, ri) => {
                         const isMe = row.registration_id === myRegId;
+                        const isPendingRow =
+                          isPendingPair &&
+                          !!invitedSeekerRow &&
+                          row.registration_id === invitedSeekerRow.registration_id;
                         const rating = rosterRating(row, event);
                         const loc = [row.city as string | null, row.state as string | null]
                           .filter(Boolean)
@@ -2725,7 +2791,11 @@ function RosterPanel({
                           <tr
                             key={row.registration_id}
                             style={{
-                              background: isMe ? "#f0fdf4" : undefined,
+                              background: isPendingRow
+                                ? warnBg
+                                : isMe
+                                  ? "#f0fdf4"
+                                  : undefined,
                               borderBottom:
                                 isPair && ri === 0
                                   ? "1px solid #e5e7eb"
@@ -2744,6 +2814,18 @@ function RosterPanel({
                                   }}
                                 >
                                   ← you
+                                </span>
+                              )}
+                              {isPendingRow && (
+                                <span
+                                  style={{
+                                    marginLeft: 6,
+                                    fontSize: 10,
+                                    color: warnFg,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  invited · pending
                                 </span>
                               )}
                             </td>
