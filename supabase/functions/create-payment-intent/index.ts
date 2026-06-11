@@ -38,6 +38,11 @@ type Body = {
   orgSlug: string;
   tournamentSlug: string;
   couponCode?: string;
+  // The browser's origin (window.location.origin). Stashed into the
+  // PaymentIntent metadata so the webhook — which has no browser
+  // context — can build partner-invite accept links pointing back at
+  // wherever the player checked out (localhost vs. prod). See #191.
+  baseUrl?: string;
 };
 
 // @ts-expect-error Deno global in edge runtime
@@ -69,7 +74,8 @@ Deno.serve(async (req: Request) => {
     }
     const authUserId = userData.user.id;
 
-    const { orgSlug, tournamentSlug, couponCode } = (await req.json()) as Body;
+    const { orgSlug, tournamentSlug, couponCode, baseUrl } =
+      (await req.json()) as Body;
 
     // Resolve org → tournament. (Pricing is tier-based; tournaments has
     // no entry_fee_cents — the total comes from compute_checkout_total.)
@@ -164,6 +170,8 @@ Deno.serve(async (req: Request) => {
           player_id: player.id,
           tournament_id: tournament.id,
           coupon_id: couponId ?? "",
+          // Sanitised origin for the webhook's partner-invite links (#191).
+          base_url: (baseUrl ?? "").replace(/\/+$/, "").slice(0, 200),
         },
       },
       { idempotencyKey },
