@@ -1299,6 +1299,8 @@ export type Database = {
           last_name: string
           partner_registration_id: string
           partner_status: Database["public"]["Enums"]["partner_status"]
+          pending_invite_id: string | null
+          pending_partner_reg_id: string | null
           registration_id: string
           self_rating_doubles: number
           self_rating_mixed: number
