@@ -9,8 +9,10 @@ import {
   inkSoft,
   inkMuted,
   rule,
+  ruleSoft,
+  bg,
+  cream,
   courtBlue,
-  courtRed,
   successBg,
   successFg,
   dangerBg,
@@ -19,11 +21,8 @@ import {
   warnFg,
   breadcrumbLinkStyle,
   pageH1Style,
-  panelMutedStyle,
   ctaPrimaryStyle,
   ctaSecondaryStyle,
-  inputStyle,
-  statusPanelStyle,
   bodyFontStack,
 } from "../../lib/publicTheme";
 
@@ -50,10 +49,10 @@ const STATUS_COLORS: Record<
   ChangeRequestStatus,
   { bg: string; fg: string }
 > = {
-  open: { bg: "#eff6ff", fg: "#1d4ed8" },
-  approved: { bg: "#dcfce7", fg: "#166534" },
-  denied: { bg: "#fef2f2", fg: "#991b1b" },
-  cancelled: { bg: "#f3f4f6", fg: "#6b7280" },
+  open: { bg: warnBg, fg: warnFg },
+  approved: { bg: successBg, fg: successFg },
+  denied: { bg: dangerBg, fg: dangerFg },
+  cancelled: { bg: bg, fg: inkMuted },
 };
 
 function StatusBadge({ status }: { status: ChangeRequestStatus }) {
@@ -84,9 +83,10 @@ function KindBadge({ kind }: { kind: ChangeRequestKind }) {
         borderRadius: 4,
         fontSize: 11,
         fontWeight: 600,
-        background: "#f3f4f6",
-        color: "#374151",
+        background: bg,
+        color: inkSoft,
         whiteSpace: "nowrap",
+        border: `1px solid ${ruleSoft}`,
       }}
     >
       {KIND_LABELS[kind]}
@@ -191,18 +191,19 @@ export default function ChangeRequestsPage() {
   if (!org) return null;
 
   if (loading)
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ color: inkMuted, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
 
   if (error) {
     return (
       <div
         style={{
           padding: 12,
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
+          background: dangerBg,
+          border: `1px solid ${dangerFg}40`,
           borderRadius: 6,
-          color: "#991b1b",
+          color: dangerFg,
           fontSize: 14,
+          fontFamily: bodyFontStack,
         }}
       >
         {error}
@@ -221,20 +222,20 @@ export default function ChangeRequestsPage() {
     padding: "6px 16px",
     borderRadius: 6,
     border: "1px solid",
-    borderColor: active ? "#2563eb" : "#d1d5db",
-    background: active ? "#eff6ff" : "#fff",
-    color: active ? "#1d4ed8" : "#374151",
+    borderColor: active ? ink : rule,
+    background: active ? ink : "#fff",
+    color: active ? bg : inkSoft,
     fontSize: 13,
     fontWeight: 500,
     cursor: "pointer",
-    fontFamily: "inherit",
+    fontFamily: bodyFontStack,
   });
 
   return (
-    <div>
+    <div style={{ fontFamily: bodyFontStack }}>
       <Link
         to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-        style={{ color: "#2563eb", textDecoration: "none", fontSize: 13, fontWeight: 500 }}
+        style={breadcrumbLinkStyle}
       >
         ← {tournament.name}
       </Link>
@@ -248,14 +249,7 @@ export default function ChangeRequestsPage() {
           flexWrap: "wrap",
         }}
       >
-        <h1
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            margin: 0,
-            color: "#111827",
-          }}
-        >
+        <h1 style={{ ...pageH1Style, fontSize: 22, margin: 0 }}>
           Change requests
         </h1>
         {openCount > 0 && (
@@ -265,8 +259,8 @@ export default function ChangeRequestsPage() {
               borderRadius: 999,
               fontSize: 12,
               fontWeight: 700,
-              background: "#fef3c7",
-              color: "#92400e",
+              background: warnBg,
+              color: warnFg,
             }}
           >
             {openCount} open
@@ -288,7 +282,7 @@ export default function ChangeRequestsPage() {
           style={{
             padding: "32px 0",
             textAlign: "center",
-            color: "#9ca3af",
+            color: inkMuted,
             fontSize: 14,
           }}
         >
@@ -307,10 +301,9 @@ export default function ChangeRequestsPage() {
               <div
                 key={req.id}
                 style={{
-                  border: "1px solid",
-                  borderColor: req.status === "open" ? "#bfdbfe" : "#e5e7eb",
+                  border: `1px solid ${req.status === "open" ? `${courtBlue}40` : rule}`,
                   borderRadius: 8,
-                  background: req.status === "open" ? "#f8faff" : "#fff",
+                  background: req.status === "open" ? cream : "#fff",
                   overflow: "hidden",
                 }}
               >
@@ -329,14 +322,14 @@ export default function ChangeRequestsPage() {
                       style={{
                         fontWeight: 600,
                         fontSize: 14,
-                        color: "#111827",
+                        color: ink,
                         marginBottom: 2,
                       }}
                     >
                       {playerName}
                     </div>
                     {req.player?.email && (
-                      <div style={{ fontSize: 12, color: "#6b7280" }}>
+                      <div style={{ fontSize: 12, color: inkMuted }}>
                         {req.player.email}
                       </div>
                     )}
@@ -344,7 +337,7 @@ export default function ChangeRequestsPage() {
                       <div
                         style={{
                           fontSize: 13,
-                          color: "#374151",
+                          color: inkSoft,
                           marginTop: 4,
                           lineHeight: 1.45,
                         }}
@@ -364,7 +357,7 @@ export default function ChangeRequestsPage() {
                     <KindBadge kind={req.kind} />
                     <StatusBadge status={req.status} />
                     <span
-                      style={{ fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}
+                      style={{ fontSize: 11, color: inkMuted, whiteSpace: "nowrap" }}
                     >
                       {fmtDate(req.created_at)}
                     </span>
@@ -382,13 +375,13 @@ export default function ChangeRequestsPage() {
                       style={{
                         padding: "6px 14px",
                         borderRadius: 6,
-                        border: "1px solid #d1d5db",
+                        border: `1px solid ${rule}`,
                         background: "#fff",
-                        color: "#374151",
+                        color: inkSoft,
                         fontSize: 13,
                         fontWeight: 500,
                         cursor: "pointer",
-                        fontFamily: "inherit",
+                        fontFamily: bodyFontStack,
                         whiteSpace: "nowrap",
                         flexShrink: 0,
                       }}
@@ -402,15 +395,15 @@ export default function ChangeRequestsPage() {
                 {req.status !== "open" && req.organizer_resolution && (
                   <div
                     style={{
-                      borderTop: "1px solid #e5e7eb",
+                      borderTop: `1px solid ${rule}`,
                       padding: "10px 16px",
-                      background: "#f9fafb",
+                      background: bg,
                     }}
                   >
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 2 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: inkMuted, marginBottom: 2 }}>
                       Organizer reply
                     </div>
-                    <div style={{ fontSize: 13, color: "#374151" }}>
+                    <div style={{ fontSize: 13, color: inkSoft }}>
                       {req.organizer_resolution}
                     </div>
                   </div>
@@ -419,13 +412,13 @@ export default function ChangeRequestsPage() {
                 {expanded && req.status === "open" && (
                   <div
                     style={{
-                      borderTop: "1px solid #bfdbfe",
+                      borderTop: `1px solid ${rule}`,
                       padding: "14px 16px",
                       background: "#fff",
                     }}
                   >
                     <label
-                      style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}
+                      style={{ fontSize: 12, fontWeight: 600, color: inkSoft }}
                     >
                       Resolution
                     </label>
@@ -439,12 +432,12 @@ export default function ChangeRequestsPage() {
                         width: "100%",
                         marginTop: 6,
                         padding: "8px 10px",
-                        border: "1px solid #d1d5db",
+                        border: `1px solid ${rule}`,
                         borderRadius: 6,
                         fontSize: 13,
-                        fontFamily: "inherit",
+                        fontFamily: bodyFontStack,
                         background: "#fff",
-                        color: "#111827",
+                        color: ink,
                         boxSizing: "border-box",
                       }}
                     >
@@ -456,7 +449,7 @@ export default function ChangeRequestsPage() {
                       style={{
                         fontSize: 12,
                         fontWeight: 600,
-                        color: "#374151",
+                        color: inkSoft,
                         display: "block",
                         marginTop: 12,
                       }}
@@ -473,12 +466,13 @@ export default function ChangeRequestsPage() {
                         width: "100%",
                         marginTop: 6,
                         padding: "8px 10px",
-                        border: "1px solid #d1d5db",
+                        border: `1px solid ${rule}`,
                         borderRadius: 6,
                         fontSize: 13,
-                        fontFamily: "inherit",
+                        fontFamily: bodyFontStack,
                         resize: "vertical",
                         boxSizing: "border-box",
+                        color: ink,
                       }}
                     />
                     {resolveError && (
@@ -486,7 +480,7 @@ export default function ChangeRequestsPage() {
                         style={{
                           marginTop: 8,
                           fontSize: 13,
-                          color: "#991b1b",
+                          color: dangerFg,
                         }}
                       >
                         {resolveError}
@@ -504,18 +498,7 @@ export default function ChangeRequestsPage() {
                         type="button"
                         disabled={resolving}
                         onClick={() => void resolve(req, resolutionStatus)}
-                        style={{
-                          padding: "8px 20px",
-                          borderRadius: 6,
-                          border: "1px solid #2563eb",
-                          background: resolving ? "#eff6ff" : "#dbeafe",
-                          color: "#1d4ed8",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: resolving ? "not-allowed" : "pointer",
-                          fontFamily: "inherit",
-                          opacity: resolving ? 0.7 : 1,
-                        }}
+                        style={resolving ? { ...ctaPrimaryStyle, opacity: 0.7, cursor: "not-allowed" } : ctaPrimaryStyle}
                       >
                         {resolving ? "Sending…" : "Send"}
                       </button>
@@ -528,18 +511,7 @@ export default function ChangeRequestsPage() {
                           setResolutionStatus("approved");
                           setResolveError(null);
                         }}
-                        style={{
-                          padding: "8px 20px",
-                          borderRadius: 6,
-                          border: "1px solid #d1d5db",
-                          background: "#fff",
-                          color: "#374151",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: resolving ? "not-allowed" : "pointer",
-                          fontFamily: "inherit",
-                          opacity: resolving ? 0.7 : 1,
-                        }}
+                        style={resolving ? { ...ctaSecondaryStyle, opacity: 0.7, cursor: "not-allowed" } : ctaSecondaryStyle}
                       >
                         Cancel
                       </button>
