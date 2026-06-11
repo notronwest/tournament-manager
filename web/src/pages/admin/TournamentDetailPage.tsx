@@ -65,7 +65,7 @@ type EventSummary = {
 // link sits at the top because it's tournament-wide — a single
 // dispatcher across all active events.
 export default function TournamentDetailPage() {
-  const { org } = useCurrentOrg();
+  const { org, role } = useCurrentOrg();
   const { tournamentSlug } = useParams<{ tournamentSlug: string }>();
   const [t, setT] = useState<Tournament | null>(null);
   const [tiers, setTiers] = useState<PricingTier[]>([]);
@@ -436,6 +436,19 @@ export default function TournamentDetailPage() {
           >
             Tournament Contacts
           </Link>
+          {(role === "owner" || role === "admin") && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/coupons`}
+              style={{
+                ...primaryLinkBtn,
+                background: "#fff",
+                color: "#2563eb",
+                border: "1px solid #2563eb",
+              }}
+            >
+              Coupons
+            </Link>
+          )}
           {/* Court manager is always reachable from the tournament home —
               users want it to peek at the queue / setup courts even
               before an event is active. The page itself handles the
