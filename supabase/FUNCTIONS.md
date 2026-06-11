@@ -31,6 +31,24 @@ it. The full flow works once merged (this pipeline guarantees that). Making
 previews fully testable would mean pointing them at the test Supabase project
 and deploying PR functions there — tracked separately as an infra story.
 
+## Ship function changes separately from UX (same rule as migrations)
+
+An edge function is a **deploy-on-merge server change** — exactly like a DB
+migration: it goes live only on merge, and the preview calls the *prod*
+function until then (see above). So it follows the **same split rule**:
+
+- A function change ships in its **own PR**, separate from the UX that depends
+  on it. Mark it **`[FN]`** + the **`edge-function`** label (the function
+  sibling of `[DB]` / `db-migration`).
+- **Deploy-on-merge server PRs go first.** Merge the `[FN]` (or `[DB]`) PR →
+  it deploys → then the dependent **UX PR** is testable against the live
+  function and merged. Expand/contract, same as schema.
+
+Why: bundling a function change with its UI means the UI can't be exercised on
+the preview before merge (the function isn't deployed yet) — the same
+untestable-before-merge trap that motivated the DB split. Canonical rule:
+[`../../wmpc-meta/conventions/migrations.md`](../../wmpc-meta/conventions/migrations.md).
+
 ## Inert until configured
 
 If `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_REF` aren't set, the workflow
