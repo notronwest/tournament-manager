@@ -2645,7 +2645,7 @@ function RosterPanel({
     if (b.kind === "pending") {
       return (
         b.inviter.registration_id === myRegId ||
-        b.inviter.pending_partner_reg_id === myRegId
+        (myRegId !== null && b.inviter.pending_partner_reg_id === myRegId)
       );
     }
     return b.row.registration_id === myRegId;
@@ -2802,7 +2802,7 @@ function RosterPanel({
 
               if (block.kind === "pending") {
                 const isMe1 = block.inviter.registration_id === myRegId;
-                const isMeInvitee = block.inviter.pending_partner_reg_id === myRegId;
+                const isMeInvitee = myRegId !== null && block.inviter.pending_partner_reg_id === myRegId;
                 const inviterRating = rosterRating(block.inviter, event);
                 const inviterLoc = [block.inviter.city as string | null, block.inviter.state as string | null]
                   .filter(Boolean).join(", ");
