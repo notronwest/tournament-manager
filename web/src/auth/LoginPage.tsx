@@ -21,7 +21,6 @@ import {
   monoFontStack,
 } from "../lib/publicTheme";
 import brushMark from "../assets/bert-and-erne-brush-mark.svg";
-import outlinedLogo from "../assets/bert-and-erne-v5-outlined.svg";
 
 // Three modes:
 //   magic  — email-only "get a link" flow. Default for public-flow
@@ -157,7 +156,6 @@ export default function LoginPage() {
         style={{
           background: ink,
           padding: "12px 20px",
-          display: "flex",
           alignItems: "center",
         }}
       >
@@ -176,7 +174,6 @@ export default function LoginPage() {
           background: ink,
           color: "#ffffff",
           position: "relative",
-          display: "flex",
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "flex-start",
@@ -191,7 +188,7 @@ export default function LoginPage() {
         />
         <p
           style={{
-            margin: 0,
+            margin: "0 0 36px",
             fontFamily: monoFontStack,
             fontSize: 13,
             letterSpacing: "0.12em",
@@ -201,6 +198,60 @@ export default function LoginPage() {
         >
           pickleball tournaments
         </p>
+
+        <p
+          style={{
+            margin: "0 0 24px",
+            fontFamily: displayFontStack,
+            fontSize: 22,
+            lineHeight: 1.25,
+            color: "#ffffff",
+          }}
+        >
+          Run your tournament,<br />not your inbox.
+        </p>
+
+        <ul
+          style={{
+            margin: 0,
+            padding: 0,
+            listStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+          }}
+        >
+          {[
+            "Build and run brackets end-to-end",
+            "Take registrations and payments online",
+            "Players track their tournament history",
+          ].map((text) => (
+            <li
+              key={text}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 10,
+                fontSize: 14,
+                lineHeight: 1.45,
+                color: "rgba(255,255,255,0.80)",
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  flexShrink: 0,
+                  width: 6,
+                  height: 6,
+                  marginTop: 6,
+                  borderRadius: "50%",
+                  background: courtYellow,
+                }}
+              />
+              {text}
+            </li>
+          ))}
+        </ul>
 
         {/* G / Y / R court stripes at the bottom of the panel */}
         <div
@@ -242,17 +293,6 @@ export default function LoginPage() {
             boxShadow: `0 6px 22px rgba(20,24,31,.06)`,
           }}
         >
-          {/* Wordmark inside card — shown on mobile only via CSS class.
-              On desktop the brand panel handles the wordmark. */}
-          <div className="login-card-logo" style={{ marginBottom: 14 }}>
-            <img
-              src={outlinedLogo}
-              alt="bert & erne"
-              width="130"
-              style={{ display: "block" }}
-            />
-          </div>
-
           <h1
             style={{
               fontFamily: displayFontStack,

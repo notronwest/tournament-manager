@@ -11,6 +11,7 @@ import SiteHeader from "./components/SiteHeader";
 import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
+import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
@@ -30,6 +31,7 @@ import PrivacyPage from "./pages/public/PrivacyPage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
+import TournamentContactPage from "./pages/public/TournamentContactPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import SchedulePage from "./pages/admin/SchedulePage";
@@ -114,6 +116,11 @@ export default function App() {
           </RequireAuth>
         }
       />
+      {/* Public contact page — anonymous-readable, no auth required. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/contact"
+        element={<TournamentContactPage />}
+      />
       {/* Partner invite accept page. NOT wrapped in RequireAuth /
           RequireProfile — the page handles those states internally so
           unauthenticated visitors still see the "you've been invited"
@@ -166,6 +173,17 @@ export default function App() {
         element={
           <RequireAuth>
             <StripeOauthCallbackPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only site-wide attendees list. Defined before
+          the :orgSlug catch-all so "attendees" isn't treated as a slug. */}
+      <Route
+        path="/admin/attendees"
+        element={
+          <RequireAuth>
+            <SiteAttendeesPage />
           </RequireAuth>
         }
       />
