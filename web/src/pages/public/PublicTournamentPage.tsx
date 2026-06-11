@@ -16,7 +16,6 @@ import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   deriveRegistrationStatus,
   pickActivePricingTier,
-  pickNextPricingTier,
   type PricingTier,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
@@ -186,6 +185,11 @@ export default function PublicTournamentPage() {
   // null = no card focused; a string event_id = that card is lifted
   // above the scrim and all siblings are dimmed + inert.
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
+
+  // #208: pricing schedule expand/collapse — collapsed by default so
+  // single-price tournaments see no extra chrome and staged-pricing
+  // users can dig in on demand.
+  const [pricingExpanded, setPricingExpanded] = useState(false);
 
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
@@ -504,8 +508,8 @@ export default function PublicTournamentPage() {
   // fee gets you into your first event; each additional event adds
   // the additional-event fee. (Per-event overrides were retired as
   // the default — see migration 20260529150000.)
+  const sortedTiers = [...tiers].sort((a, b) => a.sort_order - b.sort_order);
   const activeTier = pickActivePricingTier(tiers);
-  const nextTier = pickNextPricingTier(tiers);
   const regFeeCents = activeTier?.first_event_fee_cents ?? 0;
   const additionalFeeCents = activeTier?.additional_event_fee_cents ?? 0;
   const isMultiTier = tiers.length > 1;
@@ -716,69 +720,164 @@ export default function PublicTournamentPage() {
       <div
         style={{
           ...panelStyle,
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
           marginBottom: 24,
         }}
       >
-        <div style={{ flex: 1 }}>
-          {/* Window detail: when it opens (if not yet) or closes (if open). */}
-          {regStatus.tone === "soon" &&
-            tournament.registration_opens_at && (
-              <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
-                Registration opens {fmtDateTime(tournament.registration_opens_at)}
+        {/* Main row: window info + price headline */}
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ flex: 1 }}>
+            {/* Window detail: when it opens (if not yet) or closes (if open). */}
+            {regStatus.tone === "soon" &&
+              tournament.registration_opens_at && (
+                <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
+                  Registration opens {fmtDateTime(tournament.registration_opens_at)}
+                </div>
+              )}
+            {tournament.registration_closes_at && registrationOpen && (
+              <div style={{ fontSize: 14, color: inkSoft }}>
+                Registration closes {fmtDateTime(tournament.registration_closes_at)}
               </div>
             )}
-          {tournament.registration_closes_at && registrationOpen && (
-            <div style={{ fontSize: 14, color: inkSoft }}>
-              Registration closes {fmtDateTime(tournament.registration_closes_at)}
-            </div>
-          )}
-          {regStatus.tone === "closed" && (
-            <div style={{ fontSize: 12, color: inkMuted }}>
-              Registration is closed
+            {regStatus.tone === "closed" && (
+              <div style={{ fontSize: 12, color: inkMuted }}>
+                Registration is closed
+              </div>
+            )}
+          </div>
+          {/* Price headline — registration fee to enter the first event. */}
+          {regFeeCents > 0 && (
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div
+                style={{
+                  fontFamily: displayFontStack,
+                  fontSize: 28,
+                  color: ink,
+                  lineHeight: 1.0,
+                }}
+              >
+                ${(regFeeCents / 100).toFixed(0)}
+              </div>
+              <div style={{ fontSize: 13, color: inkSoft, marginTop: 2 }}>
+                to register · includes 1 event
+              </div>
+              {additionalFeeCents > 0 && (
+                <div style={{ fontSize: 13, color: inkMuted, marginTop: 1 }}>
+                  +${(additionalFeeCents / 100).toFixed(0)} each additional event
+                </div>
+              )}
+              {/* Multi-tier: active stage label + when it ends */}
+              {isMultiTier && activeTier && (
+                <div
+                  style={{
+                    fontFamily: monoFontStack,
+                    fontSize: 11,
+                    color: courtBlue,
+                    marginTop: 4,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.12em",
+                  }}
+                >
+                  {activeTier.label}
+                  {activeTier.ends_at
+                    ? ` · ends ${fmtShortDate(activeTier.ends_at)}`
+                    : " · ongoing"}
+                </div>
+              )}
+              {/* Multi-tier: expand/collapse toggle for full schedule */}
+              {isMultiTier && (
+                <button
+                  onClick={() => setPricingExpanded((e) => !e)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: "4px 0 0",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    color: courtBlue,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 2,
+                    display: "block",
+                    marginLeft: "auto",
+                  }}
+                >
+                  {pricingExpanded
+                    ? "Hide pricing schedule"
+                    : "See full pricing schedule"}
+                </button>
+              )}
             </div>
           )}
         </div>
-        {/* Price headline — registration fee to enter the first event. */}
-        {regFeeCents > 0 && (
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div
-              style={{
-                fontFamily: displayFontStack,
-                fontSize: 28,
-                color: ink,
-                lineHeight: 1.0,
-              }}
-            >
-              ${(regFeeCents / 100).toFixed(0)}
-            </div>
-            <div style={{ fontSize: 12, color: inkSoft, marginTop: 2 }}>
-              to register · includes 1 event
-            </div>
-            {additionalFeeCents > 0 && (
-              <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
-                +${(additionalFeeCents / 100).toFixed(0)} each additional event
-              </div>
-            )}
-            {isMultiTier && activeTier && (
-              <div
-                style={{
-                  fontFamily: monoFontStack,
-                  fontSize: 10,
-                  color: courtBlue,
-                  marginTop: 4,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.12em",
-                }}
-              >
-                {activeTier.label} pricing
-                {nextTier && activeTier.ends_at
-                  ? ` · ${nextTier.label} from ${fmtDate(activeTier.ends_at)}`
-                  : ""}
-              </div>
-            )}
+        {/* Full pricing schedule — expanded on demand */}
+        {isMultiTier && pricingExpanded && (
+          <div
+            style={{
+              marginTop: 12,
+              borderTop: `1px solid ${rule}`,
+              paddingTop: 12,
+            }}
+          >
+            {sortedTiers.map((tier) => {
+              const isActive = tier.id === activeTier?.id;
+              return (
+                <div
+                  key={tier.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    padding: "5px 0",
+                    borderBottom: `1px solid ${rule}`,
+                    opacity: isActive ? 1 : 0.7,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? ink : inkSoft,
+                      }}
+                    >
+                      {tier.label}
+                      {isActive && (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            fontFamily: monoFontStack,
+                            fontSize: 9,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.1em",
+                            color: courtBlue,
+                          }}
+                        >
+                          active
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                      {tier.starts_at
+                        ? fmtShortDate(tier.starts_at)
+                        : "start of registration"}
+                      {" – "}
+                      {tier.ends_at
+                        ? fmtShortDate(tier.ends_at)
+                        : "no end date"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? ink : inkSoft }}>
+                      ${(tier.first_event_fee_cents / 100).toFixed(0)}
+                    </div>
+                    {tier.additional_event_fee_cents > 0 && (
+                      <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                        +${(tier.additional_event_fee_cents / 100).toFixed(0)} add'l
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -2779,6 +2878,13 @@ function fmtDate(iso: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function fmtShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
   });
 }
 
