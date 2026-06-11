@@ -392,8 +392,10 @@ export type Database = {
       locations: {
         Row: {
           address: string | null
+          address_line2: string | null
           ceiling_height_max_ft: number | null
           ceiling_height_min_ft: number | null
+          city: string | null
           court_count: number | null
           created_at: string
           deleted_at: string | null
@@ -402,14 +404,18 @@ export type Database = {
           name: string
           net_type: Database["public"]["Enums"]["net_type"] | null
           organization_id: string
+          postal_code: string | null
+          state: string | null
           surface_notes: string | null
           surface_type: Database["public"]["Enums"]["surface_type"] | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          address_line2?: string | null
           ceiling_height_max_ft?: number | null
           ceiling_height_min_ft?: number | null
+          city?: string | null
           court_count?: number | null
           created_at?: string
           deleted_at?: string | null
@@ -418,14 +424,18 @@ export type Database = {
           name: string
           net_type?: Database["public"]["Enums"]["net_type"] | null
           organization_id: string
+          postal_code?: string | null
+          state?: string | null
           surface_notes?: string | null
           surface_type?: Database["public"]["Enums"]["surface_type"] | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          address_line2?: string | null
           ceiling_height_max_ft?: number | null
           ceiling_height_min_ft?: number | null
+          city?: string | null
           court_count?: number | null
           created_at?: string
           deleted_at?: string | null
@@ -434,6 +444,8 @@ export type Database = {
           name?: string
           net_type?: Database["public"]["Enums"]["net_type"] | null
           organization_id?: string
+          postal_code?: string | null
+          state?: string | null
           surface_notes?: string | null
           surface_type?: Database["public"]["Enums"]["surface_type"] | null
           updated_at?: string
