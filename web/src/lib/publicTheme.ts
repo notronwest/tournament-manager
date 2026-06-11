@@ -37,6 +37,9 @@ export const dangerBg = "#fdeae6"; // soft court-red wash
 export const dangerFg = "#9c2412";
 export const warnBg = "#fef6d6"; // soft court-yellow wash
 export const warnFg = "#8a6500";
+// Info surface — built from courtBlue for completed/done-style states
+export const infoBg = "#dceeff"; // soft courtBlue wash
+export const infoFg = "#1651a8"; // deep courtBlue
 
 // ── Type stacks ──────────────────────────────────────────────────────
 
