@@ -99,7 +99,11 @@ against `tournaments.starts_at` ("before start") and the registration's
 { "eventRegistrationId": "uuid", "mode": "resolve", "decision": "deny" }
 //   approve + amount>0 → refund that amount → 'refunded'; approve+$0 or deny →
 //   'withdrawn'. Either stamps withdrawal_decided_at + withdrawal_decision.
-//   amountCents is server-clamped to [0, paid_cents].
+//   amountCents is server-capped at the NET charged on the covering payment
+//   (min of the per-event gross and payments.amount_cents) — so a coupon
+//   (a payment-level negative line, charge clamped at $0) can't enable an
+//   over-refund. The preview returns maxRefundableCents (the slider max);
+//   Stripe is the hard backstop (can't refund more than was captured).
 ```
 
 **Response (200)**

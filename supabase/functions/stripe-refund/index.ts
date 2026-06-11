@@ -198,22 +198,41 @@ Deno.serve(async (req: Request) => {
         return json({ error: "missing_decision" }, 400);
       }
 
-      // Approve amount: integer, 0 ≤ amount ≤ paid_cents. Deny → 0.
+      // Refund cap = the NET actually charged for this reg, not the gross
+      // per-event line-item sum. A coupon is a payment-level negative line
+      // (event_registration_id = null) and the charge is clamped at $0
+      // (over-couponing → $0, never negative), so `refund_compute.paid_cents`
+      // (per-event gross) can overstate what the player netted. Bound at the
+      // covering payment's net charge; Stripe is the hard backstop (it can't
+      // refund more than was captured on the payment_intent).
+      let paymentNet = r.paid_cents;
+      if (r.payment_id) {
+        const { data: pay } = await admin
+          .from("payments")
+          .select("amount_cents")
+          .eq("id", r.payment_id)
+          .maybeSingle();
+        if (pay && typeof pay.amount_cents === "number") paymentNet = pay.amount_cents;
+      }
+      const maxRefundable = Math.max(0, Math.min(r.paid_cents, paymentNet));
+
+      // Approve amount: integer, 0 ≤ amount ≤ maxRefundable. Deny → 0.
       let amount = 0;
       if (decision === "approve") {
         amount = typeof amountCents === "number" ? Math.trunc(amountCents) : NaN;
         if (!Number.isInteger(amount) || amount < 0) {
           return json({ error: "invalid_amount" }, 400);
         }
-        if (amount > r.paid_cents) {
-          return json({ error: "amount_exceeds_paid", paidCents: r.paid_cents }, 422);
+        if (amount > maxRefundable) {
+          return json({ error: "amount_exceeds_paid", maxRefundableCents: maxRefundable }, 422);
         }
       }
 
       const resolvePreview = {
         mode: "resolve",
         decision,
-        paidCents: r.paid_cents,
+        paidCents: maxRefundable, // net charged ("what they paid"), the slider max
+        maxRefundableCents: maxRefundable,
         amountCents: amount,
         currency: "usd",
         partner,
