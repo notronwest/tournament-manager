@@ -85,8 +85,25 @@ against `tournaments.starts_at` ("before start") and the registration's
 **Request**
 
 ```jsonc
+// mode "self" (default) — the PLAYER withdraws (owner-authorized)
 { "eventRegistrationId": "uuid", "dryRun": true }   // preview
-{ "eventRegistrationId": "uuid", "dryRun": false }  // execute (mode auto)
+{ "eventRegistrationId": "uuid", "dryRun": false, "reason": "..." }  // execute
+//   On execute, if the policy can't auto-decide (manual_required), this FILES
+//   a withdrawal request (withdrawal_requested_at + withdrawal_reason) for the
+//   organizer queue (#200) and returns { applied:false, requested:true }.
+
+// mode "resolve" — an ORGANIZER resolves a queued request (#200).
+//   Authorized as has_org_role(<reg's tournament org>, 'admin').
+{ "eventRegistrationId": "uuid", "mode": "resolve",
+  "decision": "approve", "amountCents": 1500, "dryRun": false }  // refund $15
+{ "eventRegistrationId": "uuid", "mode": "resolve", "decision": "deny" }
+//   approve + amount>0 → refund that amount → 'refunded'; approve+$0 or deny →
+//   'withdrawn'. Either stamps withdrawal_decided_at + withdrawal_decision.
+//   amountCents is server-capped at the NET charged on the covering payment
+//   (min of the per-event gross and payments.amount_cents) — so a coupon
+//   (a payment-level negative line, charge clamped at $0) can't enable an
+//   over-refund. The preview returns maxRefundableCents (the slider max);
+//   Stripe is the hard backstop (can't refund more than was captured).
 ```
 
 **Response (200)**
