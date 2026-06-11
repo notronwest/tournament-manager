@@ -426,6 +426,17 @@ export default function TournamentDetailPage() {
             Schedule
           </Link>
           <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/coupons`}
+            style={{
+              ...primaryLinkBtn,
+              background: "#fff",
+              color: "#2563eb",
+              border: "1px solid #2563eb",
+            }}
+          >
+            Coupon Codes
+          </Link>
+          <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/contacts`}
             style={{
               ...primaryLinkBtn,
