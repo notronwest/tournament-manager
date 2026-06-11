@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
@@ -7,57 +7,58 @@ import {
   groupTiersByTournament,
   type PricingTier,
 } from "../../lib/pricingTiers";
-import { ConfirmModal } from "../../components/ConfirmModal";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  cream,
+  rule,
+  courtBlue,
+  bodyFontStack,
+  headingFontStack,
+  displayFontStack,
+  ctaPrimaryStyle,
+  dangerBg,
+  dangerFg,
+  successBg,
+  successFg,
+  warnBg,
+  warnFg,
+  infoBg,
+  infoFg,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type TournamentStatus = Database["public"]["Enums"]["tournament_status"];
-type View = "current" | "archived";
-
-interface DeleteCandidate {
-  tournament: Tournament;
-  paidRegCount: number;
-}
 
 export default function TournamentsListPage() {
   const { org } = useCurrentOrg();
-  const [view, setView] = useState<View>("current");
   const [tournaments, setTournaments] = useState<Tournament[] | null>(null);
+  // Pricing tiers for the listed tournaments, keyed by tournament id.
+  // Batch-loaded in one query to avoid N+1 across the table.
   const [tiersByTournament, setTiersByTournament] = useState<
     Map<string, PricingTier[]>
   >(new Map());
   const [error, setError] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-  const [deleteCandidate, setDeleteCandidate] =
-    useState<DeleteCandidate | null>(null);
 
   useEffect(() => {
     if (!org) return;
     let cancelled = false;
     (async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from("tournaments")
         .select("*")
         .eq("organization_id", org.id)
         .is("deleted_at", null)
         .order("starts_at", { ascending: false });
 
-      if (view === "current") {
-        query = query.is("archived_at", null);
-      } else {
-        query = query.not("archived_at", "is", null);
-      }
-
-      const { data, error } = await query;
-
       if (cancelled) return;
       if (error) {
         setError(error.message);
         return;
       }
-      setError(null);
       const rows = data ?? [];
       setTournaments(rows);
 
@@ -71,141 +72,55 @@ export default function TournamentsListPage() {
           );
         if (cancelled) return;
         setTiersByTournament(groupTiersByTournament(tierRows ?? []));
-      } else {
-        setTiersByTournament(new Map());
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [org, view]);
-
-  async function handleArchive(t: Tournament) {
-    setLoadingAction(t.id);
-    setActionError(null);
-    const { error } = await supabase
-      .from("tournaments")
-      .update({ archived_at: new Date().toISOString() })
-      .eq("id", t.id);
-    setLoadingAction(null);
-    if (error) {
-      setActionError(error.message);
-      return;
-    }
-    setTournaments((prev) => prev?.filter((x) => x.id !== t.id) ?? prev);
-  }
-
-  async function handleUnarchive(t: Tournament) {
-    setLoadingAction(t.id);
-    setActionError(null);
-    const { error } = await supabase
-      .from("tournaments")
-      .update({ archived_at: null })
-      .eq("id", t.id);
-    setLoadingAction(null);
-    if (error) {
-      setActionError(error.message);
-      return;
-    }
-    setTournaments((prev) => prev?.filter((x) => x.id !== t.id) ?? prev);
-  }
-
-  async function initiateDelete(t: Tournament) {
-    setPendingDeleteId(t.id);
-    setActionError(null);
-    const { count } = await supabase
-      .from("registrations")
-      .select("id", { count: "exact", head: true })
-      .eq("tournament_id", t.id)
-      .in("status", ["paid", "pending_payment"]);
-    setPendingDeleteId(null);
-    setDeleteCandidate({ tournament: t, paidRegCount: count ?? 0 });
-  }
-
-  async function executeDelete(t: Tournament) {
-    const { error } = await supabase
-      .from("tournaments")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", t.id);
-    if (error) throw error;
-    setTournaments((prev) => prev?.filter((x) => x.id !== t.id) ?? prev);
-    setDeleteCandidate(null);
-  }
+  }, [org]);
 
   if (!org) return null;
 
   return (
-    <div>
+    <div style={{ fontFamily: bodyFontStack, color: ink }}>
       <header
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
           marginBottom: 24,
+          gap: 12,
+          flexWrap: "wrap",
         }}
       >
-        <h1 style={{ margin: 0, fontSize: 22 }}>Tournaments</h1>
+        <h1
+          style={{
+            margin: 0,
+            fontFamily: displayFontStack,
+            fontSize: "clamp(22px, 3.5vw, 32px)",
+            lineHeight: 1.05,
+            letterSpacing: "-0.2px",
+            color: ink,
+          }}
+        >
+          Tournaments
+        </h1>
         <Link
           to={`/admin/${org.slug}/tournaments/new`}
-          style={{
-            padding: "8px 16px",
-            background: "var(--primary)",
-            color: "var(--primary-contrast)",
-            textDecoration: "none",
-            borderRadius: 6,
-            fontSize: 14,
-            fontWeight: 500,
-          }}
+          style={ctaPrimaryStyle}
         >
           + New tournament
         </Link>
       </header>
 
-      <div
-        role="tablist"
-        style={{
-          display: "flex",
-          borderBottom: "1px solid var(--border)",
-          marginBottom: 20,
-        }}
-      >
-        {(["current", "archived"] as const).map((v) => (
-          <button
-            key={v}
-            role="tab"
-            aria-selected={view === v}
-            onClick={() => setView(v)}
-            style={tabBtnStyle(view === v)}
-          >
-            {v === "current" ? "Current" : "Archived"}
-          </button>
-        ))}
-      </div>
-
-      {actionError && (
-        <div
-          style={{
-            padding: 12,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderRadius: 6,
-            color: "#991b1b",
-            fontSize: 13,
-            marginBottom: 16,
-          }}
-        >
-          {actionError}
-        </div>
-      )}
-
       {error && (
         <div
           style={{
-            padding: 12,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
+            padding: "10px 14px",
+            background: dangerBg,
+            border: `1px solid ${dangerFg}`,
             borderRadius: 6,
-            color: "#991b1b",
+            color: dangerFg,
             fontSize: 13,
             marginBottom: 16,
           }}
@@ -215,22 +130,20 @@ export default function TournamentsListPage() {
       )}
 
       {tournaments === null ? (
-        <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>
+        <div style={{ color: inkMuted, fontSize: 14 }}>Loading…</div>
       ) : tournaments.length === 0 ? (
         <div
           style={{
             padding: 32,
             textAlign: "center",
-            background: "#fafafa",
-            border: "1px dashed #d1d5db",
-            borderRadius: 6,
-            color: "#666",
+            background: bg,
+            border: `1px dashed ${rule}`,
+            borderRadius: 8,
+            color: inkSoft,
             fontSize: 14,
           }}
         >
-          {view === "current"
-            ? "No active tournaments. Create your first one to get started."
-            : "No archived tournaments."}
+          No tournaments yet. Create your first one to get started.
         </div>
       ) : (
         <table
@@ -239,8 +152,8 @@ export default function TournamentsListPage() {
           <thead>
             <tr
               style={{
-                background: "#fafafa",
-                borderBottom: "1px solid #e2e2e2",
+                background: cream,
+                borderBottom: `1px solid ${rule}`,
               }}
             >
               <th style={thStyle}>Name</th>
@@ -251,169 +164,62 @@ export default function TournamentsListPage() {
             </tr>
           </thead>
           <tbody>
-            {tournaments.map((t) => {
-              const busy =
-                loadingAction === t.id || pendingDeleteId === t.id;
-              return (
-                <tr key={t.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>
-                    <Link
-                      to={`/admin/${org.slug}/tournaments/${t.slug}`}
-                      style={{
-                        color: "var(--primary)",
-                        textDecoration: "none",
-                      }}
-                    >
-                      {t.name}
-                    </Link>
-                  </td>
-                  <td style={tdStyle}>
-                    <StatusBadge status={t.status} />
-                  </td>
-                  <td style={{ ...tdStyle, color: "#666" }}>
-                    {fmtDate(t.starts_at)} – {fmtDate(t.ends_at)}
-                  </td>
-                  <td style={{ ...tdStyle, color: "#666" }}>
-                    {compactTierPriceLabel(tiersByTournament.get(t.id) ?? [])}
-                  </td>
-                  <td
+            {tournaments.map((t) => (
+              <tr key={t.id} style={{ borderBottom: `1px solid ${rule}` }}>
+                <td style={{ ...tdStyle, fontWeight: 500, color: ink }}>{t.name}</td>
+                <td style={tdStyle}>
+                  <StatusBadge status={t.status} />
+                </td>
+                <td style={{ ...tdStyle, color: inkSoft }}>
+                  {fmtDate(t.starts_at)} – {fmtDate(t.ends_at)}
+                </td>
+                <td style={{ ...tdStyle, color: inkSoft }}>
+                  {compactTierPriceLabel(tiersByTournament.get(t.id) ?? [])}
+                </td>
+                <td style={{ ...tdStyle, textAlign: "right" }}>
+                  <Link
+                    to={`/admin/${org.slug}/tournaments/${t.slug}`}
                     style={{
-                      ...tdStyle,
-                      textAlign: "right",
-                      whiteSpace: "nowrap",
+                      color: courtBlue,
+                      textDecoration: "none",
+                      fontSize: 13,
+                      fontWeight: 500,
                     }}
                   >
-                    {view === "current" ? (
-                      <button
-                        onClick={() => handleArchive(t)}
-                        disabled={busy}
-                        style={rowActionBtn(busy, false)}
-                      >
-                        {loadingAction === t.id ? "…" : "Archive"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleUnarchive(t)}
-                        disabled={busy}
-                        style={rowActionBtn(busy, false)}
-                      >
-                        {loadingAction === t.id ? "…" : "Unarchive"}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => initiateDelete(t)}
-                      disabled={busy}
-                      style={{ ...rowActionBtn(busy, true), marginLeft: 12 }}
-                    >
-                      {pendingDeleteId === t.id ? "…" : "Delete"}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+                    Open →
+                  </Link>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      )}
-
-      {deleteCandidate && (
-        <ConfirmModal
-          title="Delete tournament?"
-          body={
-            deleteCandidate.paidRegCount > 0 ? (
-              <div>
-                <p
-                  style={{
-                    margin: "0 0 12px",
-                    fontWeight: 600,
-                    color: "var(--danger)",
-                  }}
-                >
-                  Warning: {deleteCandidate.paidRegCount} paid or pending
-                  registration
-                  {deleteCandidate.paidRegCount !== 1 ? "s" : ""} exist for
-                  this tournament.
-                </p>
-                <p style={{ margin: "0 0 8px" }}>
-                  Deleting{" "}
-                  <strong>{deleteCandidate.tournament.name}</strong> will hide
-                  it from all views. Payment and registration records are
-                  preserved and remain recoverable by an admin.
-                </p>
-                <p style={{ margin: 0 }}>
-                  Consider archiving instead — it hides the tournament without
-                  affecting any records.
-                </p>
-              </div>
-            ) : (
-              <>
-                Delete <strong>{deleteCandidate.tournament.name}</strong>? This
-                is a soft delete — the tournament is hidden but its data remains
-                recoverable.
-              </>
-            )
-          }
-          confirmLabel={
-            deleteCandidate.paidRegCount > 0 ? "Delete anyway" : "Delete"
-          }
-          onCancel={() => setDeleteCandidate(null)}
-          onConfirm={() => executeDelete(deleteCandidate.tournament)}
-        />
       )}
     </div>
   );
 }
 
-const thStyle: CSSProperties = {
-  textAlign: "left",
+const thStyle = {
+  textAlign: "left" as const,
   padding: "10px 12px",
-  fontSize: 12,
-  color: "#888",
-  textTransform: "uppercase",
-  letterSpacing: 0.5,
-  fontWeight: 500,
+  fontSize: 11,
+  color: inkMuted,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.06em",
+  fontWeight: 600,
+  fontFamily: headingFontStack,
 };
 
-const tdStyle: CSSProperties = {
+const tdStyle = {
   padding: "12px",
 };
 
-function tabBtnStyle(selected: boolean): CSSProperties {
-  return {
-    padding: "10px 16px",
-    background: "none",
-    border: "none",
-    borderBottom: selected
-      ? "2px solid var(--primary)"
-      : "2px solid transparent",
-    color: selected ? "var(--primary)" : "var(--text-muted)",
-    fontSize: 14,
-    fontWeight: selected ? 600 : 400,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    marginBottom: -1,
-  };
-}
-
-function rowActionBtn(busy: boolean, destructive: boolean): CSSProperties {
-  return {
-    background: "none",
-    border: "none",
-    color: destructive ? "var(--danger)" : "var(--text-muted)",
-    fontSize: 13,
-    cursor: busy ? "not-allowed" : "pointer",
-    padding: "4px 0",
-    fontFamily: "inherit",
-    opacity: busy ? 0.5 : 1,
-  };
-}
-
 function StatusBadge({ status }: { status: TournamentStatus }) {
   const palette: Record<TournamentStatus, { bg: string; fg: string }> = {
-    draft: { bg: "#f3f4f6", fg: "#666" },
-    published: { bg: "#dcfce7", fg: "#166534" },
-    closed: { bg: "#fef3c7", fg: "#92400e" },
-    completed: { bg: "#dbeafe", fg: "#1e40af" },
-    cancelled: { bg: "#fee2e2", fg: "#991b1b" },
+    draft:     { bg: cream,      fg: inkSoft   },
+    published: { bg: successBg,  fg: successFg },
+    closed:    { bg: warnBg,     fg: warnFg    },
+    completed: { bg: infoBg,     fg: infoFg    },
+    cancelled: { bg: dangerBg,   fg: dangerFg  },
   };
   const c = palette[status];
   return (
@@ -425,7 +231,8 @@ function StatusBadge({ status }: { status: TournamentStatus }) {
         color: c.fg,
         borderRadius: 4,
         fontSize: 12,
-        fontWeight: 500,
+        fontWeight: 600,
+        fontFamily: bodyFontStack,
       }}
     >
       {status}

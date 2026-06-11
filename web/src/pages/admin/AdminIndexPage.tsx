@@ -3,6 +3,21 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  rule,
+  warnBg,
+  warnFg,
+  creamDeep,
+  bodyFontStack,
+  headingFontStack,
+  displayFontStack,
+  ctaPrimaryStyle,
+  ctaSecondaryStyle,
+} from "../../lib/publicTheme";
 
 type OrgSummary = { slug: string; name: string };
 
@@ -78,193 +93,171 @@ export default function AdminIndexPage() {
 
   if (error) {
     return (
-      <main style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 20 }}>Couldn't load organizations</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>{error}</p>
+      <main style={pageStyle}>
+        <div style={colStyle}>
+          <h1 style={h1Style}>Couldn't load organizations</h1>
+          <p style={{ color: inkSoft, fontSize: 14 }}>{error}</p>
+        </div>
       </main>
     );
   }
 
   if (orgs === null) {
     return (
-      <div style={{ padding: 24, color: "#666", fontSize: 14 }}>Loading…</div>
+      <main style={pageStyle}>
+        <div style={colStyle}>
+          <div style={{ color: inkMuted, fontSize: 14, fontFamily: bodyFontStack }}>
+            Loading…
+          </div>
+        </div>
+      </main>
     );
   }
 
   if (orgs.length === 0) {
     return (
-      <main style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 20, marginTop: 0 }}>No organizations</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>
-          You're not a member of any organization yet. Ask an organization
-          owner to add you, or create your own.
-        </p>
-        {isPlatformAdmin && (
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            <Link
-              to="/admin/new-org"
-              style={{
-                display: "inline-block",
-                padding: "8px 14px",
-                background: "#2563eb",
-                color: "#fff",
-                textDecoration: "none",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-              }}
-            >
-              + Create organization
-            </Link>
-            <Link
-              to="/admin/platform"
-              style={{
-                display: "inline-block",
-                padding: "8px 14px",
-                background: "#fff",
-                color: "#2563eb",
-                border: "1px solid #2563eb",
-                textDecoration: "none",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-              }}
-            >
-              Platform settings
-            </Link>
-          </div>
-        )}
+      <main style={pageStyle}>
+        <div style={colStyle}>
+          <h1 style={h1Style}>No organizations</h1>
+          <p style={{ color: inkSoft, fontSize: 14, lineHeight: 1.55 }}>
+            You're not a member of any organization yet. Ask an organization
+            owner to add you, or create your own.
+          </p>
+          {isPlatformAdmin && (
+            <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
+              <Link to="/admin/new-org" style={ctaPrimaryStyle}>
+                + Create organization
+              </Link>
+              <Link to="/admin/platform" style={ctaSecondaryStyle}>
+                Platform settings
+              </Link>
+            </div>
+          )}
+        </div>
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <h1 style={{ fontSize: 20, margin: 0 }}>Choose an organization</h1>
-        {isPlatformAdmin && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link
-              to="/admin/new-org"
-              style={{
-                padding: "8px 14px",
-                background: "#2563eb",
-                color: "#fff",
-                textDecoration: "none",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-              }}
-            >
-              + Create organization
-            </Link>
-            <Link
-              to="/admin/platform"
-              style={{
-                padding: "8px 14px",
-                background: "#fff",
-                color: "#2563eb",
-                border: "1px solid #2563eb",
-                textDecoration: "none",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-              }}
-            >
-              Platform settings
-            </Link>
-          </div>
-        )}
-      </div>
-      {orgs.length > 0 && (
-        <>
+    <main style={pageStyle}>
+      <div style={colStyle}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 24,
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <h1 style={h1Style}>Choose an organization</h1>
           {isPlatformAdmin && (
-            <div
-              style={{
-                fontSize: 11,
-                color: "#888",
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-                fontWeight: 600,
-                marginBottom: 6,
-              }}
-            >
-              Your organizations
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Link to="/admin/new-org" style={ctaPrimaryStyle}>
+                + Create organization
+              </Link>
+              <Link to="/admin/platform" style={ctaSecondaryStyle}>
+                Platform settings
+              </Link>
             </div>
           )}
-          <ul style={listStyle}>
-            {orgs.map((o) => (
-              <li key={o.slug}>
-                <Link to={`/admin/${o.slug}`} style={orgLinkStyle}>
-                  {o.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+        </div>
 
-      {overrideOrgs.length > 0 && (
-        <>
-          <div
-            style={{
-              fontSize: 11,
-              color: "#888",
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-              fontWeight: 600,
-              marginTop: 24,
-              marginBottom: 6,
-            }}
-          >
-            Other organizations (platform-admin access)
-          </div>
-          <ul style={listStyle}>
-            {overrideOrgs.map((o) => (
-              <li key={o.slug}>
-                <Link
-                  to={`/admin/${o.slug}`}
-                  style={{
-                    ...orgLinkStyle,
-                    background: "#fffbeb",
-                    borderColor: "#fde68a",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <span>{o.name}</span>
-                  <span
+        {orgs.length > 0 && (
+          <>
+            {isPlatformAdmin && (
+              <div style={sectionLabelStyle}>Your organizations</div>
+            )}
+            <ul style={listStyle}>
+              {orgs.map((o) => (
+                <li key={o.slug}>
+                  <Link to={`/admin/${o.slug}`} style={orgLinkStyle}>
+                    {o.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+
+        {overrideOrgs.length > 0 && (
+          <>
+            <div style={{ ...sectionLabelStyle, marginTop: 28 }}>
+              Other organizations (platform-admin access)
+            </div>
+            <ul style={listStyle}>
+              {overrideOrgs.map((o) => (
+                <li key={o.slug}>
+                  <Link
+                    to={`/admin/${o.slug}`}
                     style={{
-                      fontSize: 11,
-                      color: "#7a5d00",
-                      fontWeight: 500,
-                      background: "#fef3c7",
-                      padding: "2px 8px",
-                      borderRadius: 3,
+                      ...orgLinkStyle,
+                      background: warnBg,
+                      borderColor: creamDeep,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 8,
                     }}
                   >
-                    🛡 admin override
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+                    <span>{o.name}</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: warnFg,
+                        fontWeight: 600,
+                        background: "#fff8e7",
+                        padding: "2px 8px",
+                        borderRadius: 3,
+                        fontFamily: bodyFontStack,
+                        letterSpacing: "0.03em",
+                      }}
+                    >
+                      admin override
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
     </main>
   );
 }
+
+const pageStyle: CSSProperties = {
+  background: bg,
+  color: ink,
+  fontFamily: bodyFontStack,
+  minHeight: "100vh",
+};
+
+const colStyle: CSSProperties = {
+  maxWidth: 560,
+  margin: "0 auto",
+  padding: "clamp(28px, 5vw, 48px) clamp(20px, 4vw, 32px) clamp(48px, 7vw, 72px)",
+};
+
+const h1Style: CSSProperties = {
+  fontFamily: displayFontStack,
+  fontSize: "clamp(26px, 4vw, 36px)",
+  lineHeight: 1.05,
+  letterSpacing: "-0.3px",
+  margin: "0 0 8px",
+  color: ink,
+};
+
+const sectionLabelStyle: CSSProperties = {
+  fontSize: 11,
+  color: inkMuted,
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  fontWeight: 600,
+  fontFamily: headingFontStack,
+  marginBottom: 8,
+};
 
 const listStyle: CSSProperties = {
   listStyle: "none",
@@ -277,12 +270,13 @@ const listStyle: CSSProperties = {
 
 const orgLinkStyle: CSSProperties = {
   display: "block",
-  padding: "12px 16px",
-  background: "#fff",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
+  padding: "13px 16px",
+  background: "#ffffff",
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
   textDecoration: "none",
-  color: "#222",
+  color: ink,
   fontSize: 14,
   fontWeight: 500,
+  fontFamily: bodyFontStack,
 };
