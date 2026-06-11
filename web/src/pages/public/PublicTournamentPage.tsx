@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
@@ -16,7 +16,6 @@ import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   deriveRegistrationStatus,
   pickActivePricingTier,
-  pickNextPricingTier,
   type PricingTier,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
@@ -66,12 +65,6 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
   } | null;
 };
 type Event = Database["public"]["Tables"]["events"]["Row"];
-// Public-visible contact (is_public, not deleted) for the Contacts
-// section + contact form (#38). RLS only returns these to anon.
-type PublicContact = Pick<
-  Database["public"]["Tables"]["tournament_contacts"]["Row"],
-  "id" | "name" | "role" | "phone" | "email"
->;
 type Player = Database["public"]["Tables"]["players"]["Row"];
 
 // Per-event registration status for the currently signed-in user.
@@ -99,6 +92,8 @@ type MyRegStatus = {
   // Used by Cancel-pending to know which row to soft-delete.
   regId: string | null;
   partnerLabel: string | null;
+  partnerEmail: string | null;
+  partnerPhone: string | null;
   inviteToken: string | null;
   inviterName: string | null;
   // F1: true when partner_status='seeking' on my reg — I'm
@@ -145,7 +140,6 @@ export default function PublicTournamentPage() {
   // event_registrations from this page (inline register / cancel).
   const { refresh: refreshPending, groups: pendingGroups } = usePendingPayments();
   const [tournament, setTournament] = useState<Tournament | null>(null);
-  const [contacts, setContacts] = useState<PublicContact[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   // Ordered pricing tiers for this tournament. Backfilled by migration
   // 20260526170000 — every existing tournament has at least one
@@ -191,6 +185,11 @@ export default function PublicTournamentPage() {
   // null = no card focused; a string event_id = that card is lifted
   // above the scrim and all siblings are dimmed + inert.
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
+
+  // #208: pricing schedule expand/collapse — collapsed by default so
+  // single-price tournaments see no extra chrome and staged-pricing
+  // users can dig in on demand.
+  const [pricingExpanded, setPricingExpanded] = useState(false);
 
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
@@ -238,17 +237,6 @@ export default function PublicTournamentPage() {
       return;
     }
     setTournament(t);
-
-    // Public contacts for this tournament (#38). RLS returns only
-    // is_public, non-deleted contacts to anon visitors.
-    const { data: contactRows } = await supabase
-      .from("tournament_contacts")
-      .select("id, name, role, phone, email")
-      .eq("tournament_id", t.id)
-      .eq("is_public", true)
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true });
-    setContacts(contactRows ?? []);
 
     const { data: evs, error: evErr } = await supabase
       .from("events")
@@ -357,7 +345,7 @@ export default function PublicTournamentPage() {
         .select(
           `id, event_id, status, partner_status,
            partner_registration:event_registrations!partner_registration_id (
-             player:players!player_id (first_name, last_name)
+             player:players!player_id (first_name, last_name, email, phone)
            )`,
         )
         .eq("player_id", myPlayer.id)
@@ -367,7 +355,7 @@ export default function PublicTournamentPage() {
         .from("partner_invites")
         .select(
           `event_id, invitee_email,
-           invitee:players!invitee_player_id (first_name, last_name)`,
+           invitee:players!invitee_player_id (first_name, last_name, email, phone)`,
         )
         .eq("inviter_player_id", myPlayer.id)
         .eq("status", "pending")
@@ -390,13 +378,13 @@ export default function PublicTournamentPage() {
       status: Database["public"]["Enums"]["registration_status"];
       partner_status: Database["public"]["Enums"]["partner_status"];
       partner_registration:
-        | { player: { first_name: string; last_name: string } | null }
+        | { player: { first_name: string; last_name: string; email: string | null; phone: string | null } | null }
         | null;
     };
     type OutboundRow = {
       event_id: string;
       invitee_email: string | null;
-      invitee: { first_name: string; last_name: string } | null;
+      invitee: { first_name: string; last_name: string; email: string | null; phone: string | null } | null;
     };
     type InboundRow = {
       event_id: string;
@@ -409,6 +397,8 @@ export default function PublicTournamentPage() {
       const partnerLabel = partner
         ? `${partner.first_name} ${partner.last_name}`
         : null;
+      const partnerEmail = partner?.email ?? null;
+      const partnerPhone = partner?.phone ?? null;
       // Derive the per-card state from the reg's payment + partner
       // status. pending_payment wins over partner_status (haven't
       // committed yet); for paid regs the partner_status splits
@@ -425,6 +415,8 @@ export default function PublicTournamentPage() {
         state,
         regId: r.id,
         partnerLabel,
+        partnerEmail,
+        partnerPhone,
         inviteToken: null,
         inviterName: null,
         isSeekingPartner: r.partner_status === "seeking",
@@ -438,7 +430,12 @@ export default function PublicTournamentPage() {
         ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
         : inv.invitee_email ?? null;
       if (cur && !cur.partnerLabel) {
-        map.set(inv.event_id, { ...cur, partnerLabel: label });
+        map.set(inv.event_id, {
+          ...cur,
+          partnerLabel: label,
+          partnerEmail: inv.invitee?.email ?? null,
+          partnerPhone: inv.invitee?.phone ?? null,
+        });
       }
     }
     // Inbound invites: any event I was picked for and haven't
@@ -463,6 +460,8 @@ export default function PublicTournamentPage() {
         state: "invited",
         regId: cur?.regId ?? null,
         partnerLabel: cur?.partnerLabel ?? null,
+        partnerEmail: cur?.partnerEmail ?? null,
+        partnerPhone: cur?.partnerPhone ?? null,
         inviteToken: inv.token,
         inviterName,
         isSeekingPartner: cur?.isSeekingPartner ?? false,
@@ -509,8 +508,8 @@ export default function PublicTournamentPage() {
   // fee gets you into your first event; each additional event adds
   // the additional-event fee. (Per-event overrides were retired as
   // the default — see migration 20260529150000.)
+  const sortedTiers = [...tiers].sort((a, b) => a.sort_order - b.sort_order);
   const activeTier = pickActivePricingTier(tiers);
-  const nextTier = pickNextPricingTier(tiers);
   const regFeeCents = activeTier?.first_event_fee_cents ?? 0;
   const additionalFeeCents = activeTier?.additional_event_fee_cents ?? 0;
   const isMultiTier = tiers.length > 1;
@@ -703,74 +702,182 @@ export default function PublicTournamentPage() {
           )}
           {regStatus.label}
         </span>
+        <div style={{ marginTop: 20 }}>
+          <Link
+            to={`/t/${orgSlug}/${tournamentSlug}/contact`}
+            style={{
+              fontSize: 13,
+              color: inkSoft,
+              textDecoration: "none",
+              fontFamily: headingFontStack,
+            }}
+          >
+            Contact organizers →
+          </Link>
+        </div>
       </header>
 
       <div
         style={{
           ...panelStyle,
-          display: "flex",
-          gap: 12,
-          alignItems: "center",
           marginBottom: 24,
         }}
       >
-        <div style={{ flex: 1 }}>
-          {/* Window detail: when it opens (if not yet) or closes (if open). */}
-          {regStatus.tone === "soon" &&
-            tournament.registration_opens_at && (
-              <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
-                Registration opens {fmtDateTime(tournament.registration_opens_at)}
+        {/* Main row: window info + price headline */}
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ flex: 1 }}>
+            {/* Window detail: when it opens (if not yet) or closes (if open). */}
+            {regStatus.tone === "soon" &&
+              tournament.registration_opens_at && (
+                <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
+                  Registration opens {fmtDateTime(tournament.registration_opens_at)}
+                </div>
+              )}
+            {tournament.registration_closes_at && registrationOpen && (
+              <div style={{ fontSize: 14, color: inkSoft }}>
+                Registration closes {fmtDateTime(tournament.registration_closes_at)}
               </div>
             )}
-          {tournament.registration_closes_at && registrationOpen && (
-            <div style={{ fontSize: 14, color: inkSoft }}>
-              Registration closes {fmtDateTime(tournament.registration_closes_at)}
-            </div>
-          )}
-          {regStatus.tone === "closed" && (
-            <div style={{ fontSize: 12, color: inkMuted }}>
-              Registration is closed
+            {regStatus.tone === "closed" && (
+              <div style={{ fontSize: 12, color: inkMuted }}>
+                Registration is closed
+              </div>
+            )}
+          </div>
+          {/* Price headline — registration fee to enter the first event. */}
+          {regFeeCents > 0 && (
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div
+                style={{
+                  fontFamily: displayFontStack,
+                  fontSize: 28,
+                  color: ink,
+                  lineHeight: 1.0,
+                }}
+              >
+                ${(regFeeCents / 100).toFixed(0)}
+              </div>
+              <div style={{ fontSize: 13, color: inkSoft, marginTop: 2 }}>
+                to register · includes 1 event
+              </div>
+              {additionalFeeCents > 0 && (
+                <div style={{ fontSize: 13, color: inkMuted, marginTop: 1 }}>
+                  +${(additionalFeeCents / 100).toFixed(0)} each additional event
+                </div>
+              )}
+              {/* Multi-tier: active stage label + when it ends */}
+              {isMultiTier && activeTier && (
+                <div
+                  style={{
+                    fontFamily: monoFontStack,
+                    fontSize: 11,
+                    color: courtBlue,
+                    marginTop: 4,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.12em",
+                  }}
+                >
+                  {activeTier.label}
+                  {activeTier.ends_at
+                    ? ` · ends ${fmtShortDate(activeTier.ends_at)}`
+                    : " · ongoing"}
+                </div>
+              )}
+              {/* Multi-tier: expand/collapse toggle for full schedule */}
+              {isMultiTier && (
+                <button
+                  onClick={() => setPricingExpanded((e) => !e)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: "4px 0 0",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    color: courtBlue,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 2,
+                    display: "block",
+                    marginLeft: "auto",
+                  }}
+                >
+                  {pricingExpanded
+                    ? "Hide pricing schedule"
+                    : "See full pricing schedule"}
+                </button>
+              )}
             </div>
           )}
         </div>
-        {/* Price headline — registration fee to enter the first event. */}
-        {regFeeCents > 0 && (
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div
-              style={{
-                fontFamily: displayFontStack,
-                fontSize: 28,
-                color: ink,
-                lineHeight: 1.0,
-              }}
-            >
-              ${(regFeeCents / 100).toFixed(0)}
-            </div>
-            <div style={{ fontSize: 12, color: inkSoft, marginTop: 2 }}>
-              to register · includes 1 event
-            </div>
-            {additionalFeeCents > 0 && (
-              <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
-                +${(additionalFeeCents / 100).toFixed(0)} each additional event
-              </div>
-            )}
-            {isMultiTier && activeTier && (
-              <div
-                style={{
-                  fontFamily: monoFontStack,
-                  fontSize: 10,
-                  color: courtBlue,
-                  marginTop: 4,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.12em",
-                }}
-              >
-                {activeTier.label} pricing
-                {nextTier && activeTier.ends_at
-                  ? ` · ${nextTier.label} from ${fmtDate(activeTier.ends_at)}`
-                  : ""}
-              </div>
-            )}
+        {/* Full pricing schedule — expanded on demand */}
+        {isMultiTier && pricingExpanded && (
+          <div
+            style={{
+              marginTop: 12,
+              borderTop: `1px solid ${rule}`,
+              paddingTop: 12,
+            }}
+          >
+            {sortedTiers.map((tier) => {
+              const isActive = tier.id === activeTier?.id;
+              return (
+                <div
+                  key={tier.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    padding: "5px 0",
+                    borderBottom: `1px solid ${rule}`,
+                    opacity: isActive ? 1 : 0.7,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? ink : inkSoft,
+                      }}
+                    >
+                      {tier.label}
+                      {isActive && (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            fontFamily: monoFontStack,
+                            fontSize: 9,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.1em",
+                            color: courtBlue,
+                          }}
+                        >
+                          active
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                      {tier.starts_at
+                        ? fmtShortDate(tier.starts_at)
+                        : "start of registration"}
+                      {" – "}
+                      {tier.ends_at
+                        ? fmtShortDate(tier.ends_at)
+                        : "no end date"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? ink : inkSoft }}>
+                      ${(tier.first_event_fee_cents / 100).toFixed(0)}
+                    </div>
+                    {tier.additional_event_fee_cents > 0 && (
+                      <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                        +${(tier.additional_event_fee_cents / 100).toFixed(0)} add'l
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -927,7 +1034,6 @@ export default function PublicTournamentPage() {
         </TournamentContentSection>
       )}
 
-      <ContactSection tournamentId={tournament.id} contacts={contacts} />
     </Shell>
     {myPendingGroup && (
       <StickyCheckoutBar
@@ -1721,7 +1827,7 @@ function EventCard({
               opacity: cancelling ? 0.6 : 1,
             }}
           >
-            {cancelling ? "Cancelling…" : "Cancel"}
+            {cancelling ? "Cancelling…" : "Cancel Registration"}
           </button>
         </div>
       );
@@ -1910,35 +2016,34 @@ function EventCard({
               partner
             </div>
           ) : myStatus?.partnerLabel ? (
-            <div
-              style={{
-                color: isAmberCard ? ink : successFg,
-                fontSize: 12,
-                marginTop: 4,
-              }}
-            >
-              {isPaid && myStatus.state === "paid"
-                ? "Partnered with "
-                : "Invited "}
-              <strong>{myStatus.partnerLabel}</strong>
+            <div style={{ marginTop: 4 }}>
+              <div style={{ color: isAmberCard ? ink : successFg, fontSize: 13 }}>
+                {isPaid && myStatus.state === "paid"
+                  ? "Partnered with "
+                  : "Invited "}
+              </div>
+              <div
+                style={{
+                  color: isAmberCard ? ink : successFg,
+                  fontSize: 16,
+                  fontWeight: 600,
+                  lineHeight: 1.2,
+                }}
+              >
+                {myStatus.partnerLabel}
+              </div>
+              {(myStatus.partnerEmail || myStatus.partnerPhone) && (
+                <div style={{ marginTop: 2, fontSize: 12, color: inkSoft }}>
+                  {myStatus.partnerEmail && (
+                    <div>{myStatus.partnerEmail}</div>
+                  )}
+                  {myStatus.partnerPhone && (
+                    <div>{myStatus.partnerPhone}</div>
+                  )}
+                </div>
+              )}
             </div>
           ) : null}
-          {isPending && myStatus?.partnerLabel && (
-            <div
-              style={{
-                marginTop: 5,
-                padding: "5px 10px",
-                background: "#fff",
-                border: `2px solid ${warnFg}`,
-                borderRadius: 5,
-                fontSize: 11,
-                color: ink,
-                display: "inline-block",
-              }}
-            >
-              Your partner won't be notified until you check out.
-            </div>
-          )}
           {/* Meta line */}
           <div style={{ color: inkSoft, fontSize: 13, marginTop: 4 }}>
             {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
@@ -1981,7 +2086,25 @@ function EventCard({
               box, so repeating a per-event number on every card just
               muddied the model. */}
         </div>
-        <div style={{ alignSelf: "center" }}>{renderAction()}</div>
+        <div style={{ alignSelf: "flex-start", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          {renderAction()}
+          {isPending && myStatus?.partnerLabel && (
+            <div
+              style={{
+                padding: "5px 10px",
+                background: "#fff",
+                border: `2px solid ${warnFg}`,
+                borderRadius: 5,
+                fontSize: 11,
+                color: ink,
+                maxWidth: 180,
+                textAlign: "right",
+              }}
+            >
+              Your partner won't be notified until you check out.
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Toggle bar + collapsible roster panel */}
@@ -2002,13 +2125,6 @@ function EventCard({
             (myStatus.state === "paid" ||
               myStatus.state === "pending_payment" ||
               myStatus.state === "awaiting_partner")
-          }
-          pendingInviteeName={
-            (myStatus?.state === "awaiting_partner" ||
-              myStatus?.state === "pending_payment") &&
-            myStatus.partnerLabel
-              ? myStatus.partnerLabel
-              : null
           }
           onPartnerUp={handlePartnerUp}
         />
@@ -2368,7 +2484,6 @@ function RosterPanel({
   isDoubles,
   myRegId,
   myIsRegistered,
-  pendingInviteeName,
   onPartnerUp,
 }: {
   rosterRows: RosterRow[];
@@ -2378,10 +2493,6 @@ function RosterPanel({
   // True when the current user already has any active reg for this event
   // (paid/pending_payment/awaiting_partner). Hides "Partner up →" on seekers.
   myIsRegistered: boolean;
-  // Name of a pending invitee who hasn't registered yet. When set and the
-  // current user's team renders as a solo, we inject a synthetic row beneath
-  // their name marked "Not registered yet" so the team reads as a pair.
-  pendingInviteeName: string | null;
   onPartnerUp: (seeker: { first_name: string; last_name: string }) => void;
 }) {
   const seekers = rosterRows.filter((r) => r.partner_status === "seeking");
@@ -2589,11 +2700,7 @@ function RosterPanel({
           <div style={{ background: "#fafafa", padding: "8px 8px 0" }}>
             {teams.map((team, i) => {
               const isMyTeam = team.some((r) => r.registration_id === myRegId);
-              // My solo team with a pending outbound invite: treat as a pair
-              // so the invited (not-yet-registered) partner appears beneath.
-              const hasPendingInvitee =
-                isMyTeam && team.length === 1 && isDoubles && pendingInviteeName != null;
-              const isPair = team.length === 2 || hasPendingInvitee;
+              const isPair = team.length === 2;
               return (
                 <div
                   key={i}
@@ -2655,29 +2762,35 @@ function RosterPanel({
                           </tr>
                         );
                       })}
-                      {hasPendingInvitee && (
-                        <tr style={{ background: "#fefce8" }}>
-                          <td style={{ ...colStyle, fontSize: 15 }}>
-                            {pendingInviteeName}
+                      {/* Ghost row: invited partner who hasn't registered yet.
+                          Visible only in doubles when the player sent an invite
+                          (partner_status='pending') that hasn't been accepted. */}
+                      {isDoubles && !isPair && team[0].invited_partner_first_name && (
+                        <tr style={{ borderTop: "1px dashed #e5e7eb" }}>
+                          <td
+                            style={{
+                              ...colStyle,
+                              color: "#9ca3af",
+                              fontStyle: "italic",
+                            }}
+                          >
+                            {team[0].invited_partner_first_name}{" "}
+                            {team[0].invited_partner_last_name}
                             <span
                               style={{
                                 marginLeft: 6,
                                 fontSize: 10,
-                                fontWeight: 700,
-                                color: "#92400e",
-                                background: "#fef3c7",
-                                border: "1px solid #fde68a",
-                                borderRadius: 3,
-                                padding: "1px 4px",
+                                color: "#9ca3af",
+                                fontStyle: "normal",
                               }}
                             >
-                              Not registered yet
+                              invited — hasn't registered
                             </span>
                           </td>
-                          <td style={colStyle}>--</td>
-                          <td style={colStyle}>--</td>
-                          <td style={colStyle}>--</td>
-                          <td style={{ ...colStyle, color: "#888" }}>--</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
+                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
                         </tr>
                       )}
                     </tbody>
@@ -2768,6 +2881,13 @@ function fmtDate(iso: string): string {
   });
 }
 
+function fmtShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     month: "short",
@@ -2855,211 +2975,3 @@ function TournamentContentSection({
   );
 }
 
-// #38 — public Contacts list + "Contact the organizers" form. The form
-// posts to the submit-contact-form edge function (salted-IP throttle +
-// Resend fan-out to contacts flagged receives_form_messages). Always
-// shown; the contacts list only renders when the org has public contacts.
-function ContactSection({
-  tournamentId,
-  contacts,
-}: {
-  tournamentId: string;
-  contacts: PublicContact[];
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
-    "idle",
-  );
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !email.trim() || !message.trim()) return;
-    setStatus("sending");
-    setErrorMsg(null);
-
-    const { data, error } = await supabase.functions.invoke(
-      "submit-contact-form",
-      {
-        body: {
-          tournamentId,
-          senderName: name.trim(),
-          senderEmail: email.trim(),
-          message: message.trim(),
-        },
-      },
-    );
-
-    if (error) {
-      // The edge function returns a JSON { error } body on 4xx/5xx;
-      // supabase-js surfaces that as a FunctionsHttpError whose
-      // `context` is the raw Response. Read it for a friendly message.
-      let msg = "Something went wrong sending your message. Please try again.";
-      try {
-        const ctx = (error as { context?: Response }).context;
-        if (ctx) {
-          const j = (await ctx.json()) as { error?: string };
-          if (j?.error) msg = j.error;
-        }
-      } catch {
-        /* fall back to the generic message */
-      }
-      setErrorMsg(msg);
-      setStatus("error");
-      return;
-    }
-    if ((data as { error?: string } | null)?.error) {
-      setErrorMsg((data as { error: string }).error);
-      setStatus("error");
-      return;
-    }
-    setStatus("sent");
-    setName("");
-    setEmail("");
-    setMessage("");
-  };
-
-  const inputStyle: CSSProperties = {
-    width: "100%",
-    padding: "10px 12px",
-    border: "1px solid #d1d5db",
-    borderRadius: 8,
-    fontSize: 14,
-    fontFamily: "inherit",
-    marginTop: 4,
-  };
-  const labelStyle: CSSProperties = {
-    display: "block",
-    fontSize: 13,
-    color: "#555",
-    marginBottom: 12,
-  };
-
-  return (
-    <section style={{ marginTop: 32 }}>
-      <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>Contact the organizers</h2>
-
-      {contacts.length > 0 && (
-        <div style={{ marginBottom: 18 }}>
-          {contacts.map((c) => (
-            <div
-              key={c.id}
-              style={{
-                fontSize: 14,
-                color: "#444",
-                lineHeight: 1.5,
-                marginBottom: 8,
-              }}
-            >
-              <strong>{c.name}</strong>
-              {c.role && <span style={{ color: "#666" }}> · {c.role}</span>}
-              <div style={{ color: "#666", fontSize: 13 }}>
-                {c.email && (
-                  <a href={`mailto:${c.email}`} style={{ color: "#2563eb" }}>
-                    {c.email}
-                  </a>
-                )}
-                {c.email && c.phone && " · "}
-                {c.phone && (
-                  <a href={`tel:${c.phone}`} style={{ color: "#2563eb" }}>
-                    {c.phone}
-                  </a>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {status === "sent" ? (
-        <div
-          style={{
-            padding: 14,
-            background: "#e8f4eb",
-            border: "1px solid #bfe3c8",
-            borderRadius: 8,
-            color: "#1e6b2c",
-            fontSize: 14,
-            lineHeight: 1.5,
-          }}
-        >
-          Thanks — your message was sent to the organizers. They'll reply to
-          the email you provided.
-        </div>
-      ) : (
-        <form onSubmit={onSubmit} style={{ maxWidth: 520 }}>
-          <p style={{ fontSize: 14, color: "#666", margin: "0 0 14px", lineHeight: 1.5 }}>
-            Have a question about this tournament? Send the organizers a note.
-          </p>
-          <label style={labelStyle}>
-            Your name
-            <input
-              type="text"
-              required
-              maxLength={120}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            Your email
-            <input
-              type="email"
-              required
-              maxLength={200}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            Message
-            <textarea
-              required
-              maxLength={5000}
-              rows={5}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
-          </label>
-          {status === "error" && errorMsg && (
-            <div
-              style={{
-                padding: 12,
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
-                borderRadius: 8,
-                color: "#991b1b",
-                fontSize: 13,
-                marginBottom: 12,
-              }}
-            >
-              {errorMsg}
-            </div>
-          )}
-          <button
-            type="submit"
-            disabled={status === "sending"}
-            style={{
-              padding: "10px 20px",
-              background: status === "sending" ? "#9ca3af" : "#14181f",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: status === "sending" ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            {status === "sending" ? "Sending…" : "Send message"}
-          </button>
-        </form>
-      )}
-    </section>
-  );
-}
