@@ -130,6 +130,26 @@ already withdrawn/refunded/cancelled), `refund_failed` (502, Stripe error).
 - The refund is by `payment_intent` with `reverse_transfer: true,
   refund_application_fee: false` (keep the platform fee; debit the organizer).
 
+## Late-withdrawal queue columns (#200)
+
+When surface (a) can't auto-decide (`manual_required`), the player files a
+withdrawal **request** instead of an instant refund, and the organizer resolves
+it from a queue (#200). Migration `20260611130000_withdrawal_request_columns`
+adds, on `event_registrations`:
+
+| column | type | meaning |
+|---|---|---|
+| `withdrawal_requested_at` | `timestamptz` | player filed the request (reg stays `paid`, no status change) |
+| `withdrawal_reason` | `text` | optional reason from the player |
+| `withdrawal_decided_at` | `timestamptz` | organizer resolved it |
+| `withdrawal_decision` | `withdrawal_decision` enum (`approved`/`denied`) | the organizer's call |
+
+The **pending queue** = `withdrawal_requested_at is not null and
+withdrawal_decided_at is null` (a partial index backs this). The chosen refund
+**amount** is not stored here — it's passed to `stripe-refund` (manual mode,
+not yet built) at approve time and recorded in `payments`. Approve → manual
+refund → status `refunded` (or `withdrawn` if $0); deny → `withdrawn`, no refund.
+
 ---
 
 ## Deploy — happens on merge (do NOT hand-run)
