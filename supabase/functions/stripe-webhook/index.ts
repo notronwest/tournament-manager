@@ -131,8 +131,84 @@ async function handleSucceeded(pi: any) {
     await admin.rpc("redeem_coupon", { p_coupon_id: couponId });
   }
 
-  // ── Deferred partner-invite emails ────────────────────────────────
-  // TODO(Ron/Builder Card C): fan out the pending partner invites for
-  // these regs here (the send-partner-invite edge fn is already built);
-  // this is where CheckoutPage's current at-pay-time email send moves to.
+  // ── Deferred partner-invite emails (#191) ─────────────────────────
+  // Relocated here from CheckoutPage so a doubles invite email fires
+  // ONLY on a confirmed payment — never for an abandoned/unpaid
+  // checkout. Idempotent by construction: handleSucceeded short-circuits
+  // above when the payment is already 'succeeded', so a re-delivered
+  // webhook never reaches this and can't double-send.
+  await sendDeferredInvites(regIds, pi);
+}
+
+// Fan out the payer's pending OUTBOUND partner invites for the events
+// they just paid for. We match invites by (inviter = payer, event in the
+// paid set, status = 'pending'); inbound invites the payer merely
+// accepted have a different inviter and are correctly skipped. Email
+// composition is unchanged — we just invoke the existing
+// send-partner-invite function per invite.
+async function sendDeferredInvites(regIds: string[], pi: any) {
+  if (regIds.length === 0) return;
+
+  const inviterPlayerId = pi.metadata?.player_id;
+  if (!inviterPlayerId) return;
+
+  // Resolve the events covered by this payment's registrations.
+  const { data: regs } = await admin
+    .from("event_registrations")
+    .select("event_id")
+    .in("id", regIds);
+  const eventIds = Array.from(
+    new Set((regs ?? []).map((r: any) => r.event_id).filter(Boolean)),
+  );
+  if (eventIds.length === 0) return;
+
+  // The payer's still-pending outbound invites for those events.
+  const { data: invites } = await admin
+    .from("partner_invites")
+    .select("id, invitee_email")
+    .eq("inviter_player_id", inviterPlayerId)
+    .eq("status", "pending")
+    .in("event_id", eventIds);
+
+  // Base URL captured at checkout (origin the player paid from), with a
+  // prod fallback if an older intent has no base_url in metadata.
+  const baseUrl =
+    (pi.metadata?.base_url && String(pi.metadata.base_url)) ||
+    // @ts-expect-error Deno env
+    Deno.env.get("PUBLIC_APP_URL") ||
+    "https://tournament-manager.pages.dev";
+
+  for (const inv of invites ?? []) {
+    // Mirror CheckoutPage's guard: don't email obviously-fake addresses
+    // (seeded test players use .test / example.com).
+    if (isObviouslyFakeEmail(inv.invitee_email)) continue;
+    try {
+      await admin.functions.invoke("send-partner-invite", {
+        body: { inviteId: inv.id, baseUrl },
+      });
+    } catch (e) {
+      // Best-effort: a failed invite email must not 500 the webhook (that
+      // would make Stripe retry the whole — already-applied — payment).
+      console.warn(
+        `partner invite ${inv.id} email failed:`,
+        e instanceof Error ? e.message : String(e),
+      );
+    }
+  }
+}
+
+// Mirrors the helper in CheckoutPage / RegisterPage — keep in sync until
+// it's extracted into a shared module.
+function isObviouslyFakeEmail(email: string | null): boolean {
+  if (!email) return false;
+  const e = email.trim().toLowerCase();
+  if (e.endsWith(".test")) return true;
+  if (
+    e.endsWith("@example.com") ||
+    e.endsWith("@example.net") ||
+    e.endsWith("@example.org")
+  ) {
+    return true;
+  }
+  return false;
 }

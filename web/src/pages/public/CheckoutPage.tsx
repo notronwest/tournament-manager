@@ -66,23 +66,6 @@ type PendingRow = {
   partnerEmail: string | null;
 };
 
-// Detect addresses that can't possibly receive real email. Mirrors
-// the helper in RegisterPage / send-partner-invite — keep both
-// implementations in sync until we extract the helper.
-function isObviouslyFakeEmail(email: string | null): boolean {
-  if (!email) return false;
-  const e = email.trim().toLowerCase();
-  if (e.endsWith(".test")) return true;
-  if (
-    e.endsWith("@example.com") ||
-    e.endsWith("@example.net") ||
-    e.endsWith("@example.org")
-  ) {
-    return true;
-  }
-  return false;
-}
-
 // Checkout page at /t/:orgSlug/:tournamentSlug/checkout.
 //
 // Reads the user's pending_payment registrations for THIS tournament,
@@ -377,7 +360,9 @@ export default function CheckoutPage() {
     setCreatingIntent(true);
     const { data, error: fnErr } = await supabase.functions.invoke(
       "create-payment-intent",
-      { body: { orgSlug, tournamentSlug } },
+      // baseUrl is stashed in the PaymentIntent metadata so the webhook
+      // can build partner-invite accept links from this same origin (#191).
+      { body: { orgSlug, tournamentSlug, baseUrl: window.location.origin } },
     );
     setCreatingIntent(false);
     const res = data as {
@@ -400,10 +385,10 @@ export default function CheckoutPage() {
   };
 
   // Step 2 — called by the Payment Element form once Stripe confirms the
-  // charge. The webhook is the source of truth for the status flip, so
-  // we poll our regs until they read 'paid', then fire the partner
-  // invite emails and show the success view. (Card C moves the email
-  // fan-out to the webhook.)
+  // charge. The webhook is the source of truth: it flips the regs to
+  // 'paid' AND fires the partner-invite emails (#191 — invites now send
+  // only on confirmed payment, never for abandoned checkouts). Here we
+  // just poll our regs until they read 'paid', then show the success view.
   const onConfirmed = async () => {
     setFinalizing(true);
     const paidRows = rows; // capture before clearing
@@ -424,21 +409,6 @@ export default function CheckoutPage() {
         break;
       }
       await new Promise((res) => setTimeout(res, 1500));
-    }
-
-    for (const r of paidRows) {
-      if (r.format !== "doubles" || !r.inviteId) continue;
-      if (isObviouslyFakeEmail(r.partnerEmail)) continue;
-      try {
-        await supabase.functions.invoke("send-partner-invite", {
-          body: { inviteId: r.inviteId, baseUrl: window.location.origin },
-        });
-      } catch (e) {
-        console.warn(
-          `Invite email for ${r.eventName} failed:`,
-          e instanceof Error ? e.message : String(e),
-        );
-      }
     }
 
     if (!allPaid) {

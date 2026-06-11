@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
@@ -66,12 +66,6 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
   } | null;
 };
 type Event = Database["public"]["Tables"]["events"]["Row"];
-// Public-visible contact (is_public, not deleted) for the Contacts
-// section + contact form (#38). RLS only returns these to anon.
-type PublicContact = Pick<
-  Database["public"]["Tables"]["tournament_contacts"]["Row"],
-  "id" | "name" | "role" | "phone" | "email" | "receives_form_messages"
->;
 type Player = Database["public"]["Tables"]["players"]["Row"];
 
 // Per-event registration status for the currently signed-in user.
@@ -145,7 +139,6 @@ export default function PublicTournamentPage() {
   // event_registrations from this page (inline register / cancel).
   const { refresh: refreshPending, groups: pendingGroups } = usePendingPayments();
   const [tournament, setTournament] = useState<Tournament | null>(null);
-  const [contacts, setContacts] = useState<PublicContact[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   // Ordered pricing tiers for this tournament. Backfilled by migration
   // 20260526170000 — every existing tournament has at least one
@@ -238,17 +231,6 @@ export default function PublicTournamentPage() {
       return;
     }
     setTournament(t);
-
-    // Public contacts for this tournament (#38). RLS returns only
-    // is_public, non-deleted contacts to anon visitors.
-    const { data: contactRows } = await supabase
-      .from("tournament_contacts")
-      .select("id, name, role, phone, email, receives_form_messages")
-      .eq("tournament_id", t.id)
-      .eq("is_public", true)
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true });
-    setContacts(contactRows ?? []);
 
     const { data: evs, error: evErr } = await supabase
       .from("events")
@@ -703,6 +685,19 @@ export default function PublicTournamentPage() {
           )}
           {regStatus.label}
         </span>
+        <div style={{ marginTop: 20 }}>
+          <Link
+            to={`/t/${orgSlug}/${tournamentSlug}/contact`}
+            style={{
+              fontSize: 13,
+              color: inkSoft,
+              textDecoration: "none",
+              fontFamily: headingFontStack,
+            }}
+          >
+            Contact organizers →
+          </Link>
+        </div>
       </header>
 
       <div
@@ -927,7 +922,6 @@ export default function PublicTournamentPage() {
         </TournamentContentSection>
       )}
 
-      <ContactSection tournamentId={tournament.id} contacts={contacts} me={me} />
     </Shell>
     {myPendingGroup && (
       <StickyCheckoutBar
@@ -2845,233 +2839,3 @@ function TournamentContentSection({
   );
 }
 
-// #38/#148 — "Contact the organizers" form with recipient picker.
-// Posts to the submit-contact-form edge function. When the signed-in
-// user's player record is passed, the name + email fields are pre-filled
-// (they can still edit). When selectable contacts exist, a recipient
-// dropdown lets the sender direct their message to one contact; the
-// edge function routes the email to that contact only.
-function ContactSection({
-  tournamentId,
-  contacts,
-  me,
-}: {
-  tournamentId: string;
-  contacts: PublicContact[];
-  me: Player | null;
-}) {
-  // Contacts eligible to appear in the recipient picker: public,
-  // flagged receives_form_messages, and have an email address.
-  const selectableContacts = contacts.filter(
-    (c) => c.receives_form_messages && c.email,
-  );
-
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-
-  // Pre-fill from signed-in user's player record. useEffect so it
-  // still runs if me arrives after first render.
-  useEffect(() => {
-    if (me) {
-      setName([me.first_name, me.last_name].filter(Boolean).join(" "));
-      setEmail(me.email ?? "");
-    }
-  }, [me]);
-  const [message, setMessage] = useState("");
-  // The user's explicit recipient pick ("" until they choose one).
-  const [targetContactId, setTargetContactId] = useState<string>("");
-  // Effective recipient, DERIVED during render (not synced via an effect):
-  // the user's pick if still valid, else the first selectable contact. This
-  // matters because `contacts` load async — a state+effect default could leave
-  // the dropdown SHOWING a recipient while submitting an empty id, which makes
-  // the server silently fan the message out to every contact instead.
-  const effectiveTargetId = selectableContacts.some(
-    (c) => c.id === targetContactId,
-  )
-    ? targetContactId
-    : selectableContacts[0]?.id ?? "";
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
-    "idle",
-  );
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !email.trim() || !message.trim()) return;
-    setStatus("sending");
-    setErrorMsg(null);
-
-    const body: Record<string, string> = {
-      tournamentId,
-      senderName: name.trim(),
-      senderEmail: email.trim(),
-      message: message.trim(),
-    };
-    if (effectiveTargetId) body.targetContactId = effectiveTargetId;
-
-    const { data, error } = await supabase.functions.invoke(
-      "submit-contact-form",
-      { body },
-    );
-
-    if (error) {
-      // The edge function returns a JSON { error } body on 4xx/5xx;
-      // supabase-js surfaces that as a FunctionsHttpError whose
-      // `context` is the raw Response. Read it for a friendly message.
-      let msg = "Something went wrong sending your message. Please try again.";
-      try {
-        const ctx = (error as { context?: Response }).context;
-        if (ctx) {
-          const j = (await ctx.json()) as { error?: string };
-          if (j?.error) msg = j.error;
-        }
-      } catch {
-        /* fall back to the generic message */
-      }
-      setErrorMsg(msg);
-      setStatus("error");
-      return;
-    }
-    if ((data as { error?: string } | null)?.error) {
-      setErrorMsg((data as { error: string }).error);
-      setStatus("error");
-      return;
-    }
-    setStatus("sent");
-    setName("");
-    setEmail("");
-    setMessage("");
-  };
-
-  const inputStyle: CSSProperties = {
-    width: "100%",
-    padding: "10px 12px",
-    border: "1px solid #d1d5db",
-    borderRadius: 8,
-    fontSize: 14,
-    fontFamily: "inherit",
-    marginTop: 4,
-  };
-  const labelStyle: CSSProperties = {
-    display: "block",
-    fontSize: 13,
-    color: "#555",
-    marginBottom: 12,
-  };
-
-  return (
-    <section style={{ marginTop: 32 }}>
-      <h2 style={{ margin: "0 0 10px", fontSize: 18 }}>Contact the organizers</h2>
-
-      {status === "sent" ? (
-        <div
-          style={{
-            padding: 14,
-            background: "#e8f4eb",
-            border: "1px solid #bfe3c8",
-            borderRadius: 8,
-            color: "#1e6b2c",
-            fontSize: 14,
-            lineHeight: 1.5,
-          }}
-        >
-          {(() => {
-            const recipient = selectableContacts.find(
-              (c) => c.id === effectiveTargetId,
-            );
-            return recipient
-              ? `Thanks — your message was sent to ${recipient.name}. They'll reply to the email you provided.`
-              : "Thanks — your message was sent to the organizers. They'll reply to the email you provided.";
-          })()}
-        </div>
-      ) : (
-        <form onSubmit={onSubmit} style={{ maxWidth: 520 }}>
-          <p style={{ fontSize: 14, color: "#666", margin: "0 0 14px", lineHeight: 1.5 }}>
-            Have a question about this tournament? Send the organizers a note.
-          </p>
-          {selectableContacts.length > 0 && (
-            <label style={labelStyle}>
-              Direct your question to…
-              <select
-                value={effectiveTargetId}
-                onChange={(e) => setTargetContactId(e.target.value)}
-                style={{ ...inputStyle, background: "#fff" }}
-              >
-                {selectableContacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.role ? ` · ${c.role}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <label style={labelStyle}>
-            Your name
-            <input
-              type="text"
-              required
-              maxLength={120}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            Your email
-            <input
-              type="email"
-              required
-              maxLength={200}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-            />
-          </label>
-          <label style={labelStyle}>
-            Message
-            <textarea
-              required
-              maxLength={5000}
-              rows={5}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
-          </label>
-          {status === "error" && errorMsg && (
-            <div
-              style={{
-                padding: 12,
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
-                borderRadius: 8,
-                color: "#991b1b",
-                fontSize: 13,
-                marginBottom: 12,
-              }}
-            >
-              {errorMsg}
-            </div>
-          )}
-          <button
-            type="submit"
-            disabled={status === "sending"}
-            style={{
-              padding: "10px 20px",
-              background: status === "sending" ? "#9ca3af" : "#14181f",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: status === "sending" ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            {status === "sending" ? "Sending…" : "Send message"}
-          </button>
-        </form>
-      )}
-    </section>
-  );
-}
