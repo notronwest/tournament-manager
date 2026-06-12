@@ -3,6 +3,27 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  rule,
+  courtBlue,
+  courtRed,
+  bodyFontStack,
+  displayFontStack,
+  headingFontStack,
+  dangerBg,
+  dangerFg,
+  successBg,
+  successFg,
+  warnBg,
+  warnFg,
+  infoBg,
+  infoBorder,
+  infoFg,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
@@ -53,13 +74,13 @@ function paymentBadge(status: RegistrationStatus) {
     RegistrationStatus,
     { label: string; bg: string; color: string }
   > = {
-    paid: { label: "Paid", bg: "#dcfce7", color: "#15803d" },
-    pending_payment: { label: "Pending", bg: "#fef9c3", color: "#a16207" },
-    cancelled: { label: "Cancelled", bg: "#f3f4f6", color: "#6b7280" },
-    refunded: { label: "Refunded", bg: "#f3f4f6", color: "#6b7280" },
-    withdrawn: { label: "Withdrawn", bg: "#f3f4f6", color: "#6b7280" },
+    paid: { label: "Paid", bg: successBg, color: successFg },
+    pending_payment: { label: "Pending", bg: warnBg, color: warnFg },
+    cancelled: { label: "Cancelled", bg: bg, color: inkMuted },
+    refunded: { label: "Refunded", bg: bg, color: inkMuted },
+    withdrawn: { label: "Withdrawn", bg: bg, color: inkMuted },
   };
-  const s = map[status] ?? { label: status, bg: "#f3f4f6", color: "#6b7280" };
+  const s = map[status] ?? { label: status, bg, color: inkMuted };
   return (
     <span
       style={{
@@ -79,11 +100,11 @@ function paymentBadge(status: RegistrationStatus) {
 function partnerBadge(ps: PartnerStatus) {
   if (ps === "confirmed" || ps === "solo") return null;
   const map: Record<string, { label: string; bg: string; color: string }> = {
-    seeking: { label: "Seeking partner", bg: "#fef9c3", color: "#a16207" },
-    pending: { label: "Invite pending", bg: "#eff6ff", color: "#1e40af" },
-    declined: { label: "Declined", bg: "#fef2f2", color: "#991b1b" },
+    seeking: { label: "Seeking partner", bg: warnBg, color: warnFg },
+    pending: { label: "Invite pending", bg: infoBg, color: infoFg },
+    declined: { label: "Declined", bg: dangerBg, color: dangerFg },
   };
-  const s = map[ps] ?? { label: ps, bg: "#f3f4f6", color: "#6b7280" };
+  const s = map[ps] ?? { label: ps, bg, color: inkMuted };
   return (
     <span
       style={{
@@ -118,17 +139,17 @@ function ContactCell({ player }: { player: Player }) {
       {player.email ? (
         <a
           href={`mailto:${player.email}`}
-          style={{ color: "#2563eb", textDecoration: "none", fontSize: 12 }}
+          style={{ color: courtBlue, textDecoration: "none", fontSize: 12 }}
         >
           {player.email}
         </a>
       ) : (
-        <span style={{ color: "#bbb", fontSize: 12 }}>no email</span>
+        <span style={{ color: inkMuted, fontSize: 12 }}>no email</span>
       )}
       {player.phone ? (
         <a
           href={`tel:${player.phone}`}
-          style={{ color: "#2563eb", textDecoration: "none", fontSize: 12 }}
+          style={{ color: courtBlue, textDecoration: "none", fontSize: 12 }}
         >
           {player.phone}
         </a>
@@ -341,17 +362,22 @@ export default function AttendeesPage() {
 
   if (!org) return null;
   if (loading)
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return (
+      <div style={{ color: inkMuted, fontSize: 14, fontFamily: bodyFontStack }}>
+        Loading…
+      </div>
+    );
   if (error) {
     return (
       <div
         style={{
           padding: 12,
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
+          background: dangerBg,
+          border: `1px solid ${courtRed}`,
           borderRadius: 6,
-          color: "#991b1b",
+          color: dangerFg,
           fontSize: 13,
+          fontFamily: bodyFontStack,
         }}
       >
         {error}
@@ -361,10 +387,10 @@ export default function AttendeesPage() {
   if (!tournament) return null;
 
   return (
-    <div>
+    <div style={{ fontFamily: bodyFontStack, color: ink }}>
       <Link
         to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-        style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}
+        style={{ color: courtBlue, textDecoration: "none", fontSize: 13 }}
       >
         ← {tournament.name}
       </Link>
@@ -381,8 +407,17 @@ export default function AttendeesPage() {
         }}
       >
         <div>
-          <h1 style={{ margin: 0, fontSize: 22 }}>Attendees</h1>
-          <p style={{ color: "#666", margin: "4px 0 0", fontSize: 13 }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              fontFamily: displayFontStack,
+              color: ink,
+            }}
+          >
+            Attendees
+          </h1>
+          <p style={{ color: inkMuted, margin: "4px 0 0", fontSize: 13 }}>
             {rows.length} {rows.length === 1 ? "player" : "players"} across all
             events
             {view === "players" && filter
@@ -399,10 +434,10 @@ export default function AttendeesPage() {
               onChange={(e) => setFilter(e.target.value)}
               style={{
                 padding: "6px 12px",
-                border: "1px solid #e2e2e2",
+                border: `1px solid ${rule}`,
                 borderRadius: 6,
                 fontSize: 13,
-                fontFamily: "inherit",
+                fontFamily: bodyFontStack,
                 minWidth: 240,
               }}
             />
@@ -410,7 +445,7 @@ export default function AttendeesPage() {
           <div
             style={{
               display: "flex",
-              border: "1px solid #d1d5db",
+              border: `1px solid ${rule}`,
               borderRadius: 6,
               overflow: "hidden",
             }}
@@ -425,7 +460,7 @@ export default function AttendeesPage() {
               onClick={() => setView("events")}
               style={{
                 ...viewTabStyle(view === "events"),
-                borderLeft: "1px solid #d1d5db",
+                borderLeft: `1px solid ${rule}`,
               }}
             >
               By Event
@@ -464,8 +499,8 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
           style={{
             marginBottom: 20,
             padding: 16,
-            background: "#eff6ff",
-            border: "1px solid #bfdbfe",
+            background: infoBg,
+            border: `1px solid ${infoBorder}`,
             borderRadius: 8,
           }}
         >
@@ -473,7 +508,8 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
             style={{
               fontSize: 14,
               fontWeight: 600,
-              color: "#1e40af",
+              fontFamily: headingFontStack,
+              color: infoFg,
               marginBottom: 4,
             }}
           >
@@ -482,7 +518,7 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
           <div
             style={{
               fontSize: 12,
-              color: "#1e40af",
+              color: infoFg,
               marginBottom: 12,
               lineHeight: 1.5,
             }}
@@ -502,7 +538,7 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
             }}
           >
             <thead>
-              <tr style={{ background: "#dbeafe" }}>
+              <tr style={{ background: infoBg }}>
                 <th style={thStyle}>Name</th>
                 <th style={thStyle}>Email</th>
                 <th style={thStyle}>Phone</th>
@@ -513,7 +549,7 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
               {seekers.map((s) => (
                 <tr
                   key={s.player.id}
-                  style={{ borderTop: "1px solid #dbeafe" }}
+                  style={{ borderTop: `1px solid ${infoBorder}` }}
                 >
                   <td style={{ ...tdStyle, fontWeight: 500 }}>
                     {s.player.first_name} {s.player.last_name}
@@ -521,13 +557,13 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
                   <td
                     style={{
                       ...tdStyle,
-                      color: s.player.email ? "#444" : "#bbb",
+                      color: s.player.email ? inkSoft : inkMuted,
                     }}
                   >
                     {s.player.email ? (
                       <a
                         href={`mailto:${s.player.email}`}
-                        style={{ color: "#2563eb", textDecoration: "none" }}
+                        style={{ color: courtBlue, textDecoration: "none" }}
                       >
                         {s.player.email}
                       </a>
@@ -538,13 +574,13 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
                   <td
                     style={{
                       ...tdStyle,
-                      color: s.player.phone ? "#444" : "#bbb",
+                      color: s.player.phone ? inkSoft : inkMuted,
                     }}
                   >
                     {s.player.phone ? (
                       <a
                         href={`tel:${s.player.phone}`}
-                        style={{ color: "#2563eb", textDecoration: "none" }}
+                        style={{ color: courtBlue, textDecoration: "none" }}
                       >
                         {s.player.phone}
                       </a>
@@ -561,8 +597,8 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
                           key={e.id}
                           style={{
                             padding: "2px 8px",
-                            background: "#dbeafe",
-                            color: "#1e40af",
+                            background: infoBg,
+                            color: infoFg,
                             borderRadius: 4,
                             fontSize: 11,
                             fontWeight: 500,
@@ -585,10 +621,10 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
           style={{
             padding: 32,
             textAlign: "center",
-            background: "#fafafa",
-            border: "1px dashed #d1d5db",
+            background: bg,
+            border: `1px dashed ${rule}`,
             borderRadius: 6,
-            color: "#666",
+            color: inkMuted,
             fontSize: 13,
           }}
         >
@@ -603,8 +639,8 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
           <thead>
             <tr
               style={{
-                background: "#fafafa",
-                borderBottom: "1px solid #e5e7eb",
+                background: bg,
+                borderBottom: `1px solid ${rule}`,
               }}
             >
               <th style={thStyle}>Name</th>
@@ -617,7 +653,7 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
             {visible.map((row) => (
               <tr
                 key={row.player.id}
-                style={{ borderBottom: "1px solid #f3f4f6" }}
+                style={{ borderBottom: `1px solid ${rule}` }}
               >
                 <td style={{ ...tdStyle, fontWeight: 500 }}>
                   {row.player.first_name} {row.player.last_name}
@@ -625,7 +661,7 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
                 <td
                   style={{
                     ...tdStyle,
-                    color: row.player.email ? "#444" : "#bbb",
+                    color: row.player.email ? inkSoft : inkMuted,
                   }}
                 >
                   {row.player.email ?? "—"}
@@ -633,7 +669,7 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
                 <td
                   style={{
                     ...tdStyle,
-                    color: row.player.phone ? "#444" : "#bbb",
+                    color: row.player.phone ? inkSoft : inkMuted,
                   }}
                 >
                   {row.player.phone ?? "—"}
@@ -645,8 +681,8 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
                         key={e.id}
                         style={{
                           padding: "2px 8px",
-                          background: "#eff6ff",
-                          color: "#1e40af",
+                          background: infoBg,
+                          color: infoFg,
                           borderRadius: 4,
                           fontSize: 11,
                           fontWeight: 500,
@@ -675,10 +711,10 @@ function ByEventView({ eventGroups }: { eventGroups: EventGroup[] }) {
         style={{
           padding: 32,
           textAlign: "center",
-          background: "#fafafa",
-          border: "1px dashed #d1d5db",
+          background: bg,
+          border: `1px dashed ${rule}`,
           borderRadius: 6,
-          color: "#666",
+          color: inkMuted,
           fontSize: 13,
         }}
       >
@@ -739,13 +775,20 @@ function EventRosterSection({ group }: { group: EventGroup }) {
           flexWrap: "wrap",
           marginBottom: 10,
           paddingBottom: 6,
-          borderBottom: "2px solid #e5e7eb",
+          borderBottom: `2px solid ${rule}`,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 16,
+            fontFamily: headingFontStack,
+            color: ink,
+          }}
+        >
           {event.name}
         </h2>
-        <span style={{ fontSize: 12, color: "#888" }}>
+        <span style={{ fontSize: 12, color: inkMuted }}>
           {formatEventLabel(event)}
         </span>
         <div
@@ -756,7 +799,7 @@ function EventRosterSection({ group }: { group: EventGroup }) {
             alignItems: "center",
           }}
         >
-          <span style={{ fontSize: 12, color: "#666" }}>
+          <span style={{ fontSize: 12, color: inkMuted }}>
             {regs.length} {regs.length === 1 ? "entry" : "entries"}
           </span>
           {seekingCount > 0 && (
@@ -764,8 +807,8 @@ function EventRosterSection({ group }: { group: EventGroup }) {
               style={{
                 fontSize: 11,
                 padding: "2px 7px",
-                background: "#fef9c3",
-                color: "#a16207",
+                background: warnBg,
+                color: warnFg,
                 borderRadius: 4,
                 fontWeight: 500,
               }}
@@ -778,8 +821,8 @@ function EventRosterSection({ group }: { group: EventGroup }) {
               style={{
                 fontSize: 11,
                 padding: "2px 7px",
-                background: "#eff6ff",
-                color: "#1e40af",
+                background: infoBg,
+                color: infoFg,
                 borderRadius: 4,
                 fontWeight: 500,
               }}
@@ -791,7 +834,7 @@ function EventRosterSection({ group }: { group: EventGroup }) {
       </div>
 
       {teams.length === 0 ? (
-        <div style={{ color: "#999", fontSize: 13 }}>No registrations.</div>
+        <div style={{ color: inkMuted, fontSize: 13 }}>No registrations.</div>
       ) : (
         <table
           style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
@@ -799,8 +842,8 @@ function EventRosterSection({ group }: { group: EventGroup }) {
           <thead>
             <tr
               style={{
-                background: "#fafafa",
-                borderBottom: "1px solid #e5e7eb",
+                background: bg,
+                borderBottom: `1px solid ${rule}`,
               }}
             >
               <th style={thStyle}>
@@ -835,7 +878,7 @@ function EventRosterSection({ group }: { group: EventGroup }) {
   );
 }
 
-// Two-row block for a confirmed doubles pair, connected by a blue left bar.
+// Two-row block for a confirmed doubles pair, connected by a courtBlue left bar.
 function ConfirmedPairRows({
   primary,
   partner,
@@ -845,13 +888,13 @@ function ConfirmedPairRows({
   partner: RegData;
   stripe: boolean;
 }) {
-  const bg = stripe ? "#fff" : "#fafafa";
+  const rowBg = stripe ? "#fff" : bg;
   const confirmedBadge = (
     <span
       style={{
         padding: "2px 7px",
-        background: "#dcfce7",
-        color: "#15803d",
+        background: successBg,
+        color: successFg,
         borderRadius: 4,
         fontSize: 11,
         fontWeight: 500,
@@ -863,7 +906,7 @@ function ConfirmedPairRows({
 
   return (
     <>
-      <tr style={{ background: bg, borderTop: "1px solid #e5e7eb" }}>
+      <tr style={{ background: rowBg, borderTop: `1px solid ${rule}` }}>
         <td style={{ ...tdStyle, fontWeight: 500, paddingBottom: 3 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
@@ -871,7 +914,7 @@ function ConfirmedPairRows({
                 width: 3,
                 minHeight: 20,
                 alignSelf: "stretch",
-                background: "#2563eb",
+                background: courtBlue,
                 borderRadius: "2px 2px 0 0",
                 flexShrink: 0,
               }}
@@ -887,7 +930,7 @@ function ConfirmedPairRows({
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>{confirmedBadge}</td>
       </tr>
-      <tr style={{ background: bg, borderBottom: "1px solid #e5e7eb" }}>
+      <tr style={{ background: rowBg, borderBottom: `1px solid ${rule}` }}>
         <td style={{ ...tdStyle, fontWeight: 500, paddingTop: 3 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
@@ -895,7 +938,7 @@ function ConfirmedPairRows({
                 width: 3,
                 minHeight: 20,
                 alignSelf: "stretch",
-                background: "#2563eb",
+                background: courtBlue,
                 borderRadius: "0 0 2px 2px",
                 flexShrink: 0,
               }}
@@ -925,8 +968,8 @@ function SingleEntryRow({
   return (
     <tr
       style={{
-        background: stripe ? "#fff" : "#fafafa",
-        borderTop: "1px solid #e5e7eb",
+        background: stripe ? "#fff" : bg,
+        borderTop: `1px solid ${rule}`,
       }}
     >
       <td style={{ ...tdStyle, fontWeight: 500 }}>
@@ -945,10 +988,10 @@ function viewTabStyle(active: boolean): CSSProperties {
   return {
     padding: "6px 14px",
     fontSize: 13,
-    fontFamily: "inherit",
+    fontFamily: bodyFontStack,
     fontWeight: active ? 600 : 400,
-    background: active ? "#eff6ff" : "#fff",
-    color: active ? "#2563eb" : "#444",
+    background: active ? infoBg : "#fff",
+    color: active ? courtBlue : inkSoft,
     border: "none",
     cursor: "pointer",
   };
@@ -958,7 +1001,7 @@ const thStyle: CSSProperties = {
   textAlign: "left",
   padding: "8px 12px",
   fontSize: 11,
-  color: "#888",
+  color: inkMuted,
   textTransform: "uppercase",
   letterSpacing: 0.5,
   fontWeight: 500,
