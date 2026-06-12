@@ -4,6 +4,31 @@ import { supabase } from "../../supabase";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  bg,
+  creamDeep,
+  rule,
+  courtBlue,
+  courtGreen,
+  courtRed,
+  successBg,
+  successFg,
+  warnBg,
+  warnFg,
+  dangerBg,
+  dangerFg,
+  monoFontStack,
+  bodyFontStack,
+  breadcrumbLinkStyle,
+  pageH1Style,
+  pageSubStyle,
+  panelMutedStyle,
+  ctaPrimaryStyle,
+  ctaPrimaryDisabledStyle,
+  statusPanelStyle,
+} from "../../lib/publicTheme";
 
 type StripeStatus = Database["public"]["Enums"]["org_stripe_status"];
 
@@ -143,29 +168,19 @@ export default function OrgStripeSettingsPage() {
   };
 
   if (!org) {
-    return <div style={{ padding: 24, color: "#666" }}>Loading…</div>;
+    return <div style={{ padding: 24, color: inkSoft, fontFamily: bodyFontStack }}>Loading…</div>;
   }
   if (status === null) {
-    return <div style={{ padding: 24, color: "#666" }}>Loading…</div>;
+    return <div style={{ padding: 24, color: inkSoft, fontFamily: bodyFontStack }}>Loading…</div>;
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
-      <Link
-        to={`/admin/${org.slug}`}
-        style={{ color: "#2563eb", fontSize: 13, textDecoration: "none" }}
-      >
+    <div style={{ maxWidth: 720, fontFamily: bodyFontStack }}>
+      <Link to={`/admin/${org.slug}`} style={breadcrumbLinkStyle}>
         ← {org.name}
       </Link>
-      <h1 style={{ fontSize: 24, margin: "12px 0 4px" }}>Stripe Connect</h1>
-      <p
-        style={{
-          margin: 0,
-          color: "#666",
-          fontSize: 14,
-          lineHeight: 1.55,
-        }}
-      >
+      <h1 style={{ ...pageH1Style, fontSize: 24, margin: "12px 0 4px" }}>Stripe Connect</h1>
+      <p style={pageSubStyle}>
         Each organization connects its own Stripe account. Registration
         money lands directly in your account; we collect a small platform
         fee on top. Stripe handles all card data, refunds, and payouts.
@@ -176,18 +191,7 @@ export default function OrgStripeSettingsPage() {
       </div>
 
       {error && (
-        <div
-          style={{
-            marginTop: 16,
-            padding: 12,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderRadius: 6,
-            color: "#991b1b",
-            fontSize: 13,
-            lineHeight: 1.55,
-          }}
-        >
+        <div style={{ ...statusPanelStyle("danger"), marginTop: 16 }}>
           {error}
         </div>
       )}
@@ -235,7 +239,7 @@ export default function OrgStripeSettingsPage() {
               type="button"
               onClick={() => void onConnect("express")}
               disabled={connecting}
-              style={primaryBtn(connecting)}
+              style={connecting ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
             >
               {connecting
                 ? "Opening Stripe…"
@@ -245,7 +249,7 @@ export default function OrgStripeSettingsPage() {
               type="button"
               onClick={() => void refreshStatus()}
               disabled={refreshing}
-              style={primaryBtn(refreshing)}
+              style={refreshing ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
             >
               {refreshing ? "Refreshing…" : "Refresh status"}
             </button>
@@ -256,7 +260,7 @@ export default function OrgStripeSettingsPage() {
             type="button"
             onClick={() => void onConnect("express")}
             disabled={connecting}
-            style={primaryBtn(connecting)}
+            style={connecting ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
           >
             {connecting ? "Opening Stripe…" : "Continue Stripe onboarding →"}
           </button>
@@ -266,7 +270,7 @@ export default function OrgStripeSettingsPage() {
             type="button"
             onClick={() => void refreshStatus()}
             disabled={refreshing}
-            style={primaryBtn(refreshing)}
+            style={refreshing ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
           >
             {refreshing ? "Refreshing…" : "Refresh status"}
           </button>
@@ -276,7 +280,7 @@ export default function OrgStripeSettingsPage() {
             href={`https://dashboard.stripe.com/test/connect/accounts/${accountId}`}
             target="_blank"
             rel="noreferrer"
-            style={{ ...secondaryBtn, textDecoration: "none" }}
+            style={stripeExternalLinkStyle}
           >
             Open this account in Stripe ↗
           </a>
@@ -286,11 +290,7 @@ export default function OrgStripeSettingsPage() {
             type="button"
             onClick={() => setConfirmDisconnect(true)}
             disabled={disconnecting}
-            style={{
-              ...secondaryBtn,
-              color: "#b91c1c",
-              borderColor: "#fecaca",
-            }}
+            style={disconnectBtnStyle}
           >
             Disconnect Stripe
           </button>
@@ -300,18 +300,14 @@ export default function OrgStripeSettingsPage() {
       {diagnostics && status !== "active" && status !== "not_connected" && (
         <div
           style={{
+            ...panelMutedStyle,
             marginTop: 14,
-            padding: 12,
-            background: "#fafafa",
-            border: "1px solid #e5e7eb",
-            borderRadius: 6,
             fontSize: 12,
-            color: "#555",
-            lineHeight: 1.55,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            color: inkSoft,
+            fontFamily: monoFontStack,
           }}
         >
-          <div style={{ fontWeight: 600, marginBottom: 4, color: "#333" }}>
+          <div style={{ fontWeight: 600, marginBottom: 4, color: ink }}>
             Stripe says
           </div>
           <div>charges_enabled: {String(diagnostics.chargesEnabled)}</div>
@@ -322,8 +318,8 @@ export default function OrgStripeSettingsPage() {
           <div
             style={{
               marginTop: 8,
-              fontFamily: "inherit",
-              color: "#666",
+              fontFamily: bodyFontStack,
+              color: inkSoft,
             }}
           >
             {diagnostics.chargesEnabled
@@ -337,17 +333,13 @@ export default function OrgStripeSettingsPage() {
 
       <details
         style={{
+          ...panelMutedStyle,
           marginTop: 24,
-          padding: "10px 14px",
-          background: "#fafafa",
-          border: "1px solid #e5e7eb",
-          borderRadius: 6,
           fontSize: 12,
-          color: "#555",
-          lineHeight: 1.55,
+          color: inkSoft,
         }}
       >
-        <summary style={{ cursor: "pointer", fontWeight: 500 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 500, color: ink }}>
           How does Stripe Connect work?
         </summary>
         <div style={{ marginTop: 8 }}>
@@ -405,11 +397,9 @@ function ConnectChoiceCard({
   return (
     <div
       style={{
+        ...panelMutedStyle,
         position: "relative",
-        padding: 16,
-        background: "#fff",
-        border: `1px solid ${recommended ? "#2563eb" : "#e5e7eb"}`,
-        borderRadius: 8,
+        border: `1px solid ${recommended ? courtBlue : rule}`,
         display: "flex",
         flexDirection: "column",
         gap: 10,
@@ -421,41 +411,31 @@ function ConnectChoiceCard({
             position: "absolute",
             top: -10,
             left: 12,
-            background: "#2563eb",
-            color: "#fff",
+            background: courtBlue,
+            color: bg,
             fontSize: 10,
-            fontWeight: 600,
+            fontWeight: 700,
             padding: "2px 8px",
             borderRadius: 3,
             textTransform: "uppercase",
-            letterSpacing: 0.5,
+            letterSpacing: "0.08em",
+            fontFamily: "inherit",
           }}
         >
           Recommended
         </span>
       )}
-      <div style={{ fontSize: 15, fontWeight: 600, color: "#222" }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: ink }}>
         {title}
       </div>
-      <div style={{ fontSize: 13, color: "#555", lineHeight: 1.55, flex: 1 }}>
+      <div style={{ fontSize: 13, color: inkSoft, lineHeight: 1.55, flex: 1 }}>
         {blurb}
       </div>
       <button
         type="button"
         onClick={onClick}
         disabled={disabled}
-        style={{
-          padding: "9px 14px",
-          background: disabled ? "#9ca3af" : "#2563eb",
-          color: "#fff",
-          border: "none",
-          borderRadius: 6,
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: disabled ? "not-allowed" : "pointer",
-          fontFamily: "inherit",
-          marginTop: 4,
-        }}
+        style={disabled ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
       >
         {cta}
       </button>
@@ -475,33 +455,33 @@ function StripeStatusCard({
     { bg: string; border: string; fg: string; label: string; desc: string }
   > = {
     not_connected: {
-      bg: "#fffbeb",
-      border: "#fde68a",
-      fg: "#7a5d00",
+      bg: warnBg,
+      border: creamDeep,
+      fg: warnFg,
       label: "Not connected",
       desc:
         "No Stripe account is linked yet. Until one is connected, registrations save as 'paid' without actually charging — fine for testing, not for production.",
     },
     pending: {
-      bg: "#fef3c7",
-      border: "#fde68a",
-      fg: "#92400e",
+      bg: warnBg,
+      border: creamDeep,
+      fg: warnFg,
       label: "Onboarding in progress",
       desc:
         "Your Stripe account exists but verification isn't complete. Either continue onboarding or refresh below to pull the latest status.",
     },
     active: {
-      bg: "#dcfce7",
-      border: "#bbf7d0",
-      fg: "#166534",
+      bg: successBg,
+      border: courtGreen,
+      fg: successFg,
       label: "✓ Stripe connected",
       desc:
         "Your organization is ready to accept payments. Registration money will move directly to your Stripe account.",
     },
     restricted: {
-      bg: "#fef2f2",
-      border: "#fecaca",
-      fg: "#991b1b",
+      bg: dangerBg,
+      border: courtRed,
+      fg: dangerFg,
       label: "⚠ Account restricted",
       desc:
         "Stripe has restricted this account — usually missing verification or a compliance flag. Resolve from your Stripe dashboard, then come back and refresh.",
@@ -537,7 +517,7 @@ function StripeStatusCard({
             fontSize: 11,
             color: p.fg,
             opacity: 0.7,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontFamily: monoFontStack,
           }}
         >
           Account: {accountId}
@@ -567,27 +547,23 @@ async function extractError(fnErr: unknown): Promise<string> {
 
 // ─── styles ──────────────────────────────────────────────────────────
 
-function primaryBtn(busy: boolean): CSSProperties {
-  return {
-    padding: "10px 22px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
-    border: "none",
-    borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
-    cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
-  };
-}
+const stripeExternalLinkStyle: CSSProperties = {
+  ...ctaPrimaryStyle,
+  textDecoration: "none",
+  background: "transparent",
+  color: ink,
+  boxShadow: `inset 0 0 0 2px ${ink}`,
+};
 
-const secondaryBtn: CSSProperties = {
+const disconnectBtnStyle: CSSProperties = {
   padding: "10px 22px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
+  background: "transparent",
+  color: courtRed,
+  border: `2px solid ${courtRed}`,
+  borderRadius: 8,
+  fontWeight: 600,
   fontSize: 14,
   cursor: "pointer",
   fontFamily: "inherit",
 };
+

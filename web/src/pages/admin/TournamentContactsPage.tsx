@@ -1,9 +1,25 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  courtBlue,
+  courtRed,
+  pageH1Style,
+  panelStyle,
+  panelMutedStyle,
+  ctaPrimaryStyle,
+  ctaSecondaryStyle,
+  inputStyle,
+  statusPanelStyle,
+  bodyFontStack,
+  breadcrumbLinkStyle,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Contact = Database["public"]["Tables"]["tournament_contacts"]["Row"];
@@ -173,16 +189,16 @@ export default function TournamentContactsPage() {
     void load();
   };
 
-  if (!org || loading) return <div style={pageStyle}>Loading…</div>;
-  if (error) return <div style={pageStyle}><div style={errorStyle}>{error}</div></div>;
+  if (!org || loading) return <div style={{ padding: "24px 32px", maxWidth: 720, color: inkSoft, fontFamily: bodyFontStack }}>Loading…</div>;
+  if (error) return <div style={{ padding: "24px 32px", maxWidth: 720, fontFamily: bodyFontStack }}><div style={{ color: courtRed, fontSize: 13 }}>{error}</div></div>;
   if (!tournament) return null;
 
   return (
-    <div style={pageStyle}>
-      <nav style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
+    <div style={{ padding: "24px 32px", maxWidth: 720, fontFamily: bodyFontStack }}>
+      <nav style={{ fontSize: 13, color: inkMuted, marginBottom: 16 }}>
         <Link
           to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-          style={{ color: "#2563eb", textDecoration: "none" }}
+          style={breadcrumbLinkStyle}
         >
           {tournament.name}
         </Link>
@@ -190,11 +206,11 @@ export default function TournamentContactsPage() {
       </nav>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Tournament Contacts</h1>
+        <h1 style={{ ...pageH1Style, margin: 0 }}>Tournament Contacts</h1>
         {!showAdd && (
           <button
             onClick={() => { setShowAdd(true); setAddDraft(emptyDraft()); setAddError(null); }}
-            style={primaryBtn}
+            style={ctaPrimaryStyle}
           >
             + Add contact
           </button>
@@ -202,21 +218,21 @@ export default function TournamentContactsPage() {
       </div>
 
       {showAdd && (
-        <div style={formCardStyle}>
-          <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600 }}>New contact</h2>
+        <div style={{ ...panelStyle, marginBottom: 8 }}>
+          <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600, color: ink }}>New contact</h2>
           <ContactForm
             draft={addDraft}
             onChange={setAddDraft}
             error={addError}
           />
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            <button onClick={handleAdd} disabled={addBusy} style={primaryBtn}>
+            <button onClick={handleAdd} disabled={addBusy} style={addBusy ? { ...ctaPrimaryStyle, opacity: 0.7 } : ctaPrimaryStyle}>
               {addBusy ? "Saving…" : "Save contact"}
             </button>
             <button
               onClick={() => { setShowAdd(false); setAddError(null); }}
               disabled={addBusy}
-              style={secondaryBtn}
+              style={ctaSecondaryStyle}
             >
               Cancel
             </button>
@@ -225,26 +241,26 @@ export default function TournamentContactsPage() {
       )}
 
       {contacts.length === 0 && !showAdd ? (
-        <div style={emptyStyle}>No contacts yet.</div>
+        <div style={{ padding: "24px 0", color: inkMuted, fontSize: 13 }}>No contacts yet.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {contacts.map((c, idx) =>
             editingId === c.id ? (
-              <div key={c.id} style={formCardStyle}>
-                <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600 }}>Edit contact</h2>
+              <div key={c.id} style={{ ...panelStyle, marginBottom: 8 }}>
+                <h2 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 600, color: ink }}>Edit contact</h2>
                 <ContactForm
                   draft={editDraft}
                   onChange={setEditDraft}
                   error={editError}
                 />
                 <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-                  <button onClick={handleSaveEdit} disabled={editBusy} style={primaryBtn}>
+                  <button onClick={handleSaveEdit} disabled={editBusy} style={editBusy ? { ...ctaPrimaryStyle, opacity: 0.7 } : ctaPrimaryStyle}>
                     {editBusy ? "Saving…" : "Save"}
                   </button>
                   <button
                     onClick={() => { setEditingId(null); setEditError(null); }}
                     disabled={editBusy}
-                    style={secondaryBtn}
+                    style={ctaSecondaryStyle}
                   >
                     Cancel
                   </button>
@@ -290,9 +306,9 @@ function ContactForm({
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {error && <div style={inlineErrorStyle}>{error}</div>}
-      <div style={fieldRowStyle}>
-        <label style={labelStyle}>Name *</label>
+      {error && <div style={statusPanelStyle("danger")}>{error}</div>}
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, alignItems: "center" }}>
+        <label style={{ fontSize: 13, color: inkSoft, fontWeight: 500 }}>Name *</label>
         <input
           style={inputStyle}
           value={draft.name}
@@ -301,8 +317,8 @@ function ContactForm({
           autoFocus
         />
       </div>
-      <div style={fieldRowStyle}>
-        <label style={labelStyle}>Role</label>
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, alignItems: "center" }}>
+        <label style={{ fontSize: 13, color: inkSoft, fontWeight: 500 }}>Role</label>
         <input
           style={inputStyle}
           value={draft.role}
@@ -310,8 +326,8 @@ function ContactForm({
           placeholder="e.g. Registration, On-site contact"
         />
       </div>
-      <div style={fieldRowStyle}>
-        <label style={labelStyle}>Phone</label>
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, alignItems: "center" }}>
+        <label style={{ fontSize: 13, color: inkSoft, fontWeight: 500 }}>Phone</label>
         <input
           style={inputStyle}
           value={draft.phone}
@@ -320,8 +336,8 @@ function ContactForm({
           type="tel"
         />
       </div>
-      <div style={fieldRowStyle}>
-        <label style={labelStyle}>Email</label>
+      <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 8, alignItems: "center" }}>
+        <label style={{ fontSize: 13, color: inkSoft, fontWeight: 500 }}>Email</label>
         <input
           style={inputStyle}
           value={draft.email}
@@ -331,7 +347,7 @@ function ContactForm({
         />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-        <label style={checkboxLabelStyle}>
+        <label style={{ fontSize: 13, color: inkSoft, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={draft.is_public}
@@ -339,14 +355,7 @@ function ContactForm({
           />
           {" Show on public tournament page"}
         </label>
-        {draft.is_public && (
-          <div style={spamWarningStyle}>
-            Publicly displayed names, emails, and phone numbers can be collected
-            by spam bots. Consider using a role-based address (e.g.{" "}
-            <em>info@example.com</em>) instead of a personal one.
-          </div>
-        )}
-        <label style={checkboxLabelStyle}>
+        <label style={{ fontSize: 13, color: inkSoft, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
           <input
             type="checkbox"
             checked={draft.receives_form_messages}
@@ -378,13 +387,13 @@ function ContactRow({
 }) {
   const busy = reorderBusy === contact.id;
   return (
-    <div style={rowCardStyle}>
+    <div style={{ ...panelMutedStyle, display: "flex", gap: 12, alignItems: "flex-start" }}>
       <div style={{ display: "flex", gap: 4, flexDirection: "column" }}>
         <button
           onClick={() => onMove(-1)}
           disabled={idx === 0 || busy}
           title="Move up"
-          style={reorderBtn(idx === 0 || busy)}
+          style={reorderBtnStyle(idx === 0 || busy)}
           aria-label="Move up"
         >
           ▲
@@ -393,7 +402,7 @@ function ContactRow({
           onClick={() => onMove(1)}
           disabled={idx === total - 1 || busy}
           title="Move down"
-          style={reorderBtn(idx === total - 1 || busy)}
+          style={reorderBtnStyle(idx === total - 1 || busy)}
           aria-label="Move down"
         >
           ▼
@@ -402,9 +411,9 @@ function ContactRow({
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 600, fontSize: 14 }}>{contact.name}</span>
+          <span style={{ fontWeight: 600, fontSize: 14, color: ink }}>{contact.name}</span>
           {contact.role && (
-            <span style={{ fontSize: 12, color: "#777" }}>{contact.role}</span>
+            <span style={{ fontSize: 12, color: inkSoft }}>{contact.role}</span>
           )}
           {!contact.is_public && (
             <span style={privateBadgeStyle}>Private</span>
@@ -415,182 +424,73 @@ function ContactRow({
         </div>
         <div style={{ display: "flex", gap: 16, marginTop: 4, flexWrap: "wrap" }}>
           {contact.phone && (
-            <span style={{ fontSize: 12, color: "#555" }}>{contact.phone}</span>
+            <span style={{ fontSize: 12, color: inkSoft }}>{contact.phone}</span>
           )}
           {contact.email && (
-            <span style={{ fontSize: 12, color: "#555" }}>{contact.email}</span>
+            <span style={{ fontSize: 12, color: inkSoft }}>{contact.email}</span>
           )}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <button onClick={onEdit} style={rowActionBtn}>Edit</button>
-        <button onClick={onDelete} style={rowDeleteBtn}>Remove</button>
+        <button onClick={onEdit} style={rowEditBtnStyle}>Edit</button>
+        <button onClick={onDelete} style={rowDeleteBtnStyle}>Remove</button>
       </div>
     </div>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
-const pageStyle: CSSProperties = {
-  padding: "24px 32px",
-  maxWidth: 720,
-};
-
-const errorStyle: CSSProperties = {
-  color: "#dc2626",
-  fontSize: 13,
-};
-
-const inlineErrorStyle: CSSProperties = {
-  color: "#dc2626",
-  fontSize: 12,
-  padding: "6px 10px",
-  background: "#fef2f2",
-  border: "1px solid #fecaca",
-  borderRadius: 4,
-};
-
-const emptyStyle: CSSProperties = {
-  padding: "24px 0",
-  color: "#888",
-  fontSize: 13,
-};
-
-const formCardStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 8,
-  padding: 20,
-  marginBottom: 8,
-};
-
-const rowCardStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 8,
-  padding: "12px 16px",
-  display: "flex",
-  gap: 12,
-  alignItems: "flex-start",
-};
-
-const fieldRowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "120px 1fr",
-  gap: 8,
-  alignItems: "center",
-};
-
-const labelStyle: CSSProperties = {
-  fontSize: 13,
-  color: "#555",
-  fontWeight: 500,
-};
-
-const checkboxLabelStyle: CSSProperties = {
-  fontSize: 13,
-  color: "#444",
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  cursor: "pointer",
-};
-
-const inputStyle: CSSProperties = {
-  padding: "6px 10px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 4,
-  fontSize: 13,
-  fontFamily: "inherit",
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-const primaryBtn: CSSProperties = {
-  padding: "6px 14px",
-  background: "#2563eb",
-  color: "#fff",
-  border: "none",
-  borderRadius: 6,
-  fontSize: 13,
-  fontWeight: 500,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const secondaryBtn: CSSProperties = {
-  padding: "6px 14px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 13,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const rowActionBtn: CSSProperties = {
-  padding: "4px 10px",
-  background: "#fff",
-  color: "#2563eb",
-  border: "1px solid #2563eb",
-  borderRadius: 4,
-  fontSize: 12,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const rowDeleteBtn: CSSProperties = {
-  padding: "4px 10px",
-  background: "#fff",
-  color: "#dc2626",
-  border: "1px solid #fecaca",
-  borderRadius: 4,
-  fontSize: 12,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-function reorderBtn(disabled: boolean): CSSProperties {
+function reorderBtnStyle(disabled: boolean) {
   return {
     padding: "2px 6px",
     background: "transparent",
-    color: disabled ? "#ddd" : "#888",
+    color: disabled ? "#ddd" : inkMuted,
     border: "none",
     borderRadius: 3,
     fontSize: 10,
     cursor: disabled ? "default" : "pointer",
     fontFamily: "inherit",
     lineHeight: 1,
-  };
+  } as const;
 }
 
-const privateBadgeStyle: CSSProperties = {
+const privateBadgeStyle = {
   padding: "2px 6px",
   background: "#f3f4f6",
-  color: "#6b7280",
+  color: inkMuted,
   borderRadius: 4,
   fontSize: 11,
   fontWeight: 500,
 };
 
-const msgBadgeStyle: CSSProperties = {
+const msgBadgeStyle = {
   padding: "2px 6px",
   background: "#eff6ff",
-  color: "#1d4ed8",
+  color: courtBlue,
   borderRadius: 4,
   fontSize: 11,
   fontWeight: 500,
 };
 
-const spamWarningStyle: CSSProperties = {
-  padding: "8px 12px",
-  background: "#fffbeb",
-  border: "1px solid #fcd34d",
+const rowEditBtnStyle = {
+  padding: "4px 10px",
+  background: "transparent",
+  color: courtBlue,
+  border: `1px solid ${courtBlue}`,
   borderRadius: 4,
-  color: "#92400e",
   fontSize: 12,
-  lineHeight: 1.5,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
+
+const rowDeleteBtnStyle = {
+  padding: "4px 10px",
+  background: "transparent",
+  color: courtRed,
+  border: `1px solid ${courtRed}`,
+  borderRadius: 4,
+  fontSize: 12,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+

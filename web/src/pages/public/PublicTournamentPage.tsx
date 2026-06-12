@@ -2146,6 +2146,7 @@ function EventCard({
       <RosterToggleBar
         rosterRows={rosterRows}
         isDoubles={isDoubles}
+        maxTeams={event.max_teams}
         rosterOpen={rosterOpen}
         onToggle={() => setRosterOpen((o) => !o)}
       />
@@ -2161,7 +2162,6 @@ function EventCard({
               myStatus.state === "pending_payment" ||
               myStatus.state === "awaiting_partner")
           }
-          pendingInviteeName={myStatus?.pendingInviteeName ?? null}
           onPartnerUp={handlePartnerUp}
         />
       )}
@@ -2422,35 +2422,38 @@ function rosterRating(row: RosterRow, event: Event): number | null {
   return (row.self_rating_doubles as number | null);
 }
 
-// Team-slot count for the toggle bar label.
-// Doubles: confirmed pairs each count as 1 team; every non-confirmed
-// registration counts as 1 individual slot.
-// Singles: one row = one player.
-function countTeamSlots(rows: RosterRow[], isDoubles: boolean): number {
-  if (!isDoubles) return rows.length;
-  const confirmedCount = rows.filter(
-    (r) => r.partner_status === "confirmed",
-  ).length;
-  const nonConfirmedCount = rows.length - confirmedCount;
-  return confirmedCount / 2 + nonConfirmedCount;
-}
 
 function RosterToggleBar({
   rosterRows,
   isDoubles,
+  maxTeams,
   rosterOpen,
   onToggle,
 }: {
   rosterRows: RosterRow[];
   isDoubles: boolean;
+  maxTeams: number | null;
   rosterOpen: boolean;
   onToggle: () => void;
 }) {
-  const teamSlots = countTeamSlots(rosterRows, isDoubles);
-  const seekerCount = rosterRows.filter(
-    (r) => r.partner_status === "seeking",
-  ).length;
-  const label = isDoubles ? "teams" : "players";
+  let countLabel: string;
+  if (isDoubles) {
+    const confirmedPairs = rosterRows.filter(
+      (r) => r.partner_status === "confirmed",
+    ).length / 2;
+    const pendingCount = rosterRows.filter(
+      (r) => r.partner_status === "pending",
+    ).length;
+    const openSeekerCount = rosterRows.filter(
+      (r) => r.partner_status === "seeking" && r.pending_partner_reg_id === null,
+    ).length;
+    const totalTeams = Math.floor(confirmedPairs) + pendingCount + openSeekerCount;
+    const formingCount = pendingCount + openSeekerCount;
+    const cap = maxTeams ? ` of ${maxTeams}` : "";
+    countLabel = `${totalTeams}${cap} teams${formingCount > 0 ? ` · ${formingCount} still forming` : ""}`;
+  } else {
+    countLabel = `${rosterRows.length} player${rosterRows.length !== 1 ? "s" : ""}`;
+  }
 
   return (
     <div
@@ -2464,24 +2467,7 @@ function RosterToggleBar({
         flexWrap: "wrap",
       }}
     >
-      <span style={{ fontSize: 12, color: "#555" }}>
-        {teamSlots} {label}
-      </span>
-      {seekerCount > 0 && (
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            color: "#1e40af",
-            background: "#dbeafe",
-            border: "1px solid #bfdbfe",
-            borderRadius: 999,
-            padding: "2px 8px",
-          }}
-        >
-          {seekerCount} seeking partner
-        </span>
-      )}
+      <span style={{ fontSize: 12, color: "#555" }}>{countLabel}</span>
       <button
         type="button"
         onClick={onToggle}
@@ -2520,124 +2506,230 @@ function RosterPanel({
   isDoubles,
   myRegId,
   myIsRegistered,
-  pendingInviteeName,
   onPartnerUp,
 }: {
   rosterRows: RosterRow[];
   event: Event;
   isDoubles: boolean;
   myRegId: string | null;
-  // True when the current user already has any active reg for this event
-  // (paid/pending_payment/awaiting_partner). Hides "Partner up →" on seekers.
   myIsRegistered: boolean;
-  // When the signed-in user has a pending outbound invite to a named
-  // player, that player's name is passed here. RosterPanel uses it to
-  // suppress the seeker from "Looking for a partner" (they already
-  // received an invite) and surface them as a pending partner instead.
-  // Viewer-specific: only affects the inviting user's view (#212).
-  pendingInviteeName: { first_name: string; last_name: string } | null;
   onPartnerUp: (seeker: { first_name: string; last_name: string }) => void;
 }) {
-  // The seeker the current user invited via "Partner up" — suppress
-  // from the seekers list and inject as a pending partner row instead.
-  const invitedSeekerRow = pendingInviteeName
-    ? rosterRows.find(
-        (r) =>
-          r.partner_status === "seeking" &&
-          r.first_name === pendingInviteeName.first_name &&
-          r.last_name === pendingInviteeName.last_name,
-      ) ?? null
-    : null;
-
-  const seekers = rosterRows.filter(
-    (r) =>
-      r.partner_status === "seeking" &&
-      !(
-        invitedSeekerRow &&
-        r.registration_id === invitedSeekerRow.registration_id
-      ),
-  );
-  const nonSeekers = rosterRows.filter((r) => r.partner_status !== "seeking");
-
-  // Group doubles non-seekers into pairs. Each confirmed pair has two
-  // rows pointing at each other via registration_id ↔
-  // partner_registration_id. Unconfirmed rows render as singles.
-  const teams: RosterRow[][] = [];
-  if (isDoubles) {
-    const placed = new Set<string>();
-    for (const row of nonSeekers) {
-      if (placed.has(row.registration_id)) continue;
-      placed.add(row.registration_id);
-      if (row.partner_registration_id) {
-        const partner = nonSeekers.find(
-          (r) => r.registration_id === row.partner_registration_id,
-        );
-        if (partner && !placed.has(partner.registration_id)) {
-          placed.add(partner.registration_id);
-          teams.push([row, partner]);
-          continue;
-        }
-      }
-      teams.push([row]);
-    }
-  } else {
-    for (const row of nonSeekers) teams.push([row]);
-  }
-
-  // Sort: current user's team/row first.
-  const myTeamIdx = teams.findIndex((t) =>
-    t.some((r) => r.registration_id === myRegId),
-  );
-  if (myTeamIdx > 0) {
-    const [myTeam] = teams.splice(myTeamIdx, 1);
-    teams.unshift(myTeam);
-  }
-
-  // If the current user has a pending outbound invite to a seeker,
-  // inject that seeker row as the second member of their team so the
-  // pending pair appears under the inviter's name rather than in
-  // "Looking for a partner". Only applies when the team is still a
-  // single row (the invite hasn't been accepted / linked yet).
-  if (invitedSeekerRow && myRegId) {
-    const myIdx = teams.findIndex((t) =>
-      t.some((r) => r.registration_id === myRegId),
+  if (!isDoubles) {
+    // Singles: flat list unchanged from before.
+    return (
+      <div
+        style={{
+          marginTop: 8,
+          border: "1px solid #e5e7eb",
+          borderRadius: 6,
+          overflow: "hidden",
+        }}
+      >
+        {rosterRows.length === 0 ? (
+          <div style={{ padding: "14px 12px", fontSize: 12, color: "#888", textAlign: "center" }}>
+            No registrations yet.
+          </div>
+        ) : (
+          <>
+            <div
+              style={{
+                padding: "6px 10px",
+                background: "#f9fafb",
+                borderBottom: "1px solid #e5e7eb",
+                fontSize: 11,
+                fontWeight: 700,
+                color: "#555",
+                textTransform: "uppercase" as const,
+                letterSpacing: 0.5,
+              }}
+            >
+              Registered players
+            </div>
+            {rosterRows.map((row) => {
+              const isMe = row.registration_id === myRegId;
+              const rating = rosterRating(row, event);
+              const loc = [row.city as string | null, row.state as string | null]
+                .filter(Boolean).join(", ");
+              return (
+                <div
+                  key={row.registration_id}
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 56px 48px 1fr",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 12px",
+                    borderBottom: "1px solid #f3f4f6",
+                    background: isMe ? "#f0fdf4" : undefined,
+                  }}
+                >
+                  <span style={{ fontSize: 13.5, fontWeight: isMe ? 600 : 500, color: ink }}>
+                    {row.first_name} {row.last_name}
+                    {isMe && (
+                      <span style={{ marginLeft: 5, fontSize: 10, color: "#16a34a", fontWeight: 700 }}>
+                        ← you
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ fontSize: 12.5, color: "#555" }}>
+                    {rating != null ? rating.toFixed(2) : "--"}
+                  </span>
+                  <span style={{ fontSize: 12.5, color: "#555" }}>
+                    {row.gender ? capitalize(row.gender) : "--"}
+                  </span>
+                  <span style={{ fontSize: 12, color: "#888", textAlign: "right" }}>
+                    {loc || "--"}
+                  </span>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
     );
-    if (myIdx !== -1 && teams[myIdx].length === 1) {
-      teams[myIdx] = [teams[myIdx][0], invitedSeekerRow];
+  }
+
+  // Doubles: slot-teams layout (mock 5D).
+  //
+  // Each team block has up to two "slots":
+  //   confirmed pair  → slot1 + slot2: both green dots
+  //   pending inviter → slot1 (green) + amber slot (invitee name or "not registered yet")
+  //   open seeker     → slot1 (green) + dashed-ring open slot with "Partner up →"
+  //
+  // Seekers with pending_partner_reg_id are "spoken-for": they appear
+  // only as the amber slot inside the inviter's block, not as open slots.
+
+  const spokenForRegIds = new Set<string>(
+    rosterRows
+      .filter((r) => r.partner_status === "pending" && r.pending_partner_reg_id !== null)
+      .map((r) => r.pending_partner_reg_id as string),
+  );
+
+  type Block =
+    | { kind: "confirmed"; a: RosterRow; b: RosterRow }
+    | { kind: "pending"; inviter: RosterRow }
+    | { kind: "seeker"; row: RosterRow };
+
+  const blocks: Block[] = [];
+  const placed = new Set<string>();
+
+  for (const row of rosterRows) {
+    if (row.partner_status !== "confirmed") continue;
+    if (placed.has(row.registration_id)) continue;
+    placed.add(row.registration_id);
+    const partner = rosterRows.find(
+      (r) => r.registration_id === row.partner_registration_id,
+    );
+    if (partner && !placed.has(partner.registration_id)) {
+      placed.add(partner.registration_id);
+      blocks.push({ kind: "confirmed", a: row, b: partner });
     }
   }
 
-  // Sort seekers: current user first.
-  const seekersSorted = [...seekers].sort((a) =>
-    a.registration_id === myRegId ? -1 : 0,
+  for (const row of rosterRows) {
+    if (row.partner_status === "pending") {
+      blocks.push({ kind: "pending", inviter: row });
+    }
+  }
+
+  for (const row of rosterRows) {
+    if (row.partner_status === "seeking" && !spokenForRegIds.has(row.registration_id)) {
+      blocks.push({ kind: "seeker", row });
+    }
+  }
+
+  // Sort: bubble my block (or the block where I'm the amber invitee) to front.
+  const myBlockIdx = blocks.findIndex((b) => {
+    if (b.kind === "confirmed") return b.a.registration_id === myRegId || b.b.registration_id === myRegId;
+    if (b.kind === "pending") {
+      return (
+        b.inviter.registration_id === myRegId ||
+        (myRegId !== null && b.inviter.pending_partner_reg_id === myRegId)
+      );
+    }
+    return b.row.registration_id === myRegId;
+  });
+  if (myBlockIdx > 0) {
+    const [mine] = blocks.splice(myBlockIdx, 1);
+    blocks.unshift(mine);
+  }
+
+  const isMeSeeker = rosterRows.some(
+    (r) => r.partner_status === "seeking" && r.registration_id === myRegId,
   );
 
-  const isMeSeeker = seekers.some((r) => r.registration_id === myRegId);
-  const colStyle: CSSProperties = {
-    fontSize: 12,
-    color: "#555",
-    padding: "4px 6px",
-    verticalAlign: "middle",
+  const dotStyle = (color: string, dashed = false): CSSProperties => ({
+    display: "inline-block",
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    flexShrink: 0,
+    ...(dashed
+      ? { background: "transparent", border: "2px dashed #c9b58a" }
+      : { background: color }),
+  });
+
+  const slotRowBase: CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "1fr 56px 48px 1fr",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 12px",
   };
 
-  // Shared fixed column tracks so every roster table — the seekers
-  // table and each per-team table — lines its columns up at the same
-  // x-positions regardless of name length. Without this each table
-  // auto-sizes to its own content and the columns drift row to row.
-  // Order: name · rating · age · gender · location/action.
-  const RosterCols = () => (
-    <colgroup>
-      <col style={{ width: "40%" }} />
-      <col style={{ width: "13%" }} />
-      <col style={{ width: "10%" }} />
-      <col style={{ width: "12%" }} />
-      <col style={{ width: "25%" }} />
-    </colgroup>
+  const partnerUpBtnStyle: CSSProperties = {
+    padding: "4px 10px",
+    background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  };
+
+  const renderNameCell = (
+    firstName: string,
+    lastName: string,
+    isMe: boolean,
+    meColor = "#16a34a",
+  ) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+      <span
+        style={{
+          fontSize: 13.5,
+          fontWeight: isMe ? 600 : 500,
+          color: ink,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {firstName} {lastName}
+      </span>
+      {isMe && (
+        <span style={{ fontSize: 10, color: meColor, fontWeight: 700, flexShrink: 0 }}>
+          ← you
+        </span>
+      )}
+    </div>
   );
-  const tableStyle: CSSProperties = {
-    width: "100%",
-    borderCollapse: "collapse",
-    tableLayout: "fixed",
+
+  const renderRating = (row: RosterRow) => {
+    const r = rosterRating(row, event);
+    return <span style={{ fontSize: 12.5, color: "#555" }}>{r != null ? r.toFixed(2) : "--"}</span>;
+  };
+
+  const renderGender = (row: RosterRow) => (
+    <span style={{ fontSize: 12.5, color: "#555" }}>{row.gender ? capitalize(row.gender) : "--"}</span>
+  );
+
+  const renderLoc = (row: RosterRow) => {
+    const loc = [row.city as string | null, row.state as string | null].filter(Boolean).join(", ");
+    return <span style={{ fontSize: 12, color: "#888", textAlign: "right" }}>{loc || "--"}</span>;
   };
 
   return (
@@ -2649,277 +2741,227 @@ function RosterPanel({
         overflow: "hidden",
       }}
     >
-      {/* Section 1: seeking partner */}
-      {seekersSorted.length > 0 && (
-        <div>
-          <div
-            style={{
-              padding: "6px 10px",
-              background: "#eff6ff",
-              borderBottom: "1px solid #bfdbfe",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "#1e40af",
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-            }}
-          >
-            Looking for a partner
-          </div>
-          <table style={tableStyle}>
-            <RosterCols />
-            <tbody>
-              {seekersSorted.map((row) => {
-                const isMe = row.registration_id === myRegId;
-                const rating = rosterRating(row, event);
-                return (
-                  <tr
-                    key={row.registration_id}
-                    style={{
-                      background: isMe ? "#eff6ff" : undefined,
-                      borderBottom: "1px solid #f3f4f6",
-                    }}
-                  >
-                    <td style={{ ...colStyle, fontWeight: isMe ? 600 : undefined }}>
-                      {row.first_name} {row.last_name}
-                      {isMe && (
-                        <span
-                          style={{
-                            marginLeft: 5,
-                            fontSize: 10,
-                            color: "#2563eb",
-                            fontWeight: 700,
-                          }}
-                        >
-                          ← you
-                        </span>
-                      )}
-                    </td>
-                    <td style={colStyle}>
-                      {rating != null ? rating.toFixed(2) : "--"}
-                    </td>
-                    <td style={colStyle}>
-                      {(row.age as number | null) != null ? String(row.age) : "--"}
-                    </td>
-                    <td style={colStyle}>
-                      {row.gender ? capitalize(row.gender) : "--"}
-                    </td>
-                    <td style={{ ...colStyle, textAlign: "right" }}>
-                      {!isMe && !myIsRegistered && !isMeSeeker && (
-                        <button
-                          type="button"
-                          onClick={() => onPartnerUp(row)}
-                          style={{
-                            padding: "4px 10px",
-                            background: "#2563eb",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 4,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Partner up →
-                        </button>
-                      )}
-                      {isMeSeeker && !isMe && (
-                        <button
-                          type="button"
-                          onClick={() => onPartnerUp(row)}
-                          style={{
-                            padding: "4px 10px",
-                            background: "#2563eb",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 4,
-                            fontSize: 11,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          Partner up →
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {blocks.length === 0 && (
+        <div style={{ padding: "14px 12px", fontSize: 12, color: "#888", textAlign: "center" }}>
+          No registrations yet.
         </div>
       )}
-
-      {/* Section 2: registered teams / players */}
-      {teams.length > 0 && (
-        <div>
+      {blocks.length > 0 && (
+        <>
           <div
             style={{
               padding: "6px 10px",
               background: "#f9fafb",
-              borderTop: seekersSorted.length > 0 ? "1px solid #e5e7eb" : undefined,
               borderBottom: "1px solid #e5e7eb",
               fontSize: 11,
               fontWeight: 700,
               color: "#555",
-              textTransform: "uppercase",
+              textTransform: "uppercase" as const,
               letterSpacing: 0.5,
             }}
           >
-            {isDoubles ? "Registered teams" : "Registered players"}
+            Registered
           </div>
           <div style={{ background: "#fafafa", padding: "8px 8px 0" }}>
-            {teams.map((team, i) => {
-              const isMyTeam = team.some((r) => r.registration_id === myRegId);
-              const isPair = team.length === 2;
-              // A "pending pair" is one where the second row is the seeker
-              // the current viewer invited — not yet confirmed.
-              const isPendingPair =
-                isPair &&
-                !!invitedSeekerRow &&
-                team.some(
-                  (r) => r.registration_id === invitedSeekerRow.registration_id,
+            {blocks.map((block, bi) => {
+              if (block.kind === "confirmed") {
+                const isMeA = block.a.registration_id === myRegId;
+                const isMeB = block.b.registration_id === myRegId;
+                return (
+                  <div
+                    key={bi}
+                    style={{
+                      background: "#fff",
+                      border: isMeA || isMeB ? "1px solid #bbf7d0" : "1px solid #e5e7eb",
+                      borderRadius: 6,
+                      overflow: "hidden",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div style={{ ...slotRowBase, background: isMeA ? "#f0fdf4" : undefined }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                        <span style={dotStyle("#16a34a")} />
+                        {renderNameCell(block.a.first_name, block.a.last_name, isMeA)}
+                      </div>
+                      {renderRating(block.a)}
+                      {renderGender(block.a)}
+                      {renderLoc(block.a)}
+                    </div>
+                    <div style={{ ...slotRowBase, borderTop: "1px solid #f3f4f6", background: isMeB ? "#f0fdf4" : undefined }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                        <span style={dotStyle("#16a34a")} />
+                        {renderNameCell(block.b.first_name, block.b.last_name, isMeB)}
+                      </div>
+                      {renderRating(block.b)}
+                      {renderGender(block.b)}
+                      {renderLoc(block.b)}
+                    </div>
+                  </div>
                 );
+              }
+
+              if (block.kind === "pending") {
+                const isMe1 = block.inviter.registration_id === myRegId;
+                const isMeInvitee = myRegId !== null && block.inviter.pending_partner_reg_id === myRegId;
+                const inviterRating = rosterRating(block.inviter, event);
+                const inviterLoc = [block.inviter.city as string | null, block.inviter.state as string | null]
+                  .filter(Boolean).join(", ");
+                const hasRegisteredInvitee = block.inviter.pending_partner_reg_id !== null;
+                // For a registered invitee, look up their roster row for actual data.
+                const inviteeRow = hasRegisteredInvitee
+                  ? rosterRows.find((r) => r.registration_id === block.inviter.pending_partner_reg_id) ?? null
+                  : null;
+                const inviteeName = inviteeRow
+                  ? `${inviteeRow.first_name} ${inviteeRow.last_name}`
+                  : block.inviter.invited_partner_first_name
+                    ? `${block.inviter.invited_partner_first_name} ${block.inviter.invited_partner_last_name ?? ""}`.trim()
+                    : null;
+                const inviteeRating = inviteeRow ? rosterRating(inviteeRow, event) : null;
+                const isMyBlock = isMe1 || isMeInvitee;
+                return (
+                  <div
+                    key={bi}
+                    style={{
+                      background: "#fff",
+                      border: isMyBlock ? `1px solid ${courtYellow}` : "1px solid #e5e7eb",
+                      borderRadius: 6,
+                      overflow: "hidden",
+                      marginBottom: 8,
+                    }}
+                  >
+                    {/* Slot 1: inviter (green dot) */}
+                    <div style={{ ...slotRowBase, background: isMe1 ? "#fffbeb" : undefined }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                        <span style={dotStyle("#16a34a")} />
+                        {renderNameCell(block.inviter.first_name, block.inviter.last_name, isMe1)}
+                      </div>
+                      <span style={{ fontSize: 12.5, color: "#555" }}>
+                        {inviterRating != null ? inviterRating.toFixed(2) : "--"}
+                      </span>
+                      <span style={{ fontSize: 12.5, color: "#555" }}>
+                        {block.inviter.gender ? capitalize(block.inviter.gender) : "--"}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#888", textAlign: "right" }}>
+                        {inviterLoc || "--"}
+                      </span>
+                    </div>
+                    {/* Slot 2: amber dot — invited player */}
+                    <div
+                      style={{
+                        ...slotRowBase,
+                        borderTop: "1px solid #f3f4f6",
+                        background: "#fffbeb",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                        <span style={dotStyle("#d97706")} />
+                        {inviteeName ? (
+                          renderNameCell(
+                            inviteeName.split(" ")[0],
+                            inviteeName.split(" ").slice(1).join(" "),
+                            isMeInvitee,
+                            "#d97706",
+                          )
+                        ) : (
+                          <span style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>
+                            Invited player
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 12.5, color: inviteeRow ? "#555" : "#9ca3af" }}>
+                        {inviteeRating != null ? inviteeRating.toFixed(2) : "--"}
+                      </span>
+                      <span style={{ fontSize: 12.5, color: inviteeRow ? "#555" : "#9ca3af" }}>
+                        {inviteeRow?.gender ? capitalize(inviteeRow.gender) : "--"}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: "#92400e",
+                          textAlign: "right",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        {hasRegisteredInvitee
+                          ? "invited — awaiting reply"
+                          : "invited — not registered yet"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // kind === "seeker"
+              const isMe1 = block.row.registration_id === myRegId;
+              const seekerRating = rosterRating(block.row, event);
+              const seekerLoc = [block.row.city as string | null, block.row.state as string | null]
+                .filter(Boolean).join(", ");
+              const showPartnerUp =
+                !isMe1 && (!myIsRegistered || isMeSeeker);
               return (
                 <div
-                  key={i}
+                  key={bi}
                   style={{
                     background: "#fff",
-                    border: isPendingPair
-                      ? `1px solid ${courtYellow}`
-                      : isMyTeam
-                        ? "1px solid #bbf7d0"
-                        : "1px solid #e5e7eb",
+                    border: isMe1 ? "1px solid #bfdbfe" : "1px solid #e5e7eb",
                     borderRadius: 6,
                     overflow: "hidden",
                     marginBottom: 8,
                   }}
                 >
-                  <table style={tableStyle}>
-                    <RosterCols />
-                    <tbody>
-                      {team.map((row, ri) => {
-                        const isMe = row.registration_id === myRegId;
-                        const isPendingRow =
-                          isPendingPair &&
-                          !!invitedSeekerRow &&
-                          row.registration_id === invitedSeekerRow.registration_id;
-                        const rating = rosterRating(row, event);
-                        const loc = [row.city as string | null, row.state as string | null]
-                          .filter(Boolean)
-                          .join(", ");
-                        return (
-                          <tr
-                            key={row.registration_id}
-                            style={{
-                              background: isPendingRow
-                                ? warnBg
-                                : isMe
-                                  ? "#f0fdf4"
-                                  : undefined,
-                              borderBottom:
-                                isPair && ri === 0
-                                  ? "1px solid #e5e7eb"
-                                  : undefined,
-                            }}
-                          >
-                            <td style={{ ...colStyle, fontSize: 15, fontWeight: isMe ? 600 : undefined }}>
-                              {row.first_name} {row.last_name}
-                              {isMe && (
-                                <span
-                                  style={{
-                                    marginLeft: 5,
-                                    fontSize: 10,
-                                    color: "#16a34a",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  ← you
-                                </span>
-                              )}
-                              {isPendingRow && (
-                                <span
-                                  style={{
-                                    marginLeft: 6,
-                                    fontSize: 10,
-                                    color: warnFg,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  invited · pending
-                                </span>
-                              )}
-                            </td>
-                            <td style={colStyle}>
-                              {rating != null ? rating.toFixed(2) : "--"}
-                            </td>
-                            <td style={colStyle}>
-                              {(row.age as number | null) != null ? String(row.age) : "--"}
-                            </td>
-                            <td style={colStyle}>
-                              {row.gender ? capitalize(row.gender) : "--"}
-                            </td>
-                            <td style={{ ...colStyle, color: "#888" }}>
-                              {loc || "--"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {/* Ghost row: invited partner who hasn't registered yet.
-                          Visible only in doubles when the player sent an invite
-                          (partner_status='pending') that hasn't been accepted. */}
-                      {isDoubles && !isPair && team[0].invited_partner_first_name && (
-                        <tr style={{ borderTop: "1px dashed #e5e7eb" }}>
-                          <td
-                            style={{
-                              ...colStyle,
-                              color: "#9ca3af",
-                              fontStyle: "italic",
-                            }}
-                          >
-                            {team[0].invited_partner_first_name}{" "}
-                            {team[0].invited_partner_last_name}
-                            <span
-                              style={{
-                                marginLeft: 6,
-                                fontSize: 10,
-                                color: "#9ca3af",
-                                fontStyle: "normal",
-                              }}
-                            >
-                              invited — hasn't registered
-                            </span>
-                          </td>
-                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
-                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
-                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
-                          <td style={{ ...colStyle, color: "#d1d5db" }}>—</td>
-                        </tr>
+                  {/* Slot 1: seeker (green dot) */}
+                  <div style={{ ...slotRowBase, background: isMe1 ? "#eff6ff" : undefined }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                      <span style={dotStyle("#16a34a")} />
+                      {renderNameCell(block.row.first_name, block.row.last_name, isMe1, "#2563eb")}
+                    </div>
+                    <span style={{ fontSize: 12.5, color: "#555" }}>
+                      {seekerRating != null ? seekerRating.toFixed(2) : "--"}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: "#555" }}>
+                      {block.row.gender ? capitalize(block.row.gender) : "--"}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#888", textAlign: "right" }}>
+                      {seekerLoc || "--"}
+                    </span>
+                  </div>
+                  {/* Slot 2: open slot (dashed ring) */}
+                  <div
+                    style={{
+                      ...slotRowBase,
+                      borderTop: "1px solid #f3f4f6",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                      <span style={dotStyle("", true)} />
+                      <span style={{ fontSize: 13, color: "#9ca3af" }}>
+                        Open slot — seeking partner
+                      </span>
+                    </div>
+                    <span />
+                    <span />
+                    <div style={{ textAlign: "right" }}>
+                      {showPartnerUp && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onPartnerUp({
+                              first_name: block.row.first_name,
+                              last_name: block.row.last_name,
+                            })
+                          }
+                          style={partnerUpBtnStyle}
+                        >
+                          Partner up →
+                        </button>
                       )}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
-
-      {rosterRows.length === 0 && (
-        <div
-          style={{
-            padding: "14px 12px",
-            fontSize: 12,
-            color: "#888",
-            textAlign: "center",
-          }}
-        >
-          No registrations yet.
-        </div>
+        </>
       )}
     </div>
   );

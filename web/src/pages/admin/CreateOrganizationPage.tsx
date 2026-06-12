@@ -1,12 +1,26 @@
 import {
   useState,
-  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
+import {
+  ink,
+  inkSoft,
+  breadcrumbLinkStyle,
+  pageH1Style,
+  pageSubStyle,
+  panelStyle,
+  ctaPrimaryStyle,
+  ctaPrimaryDisabledStyle,
+  ctaSecondaryStyle,
+  inputStyle,
+  statusPanelStyle,
+  sectionH2Style,
+  bodyFontStack,
+} from "../../lib/publicTheme";
 
 // Super-admin form to spin up a new organization + provision its
 // initial owner in one go. Gated by usePlatformAdmin() — non-admins
@@ -35,16 +49,16 @@ export default function CreateOrganizationPage() {
   } | null>(null);
 
   if (isPlatformAdmin === null) {
-    return <div style={{ padding: 24, color: "#666" }}>Loading…</div>;
+    return <div style={{ padding: 24, color: inkSoft, fontFamily: bodyFontStack }}>Loading…</div>;
   }
   if (!isPlatformAdmin) {
     return (
-      <main style={{ padding: 24, maxWidth: 600, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 20 }}>Not authorized</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>
+      <main style={{ padding: 24, maxWidth: 600, margin: "0 auto", fontFamily: bodyFontStack }}>
+        <h1 style={{ ...pageH1Style, fontSize: 20 }}>Not authorized</h1>
+        <p style={{ color: inkSoft, fontSize: 14 }}>
           Creating organizations is restricted to platform admins.
         </p>
-        <Link to="/admin" style={{ color: "#2563eb", fontSize: 13 }}>
+        <Link to="/admin" style={breadcrumbLinkStyle}>
           ← Back to organizations
         </Link>
       </main>
@@ -114,22 +128,11 @@ export default function CreateOrganizationPage() {
 
   if (success) {
     return (
-      <main style={{ padding: 24, maxWidth: 640, margin: "0 auto" }}>
-        <h1 style={{ fontSize: 22, marginTop: 0 }}>
-          🎉 {success.name} created
+      <main style={{ padding: 24, maxWidth: 640, margin: "0 auto", fontFamily: bodyFontStack }}>
+        <h1 style={{ ...pageH1Style, marginTop: 0 }}>
+          {success.name} created
         </h1>
-        <div
-          style={{
-            padding: 14,
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            borderRadius: 8,
-            fontSize: 14,
-            color: "#166534",
-            lineHeight: 1.55,
-            marginTop: 14,
-          }}
-        >
+        <div style={{ ...statusPanelStyle("success"), marginTop: 14 }}>
           {success.ownerWasInvited ? (
             <>
               An invitation email was sent to{" "}
@@ -146,29 +149,13 @@ export default function CreateOrganizationPage() {
         <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
           <Link
             to={`/admin/${success.slug}`}
-            style={{
-              padding: "9px 18px",
-              background: "#2563eb",
-              color: "#fff",
-              textDecoration: "none",
-              borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500,
-            }}
+            style={{ ...ctaPrimaryStyle, textDecoration: "none" }}
           >
             Open {success.name} →
           </Link>
           <Link
             to="/admin"
-            style={{
-              padding: "9px 18px",
-              background: "#fff",
-              color: "#555",
-              textDecoration: "none",
-              border: "1px solid #e2e2e2",
-              borderRadius: 6,
-              fontSize: 13,
-            }}
+            style={{ ...ctaSecondaryStyle, textDecoration: "none" }}
           >
             Back to organizations
           </Link>
@@ -178,17 +165,14 @@ export default function CreateOrganizationPage() {
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 640, margin: "0 auto" }}>
-      <Link
-        to="/admin"
-        style={{ color: "#2563eb", fontSize: 13, textDecoration: "none" }}
-      >
+    <main style={{ padding: 24, maxWidth: 640, margin: "0 auto", fontFamily: bodyFontStack }}>
+      <Link to="/admin" style={breadcrumbLinkStyle}>
         ← Organizations
       </Link>
-      <h1 style={{ fontSize: 22, margin: "12px 0 4px" }}>
+      <h1 style={{ ...pageH1Style, margin: "12px 0 4px" }}>
         Create an organization
       </h1>
-      <p style={{ color: "#666", fontSize: 14, margin: 0 }}>
+      <p style={{ ...pageSubStyle, margin: 0 }}>
         Sets up the organization and provisions its initial owner. If the
         owner email doesn't already have an account, an invitation is sent.
       </p>
@@ -233,29 +217,14 @@ export default function CreateOrganizationPage() {
           </Field>
         </FieldRow>
 
-        <div
-          style={{
-            marginTop: 6,
-            padding: 14,
-            background: "#fafafa",
-            border: "1px solid #e5e7eb",
-            borderRadius: 8,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#333",
-              marginBottom: 4,
-            }}
-          >
+        <div style={{ ...panelStyle, marginTop: 6 }}>
+          <div style={{ ...sectionH2Style, fontSize: 13, marginBottom: 4 }}>
             Initial owner
           </div>
           <div
             style={{
               fontSize: 12,
-              color: "#666",
+              color: inkSoft,
               marginBottom: 12,
               lineHeight: 1.5,
             }}
@@ -295,16 +264,7 @@ export default function CreateOrganizationPage() {
         </div>
 
         {error && (
-          <div
-            style={{
-              padding: 12,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: 6,
-              color: "#991b1b",
-              fontSize: 13,
-            }}
-          >
+          <div style={statusPanelStyle("danger")}>
             {error}
           </div>
         )}
@@ -313,31 +273,13 @@ export default function CreateOrganizationPage() {
           <button
             type="submit"
             disabled={busy}
-            style={{
-              padding: "10px 22px",
-              background: busy ? "#9ca3af" : "#2563eb",
-              color: "#fff",
-              border: "none",
-              borderRadius: 6,
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: busy ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-            }}
+            style={busy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
           >
             {busy ? "Creating…" : "Create organization"}
           </button>
           <Link
             to="/admin"
-            style={{
-              padding: "10px 22px",
-              background: "#fff",
-              color: "#555",
-              textDecoration: "none",
-              border: "1px solid #e2e2e2",
-              borderRadius: 6,
-              fontSize: 14,
-            }}
+            style={{ ...ctaSecondaryStyle, textDecoration: "none" }}
           >
             Cancel
           </Link>
@@ -367,7 +309,7 @@ function Field({
         flexDirection: "column",
         gap: 4,
         fontSize: 13,
-        color: "#555",
+        color: inkSoft,
       }}
     >
       <span>
@@ -378,7 +320,7 @@ function Field({
       </span>
       {children}
       {hint && (
-        <span style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+        <span style={{ fontSize: 12, color: ink, opacity: 0.5, marginTop: 2 }}>
           {hint}
         </span>
       )}
@@ -399,16 +341,6 @@ function FieldRow({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: "9px 12px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 14,
-  fontFamily: "inherit",
-  boxSizing: "border-box",
-};
 
 function slugify(s: string): string {
   return s

@@ -16,39 +16,36 @@ import {
   type PricingTier,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  cream,
+  rule,
+  ruleSoft,
+  creamDeep,
+  courtBlue,
+  bodyFontStack,
+  headingFontStack,
+  displayFontStack,
+  monoFontStack,
+  dangerBg,
+  dangerFg,
+  successBg,
+  successFg,
+  warnBg,
+  warnFg,
+  infoBg,
+  infoFg,
+  breadcrumbLinkStyle,
+} from "../../lib/publicTheme";
 
 // Court count + venue details now live on the selected venue
 // (locations), joined in on the tournament fetch below.
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
-  locations: {
-    name: string;
-    address: string | null;
-    address_line2: string | null;
-    city: string | null;
-    state: string | null;
-    postal_code: string | null;
-    court_count: number | null;
-  } | null;
+  locations: { name: string; address: string | null; court_count: number | null } | null;
 };
-
-function composeAddress(loc: {
-  address?: string | null;
-  address_line2?: string | null;
-  city?: string | null;
-  state?: string | null;
-  postal_code?: string | null;
-}): string | null {
-  const parts: string[] = [];
-  if (loc.address) parts.push(loc.address);
-  if (loc.address_line2) parts.push(loc.address_line2);
-  const stateZip =
-    loc.state && loc.postal_code
-      ? `${loc.state} ${loc.postal_code}`
-      : (loc.state ?? loc.postal_code ?? null);
-  const cityStateZip = [loc.city, stateZip].filter(Boolean).join(", ");
-  if (cityStateZip) parts.push(cityStateZip);
-  return parts.length > 0 ? parts.join(", ") : null;
-}
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type EventStatus = Database["public"]["Enums"]["event_status"];
 type TournamentStatus = Database["public"]["Enums"]["tournament_status"];
@@ -65,7 +62,7 @@ type EventSummary = {
 // link sits at the top because it's tournament-wide — a single
 // dispatcher across all active events.
 export default function TournamentDetailPage() {
-  const { org } = useCurrentOrg();
+  const { org, role } = useCurrentOrg();
   const { tournamentSlug } = useParams<{ tournamentSlug: string }>();
   const [t, setT] = useState<Tournament | null>(null);
   const [tiers, setTiers] = useState<PricingTier[]>([]);
@@ -88,7 +85,7 @@ export default function TournamentDetailPage() {
 
     const { data: tData, error: tErr } = await supabase
       .from("tournaments")
-      .select("*, locations(name, address, address_line2, city, state, postal_code, court_count)")
+      .select("*, locations(name, address, court_count)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .is("deleted_at", null)
@@ -314,7 +311,7 @@ export default function TournamentDetailPage() {
 
   if (!org) return null;
   if (loading)
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ color: inkMuted, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
   if (error) return <ErrorBox message={error} />;
   if (!t) return null;
 
@@ -325,14 +322,10 @@ export default function TournamentDetailPage() {
   );
 
   return (
-    <div>
+    <div style={{ fontFamily: bodyFontStack, color: ink }}>
       <Link
         to={`/admin/${org.slug}/tournaments`}
-        style={{
-          color: "#2563eb",
-          textDecoration: "none",
-          fontSize: 13,
-        }}
+        style={breadcrumbLinkStyle}
       >
         ← Tournaments
       </Link>
@@ -351,10 +344,10 @@ export default function TournamentDetailPage() {
           <div
             style={{ display: "flex", alignItems: "center", gap: 10 }}
           >
-            <h1 style={{ margin: 0, fontSize: 22 }}>{t.name}</h1>
+            <h1 style={pageH1Style}>{t.name}</h1>
             <TournamentStatusBadge status={t.status} />
           </div>
-          <p style={{ color: "#666", margin: "4px 0 0", fontSize: 14 }}>
+          <p style={{ color: inkSoft, margin: "4px 0 0", fontSize: 14, lineHeight: 1.5 }}>
             {t.description || "No description."}
           </p>
         </div>
@@ -378,12 +371,7 @@ export default function TournamentDetailPage() {
               side effects worth surfacing in context. */}
           <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/edit`}
-            style={{
-              ...primaryLinkBtn,
-              background: "#fff",
-              color: "#555",
-              border: "1px solid #e2e2e2",
-            }}
+            style={secondaryLinkBtn}
           >
             Edit
           </Link>
@@ -392,12 +380,7 @@ export default function TournamentDetailPage() {
           {t.status === "draft" && (
             <Link
               to={`/admin/${org.slug}/tournaments/${t.slug}/wizard`}
-              style={{
-                ...primaryLinkBtn,
-                background: "#2563eb",
-                color: "#fff",
-                border: "1px solid #2563eb",
-              }}
+              style={primaryLinkBtn}
             >
               Continue setup →
             </Link>
@@ -416,26 +399,29 @@ export default function TournamentDetailPage() {
               live (e.g. "are we tracking ahead of plan?"). */}
           <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/schedule`}
-            style={{
-              ...primaryLinkBtn,
-              background: "#fff",
-              color: "#2563eb",
-              border: "1px solid #2563eb",
-            }}
+            style={secondaryLinkBtn}
           >
             Schedule
           </Link>
           <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/contacts`}
-            style={{
-              ...primaryLinkBtn,
-              background: "#fff",
-              color: "#2563eb",
-              border: "1px solid #2563eb",
-            }}
+            style={secondaryLinkBtn}
           >
             Tournament Contacts
           </Link>
+          {(role === "owner" || role === "admin") && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/coupons`}
+              style={{
+                ...primaryLinkBtn,
+                background: "#fff",
+                color: "#2563eb",
+                border: "1px solid #2563eb",
+              }}
+            >
+              Coupons
+            </Link>
+          )}
           {/* Court manager is always reachable from the tournament home —
               users want it to peek at the queue / setup courts even
               before an event is active. The page itself handles the
@@ -496,7 +482,7 @@ export default function TournamentDetailPage() {
           rowGap: 6,
           columnGap: 16,
           fontSize: 13,
-          color: "#555",
+          color: inkSoft,
           maxWidth: 600,
         }}
       >
@@ -510,22 +496,22 @@ export default function TournamentDetailPage() {
         />
         <DtDd
           label="Address"
-          value={(t.locations ? composeAddress(t.locations) : null) || t.location_address || "—"}
+          value={t.locations?.address || t.location_address || "—"}
         />
-        <dt style={{ color: "#888" }}>Courts at venue</dt>
+        <dt style={{ color: inkMuted }}>Courts at venue</dt>
         <dd style={{ margin: 0 }}>
           {venueCourtCount != null ? (
-            <span style={{ fontSize: 13 }}>
+            <span style={{ fontSize: 13, color: inkSoft }}>
               {venueCourtCount} court{venueCourtCount === 1 ? "" : "s"}
             </span>
           ) : (
-            <span style={{ fontSize: 13, color: "#999" }}>
+            <span style={{ fontSize: 13, color: inkMuted }}>
               {t.location_id != null ? (
                 <>
                   Not set —{" "}
                   <Link
                     to={`/admin/${org.slug}/locations`}
-                    style={{ color: "#2563eb", textDecoration: "none" }}
+                    style={{ color: courtBlue, textDecoration: "none" }}
                   >
                     add it on the venue
                   </Link>
@@ -535,7 +521,7 @@ export default function TournamentDetailPage() {
                   No venue —{" "}
                   <Link
                     to={`/admin/${org.slug}/tournaments/${t.slug}/edit`}
-                    style={{ color: "#2563eb", textDecoration: "none" }}
+                    style={{ color: courtBlue, textDecoration: "none" }}
                   >
                     choose one
                   </Link>
@@ -556,7 +542,7 @@ export default function TournamentDetailPage() {
             marginBottom: 12,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+          <h2 style={sectionH2Style}>
             Events ({events.length})
           </h2>
           <div style={{ display: "flex", gap: 8 }}>
@@ -566,12 +552,7 @@ export default function TournamentDetailPage() {
             {events.length > 0 && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${t.slug}/events/edit`}
-                style={{
-                  ...primaryLinkBtnSmall,
-                  background: "#fff",
-                  color: "#555",
-                  border: "1px solid #e2e2e2",
-                }}
+                style={secondaryLinkBtnSmall}
               >
                 Edit all
               </Link>
@@ -699,8 +680,8 @@ function EventCard({
     <div
       style={{
         padding: 16,
-        background: "#fff",
-        border: "1px solid #e5e7eb",
+        background: "#ffffff",
+        border: `1px solid ${rule}`,
         borderRadius: 8,
       }}
     >
@@ -715,12 +696,12 @@ function EventCard({
       >
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, fontFamily: bodyFontStack, color: ink }}>
               {event.name}
             </h3>
             <EventStatusBadge status={event.status} />
           </div>
-          <div style={{ color: "#888", fontSize: 12, marginTop: 4 }}>
+          <div style={{ color: inkMuted, fontSize: 12, marginTop: 4 }}>
             {event.format} · {event.gender} ·{" "}
             {event.bracket_type.replace("_", " ")} · {teamCount}{" "}
             {teamCount === 1 ? "team" : "teams"}
@@ -729,7 +710,7 @@ function EventCard({
           {scheduledStart && (
             <div
               style={{
-                color: "#444",
+                color: inkSoft,
                 fontSize: 12,
                 marginTop: 4,
                 fontWeight: 500,
@@ -752,11 +733,15 @@ function EventCard({
                   key={c}
                   style={{
                     padding: "2px 6px",
-                    background: "#eff6ff",
-                    color: "#1e40af",
+                    background: cream,
+                    color: inkSoft,
+                    border: `1px solid ${ruleSoft}`,
                     borderRadius: 3,
                     fontSize: 10,
                     fontWeight: 500,
+                    fontFamily: monoFontStack,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
                   }}
                 >
                   {c}
@@ -856,19 +841,19 @@ function EventCard({
           )}
           <Link
             to={`/admin/${orgSlug}/tournaments/${tournamentSlug}/events/${event.id}/edit`}
-            style={secondaryLinkBtn}
+            style={secondaryLinkBtnSmall}
           >
             Edit
           </Link>
           <Link
             to={`/admin/${orgSlug}/tournaments/${tournamentSlug}/events/${event.id}`}
-            style={secondaryLinkBtn}
+            style={secondaryLinkBtnSmall}
           >
             Open →
           </Link>
           <button
             onClick={onDelete}
-            style={dangerStatusBtn(false)}
+            style={dangerBtn(false)}
             title="Hide this event from the dashboard. Match history and registrations stay in the database for recovery."
           >
             Delete
@@ -881,9 +866,10 @@ function EventCard({
         <div
           style={{
             fontSize: 11,
-            color: "#888",
+            color: inkMuted,
             textTransform: "uppercase",
-            letterSpacing: 0.5,
+            letterSpacing: "0.06em",
+            fontFamily: headingFontStack,
             marginBottom: 6,
           }}
         >
@@ -891,7 +877,7 @@ function EventCard({
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {courts.length === 0 ? (
-            <span style={{ color: "#999", fontSize: 13 }}>
+            <span style={{ color: inkMuted, fontSize: 13 }}>
               Set a court count on this tournament's venue to assign courts.
             </span>
           ) : (
@@ -1079,11 +1065,11 @@ function TournamentStatusBadge({ status }: { status: TournamentStatus }) {
     TournamentStatus,
     { bg: string; fg: string; label: string }
   > = {
-    draft:     { bg: "#f3f4f6", fg: "#666",    label: "Draft" },
-    published: { bg: "#dcfce7", fg: "#166534", label: "Published" },
-    closed:    { bg: "#fef3c7", fg: "#92400e", label: "Closed" },
-    completed: { bg: "#dbeafe", fg: "#1e40af", label: "Completed" },
-    cancelled: { bg: "#fee2e2", fg: "#991b1b", label: "Cancelled" },
+    draft:     { bg: cream,      fg: inkSoft,   label: "Draft"     },
+    published: { bg: successBg,  fg: successFg, label: "Published" },
+    closed:    { bg: warnBg,     fg: warnFg,    label: "Closed"    },
+    completed: { bg: infoBg,     fg: infoFg,    label: "Completed" },
+    cancelled: { bg: dangerBg,   fg: dangerFg,  label: "Cancelled" },
   };
   const c = palette[status];
   return (
@@ -1097,7 +1083,8 @@ function TournamentStatusBadge({ status }: { status: TournamentStatus }) {
         fontSize: 11,
         fontWeight: 600,
         textTransform: "uppercase",
-        letterSpacing: 0.5,
+        letterSpacing: "0.04em",
+        fontFamily: headingFontStack,
       }}
     >
       {c.label}
@@ -1107,13 +1094,13 @@ function TournamentStatusBadge({ status }: { status: TournamentStatus }) {
 
 function EventStatusBadge({ status }: { status: EventStatus }) {
   const palette: Record<EventStatus, { bg: string; fg: string; label: string }> = {
-    draft:       { bg: "#f3f4f6", fg: "#666",    label: "Draft" },
-    ready:       { bg: "#fef3c7", fg: "#92400e", label: "Ready to play" },
-    active:      { bg: "#dcfce7", fg: "#166534", label: "Active" },
-    on_hold:     { bg: "#ffedd5", fg: "#9a3412", label: "On hold" },
-    medal_round: { bg: "#fde68a", fg: "#92400e", label: "Medal round" },
-    complete:    { bg: "#dbeafe", fg: "#1e40af", label: "Complete" },
-    verified:    { bg: "#ede9fe", fg: "#5b21b6", label: "Verified" },
+    draft:       { bg: cream,      fg: inkSoft,   label: "Draft"        },
+    ready:       { bg: warnBg,     fg: warnFg,    label: "Ready to play"},
+    active:      { bg: successBg,  fg: successFg, label: "Active"       },
+    on_hold:     { bg: dangerBg,   fg: dangerFg,  label: "On hold"      },
+    medal_round: { bg: warnBg,     fg: warnFg,    label: "Medal round"  },
+    complete:    { bg: infoBg,     fg: infoFg,    label: "Complete"     },
+    verified:    { bg: successBg,  fg: successFg, label: "Verified"     },
   };
   const c = palette[status];
   return (
@@ -1127,7 +1114,8 @@ function EventStatusBadge({ status }: { status: EventStatus }) {
         fontSize: 11,
         fontWeight: 600,
         textTransform: "uppercase",
-        letterSpacing: 0.5,
+        letterSpacing: "0.04em",
+        fontFamily: headingFontStack,
       }}
     >
       {c.label}
@@ -1153,9 +1141,10 @@ function Stat({
       <div
         style={{
           fontSize: 11,
-          color: "#888",
+          color: inkMuted,
           textTransform: "uppercase",
-          letterSpacing: 0.5,
+          letterSpacing: "0.06em",
+          fontFamily: headingFontStack,
         }}
       >
         {label}
@@ -1165,7 +1154,8 @@ function Stat({
           fontSize: 18,
           fontWeight: 600,
           marginTop: 4,
-          color: to ? "#2563eb" : undefined,
+          color: to ? courtBlue : ink,
+          fontFamily: bodyFontStack,
         }}
       >
         {value}
@@ -1175,7 +1165,7 @@ function Stat({
               fontSize: 11,
               fontWeight: 400,
               marginLeft: 6,
-              color: "#888",
+              color: inkMuted,
             }}
           >
             view →
@@ -1186,9 +1176,9 @@ function Stat({
   );
   const baseStyle: CSSProperties = {
     padding: 12,
-    background: "#fafafa",
-    border: "1px solid #e5e7eb",
-    borderRadius: 6,
+    background: bg,
+    border: `1px solid ${rule}`,
+    borderRadius: 8,
     display: "block",
   };
   if (to) {
@@ -1204,8 +1194,8 @@ function Stat({
 function DtDd({ label, value }: { label: string; value: string }) {
   return (
     <>
-      <dt style={{ color: "#888" }}>{label}</dt>
-      <dd style={{ margin: 0 }}>{value}</dd>
+      <dt style={{ color: inkMuted }}>{label}</dt>
+      <dd style={{ margin: 0, color: inkSoft }}>{value}</dd>
     </>
   );
 }
@@ -1216,11 +1206,12 @@ function Empty({ children }: { children: React.ReactNode }) {
       style={{
         padding: 24,
         textAlign: "center",
-        background: "#fafafa",
-        border: "1px dashed #d1d5db",
-        borderRadius: 6,
-        color: "#666",
+        background: bg,
+        border: `1px dashed ${rule}`,
+        borderRadius: 8,
+        color: inkSoft,
         fontSize: 13,
+        fontFamily: bodyFontStack,
       }}
     >
       {children}
@@ -1232,12 +1223,13 @@ function ErrorBox({ message }: { message: string }) {
   return (
     <div
       style={{
-        padding: 10,
-        background: "#fef2f2",
-        border: "1px solid #fecaca",
+        padding: "10px 14px",
+        background: dangerBg,
+        border: `1px solid ${dangerFg}`,
         borderRadius: 6,
-        color: "#991b1b",
+        color: dangerFg,
         fontSize: 13,
+        fontFamily: bodyFontStack,
       }}
     >
       {message}
@@ -1284,14 +1276,8 @@ function PublicPageLink({
         rel="noreferrer"
         title={`Open ${fullUrl}`}
         style={{
-          padding: "8px 16px",
-          background: "#fff",
-          color: "#2563eb",
-          textDecoration: "none",
-          borderRadius: 6,
-          fontSize: 13,
-          fontWeight: 500,
-          border: "1px solid #2563eb",
+          ...secondaryLinkBtn,
+          display: "inline-block",
           whiteSpace: "nowrap",
         }}
       >
@@ -1302,14 +1288,14 @@ function PublicPageLink({
         title={`Copy ${fullUrl}`}
         style={{
           padding: "8px 12px",
-          background: copied ? "#dcfce7" : "#fff",
-          color: copied ? "#166534" : "#555",
-          border: `1px solid ${copied ? "#86efac" : "#e2e2e2"}`,
+          background: copied ? successBg : bg,
+          color: copied ? successFg : inkSoft,
+          border: `1px solid ${copied ? successFg : rule}`,
           borderRadius: 6,
           fontSize: 13,
           fontWeight: 500,
           cursor: "pointer",
-          fontFamily: "inherit",
+          fontFamily: bodyFontStack,
           whiteSpace: "nowrap",
         }}
       >
@@ -1352,61 +1338,93 @@ function fmtScheduledRange(start: Date, end: Date | null): string {
 // Styles
 // ─────────────────────────────────────────────────────────────────────
 
+const pageH1Style: CSSProperties = {
+  fontFamily: displayFontStack,
+  fontSize: "clamp(22px, 3.5vw, 30px)",
+  lineHeight: 1.05,
+  letterSpacing: "-0.2px",
+  margin: 0,
+  color: ink,
+};
+
+const sectionH2Style: CSSProperties = {
+  fontFamily: headingFontStack,
+  fontSize: 16,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  margin: 0,
+  color: ink,
+};
+
 const primaryLinkBtn: CSSProperties = {
   padding: "8px 16px",
-  background: "#2563eb",
-  color: "#fff",
+  background: ink,
+  color: bg,
   textDecoration: "none",
   borderRadius: 6,
   fontSize: 13,
-  fontWeight: 500,
+  fontWeight: 600,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
   whiteSpace: "nowrap",
+  display: "inline-block",
 };
 
 const primaryLinkBtnSmall: CSSProperties = {
+  ...primaryLinkBtn,
   padding: "6px 12px",
-  background: "#2563eb",
-  color: "#fff",
-  textDecoration: "none",
-  borderRadius: 6,
-  fontSize: 13,
-  fontWeight: 500,
+  fontSize: 12,
 };
 
 const secondaryLinkBtn: CSSProperties = {
-  padding: "6px 12px",
-  background: "#fff",
-  color: "#2563eb",
+  padding: "8px 14px",
+  background: "transparent",
+  color: ink,
   textDecoration: "none",
-  border: "1px solid #2563eb",
+  border: `2px solid ${ink}`,
   borderRadius: 6,
   fontSize: 13,
-  fontWeight: 500,
+  fontWeight: 600,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+  whiteSpace: "nowrap",
+  display: "inline-block",
+};
+
+const secondaryLinkBtnSmall: CSSProperties = {
+  ...secondaryLinkBtn,
+  padding: "6px 10px",
+  fontSize: 12,
 };
 
 function primaryBtn(busy: boolean): CSSProperties {
   return {
     padding: "6px 12px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: busy ? inkMuted : ink,
+    color: bg,
     border: "none",
     borderRadius: 6,
     fontSize: 13,
-    fontWeight: 500,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.03em",
+    textTransform: "uppercase",
     cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
+    opacity: busy ? 0.7 : 1,
   };
 }
 
 const secondaryBtn: CSSProperties = {
   padding: "6px 12px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "transparent",
+  color: ink,
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 13,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
 };
 
 // Tournament-status header buttons share a slightly larger size
@@ -1415,43 +1433,60 @@ const secondaryBtn: CSSProperties = {
 function primaryStatusBtn(busy: boolean): CSSProperties {
   return {
     padding: "8px 14px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: busy ? inkMuted : ink,
+    color: bg,
     border: "none",
     borderRadius: 6,
     fontSize: 13,
-    fontWeight: 500,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.03em",
+    textTransform: "uppercase",
     cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
+    opacity: busy ? 0.7 : 1,
     whiteSpace: "nowrap",
   };
 }
 
 const secondaryStatusBtn: CSSProperties = {
   padding: "8px 14px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "transparent",
+  color: ink,
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 13,
   fontWeight: 500,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
   whiteSpace: "nowrap",
 };
 
 function dangerStatusBtn(busy: boolean): CSSProperties {
   return {
     padding: "8px 14px",
-    background: "#fff",
-    color: "#991b1b",
-    border: "1px solid #fecaca",
+    background: dangerBg,
+    color: dangerFg,
+    border: `1px solid ${dangerFg}`,
     borderRadius: 6,
     fontSize: 13,
     fontWeight: 500,
     cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
+    fontFamily: bodyFontStack,
     whiteSpace: "nowrap",
+  };
+}
+
+function dangerBtn(busy: boolean): CSSProperties {
+  return {
+    padding: "6px 12px",
+    background: dangerBg,
+    color: dangerFg,
+    border: `1px solid ${dangerFg}`,
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: busy ? "not-allowed" : "pointer",
+    fontFamily: bodyFontStack,
   };
 }
 
@@ -1460,23 +1495,23 @@ function courtChip(
   ownedByOther: boolean,
   busy: boolean,
 ): CSSProperties {
-  const bg = mine ? "#2563eb" : ownedByOther ? "#f3f4f6" : "#fff";
-  const fg = mine ? "#fff" : ownedByOther ? "#9ca3af" : "#444";
+  const chipBg = mine ? ink : ownedByOther ? cream : bg;
+  const fg = mine ? bg : ownedByOther ? inkMuted : inkSoft;
   const border = mine
-    ? "#2563eb"
+    ? ink
     : ownedByOther
-      ? "#e5e7eb"
-      : "#d1d5db";
+      ? rule
+      : creamDeep;
   return {
     padding: "4px 10px",
-    background: bg,
+    background: chipBg,
     color: fg,
     border: `1px solid ${border}`,
     borderRadius: 4,
     fontSize: 12,
     fontWeight: 500,
     cursor: busy || ownedByOther ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
+    fontFamily: bodyFontStack,
     opacity: busy ? 0.6 : 1,
   };
 }
