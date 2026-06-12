@@ -10,6 +10,24 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  cream,
+  creamDeep,
+  rule,
+  courtBlue,
+  courtRed,
+  dangerBg,
+  dangerFg,
+  warnBg,
+  warnFg,
+  bodyFontStack,
+  headingFontStack,
+  displayFontStack,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
@@ -338,9 +356,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
 
   if (!org) return null;
   if (loading)
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ color: inkSoft, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
   if (!tournament) {
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ color: inkSoft, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
   }
 
   // Surface the most common misconfiguration: top-N must be even when
@@ -356,18 +374,18 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   })();
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div style={{ maxWidth: 720, fontFamily: bodyFontStack }}>
       <Link
         to={`/admin/${org.slug}/tournaments/${tournamentSlug}${mode === "edit" && event ? `/events/${event.id}` : ""}`}
-        style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}
+        style={{ color: courtBlue, textDecoration: "none", fontSize: 13 }}
       >
         ← {mode === "edit" && event ? event.name : tournament.name}
       </Link>
       <header style={{ margin: "12px 0 24px" }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontFamily: displayFontStack, color: ink }}>
           {mode === "create" ? "New event" : "Edit event"}
         </h1>
-        <p style={{ color: "#666", margin: "4px 0 0", fontSize: 14 }}>
+        <p style={{ color: inkSoft, margin: "4px 0 0", fontSize: 14 }}>
           {mode === "create"
             ? "A bracket within the tournament. Configure pool play, scoring, and the playoff structure here."
             : "Updating format affects how new RR and playoff matches generate. Existing matches keep their original pairings — reset and regenerate to apply changes."}
@@ -635,8 +653,8 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
               style={{
                 marginTop: 4,
                 padding: 12,
-                background: "#fff",
-                border: "1px solid #e5e7eb",
+                background: "#ffffff",
+                border: `1px solid ${rule}`,
                 borderRadius: 6,
                 display: "flex",
                 flexDirection: "column",
@@ -672,10 +690,10 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                 <div
                   style={{
                     padding: 10,
-                    background: "#fffbeb",
-                    border: "1px solid #fde68a",
+                    background: warnBg,
+                    border: `1px solid ${creamDeep}`,
                     borderRadius: 6,
-                    color: "#92400e",
+                    color: warnFg,
                     fontSize: 12,
                   }}
                 >
@@ -697,15 +715,18 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                   style={{
                     marginTop: 4,
                     paddingTop: 12,
-                    borderTop: "1px dashed #e5e7eb",
+                    borderTop: `1px dashed ${rule}`,
                   }}
                 >
                   <div
                     style={{
                       fontSize: 12,
                       fontWeight: 600,
-                      color: "#444",
+                      color: inkSoft,
                       marginBottom: 8,
+                      fontFamily: headingFontStack,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
                     }}
                   >
                     Semifinal format
@@ -770,15 +791,18 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                 style={{
                   marginTop: 4,
                   paddingTop: 12,
-                  borderTop: "1px dashed #e5e7eb",
+                  borderTop: `1px dashed ${rule}`,
                 }}
               >
                 <div
                   style={{
                     fontSize: 12,
                     fontWeight: 600,
-                    color: "#444",
+                    color: inkSoft,
                     marginBottom: 8,
+                    fontFamily: headingFontStack,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
                   }}
                 >
                   {roundsNum === 2
@@ -912,7 +936,7 @@ function EditWarningBody({
 }) {
   const playedAlready = stats.inProgress + stats.completed;
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, fontFamily: bodyFontStack }}>
       <p style={{ margin: 0 }}>
         This event already has <strong>{stats.total}</strong>{" "}
         match{stats.total === 1 ? "" : "es"} generated
@@ -933,10 +957,10 @@ function EditWarningBody({
           style={{
             margin: 0,
             padding: 10,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
+            background: dangerBg,
+            border: `1px solid ${courtRed}`,
             borderRadius: 6,
-            color: "#991b1b",
+            color: dangerFg,
           }}
         >
           Resetting matches will <strong>discard scores already entered</strong>.
@@ -991,7 +1015,8 @@ function RadioOption({
         gap: 8,
         cursor: "pointer",
         fontSize: 13,
-        color: "#444",
+        color: inkSoft,
+        fontFamily: bodyFontStack,
       }}
     >
       <input
@@ -1001,13 +1026,13 @@ function RadioOption({
         style={{ marginTop: 3 }}
       />
       <span>
-        <span style={{ fontWeight: 500 }}>{label}</span>
+        <span style={{ fontWeight: 500, color: ink }}>{label}</span>
         {hint && (
           <span
             style={{
               display: "block",
               fontSize: 12,
-              color: "#888",
+              color: inkMuted,
               marginTop: 2,
             }}
           >
@@ -1032,8 +1057,8 @@ function FieldGroup({
     <div
       style={{
         padding: 16,
-        background: "#fafafa",
-        border: "1px solid #e5e7eb",
+        background: cream,
+        border: `1px solid ${rule}`,
         borderRadius: 8,
         display: "flex",
         flexDirection: "column",
@@ -1041,9 +1066,17 @@ function FieldGroup({
       }}
     >
       <div>
-        <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{title}</h2>
+        <h2 style={{
+          margin: 0,
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: headingFontStack,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          color: ink,
+        }}>{title}</h2>
         {subtitle && (
-          <p style={{ margin: "4px 0 0", color: "#666", fontSize: 12 }}>
+          <p style={{ margin: "4px 0 0", color: inkSoft, fontSize: 12 }}>
             {subtitle}
           </p>
         )}
@@ -1071,16 +1104,17 @@ function Field({
         flexDirection: "column",
         gap: 4,
         fontSize: 12,
-        color: "#555",
+        color: inkSoft,
+        fontFamily: bodyFontStack,
       }}
     >
       <span>
         {label}
-        {required && <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>}
+        {required && <span style={{ color: courtRed, marginLeft: 4 }}>*</span>}
       </span>
       {children}
       {hint && (
-        <span style={{ fontSize: 11, color: "#888", marginTop: 2 }}>
+        <span style={{ fontSize: 11, color: inkMuted, marginTop: 2 }}>
           {hint}
         </span>
       )}
@@ -1126,15 +1160,18 @@ function PerMatchFormatList({
       style={{
         marginTop: 12,
         paddingTop: 12,
-        borderTop: "1px dashed #e5e7eb",
+        borderTop: `1px dashed ${rule}`,
       }}
     >
       <div
         style={{
           fontSize: 12,
           fontWeight: 600,
-          color: "#444",
+          color: inkSoft,
           marginBottom: 8,
+          fontFamily: headingFontStack,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
         }}
       >
         Per-match overrides
@@ -1142,7 +1179,7 @@ function PerMatchFormatList({
       <p
         style={{
           fontSize: 12,
-          color: "#888",
+          color: inkMuted,
           margin: "0 0 12px",
         }}
       >
@@ -1246,15 +1283,15 @@ function MatchFormatRow({
     <div
       style={{
         padding: 10,
-        background: "#fff",
-        border: "1px solid #e5e7eb",
+        background: "#ffffff",
+        border: `1px solid ${rule}`,
         borderRadius: 6,
         display: "flex",
         flexDirection: "column",
         gap: 8,
       }}
     >
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#444" }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: inkSoft, fontFamily: headingFontStack, textTransform: "uppercase", letterSpacing: "0.04em" }}>
         {label}
       </div>
       <div
@@ -1318,11 +1355,11 @@ function MatchFormatRow({
           {busy ? "Saving…" : "Save"}
         </button>
         {savedAt && !dirty && (
-          <span style={{ fontSize: 12, color: "#166534" }}>Saved</span>
+          <span style={{ fontSize: 12, color: inkSoft }}>Saved</span>
         )}
       </div>
       {err && (
-        <div style={{ color: "#991b1b", fontSize: 12 }}>{err}</div>
+        <div style={{ color: dangerFg, fontSize: 12 }}>{err}</div>
       )}
     </div>
   );
@@ -1333,33 +1370,39 @@ const smallField: CSSProperties = {
   flexDirection: "column",
   gap: 4,
   fontSize: 12,
-  color: "#555",
+  color: inkSoft,
+  fontFamily: bodyFontStack,
 };
 const smallLabel: CSSProperties = {
   fontSize: 11,
-  color: "#666",
+  color: inkMuted,
   textTransform: "uppercase",
   letterSpacing: 0.5,
+  fontFamily: headingFontStack,
 };
 const smallInput: CSSProperties = {
   padding: "6px 10px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 4,
   fontSize: 13,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
+  color: ink,
+  background: "#ffffff",
   width: 120,
 };
 function tinyPrimaryBtn(disabled: boolean): CSSProperties {
   return {
     padding: "6px 14px",
-    background: disabled ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: disabled ? inkMuted : ink,
+    color: bg,
     border: "none",
     borderRadius: 4,
     fontSize: 13,
-    fontWeight: 500,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
     cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
   };
 }
 
@@ -1368,10 +1411,10 @@ function ErrorBox({ message }: { message: string }) {
     <div
       style={{
         padding: 10,
-        background: "#fef2f2",
-        border: "1px solid #fecaca",
+        background: dangerBg,
+        border: `1px solid ${courtRed}`,
         borderRadius: 6,
-        color: "#991b1b",
+        color: dangerFg,
         fontSize: 13,
       }}
     >
@@ -1382,35 +1425,41 @@ function ErrorBox({ message }: { message: string }) {
 
 const inputStyle: CSSProperties = {
   padding: "8px 12px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 13,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
+  color: ink,
   width: "100%",
-  background: "#fff",
+  background: "#ffffff",
 };
 
 function primaryBtn(busy: boolean): CSSProperties {
   return {
     padding: "10px 20px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: busy ? inkMuted : ink,
+    color: bg,
     border: "none",
     borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
     cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
   };
 }
 
 const secondaryBtn: CSSProperties = {
   padding: "10px 20px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "transparent",
+  color: ink,
+  boxShadow: `inset 0 0 0 2px ${ink}`,
+  border: "none",
   borderRadius: 6,
-  fontSize: 14,
+  fontSize: 13,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
   cursor: "pointer",
-  fontFamily: "inherit",
 };

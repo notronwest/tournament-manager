@@ -8,6 +8,23 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  cream,
+  rule,
+  courtBlue,
+  courtGreen,
+  courtRed,
+  dangerBg,
+  dangerFg,
+  warnBg,
+  bodyFontStack,
+  headingFontStack,
+  displayFontStack,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
@@ -57,7 +74,6 @@ export default function BulkEventsEditPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
-  const isMobile = useIsMobile();
 
   // Initial load: tournament + every non-deleted event under it.
   useEffect(() => {
@@ -217,14 +233,14 @@ export default function BulkEventsEditPage() {
   if (!org) return null;
 
   if (loading) {
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ color: inkSoft, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
   }
 
   if (error && !tournament) {
     return (
-      <div style={{ maxWidth: 600 }}>
-        <h1 style={{ margin: "0 0 8px", fontSize: 20 }}>Can't load events</h1>
-        <p style={{ color: "#666", fontSize: 14 }}>{error}</p>
+      <div style={{ maxWidth: 600, fontFamily: bodyFontStack }}>
+        <h1 style={{ margin: "0 0 8px", fontSize: 20, fontFamily: displayFontStack, color: ink }}>Can't load events</h1>
+        <p style={{ color: inkSoft, fontSize: 14 }}>{error}</p>
         <button
           onClick={() => navigate(`/admin/${org.slug}/tournaments`)}
           style={secondaryBtn}
@@ -239,20 +255,20 @@ export default function BulkEventsEditPage() {
   const backUrl = `/admin/${org.slug}/tournaments/${tournament.slug}`;
 
   return (
-    <div style={{ maxWidth: 1100 }}>
+    <div style={{ maxWidth: 1100, fontFamily: bodyFontStack }}>
       <header style={{ marginBottom: 24 }}>
         <Link
           to={backUrl}
           style={{
-            color: "#2563eb",
+            color: courtBlue,
             fontSize: 13,
             textDecoration: "none",
           }}
         >
           ← {tournament.name}
         </Link>
-        <h1 style={{ margin: "8px 0 4px", fontSize: 22 }}>Edit all events</h1>
-        <p style={{ color: "#666", margin: 0, fontSize: 14 }}>
+        <h1 style={{ margin: "8px 0 4px", fontSize: 22, fontFamily: displayFontStack, color: ink }}>Edit all events</h1>
+        <p style={{ color: inkSoft, margin: 0, fontSize: 14 }}>
           Quick edits across every event. For format / gender / point
           settings / bracket type, use the per-event edit page.
         </p>
@@ -263,17 +279,17 @@ export default function BulkEventsEditPage() {
           style={{
             padding: 24,
             textAlign: "center",
-            background: "#fafafa",
-            border: "1px dashed #d1d5db",
+            background: cream,
+            border: `1px dashed ${rule}`,
             borderRadius: 8,
-            color: "#666",
+            color: inkSoft,
             fontSize: 14,
           }}
         >
           No events yet.{" "}
           <Link
             to={`${backUrl}/events/new`}
-            style={{ color: "#2563eb" }}
+            style={{ color: courtBlue }}
           >
             Add one
           </Link>
@@ -281,266 +297,146 @@ export default function BulkEventsEditPage() {
         </div>
       ) : (
         <>
-          {isMobile ? (
-            <div>
-              {drafts.map((d) => {
-                const isDirty = dirtyIds.has(d.id);
-                const state = rowState.get(d.id);
-                return (
-                  <div
-                    key={d.id}
-                    style={{
-                      border: "1px solid #e5e7eb",
-                      borderRadius: 8,
-                      background: state?.error
-                        ? "#fef2f2"
-                        : isDirty
-                          ? "#fffbeb"
-                          : "#fff",
-                      padding: "14px 16px",
-                      marginBottom: 12,
-                    }}
-                  >
-                    {isDirty && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "#92400e",
-                          marginBottom: 10,
-                          fontWeight: 500,
-                        }}
-                      >
-                        Unsaved changes
-                      </div>
-                    )}
-                    <CardField label="Name">
-                      <input
-                        type="text"
-                        value={d.name}
-                        onChange={(e) =>
-                          updateDraft(d.id, { name: e.target.value })
-                        }
-                        style={mobileInputStyle}
-                        disabled={savingAll}
-                      />
-                      {state?.error && (
-                        <div
-                          style={{
-                            marginTop: 4,
-                            color: "#991b1b",
-                            fontSize: 12,
-                          }}
-                        >
-                          {state.error}
-                        </div>
-                      )}
-                    </CardField>
-                    <CardField label="Status">
-                      <select
-                        value={d.status}
-                        onChange={(e) =>
-                          updateDraft(d.id, {
-                            status: e.target.value as EventStatus,
-                          })
-                        }
-                        style={mobileInputStyle}
-                        disabled={savingAll}
-                      >
-                        {EVENT_STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {prettyStatus(s)}
-                          </option>
-                        ))}
-                      </select>
-                    </CardField>
-                    <CardField label="Scheduled start">
-                      <input
-                        type="datetime-local"
-                        value={d.scheduledStartLocal}
-                        onChange={(e) => {
-                          updateDraft(d.id, {
-                            scheduledStartLocal: e.target.value,
-                          });
-                          e.currentTarget.blur();
-                        }}
-                        style={mobileInputStyle}
-                        disabled={savingAll}
-                      />
-                    </CardField>
-                    <CardField label="Max teams">
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        placeholder="—"
-                        value={d.maxTeams}
-                        onChange={(e) =>
-                          updateDraft(d.id, { maxTeams: e.target.value })
-                        }
-                        style={mobileInputStyle}
-                        disabled={savingAll}
-                      />
-                    </CardField>
-                    <CardField label="Custom price ($)" last>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="—"
-                        value={d.feeDollars}
-                        onChange={(e) =>
-                          updateDraft(d.id, { feeDollars: e.target.value })
-                        }
-                        style={mobileInputStyle}
-                        disabled={savingAll}
-                      />
-                    </CardField>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div
+          <div
+            style={{
+              overflow: "auto",
+              border: `1px solid ${rule}`,
+              borderRadius: 8,
+              background: "#ffffff",
+            }}
+          >
+            <table
               style={{
-                overflow: "auto",
-                border: "1px solid #e5e7eb",
-                borderRadius: 8,
-                background: "#fff",
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 13,
               }}
             >
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: 13,
-                }}
-              >
-                <thead>
-                  <tr style={{ background: "#fafafa" }}>
-                    <Th style={{ minWidth: 220 }}>Name</Th>
-                    <Th style={{ width: 140 }}>Status</Th>
-                    <Th style={{ width: 200 }}>Scheduled start</Th>
-                    <Th style={{ width: 110 }}>Max teams</Th>
-                    <Th style={{ width: 130 }}>Custom price ($)</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {drafts.map((d) => {
-                    const isDirty = dirtyIds.has(d.id);
-                    const state = rowState.get(d.id);
-                    return (
-                      <tr
-                        key={d.id}
-                        style={{
-                          borderTop: "1px solid #f0f0f0",
-                          background: state?.error
-                            ? "#fef2f2"
-                            : isDirty
-                              ? "#fffbeb"
-                              : "#fff",
-                        }}
-                      >
-                        <Td>
-                          <input
-                            type="text"
-                            value={d.name}
-                            onChange={(e) =>
-                              updateDraft(d.id, { name: e.target.value })
-                            }
-                            style={cellInputStyle}
-                            disabled={savingAll}
-                          />
-                          {state?.error && (
-                            <div
-                              style={{
-                                marginTop: 4,
-                                color: "#991b1b",
-                                fontSize: 11,
-                              }}
-                            >
-                              {state.error}
-                            </div>
-                          )}
-                        </Td>
-                        <Td>
-                          <select
-                            value={d.status}
-                            onChange={(e) =>
-                              updateDraft(d.id, {
-                                status: e.target.value as EventStatus,
-                              })
-                            }
-                            style={cellInputStyle}
-                            disabled={savingAll}
-                          >
-                            {EVENT_STATUSES.map((s) => (
-                              <option key={s} value={s}>
-                                {prettyStatus(s)}
-                              </option>
-                            ))}
-                          </select>
-                        </Td>
-                        <Td>
-                          <input
-                            type="datetime-local"
-                            value={d.scheduledStartLocal}
-                            onChange={(e) => {
-                              updateDraft(d.id, {
-                                scheduledStartLocal: e.target.value,
-                              });
-                              // Close the native picker after a value
-                              // change. Without this the calendar/clock
-                              // popup just sits there until you click
-                              // somewhere else, which is annoying in a
-                              // bulk-edit context where you're zipping
-                              // between rows.
-                              e.currentTarget.blur();
+              <thead>
+                <tr style={{ background: cream }}>
+                  <Th style={{ minWidth: 220 }}>Name</Th>
+                  <Th style={{ width: 140 }}>Status</Th>
+                  <Th style={{ width: 200 }}>Scheduled start</Th>
+                  <Th style={{ width: 110 }}>Max teams</Th>
+                  <Th style={{ width: 130 }}>Custom price ($)</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {drafts.map((d) => {
+                  const isDirty = dirtyIds.has(d.id);
+                  const state = rowState.get(d.id);
+                  return (
+                    <tr
+                      key={d.id}
+                      style={{
+                        borderTop: `1px solid ${rule}`,
+                        background: state?.error
+                          ? dangerBg
+                          : isDirty
+                            ? warnBg
+                            : "#ffffff",
+                      }}
+                    >
+                      <Td>
+                        <input
+                          type="text"
+                          value={d.name}
+                          onChange={(e) =>
+                            updateDraft(d.id, { name: e.target.value })
+                          }
+                          style={cellInputStyle}
+                          disabled={savingAll}
+                        />
+                        {state?.error && (
+                          <div
+                            style={{
+                              marginTop: 4,
+                              color: dangerFg,
+                              fontSize: 11,
                             }}
-                            style={cellInputStyle}
-                            disabled={savingAll}
-                          />
-                        </Td>
-                        <Td>
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            placeholder="—"
-                            value={d.maxTeams}
-                            onChange={(e) =>
-                              updateDraft(d.id, { maxTeams: e.target.value })
-                            }
-                            style={cellInputStyle}
-                            disabled={savingAll}
-                          />
-                        </Td>
-                        <Td>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="—"
-                            value={d.feeDollars}
-                            onChange={(e) =>
-                              updateDraft(d.id, { feeDollars: e.target.value })
-                            }
-                            style={cellInputStyle}
-                            disabled={savingAll}
-                          />
-                        </Td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                          >
+                            {state.error}
+                          </div>
+                        )}
+                      </Td>
+                      <Td>
+                        <select
+                          value={d.status}
+                          onChange={(e) =>
+                            updateDraft(d.id, {
+                              status: e.target.value as EventStatus,
+                            })
+                          }
+                          style={cellInputStyle}
+                          disabled={savingAll}
+                        >
+                          {EVENT_STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {prettyStatus(s)}
+                            </option>
+                          ))}
+                        </select>
+                      </Td>
+                      <Td>
+                        <input
+                          type="datetime-local"
+                          value={d.scheduledStartLocal}
+                          onChange={(e) => {
+                            updateDraft(d.id, {
+                              scheduledStartLocal: e.target.value,
+                            });
+                            // Close the native picker after a value
+                            // change. Without this the calendar/clock
+                            // popup just sits there until you click
+                            // somewhere else, which is annoying in a
+                            // bulk-edit context where you're zipping
+                            // between rows.
+                            e.currentTarget.blur();
+                          }}
+                          style={cellInputStyle}
+                          disabled={savingAll}
+                        />
+                      </Td>
+                      <Td>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="—"
+                          value={d.maxTeams}
+                          onChange={(e) =>
+                            updateDraft(d.id, { maxTeams: e.target.value })
+                          }
+                          style={cellInputStyle}
+                          disabled={savingAll}
+                        />
+                      </Td>
+                      <Td>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="—"
+                          value={d.feeDollars}
+                          onChange={(e) =>
+                            updateDraft(d.id, { feeDollars: e.target.value })
+                          }
+                          style={cellInputStyle}
+                          disabled={savingAll}
+                        />
+                      </Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           <div
             style={{
               marginTop: 10,
               fontSize: 12,
-              color: "#888",
+              color: inkMuted,
               lineHeight: 1.5,
             }}
           >
@@ -558,10 +454,10 @@ export default function BulkEventsEditPage() {
               style={{
                 marginTop: 16,
                 padding: 12,
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
+                background: dangerBg,
+                border: `1px solid ${courtRed}`,
                 borderRadius: 6,
-                color: "#991b1b",
+                color: dangerFg,
                 fontSize: 13,
               }}
             >
@@ -594,7 +490,7 @@ export default function BulkEventsEditPage() {
               Cancel
             </Link>
             {savedAt && dirtyIds.size === 0 && (
-              <span style={{ color: "#16a34a", fontSize: 13 }}>
+              <span style={{ color: courtGreen, fontSize: 13 }}>
                 Saved {savedAt.toLocaleTimeString()}
               </span>
             )}
@@ -663,25 +559,6 @@ function validateAndBuildPayload(
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Hooks
-// ─────────────────────────────────────────────────────────────────────
-
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== "undefined"
-      ? window.matchMedia("(max-width: 767px)").matches
-      : false,
-  );
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-  return isMobile;
-}
-
-// ─────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────
 
@@ -741,8 +618,9 @@ function Th({
         fontSize: 11,
         textTransform: "uppercase",
         letterSpacing: 0.5,
-        color: "#666",
+        color: inkSoft,
         fontWeight: 600,
+        fontFamily: headingFontStack,
         ...style,
       }}
     >
@@ -764,90 +642,60 @@ function Td({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CardField({
-  label,
-  children,
-  last,
-}: {
-  label: string;
-  children: React.ReactNode;
-  last?: boolean;
-}) {
-  return (
-    <div style={{ marginBottom: last ? 0 : 12 }}>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: 0.5,
-          color: "#666",
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 const cellInputStyle: CSSProperties = {
   padding: "6px 8px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 4,
   fontSize: 13,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
+  color: ink,
   width: "100%",
-  background: "#fff",
-};
-
-const mobileInputStyle: CSSProperties = {
-  padding: "10px 12px",
-  border: "1px solid #e2e2e2",
-  borderRadius: 6,
-  fontSize: 15,
-  fontFamily: "inherit",
-  width: "100%",
-  background: "#fff",
-  boxSizing: "border-box",
-  minHeight: 44,
+  background: "#ffffff",
 };
 
 function primaryBtn(disabled: boolean): CSSProperties {
   return {
     padding: "10px 20px",
-    background: disabled ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: disabled ? inkMuted : ink,
+    color: bg,
     border: "none",
     borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
     cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
   };
 }
 
 const secondaryBtn: CSSProperties = {
   padding: "8px 16px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "transparent",
+  color: ink,
+  boxShadow: `inset 0 0 0 2px ${ink}`,
+  border: "none",
   borderRadius: 6,
   fontSize: 13,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
   cursor: "pointer",
-  fontFamily: "inherit",
   marginTop: 12,
 };
 
 const secondaryLinkBtn: CSSProperties = {
   padding: "10px 20px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "transparent",
+  color: ink,
+  boxShadow: `inset 0 0 0 2px ${ink}`,
+  border: "none",
   borderRadius: 6,
-  fontSize: 14,
+  fontSize: 13,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
   cursor: "pointer",
-  fontFamily: "inherit",
   textDecoration: "none",
+  display: "inline-block",
 };
