@@ -139,6 +139,12 @@ export default function CheckoutPage() {
   const [doneEventNames, setDoneEventNames] = useState<string[] | null>(
     null,
   );
+  // Set when payment was taken but the reg flip wasn't observed in the
+  // poll window. Shows a "processing" state instead of success so the
+  // player isn't falsely told they're confirmed.
+  const [processingEventNames, setProcessingEventNames] = useState<
+    string[] | null
+  >(null);
   const [receiptItems, setReceiptItems] = useState<
     { description: string; amount_cents: number }[]
   >([]);
@@ -469,28 +475,31 @@ export default function CheckoutPage() {
       await new Promise((res) => setTimeout(res, 1500));
     }
 
-    if (!allPaid) {
+    if (allPaid) {
+      // Load the server-side receipt line items from payment_line_items.
+      // These were written by create-payment-intent and are readable
+      // by the player via SELECT RLS. If the query fails we show the
+      // success view without the breakdown rather than blocking it.
+      if (paymentId) {
+        const { data: liData } = await supabase
+          .from("payment_line_items")
+          .select("description, amount_cents")
+          .eq("payment_id", paymentId)
+          .order("amount_cents", { ascending: false });
+        setReceiptItems(
+          (liData ?? []) as { description: string; amount_cents: number }[],
+        );
+      }
+      setDoneEventNames(paidRows.map((r) => r.eventName));
+    } else {
+      // Webhook was slow or not yet delivered — don't claim success.
+      // The pending bar reconciles when the flip eventually arrives.
       console.warn(
         "Payment confirmed but the reg flip wasn't observed within the poll window; the pending bar will reconcile.",
       );
+      setProcessingEventNames(paidRows.map((r) => r.eventName));
     }
 
-    // Load the server-side receipt line items from payment_line_items.
-    // These were written by create-payment-intent and are readable
-    // by the player via SELECT RLS. If the query fails we show the
-    // success view without the breakdown rather than blocking it.
-    if (paymentId) {
-      const { data: liData } = await supabase
-        .from("payment_line_items")
-        .select("description, amount_cents")
-        .eq("payment_id", paymentId)
-        .order("amount_cents", { ascending: false });
-      setReceiptItems(
-        (liData ?? []) as { description: string; amount_cents: number }[],
-      );
-    }
-
-    setDoneEventNames(paidRows.map((r) => r.eventName));
     setRows([]);
     setClientSecret(null);
     setPaymentId(null);
@@ -518,6 +527,54 @@ export default function CheckoutPage() {
   }
 
   // Success state — shown right after Pay succeeds.
+  // Processing state — payment taken but reg flip not yet observed in
+  // the poll window. Don't say "you're registered"; say "finalizing".
+  if (processingEventNames && tournament) {
+    return (
+      <Shell>
+        <div
+          style={{
+            ...statusPanelStyle("warn"),
+            padding: "20px 22px",
+            marginBottom: 24,
+          }}
+        >
+          <h1
+            style={{
+              ...pageH1Style,
+              margin: "0 0 8px",
+              fontSize: "clamp(24px, 3.6vw, 30px)",
+              color: "inherit",
+            }}
+          >
+            Payment received
+          </h1>
+          <p style={{ margin: 0, fontSize: 14, lineHeight: 1.55 }}>
+            We're finalizing your registration for{" "}
+            {fmtList(processingEventNames)} in{" "}
+            <strong>{tournament.name}</strong>. This can take a moment —
+            check{" "}
+            <Link
+              to="/my-tournaments"
+              style={{ color: "inherit", textDecoration: "underline" }}
+            >
+              My Tournaments
+            </Link>{" "}
+            shortly or refresh this page.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={secondaryLinkBtn}>
+            ← Back to tournament
+          </Link>
+          <Link to="/my-tournaments" style={primaryLinkBtn}>
+            My Tournaments
+          </Link>
+        </div>
+      </Shell>
+    );
+  }
+
   if (doneEventNames && tournament) {
     const receiptTotal = receiptItems.reduce(
       (sum, it) => sum + it.amount_cents,
