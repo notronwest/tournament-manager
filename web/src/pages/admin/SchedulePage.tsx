@@ -15,6 +15,26 @@ import {
 } from "../../lib/estimator";
 import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  cream,
+  creamDeep,
+  rule,
+  ruleSoft,
+  courtBlue,
+  courtGreen,
+  courtRed,
+  courtYellow,
+  dangerBg,
+  dangerFg,
+  warnBg,
+  warnFg,
+  bodyFontStack,
+  headingFontStack,
+} from "../../lib/publicTheme";
 
 // Court count now lives on the selected venue (locations.court_count),
 // joined in on the tournament fetch below.
@@ -549,16 +569,16 @@ export default function SchedulePage() {
 
   if (!org) return null;
   if (loading)
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ color: inkMuted, fontSize: 14 }}>Loading…</div>;
   if (error) {
     return (
       <div
         style={{
           padding: 12,
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
+          background: dangerBg,
+          border: `1px solid ${courtRed}`,
           borderRadius: 6,
-          color: "#991b1b",
+          color: dangerFg,
           fontSize: 13,
         }}
       >
@@ -588,12 +608,12 @@ export default function SchedulePage() {
     <div>
       <Link
         to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-        style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}
+        style={{ color: courtBlue, textDecoration: "none", fontSize: 13 }}
       >
         ← {tournament.name}
       </Link>
-      <h1 style={{ margin: "12px 0 4px", fontSize: 22 }}>Schedule</h1>
-      <p style={{ color: "#666", margin: 0, fontSize: 13 }}>
+      <h1 style={{ margin: "12px 0 4px", fontSize: 22, fontFamily: headingFontStack, textTransform: "uppercase", letterSpacing: "0.04em" }}>Schedule</h1>
+      <p style={{ color: inkMuted, margin: 0, fontSize: 13 }}>
         Time estimates per event based on registered teams, court allocation,
         and the format / scoring settings on each event. Numbers update as
         teams register and as you edit event settings.
@@ -607,8 +627,8 @@ export default function SchedulePage() {
           style={{
             marginTop: 16,
             padding: 12,
-            background: "#fafafa",
-            border: "1px solid #e5e7eb",
+            background: bg,
+            border: `1px solid ${rule}`,
             borderRadius: 6,
             display: "flex",
             gap: 12,
@@ -622,7 +642,7 @@ export default function SchedulePage() {
               flexDirection: "column",
               gap: 4,
               fontSize: 12,
-              color: "#555",
+              color: inkSoft,
             }}
           >
             <span>Tournament start</span>
@@ -632,10 +652,10 @@ export default function SchedulePage() {
               onChange={(e) => setAnchorLocal(e.target.value)}
               style={{
                 padding: "6px 10px",
-                border: "1px solid #e2e2e2",
+                border: `1px solid ${rule}`,
                 borderRadius: 6,
                 fontSize: 13,
-                fontFamily: "inherit",
+                fontFamily: bodyFontStack,
               }}
             />
           </label>
@@ -645,7 +665,7 @@ export default function SchedulePage() {
               flexDirection: "column",
               gap: 4,
               fontSize: 12,
-              color: "#555",
+              color: inkSoft,
             }}
             title="Inserted between consecutive events on the same court (turnover, announcements, etc.). Not added within a single event's pool play."
           >
@@ -659,10 +679,10 @@ export default function SchedulePage() {
               onBlur={() => void onSaveBuffer()}
               style={{
                 padding: "6px 10px",
-                border: "1px solid #e2e2e2",
+                border: `1px solid ${rule}`,
                 borderRadius: 6,
                 fontSize: 13,
-                fontFamily: "inherit",
+                fontFamily: bodyFontStack,
                 width: 90,
               }}
             />
@@ -672,14 +692,14 @@ export default function SchedulePage() {
             disabled={busy || !anchorLocal}
             style={{
               padding: "8px 16px",
-              background: busy || !anchorLocal ? "#9ca3af" : "#2563eb",
-              color: "#fff",
+              background: busy || !anchorLocal ? inkMuted : courtBlue,
+              color: "#ffffff",
               border: "none",
               borderRadius: 6,
               fontSize: 13,
               fontWeight: 500,
               cursor: busy || !anchorLocal ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
+              fontFamily: bodyFontStack,
             }}
             title="Pack each court-cluster back-to-back starting at the chosen time. Parallel clusters all start at the anchor."
           >
@@ -690,16 +710,16 @@ export default function SchedulePage() {
             disabled={busy || !rows.some((r) => r.scheduledStart)}
             style={{
               padding: "8px 16px",
-              background: "#fff",
-              color: "#555",
-              border: "1px solid #e2e2e2",
+              background: "#ffffff",
+              color: inkSoft,
+              border: `1px solid ${rule}`,
               borderRadius: 6,
               fontSize: 13,
               cursor:
                 busy || !rows.some((r) => r.scheduledStart)
                   ? "not-allowed"
                   : "pointer",
-              fontFamily: "inherit",
+              fontFamily: bodyFontStack,
               opacity:
                 busy || !rows.some((r) => r.scheduledStart) ? 0.6 : 1,
             }}
@@ -707,7 +727,7 @@ export default function SchedulePage() {
             Clear schedule
           </button>
           <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, color: "#888" }}>
+          <span style={{ fontSize: 11, color: inkMuted }}>
             You can also edit any event's start time directly in the
             table below.
           </span>
@@ -774,8 +794,8 @@ export default function SchedulePage() {
             <thead>
               <tr
                 style={{
-                  background: "#fafafa",
-                  borderBottom: "1px solid #e5e7eb",
+                  background: bg,
+                  borderBottom: `1px solid ${rule}`,
                 }}
               >
                 <th style={thStyle}>Event</th>
@@ -792,7 +812,7 @@ export default function SchedulePage() {
               {rows.map((r) => (
                 <tr
                   key={r.event.id}
-                  style={{ borderBottom: "1px solid #f3f4f6" }}
+                  style={{ borderBottom: `1px solid ${ruleSoft}` }}
                 >
                   <td style={tdStyle}>
                     <div
@@ -806,7 +826,7 @@ export default function SchedulePage() {
                       <Link
                         to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${r.event.id}`}
                         style={{
-                          color: "#111",
+                          color: ink,
                           textDecoration: "none",
                           fontWeight: 500,
                         }}
@@ -819,7 +839,7 @@ export default function SchedulePage() {
                       />
                     </div>
                     <div
-                      style={{ fontSize: 11, color: "#888", marginTop: 2 }}
+                      style={{ fontSize: 11, color: inkMuted, marginTop: 2 }}
                     >
                       {r.event.format} ·{" "}
                       {r.event.pool_count > 1
@@ -849,7 +869,7 @@ export default function SchedulePage() {
                     style={{
                       ...tdStyle,
                       textAlign: "right",
-                      color: r.teamCount === 0 ? "#bbb" : "#444",
+                      color: r.teamCount === 0 ? inkMuted : inkSoft,
                     }}
                   >
                     {r.teamCount}
@@ -871,7 +891,7 @@ export default function SchedulePage() {
                     style={{
                       ...tdStyle,
                       textAlign: "right",
-                      color: "#444",
+                      color: inkSoft,
                     }}
                   >
                     {r.teamCount < 2 ? "—" : fmtDuration(r.poolMinutes)}
@@ -880,7 +900,7 @@ export default function SchedulePage() {
                         <div
                           style={{
                             fontSize: 10,
-                            color: "#92400e",
+                            color: warnFg,
                             marginTop: 2,
                           }}
                           title="Team-bound: more courts than teams can fill simultaneously."
@@ -893,7 +913,7 @@ export default function SchedulePage() {
                     style={{
                       ...tdStyle,
                       textAlign: "right",
-                      color: "#444",
+                      color: inkSoft,
                     }}
                   >
                     {r.event.teams_advancing_to_playoff > 0
@@ -905,7 +925,7 @@ export default function SchedulePage() {
                       ...tdStyle,
                       textAlign: "right",
                       fontWeight: 600,
-                      color: r.teamCount < 2 ? "#bbb" : "#111",
+                      color: r.teamCount < 2 ? inkMuted : ink,
                     }}
                   >
                     {r.teamCount < 2 ? "—" : fmtDuration(r.totalMinutes)}
@@ -920,18 +940,18 @@ export default function SchedulePage() {
                       disabled={busy}
                       style={{
                         padding: "4px 6px",
-                        border: "1px solid #e2e2e2",
+                        border: `1px solid ${rule}`,
                         borderRadius: 4,
                         fontSize: 12,
-                        fontFamily: "inherit",
-                        background: "#fff",
+                        fontFamily: bodyFontStack,
+                        background: "#ffffff",
                       }}
                     />
                   </td>
                   <td
                     style={{
                       ...tdStyle,
-                      color: r.scheduledEnd ? "#444" : "#bbb",
+                      color: r.scheduledEnd ? inkSoft : inkMuted,
                     }}
                   >
                     {r.scheduledEnd ? fmtTime(r.scheduledEnd) : "—"}
@@ -945,11 +965,11 @@ export default function SchedulePage() {
             style={{
               marginTop: 16,
               padding: 12,
-              background: "#fafafa",
-              border: "1px solid #e5e7eb",
+              background: bg,
+              border: `1px solid ${rule}`,
               borderRadius: 6,
               fontSize: 12,
-              color: "#555",
+              color: inkSoft,
               lineHeight: 1.6,
             }}
           >
@@ -1001,9 +1021,9 @@ function CourtPills({
             style={{
               minWidth: 22,
               padding: "2px 6px",
-              background: mine ? "#2563eb" : "#fff",
-              color: mine ? "#fff" : "#9ca3af",
-              border: `1px solid ${mine ? "#2563eb" : "#d1d5db"}`,
+              background: mine ? courtBlue : "#ffffff",
+              color: mine ? "#ffffff" : inkMuted,
+              border: `1px solid ${mine ? courtBlue : rule}`,
               borderRadius: 4,
               fontSize: 11,
               fontWeight: 500,
@@ -1037,7 +1057,7 @@ function ViewTabs({
         display: "flex",
         gap: 4,
         marginTop: 16,
-        borderBottom: "1px solid #e5e7eb",
+        borderBottom: `1px solid ${rule}`,
       }}
     >
       {tabs.map((t) => {
@@ -1052,12 +1072,12 @@ function ViewTabs({
               padding: "8px 14px",
               background: "transparent",
               border: "none",
-              borderBottom: `2px solid ${active ? "#2563eb" : "transparent"}`,
-              color: active ? "#2563eb" : "#555",
+              borderBottom: `2px solid ${active ? courtBlue : "transparent"}`,
+              color: active ? courtBlue : inkSoft,
               fontSize: 13,
               fontWeight: 500,
               cursor: "pointer",
-              fontFamily: "inherit",
+              fontFamily: bodyFontStack,
               marginBottom: -1,
             }}
           >
@@ -1080,10 +1100,10 @@ const MIN_BLOCK_PX = 28;
 // contrast against the white timeline background and white block
 // text.
 const EVENT_PALETTE = [
-  { bg: "#2563eb", border: "#1e40af" }, // blue
-  { bg: "#16a34a", border: "#15803d" }, // green
+  { bg: courtBlue, border: courtBlue }, // blue
+  { bg: courtGreen, border: courtGreen }, // green
   { bg: "#9333ea", border: "#6b21a8" }, // purple
-  { bg: "#ea580c", border: "#9a3412" }, // orange
+  { bg: courtRed, border: "#b02a16" }, // red/orange
   { bg: "#0891b2", border: "#155e75" }, // teal
   { bg: "#db2777", border: "#9d174d" }, // pink
   { bg: "#65a30d", border: "#3f6212" }, // lime
@@ -1148,7 +1168,7 @@ function CourtTimeline({
 
   return (
     <section style={{ marginTop: 16 }}>
-      <p style={{ margin: "0 0 12px", fontSize: 12, color: "#666" }}>
+      <p style={{ margin: "0 0 12px", fontSize: 12, color: inkMuted }}>
         Each column is one court. Events using multiple courts appear in
         every column they claim, so multi-court events are obvious at a
         glance. Hover a block for details.
@@ -1220,7 +1240,7 @@ function DayTimeline({
             margin: "0 0 8px",
             fontSize: 13,
             fontWeight: 600,
-            color: "#444",
+            color: inkSoft,
           }}
         >
           {dayLabel}
@@ -1231,8 +1251,8 @@ function DayTimeline({
           display: "flex",
           gap: 8,
           overflowX: "auto",
-          background: "#fff",
-          border: "1px solid #e5e7eb",
+          background: "#ffffff",
+          border: `1px solid ${rule}`,
           borderRadius: 6,
           padding: 12,
         }}
@@ -1258,7 +1278,7 @@ function DayTimeline({
                     left: 0,
                     right: 0,
                     fontSize: 10,
-                    color: "#888",
+                    color: inkMuted,
                     textAlign: "right",
                     paddingRight: 6,
                     transform: "translateY(-50%)",
@@ -1287,14 +1307,14 @@ function DayTimeline({
               <div
                 style={{
                   fontSize: 11,
-                  color: "#444",
+                  color: inkSoft,
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: 0.5,
                   textAlign: "center",
                   paddingBottom: 4,
                   marginBottom: 4,
-                  borderBottom: "1px solid #e5e7eb",
+                  borderBottom: `1px solid ${rule}`,
                 }}
               >
                 Court {court}
@@ -1303,9 +1323,9 @@ function DayTimeline({
                 style={{
                   position: "relative",
                   height: totalHeight,
-                  background: "#fafafa",
+                  background: bg,
                   borderRadius: 4,
-                  border: "1px solid #e5e7eb",
+                  border: `1px solid ${rule}`,
                 }}
               >
                 {/* Hour gridlines inside the column */}
@@ -1321,7 +1341,7 @@ function DayTimeline({
                         left: 0,
                         right: 0,
                         height: 1,
-                        background: "#e5e7eb",
+                        background: rule,
                         pointerEvents: "none",
                       }}
                     />
@@ -1336,7 +1356,7 @@ function DayTimeline({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "#bbb",
+                      color: inkMuted,
                       fontSize: 11,
                       fontStyle: "italic",
                     }}
@@ -1370,7 +1390,7 @@ function DayTimeline({
                           background: color.bg,
                           border: `1px solid ${color.border}`,
                           borderRadius: 4,
-                          color: "#fff",
+                          color: "#ffffff",
                           padding: "4px 6px",
                           fontSize: 11,
                           fontWeight: 500,
@@ -1443,8 +1463,8 @@ function ConflictsPanel({ overlaps }: { overlaps: Overlap[] }) {
       style={{
         marginTop: 16,
         padding: 12,
-        background: courtCount > 0 ? "#fef2f2" : "#fffbeb",
-        border: `1px solid ${courtCount > 0 ? "#fecaca" : "#fde68a"}`,
+        background: courtCount > 0 ? dangerBg : warnBg,
+        border: `1px solid ${courtCount > 0 ? courtRed : courtYellow}`,
         borderRadius: 6,
       }}
     >
@@ -1452,7 +1472,7 @@ function ConflictsPanel({ overlaps }: { overlaps: Overlap[] }) {
         style={{
           fontSize: 13,
           fontWeight: 600,
-          color: courtCount > 0 ? "#991b1b" : "#92400e",
+          color: courtCount > 0 ? dangerFg : warnFg,
           marginBottom: 8,
         }}
       >
@@ -1469,7 +1489,7 @@ function ConflictsPanel({ overlaps }: { overlaps: Overlap[] }) {
           margin: 0,
           paddingLeft: 18,
           fontSize: 12,
-          color: "#444",
+          color: inkSoft,
           lineHeight: 1.6,
         }}
       >
@@ -1526,9 +1546,9 @@ function RowConflictBadges({
           title={`Court conflict with: ${partnerNames(courtConflicts)}`}
           style={{
             padding: "1px 6px",
-            background: "#fef2f2",
-            color: "#991b1b",
-            border: "1px solid #fecaca",
+            background: dangerBg,
+            color: dangerFg,
+            border: `1px solid ${courtRed}`,
             borderRadius: 3,
             fontSize: 10,
             fontWeight: 600,
@@ -1544,9 +1564,9 @@ function RowConflictBadges({
           title={`Player conflict with: ${partnerNames(playerConflicts)}`}
           style={{
             padding: "1px 6px",
-            background: "#fffbeb",
-            color: "#92400e",
-            border: "1px solid #fde68a",
+            background: warnBg,
+            color: warnFg,
+            border: `1px solid ${courtYellow}`,
             borderRadius: 3,
             fontSize: 10,
             fontWeight: 600,
@@ -1586,15 +1606,15 @@ function Stat({
     <div
       style={{
         padding: 12,
-        background: emphasize ? "#eff6ff" : "#fafafa",
-        border: `1px solid ${emphasize ? "#bfdbfe" : "#e5e7eb"}`,
+        background: emphasize ? cream : bg,
+        border: `1px solid ${emphasize ? creamDeep : rule}`,
         borderRadius: 6,
       }}
     >
       <div
         style={{
           fontSize: 11,
-          color: "#888",
+          color: inkMuted,
           textTransform: "uppercase",
           letterSpacing: 0.5,
         }}
@@ -1606,7 +1626,7 @@ function Stat({
           fontSize: emphasize ? 22 : 18,
           fontWeight: 600,
           marginTop: 4,
-          color: emphasize ? "#1e40af" : "#111",
+          color: emphasize ? courtBlue : ink,
         }}
       >
         {value}
@@ -1615,7 +1635,7 @@ function Stat({
         <div
           style={{
             fontSize: 12,
-            color: "#666",
+            color: inkMuted,
             marginTop: 4,
             lineHeight: 1.4,
           }}
@@ -1634,10 +1654,10 @@ function Empty({ children }: { children: ReactNode }) {
         marginTop: 24,
         padding: 32,
         textAlign: "center",
-        background: "#fafafa",
-        border: "1px dashed #d1d5db",
+        background: bg,
+        border: `1px dashed ${rule}`,
         borderRadius: 6,
-        color: "#666",
+        color: inkMuted,
         fontSize: 13,
       }}
     >
@@ -1650,7 +1670,7 @@ const thStyle: CSSProperties = {
   textAlign: "left",
   padding: "8px 12px",
   fontSize: 11,
-  color: "#888",
+  color: inkMuted,
   textTransform: "uppercase",
   letterSpacing: 0.5,
   fontWeight: 500,
