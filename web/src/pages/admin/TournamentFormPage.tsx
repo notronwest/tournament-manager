@@ -18,6 +18,19 @@ import {
   type TierDraft,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  rule,
+  courtRed,
+  dangerBg,
+  dangerFg,
+  bodyFontStack,
+  headingFontStack,
+  displayFontStack,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 
@@ -277,16 +290,16 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
 
   if (mode === "edit" && loading) {
     return (
-      <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>
+      <div style={{ color: inkSoft, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>
     );
   }
   if (mode === "edit" && loadError) {
     return (
-      <div style={{ maxWidth: 600 }}>
-        <h1 style={{ margin: "0 0 8px", fontSize: 20 }}>
+      <div style={{ maxWidth: 600, fontFamily: bodyFontStack }}>
+        <h1 style={{ margin: "0 0 8px", fontSize: 20, fontFamily: displayFontStack, color: ink }}>
           Can't load tournament
         </h1>
-        <p style={{ color: "#666", fontSize: 14 }}>{loadError}</p>
+        <p style={{ color: inkSoft, fontSize: 14 }}>{loadError}</p>
         <button
           onClick={() => navigate(`/admin/${org.slug}/tournaments`)}
           style={secondaryBtn}
@@ -301,12 +314,12 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
     mode === "edit" && existing != null && slug !== existing.slug;
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div style={{ maxWidth: 720, fontFamily: bodyFontStack }}>
       <header style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>
+        <h1 style={{ margin: 0, fontSize: 22, fontFamily: displayFontStack, color: ink }}>
           {mode === "create" ? "New tournament" : "Edit tournament"}
         </h1>
-        <p style={{ color: "#666", margin: "4px 0 0", fontSize: 14 }}>
+        <p style={{ color: inkSoft, margin: "4px 0 0", fontSize: 14 }}>
           {mode === "create"
             ? "Create a draft. You can add events and publish later."
             : "Update tournament details. Status (draft / published / closed / completed) is managed from the tournament page."}
@@ -362,7 +375,7 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            style={{ ...inputStyle, fontFamily: "inherit", resize: "vertical" }}
+            style={{ ...inputStyle, fontFamily: bodyFontStack, resize: "vertical" }}
           />
         </Field>
 
@@ -432,10 +445,10 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
           <div
             style={{
               padding: 12,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
+              background: dangerBg,
+              border: `1px solid ${courtRed}`,
               borderRadius: 6,
-              color: "#991b1b",
+              color: dangerFg,
               fontSize: 13,
             }}
           >
@@ -494,16 +507,17 @@ function Field({
         flexDirection: "column",
         gap: 4,
         fontSize: 13,
-        color: "#555",
+        color: inkSoft,
+        fontFamily: bodyFontStack,
       }}
     >
       <span>
         {label}
-        {required && <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>}
+        {required && <span style={{ color: courtRed, marginLeft: 4 }}>*</span>}
       </span>
       {children}
       {hint && (
-        <span style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+        <span style={{ fontSize: 12, color: inkMuted, marginTop: 2 }}>
           {hint}
         </span>
       )}
@@ -527,36 +541,43 @@ function FieldRow({ children }: { children: ReactNode }) {
 
 const inputStyle: CSSProperties = {
   padding: "8px 12px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 14,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
+  color: ink,
+  background: "#ffffff",
   width: "100%",
 };
 
 function primaryBtn(busy: boolean): CSSProperties {
   return {
     padding: "10px 20px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: busy ? inkMuted : ink,
+    color: bg,
     border: "none",
     borderRadius: 6,
-    fontSize: 14,
-    fontWeight: 500,
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
     cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
   };
 }
 
 const secondaryBtn: CSSProperties = {
   padding: "10px 20px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "transparent",
+  color: ink,
+  boxShadow: `inset 0 0 0 2px ${ink}`,
+  border: "none",
   borderRadius: 6,
-  fontSize: 14,
+  fontSize: 13,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
   cursor: "pointer",
-  fontFamily: "inherit",
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────
