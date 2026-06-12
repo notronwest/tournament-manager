@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       audit_log: {
@@ -215,6 +190,12 @@ export type Database = {
           seed: number | null
           status: Database["public"]["Enums"]["registration_status"]
           updated_at: string
+          withdrawal_decided_at: string | null
+          withdrawal_decision:
+            | Database["public"]["Enums"]["withdrawal_decision"]
+            | null
+          withdrawal_reason: string | null
+          withdrawal_requested_at: string | null
         }
         Insert: {
           created_at?: string
@@ -230,6 +211,12 @@ export type Database = {
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
+          withdrawal_decided_at?: string | null
+          withdrawal_decision?:
+            | Database["public"]["Enums"]["withdrawal_decision"]
+            | null
+          withdrawal_reason?: string | null
+          withdrawal_requested_at?: string | null
         }
         Update: {
           created_at?: string
@@ -245,6 +232,12 @@ export type Database = {
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
+          withdrawal_decided_at?: string | null
+          withdrawal_decision?:
+            | Database["public"]["Enums"]["withdrawal_decision"]
+            | null
+          withdrawal_reason?: string | null
+          withdrawal_requested_at?: string | null
         }
         Relationships: [
           {
@@ -388,6 +381,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      feedback_submissions: {
+        Row: {
+          auth_user_id: string | null
+          category: string
+          created_at: string
+          id: string
+          ip_hash: string
+          message: string
+          page_url: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          ip_hash: string
+          message: string
+          page_url?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          ip_hash?: string
+          message?: string
+          page_url?: string | null
+        }
+        Relationships: []
       }
       locations: {
         Row: {
@@ -1306,13 +1329,13 @@ export type Database = {
           event_id: string
           first_name: string
           gender: Database["public"]["Enums"]["player_gender"]
-          invited_partner_first_name: string | null
-          invited_partner_last_name: string | null
+          invited_partner_first_name: string
+          invited_partner_last_name: string
           last_name: string
           partner_registration_id: string
           partner_status: Database["public"]["Enums"]["partner_status"]
-          pending_invite_id: string | null
-          pending_partner_reg_id: string | null
+          pending_invite_id: string
+          pending_partner_reg_id: string
           registration_id: string
           self_rating_doubles: number
           self_rating_mixed: number
@@ -1356,6 +1379,21 @@ export type Database = {
         }[]
       }
       redeem_coupon: { Args: { p_coupon_id: string }; Returns: boolean }
+      refund_compute: {
+        Args: { p_event_registration_id: string }
+        Returns: {
+          charge_id: string
+          connected_acct: string
+          decision: string
+          paid_cents: number
+          partner_reg_id: string
+          payment_id: string
+          payment_intent: string
+          preset: Database["public"]["Enums"]["cancellation_policy_preset"]
+          refund_cents: number
+          reg_status: Database["public"]["Enums"]["registration_status"]
+        }[]
+      }
       replace_pricing_tiers: {
         Args: { p_tiers: Json; p_tournament_id: string }
         Returns: undefined
@@ -1440,6 +1478,7 @@ export type Database = {
         | "closed"
         | "completed"
         | "cancelled"
+      withdrawal_decision: "approved" | "denied"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1565,9 +1604,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       bracket_type: [
@@ -1649,6 +1685,7 @@ export const Constants = {
         "completed",
         "cancelled",
       ],
+      withdrawal_decision: ["approved", "denied"],
     },
   },
 } as const

@@ -36,6 +36,10 @@ type EventReg = {
   event_fee_cents: number;
   event_name: string;
   event_format: string;
+  // A late-withdrawal request the player filed when auto-refund couldn't
+  // decide (#200). requested_at set + decided_at null = pending organizer review.
+  withdrawal_requested_at: string | null;
+  withdrawal_decided_at: string | null;
 };
 
 type TournamentGroup = {
@@ -226,6 +230,8 @@ export default function MyTournamentsPage() {
           status,
           partner_status,
           event_fee_cents,
+          withdrawal_requested_at,
+          withdrawal_decided_at,
           events (
             id,
             name,
@@ -298,6 +304,8 @@ export default function MyTournamentsPage() {
           event_fee_cents: row.event_fee_cents,
           event_name: ev.name,
           event_format: ev.format,
+          withdrawal_requested_at: row.withdrawal_requested_at,
+          withdrawal_decided_at: row.withdrawal_decided_at,
         });
       }
 
@@ -372,6 +380,39 @@ export default function MyTournamentsPage() {
     setWithdrawFlow(null);
   };
 
+  // #200 AC#1: when the refund can't auto-decide (manual_required), the player
+  // files a withdrawal REQUEST instead of getting an instant refund — we stamp
+  // withdrawal_requested_at + an optional reason (no status change). RLS lets a
+  // player update their own reg; the organizer resolves it from the queue.
+  const requestWithdrawal = async (reason: string) => {
+    if (!withdrawFlow) return;
+    const { regId, tournamentId } = withdrawFlow;
+    const requestedAt = new Date().toISOString();
+    const { error: updErr } = await supabase
+      .from("event_registrations")
+      .update({
+        withdrawal_requested_at: requestedAt,
+        withdrawal_reason: reason.trim() || null,
+      })
+      .eq("id", regId)
+      .is("withdrawal_requested_at", null); // don't reset the clock on a re-file
+    if (updErr) throw new Error(updErr.message);
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.tournament_id !== tournamentId
+          ? g
+          : {
+              ...g,
+              regs: g.regs.map((r) =>
+                r.id === regId
+                  ? { ...r, withdrawal_requested_at: requestedAt }
+                  : r
+              ),
+            }
+      )
+    );
+  };
+
   const cancelWithdraw = () => setWithdrawFlow(null);
 
   const activeGroup = withdrawFlow
@@ -434,6 +475,7 @@ export default function MyTournamentsPage() {
           flow={withdrawFlow}
           policy={activeGroup?.cancellation_policy_preset ?? null}
           onConfirm={executeWithdraw}
+          onRequestReview={requestWithdrawal}
           onCancel={cancelWithdraw}
         />
       )}
@@ -515,16 +557,22 @@ function TournamentCard({
                 >
                   {statusLabel(reg.status, reg.partner_status)}
                 </span>
-                {isWithdrawable(reg.status) && (
-                  <button
-                    style={withdrawBtnStyle}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onWithdraw(reg.id, group.tournament_id, reg.event_name);
-                    }}
-                  >
-                    Withdraw
-                  </button>
+                {reg.withdrawal_requested_at && !reg.withdrawal_decided_at ? (
+                  <span style={withdrawRequestedPillStyle}>
+                    Withdrawal requested
+                  </span>
+                ) : (
+                  isWithdrawable(reg.status) && (
+                    <button
+                      style={withdrawBtnStyle}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onWithdraw(reg.id, group.tournament_id, reg.event_name);
+                      }}
+                    >
+                      Withdraw
+                    </button>
+                  )
                 )}
               </div>
             </div>
@@ -548,19 +596,37 @@ function WithdrawModal({
   flow,
   policy,
   onConfirm,
+  onRequestReview,
   onCancel,
 }: {
   flow: WithdrawFlow;
   policy: CancellationPolicyPreset | null;
   onConfirm: () => Promise<void>;
+  onRequestReview: (reason: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [executing, setExecuting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [requested, setRequested] = useState(false);
+  const [requestErr, setRequestErr] = useState<string | null>(null);
 
   const handleConfirm = async () => {
     setExecuting(true);
     try {
       await onConfirm();
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const handleRequest = async () => {
+    setExecuting(true);
+    setRequestErr(null);
+    try {
+      await onRequestReview(reason);
+      setRequested(true);
+    } catch (e) {
+      setRequestErr(e instanceof Error ? e.message : "Couldn't send your request.");
     } finally {
       setExecuting(false);
     }
@@ -625,11 +691,48 @@ function WithdrawModal({
                   <span>{refundSummaryText(preview)}</span>
                 </div>
 
-                {isManual && (
-                  <p style={{ margin: 0, color: "#374151" }}>
-                    Contact the organizer to request your refund. They will
-                    review your case and process it manually.
+                {isManual && requested && (
+                  <p style={{ margin: 0, color: "#1e6b2c" }}>
+                    Your withdrawal request has been sent to the organizer.
+                    They'll review it and let you know — you'll see the result
+                    here once they decide.
                   </p>
+                )}
+
+                {isManual && !requested && (
+                  <>
+                    <p style={{ margin: 0, color: "#374151" }}>
+                      Your refund can't be decided automatically, so it goes to
+                      the organizer to review. Add a short note if you'd like,
+                      then send your request.
+                    </p>
+                    <label style={{ fontSize: 12, color: "#6b7280" }}>
+                      Reason (optional)
+                      <textarea
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        maxLength={500}
+                        rows={3}
+                        disabled={executing}
+                        placeholder="e.g. injury, schedule conflict…"
+                        style={{
+                          width: "100%",
+                          marginTop: 4,
+                          padding: "8px 10px",
+                          border: "1px solid #d1d5db",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          fontFamily: "inherit",
+                          resize: "vertical",
+                        }}
+                      />
+                    </label>
+                    {requestErr && (
+                      <p style={{ margin: 0, color: "#dc2626", fontSize: 12 }}>
+                        {requestErr}
+                      </p>
+                    )}
+                  </>
                 )}
 
                 {preview.partner?.willUnpair && (
@@ -650,7 +753,7 @@ function WithdrawModal({
             disabled={busy}
             style={secondaryBtnStyle(busy)}
           >
-            {isManual || isError ? "Close" : "Cancel"}
+            {requested || isError ? "Close" : "Cancel"}
           </button>
 
           {showConfirm && (
@@ -660,6 +763,16 @@ function WithdrawModal({
               style={destructiveBtnStyle(executing)}
             >
               {executing ? "Working…" : "Confirm Withdrawal"}
+            </button>
+          )}
+
+          {isManual && !requested && (
+            <button
+              onClick={handleRequest}
+              disabled={executing}
+              style={destructiveBtnStyle(executing)}
+            >
+              {executing ? "Sending…" : "Send request"}
             </button>
           )}
         </div>
@@ -743,6 +856,19 @@ const withdrawBtnStyle: CSSProperties = {
   cursor: "pointer",
   whiteSpace: "nowrap",
   fontFamily: "inherit",
+};
+
+// Amber "note-to-self / pending" treatment (per docs/DESIGN_PREFERENCES.md)
+// for a withdrawal request awaiting organizer review.
+const withdrawRequestedPillStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 500,
+  padding: "2px 8px",
+  borderRadius: 9999,
+  whiteSpace: "nowrap",
+  background: "#fef3c7",
+  border: "1px solid #fde68a",
+  color: "#92400e",
 };
 
 const cardFooterStyle: CSSProperties = {
