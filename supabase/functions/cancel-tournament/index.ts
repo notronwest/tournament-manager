@@ -78,14 +78,23 @@ Deno.serve(async (req: Request) => {
       .single();
     if (tErr || !t) return json({ error: "tournament_not_found" }, 404);
 
-    // ── 4. Authorize: ORG STAFF only (same gate as stripe-refund) ───
+    // ── 4. Authorize: ORG STAFF or platform admin ───────────────────
+    // Mirror the useCurrentOrg client-side check: explicit org member OR
+    // a platform admin (who has implicit owner access to every org).
     const { data: staffRow } = await admin
       .from("organization_members")
       .select("user_id")
       .eq("organization_id", t.organization_id)
       .eq("user_id", authUserId)
       .maybeSingle();
-    if (!staffRow) return json({ error: "forbidden_org_staff_only" }, 403);
+    if (!staffRow) {
+      const { data: padmin } = await admin
+        .from("platform_admins")
+        .select("user_id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (!padmin) return json({ error: "forbidden_org_staff_only" }, 403);
+    }
 
     // ── 5. Flip status → cancelled (idempotent; safe to re-run) ─────
     // TODO(Ron) [DECIDE]: persist `reason`. `tournaments` has no
