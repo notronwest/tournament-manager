@@ -4,6 +4,18 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { matchLabel, playoffStageLabel } from "../../lib/matchLabel";
 import type { Database } from "../../types/supabase";
+import {
+  inkSoft,
+  inkMuted,
+  bg,
+  rule,
+  ruleSoft,
+  courtBlue,
+  courtRed,
+  dangerBg,
+  dangerFg,
+  bodyFontStack,
+} from "../../lib/publicTheme";
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -146,17 +158,22 @@ export default function ScorecardsPage() {
 
   if (!org) return null;
   if (loading)
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return (
+      <div style={{ color: inkMuted, fontSize: 14, fontFamily: bodyFontStack }}>
+        Loading…
+      </div>
+    );
   if (error) {
     return (
       <div
         style={{
           padding: 12,
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
+          background: dangerBg,
+          border: `1px solid ${courtRed}`,
           borderRadius: 6,
-          color: "#991b1b",
+          color: dangerFg,
           fontSize: 13,
+          fontFamily: bodyFontStack,
         }}
       >
         {error}
@@ -172,7 +189,7 @@ export default function ScorecardsPage() {
       <div className="no-print" style={toolbarStyle}>
         <Link
           to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}`}
-          style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}
+          style={{ color: courtBlue, textDecoration: "none", fontSize: 13 }}
         >
           ← {event.name}
         </Link>
@@ -217,10 +234,10 @@ export default function ScorecardsPage() {
             style={{
               padding: 32,
               textAlign: "center",
-              background: "#fafafa",
-              border: "1px dashed #d1d5db",
+              background: bg,
+              border: `1px dashed ${rule}`,
               borderRadius: 6,
-              color: "#666",
+              color: inkMuted,
               fontSize: 13,
             }}
           >
@@ -359,7 +376,7 @@ function TimeoutRow({ timeouts }: { timeouts: number }) {
   if (timeouts === 0) {
     return (
       <div className="scorecard-timeout-row">
-        <span style={{ color: "#999", fontStyle: "italic" }}>No time-outs</span>
+        <span style={{ color: inkMuted, fontStyle: "italic" }}>No time-outs</span>
       </div>
     );
   }
@@ -439,28 +456,29 @@ const filterLabel = {
   alignItems: "center",
   gap: 6,
   fontSize: 13,
-  color: "#555",
+  color: inkSoft,
+  fontFamily: bodyFontStack,
 };
 
 const selectStyle = {
   padding: "6px 10px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 13,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
   background: "#fff",
 };
 
 const printBtn = {
   padding: "8px 16px",
-  background: "#2563eb",
+  background: courtBlue,
   color: "#fff",
   border: "none",
   borderRadius: 6,
   fontSize: 13,
   fontWeight: 500,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
 };
 
 // All scorecard styling lives in this one CSS string so the print rules
@@ -616,17 +634,17 @@ const printCss = `
     .scorecard {
       margin: 16px auto;
       max-width: 7.5in;
-      border: 1px solid #ddd;
+      border: 1px solid ${rule};
       background: #fff;
     }
     .scorecard:last-child {
       border-bottom: 2px solid #000;
     }
     .scorecard-cut {
-      border-top-color: #999;
+      border-top-color: ${inkMuted};
     }
     .scorecard-team-divider {
-      border-top-color: #ccc;
+      border-top-color: ${ruleSoft};
     }
   }
 `;
