@@ -21,6 +21,27 @@ import { eligibilityChips } from "../../lib/eligibility";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  cream,
+  creamDeep,
+  rule,
+  ruleSoft,
+  courtBlue,
+  courtRed,
+  courtYellow,
+  successBg,
+  successFg,
+  dangerBg,
+  dangerFg,
+  warnBg,
+  warnFg,
+  bodyFontStack,
+  headingFontStack,
+} from "../../lib/publicTheme";
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
 
@@ -323,16 +344,16 @@ export default function EventConsolePage() {
   };
 
   if (!org) return null;
-  if (loading) return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+  if (loading) return <div style={{ color: inkMuted, fontSize: 14 }}>Loading…</div>;
   if (error) {
     return (
       <div
         style={{
           padding: 12,
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
+          background: dangerBg,
+          border: `1px solid ${courtRed}`,
           borderRadius: 6,
-          color: "#991b1b",
+          color: dangerFg,
           fontSize: 13,
         }}
       >
@@ -347,7 +368,7 @@ export default function EventConsolePage() {
       <div>
         <Link
           to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-          style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}
+          style={{ color: courtBlue, textDecoration: "none", fontSize: 13 }}
         >
           ← {tournament.name}
         </Link>
@@ -361,8 +382,8 @@ export default function EventConsolePage() {
           }}
         >
           <div>
-            <h1 style={{ margin: "0 0 4px", fontSize: 22 }}>{event.name}</h1>
-            <p style={{ color: "#666", margin: 0, fontSize: 13 }}>
+            <h1 style={{ margin: "0 0 4px", fontSize: 22, color: ink }}>{event.name}</h1>
+            <p style={{ color: inkMuted, margin: 0, fontSize: 13 }}>
               {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
               {event.points_to_win} win by {event.win_by}
               {event.pool_count > 1 ? ` · ${event.pool_count} pools` : ""}
@@ -377,7 +398,7 @@ export default function EventConsolePage() {
             {event.scheduled_start_at && (
               <p
                 style={{
-                  color: "#444",
+                  color: inkSoft,
                   fontSize: 13,
                   margin: "4px 0 0",
                   fontWeight: 500,
@@ -400,8 +421,8 @@ export default function EventConsolePage() {
                     key={c}
                     style={{
                       padding: "2px 8px",
-                      background: "#eff6ff",
-                      color: "#1e40af",
+                      background: cream,
+                      color: inkSoft,
                       borderRadius: 4,
                       fontSize: 11,
                       fontWeight: 500,
@@ -421,13 +442,13 @@ export default function EventConsolePage() {
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/scorecards`}
                 style={{
                   padding: "8px 16px",
-                  background: "#fff",
-                  color: "#2563eb",
+                  background: "#ffffff",
+                  color: courtBlue,
                   textDecoration: "none",
                   borderRadius: 6,
                   fontSize: 13,
                   fontWeight: 500,
-                  border: "1px solid #2563eb",
+                  border: `1px solid ${courtBlue}`,
                   whiteSpace: "nowrap",
                 }}
               >
@@ -441,14 +462,14 @@ export default function EventConsolePage() {
                 title="Clear all scores and put every match back to pending. Keeps the schedule intact — won't delete or regenerate the bracket."
                 style={{
                   padding: "8px 16px",
-                  background: "#fff",
-                  color: "#991b1b",
+                  background: "#ffffff",
+                  color: dangerFg,
                   borderRadius: 6,
                   fontSize: 13,
                   fontWeight: 500,
-                  border: "1px solid #fecaca",
+                  border: `1px solid ${courtRed}`,
                   cursor: resetting ? "not-allowed" : "pointer",
-                  fontFamily: "inherit",
+                  fontFamily: bodyFontStack,
                   whiteSpace: "nowrap",
                 }}
               >
@@ -961,9 +982,9 @@ function TeamsSection({
               <span
                 style={{
                   fontSize: 12,
-                  color: "#7a5d00",
-                  background: "#fffbeb",
-                  border: "1px solid #fde68a",
+                  color: warnFg,
+                  background: warnBg,
+                  border: `1px solid ${creamDeep}`,
                   borderRadius: 4,
                   padding: "2px 8px",
                   fontWeight: 500,
@@ -1005,8 +1026,8 @@ function TeamsSection({
           alignItems: "flex-start",
           marginBottom: 16,
           padding: 12,
-          background: "#fafafa",
-          border: "1px solid #e5e7eb",
+          background: bg,
+          border: `1px solid ${rule}`,
           borderRadius: 6,
         }}
       >
@@ -1042,7 +1063,7 @@ function TeamsSection({
               style={{
                 margin: "0 0 8px",
                 fontSize: 12,
-                color: "#888",
+                color: inkMuted,
               }}
             >
               Drag rows to rank teams. Seeds are saved automatically and
@@ -1080,7 +1101,7 @@ function TeamsSection({
                       return (
                         <tr
                           key={team.captainRegId}
-                          style={{ ...tableRow, background: "#fafafa" }}
+                          style={{ ...tableRow, background: bg }}
                         >
                           <td colSpan={colSpan} style={{ padding: 12 }}>
                             <div
@@ -1170,10 +1191,10 @@ function TeamsSection({
                           ...tableRow,
                           opacity: isDragged ? 0.4 : 1,
                           borderTop: dropAbove
-                            ? "2px solid #2563eb"
+                            ? `2px solid ${courtBlue}`
                             : tableRow.borderTop,
                           borderBottom: dropBelow
-                            ? "2px solid #2563eb"
+                            ? `2px solid ${courtBlue}`
                             : tableRow.borderBottom,
                           cursor:
                             showSeedColumn && editingTeamId === null
@@ -1185,7 +1206,7 @@ function TeamsSection({
                           <td
                             style={{
                               ...tdStyle,
-                              color: "#9ca3af",
+                              color: inkMuted,
                               textAlign: "center",
                               userSelect: "none",
                               fontSize: 16,
@@ -1197,7 +1218,7 @@ function TeamsSection({
                             ⋮⋮
                           </td>
                         )}
-                        <td style={{ ...tdStyle, color: "#888" }}>{i + 1}</td>
+                        <td style={{ ...tdStyle, color: inkMuted }}>{i + 1}</td>
                         <td style={{ ...tdStyle, fontWeight: 500 }}>
                           {team.label}
                         </td>
@@ -1216,11 +1237,11 @@ function TeamsSection({
                               onMouseDown={(e) => e.stopPropagation()}
                               style={{
                                 padding: "4px 6px",
-                                border: "1px solid #e2e2e2",
+                                border: `1px solid ${rule}`,
                                 borderRadius: 4,
                                 fontSize: 12,
-                                fontFamily: "inherit",
-                                background: "#fff",
+                                fontFamily: bodyFontStack,
+                                background: "#ffffff",
                               }}
                             >
                               <option value="">—</option>
@@ -1549,12 +1570,12 @@ function MatchRow({
 
   return (
     <tr style={tableRow}>
-      <td style={{ ...tdStyle, color: "#888" }}>{index}</td>
+      <td style={{ ...tdStyle, color: inkMuted }}>{index}</td>
       <td
         style={{
           ...tdStyle,
           fontWeight: match.winner_reg_id === match.team_a_reg_id ? 600 : 400,
-          color: teamA ? "#111" : "#999",
+          color: teamA ? ink : inkMuted,
         }}
       >
         {teamA?.label ?? "TBD"}
@@ -1574,7 +1595,7 @@ function MatchRow({
           disabled={!canPlay || busy}
           style={scoreInputStyle}
         />
-        <span style={{ margin: "0 4px", color: "#999" }}>–</span>
+        <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
         <input
           type="number"
           min="0"
@@ -1591,7 +1612,7 @@ function MatchRow({
           {busy ? "…" : "Save"}
         </button>
         {err && (
-          <div style={{ color: "#991b1b", fontSize: 11, marginTop: 4 }}>
+          <div style={{ color: dangerFg, fontSize: 11, marginTop: 4 }}>
             {err}
           </div>
         )}
@@ -1600,7 +1621,7 @@ function MatchRow({
         style={{
           ...tdStyle,
           fontWeight: match.winner_reg_id === match.team_b_reg_id ? 600 : 400,
-          color: teamB ? "#111" : "#999",
+          color: teamB ? ink : inkMuted,
         }}
       >
         {teamB?.label ?? "TBD"}
@@ -1619,10 +1640,10 @@ function MatchStatusBadge({
 }) {
   const c =
     status === "completed"
-      ? { bg: "#dcfce7", fg: "#166534", label: "Completed" }
+      ? { bg: successBg, fg: successFg, label: "Completed" }
       : status === "in_progress"
-        ? { bg: "#fef3c7", fg: "#92400e", label: "In progress" }
-        : { bg: "#f3f4f6", fg: "#666", label: "Pending" };
+        ? { bg: warnBg, fg: warnFg, label: "In progress" }
+        : { bg: ruleSoft, fg: inkMuted, label: "Pending" };
   return (
     <span
       style={{
@@ -1716,7 +1737,7 @@ function StandingsSection({
                   {p.label}
                 </div>
                 <div
-                  style={{ fontSize: 16, fontWeight: 600, color: "#222" }}
+                  style={{ fontSize: 16, fontWeight: 600, color: ink }}
                 >
                   {team.label}
                 </div>
@@ -1735,7 +1756,7 @@ function StandingsSection({
                 <h3
                   style={{
                     fontSize: 12,
-                    color: "#888",
+                    color: inkMuted,
                     margin: "0 0 6px",
                     textTransform: "uppercase",
                     letterSpacing: 0.5,
@@ -1759,7 +1780,7 @@ function StandingsSection({
                 <tbody>
                   {g.rows.map((s, i) => (
                     <tr key={s.team.captainRegId} style={tableRow}>
-                      <td style={{ ...tdStyle, color: "#888" }}>{i + 1}</td>
+                      <td style={{ ...tdStyle, color: inkMuted }}>{i + 1}</td>
                       <td style={{ ...tdStyle, fontWeight: 500 }}>
                         {s.team.label}
                       </td>
@@ -1767,10 +1788,10 @@ function StandingsSection({
                       <td style={{ ...tdStyle, textAlign: "right" }}>
                         {s.losses}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "right", color: "#666" }}>
+                      <td style={{ ...tdStyle, textAlign: "right", color: inkMuted }}>
                         {s.pf}
                       </td>
-                      <td style={{ ...tdStyle, textAlign: "right", color: "#666" }}>
+                      <td style={{ ...tdStyle, textAlign: "right", color: inkMuted }}>
                         {s.pa}
                       </td>
                       <td
@@ -1779,10 +1800,10 @@ function StandingsSection({
                           textAlign: "right",
                           color:
                             s.diff > 0
-                              ? "#166534"
+                              ? successFg
                               : s.diff < 0
-                                ? "#991b1b"
-                                : "#666",
+                                ? dangerFg
+                                : inkMuted,
                         }}
                       >
                         {s.diff > 0 ? `+${s.diff}` : s.diff}
@@ -2019,13 +2040,13 @@ function PlayoffSection({
               gap: 12,
               alignItems: "center",
               padding: 12,
-              background: "#fafafa",
-              border: "1px solid #e5e7eb",
+              background: bg,
+              border: `1px solid ${rule}`,
               borderRadius: 6,
               flexWrap: "wrap",
             }}
           >
-            <div style={{ fontSize: 13, color: "#444" }}>
+            <div style={{ fontSize: 13, color: inkSoft }}>
               Top {N},{" "}
               {R === 1
                 ? "1 round (pairwise medal matches)"
@@ -2045,7 +2066,7 @@ function PlayoffSection({
                 <h3
                   style={{
                     fontSize: 13,
-                    color: "#888",
+                    color: inkMuted,
                     margin: "0 0 8px",
                     textTransform: "uppercase",
                     letterSpacing: 0.5,
@@ -2089,10 +2110,10 @@ function PlayoffSection({
             <div
               style={{
                 padding: 16,
-                background: "#fef3c7",
-                border: "1px solid #fcd34d",
+                background: warnBg,
+                border: `1px solid ${courtYellow}`,
                 borderRadius: 6,
-                color: "#7a5d00",
+                color: warnFg,
                 fontSize: 14,
                 fontWeight: 500,
               }}
@@ -2285,11 +2306,11 @@ function medalPalette(place: "gold" | "silver" | "bronze"): {
 } {
   switch (place) {
     case "gold":
-      return { bg: "#fef3c7", color: "#92400e", border: "#fde68a", label: "Gold" };
+      return { bg: warnBg, color: warnFg, border: creamDeep, label: "Gold" };
     case "silver":
-      return { bg: "#f1f5f9", color: "#475569", border: "#cbd5e1", label: "Silver" };
+      return { bg: bg, color: inkSoft, border: rule, label: "Silver" };
     case "bronze":
-      return { bg: "#fff7ed", color: "#7c2d12", border: "#fed7aa", label: "Bronze" };
+      return { bg: dangerBg, color: dangerFg, border: courtRed, label: "Bronze" };
   }
 }
 
@@ -2318,7 +2339,7 @@ function TabStrip({
   return (
     <div
       style={{
-        borderBottom: "1px solid #e2e2e2",
+        borderBottom: `1px solid ${rule}`,
         display: "flex",
         gap: 4,
       }}
@@ -2330,11 +2351,11 @@ function TabStrip({
           style={{
             padding: "8px 16px",
             background: "transparent",
-            color: active === t.key ? "#2563eb" : "#666",
+            color: active === t.key ? courtBlue : inkMuted,
             border: "none",
             borderBottom:
               active === t.key
-                ? "2px solid #2563eb"
+                ? `2px solid ${courtBlue}`
                 : "2px solid transparent",
             // Pull the bottom border down to overlap the strip's own
             // border, otherwise the active underline sits above it
@@ -2343,7 +2364,7 @@ function TabStrip({
             fontSize: 14,
             fontWeight: active === t.key ? 600 : 500,
             cursor: "pointer",
-            fontFamily: "inherit",
+            fontFamily: bodyFontStack,
           }}
         >
           {t.label}
@@ -2379,19 +2400,22 @@ function SettingsTab({
           gap: 12,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: ink }}>
           Event settings
         </h2>
         <Link
           to={editUrl}
           style={{
             padding: "8px 16px",
-            background: "#2563eb",
-            color: "#fff",
+            background: ink,
+            color: cream,
             textDecoration: "none",
             borderRadius: 6,
             fontSize: 13,
-            fontWeight: 500,
+            fontWeight: 600,
+            fontFamily: headingFontStack,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
             whiteSpace: "nowrap",
           }}
         >
@@ -2463,8 +2487,8 @@ function SettingsTab({
 function DtDd({ label, value }: { label: string; value: string }) {
   return (
     <>
-      <dt style={{ color: "#888" }}>{label}</dt>
-      <dd style={{ margin: 0, color: "#222" }}>{value}</dd>
+      <dt style={{ color: inkMuted }}>{label}</dt>
+      <dd style={{ margin: 0, color: ink }}>{value}</dd>
     </>
   );
 }
@@ -2485,7 +2509,7 @@ function SectionHeader({
         marginBottom: 12,
       }}
     >
-      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{title}</h2>
+      <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: ink }}>{title}</h2>
       {right}
     </div>
   );
@@ -2498,10 +2522,10 @@ function Empty({ children }: { children: ReactNode }) {
       style={{
         padding: 24,
         textAlign: "center",
-        background: "#fafafa",
-        border: "1px dashed #d1d5db",
+        background: bg,
+        border: `1px dashed ${rule}`,
         borderRadius: 6,
-        color: "#666",
+        color: inkMuted,
         fontSize: 13,
       }}
     >
@@ -2515,10 +2539,10 @@ function ErrorBox({ message }: { message: string }) {
     <div
       style={{
         padding: 10,
-        background: "#fef2f2",
-        border: "1px solid #fecaca",
+        background: dangerBg,
+        border: `1px solid ${courtRed}`,
         borderRadius: 6,
-        color: "#991b1b",
+        color: dangerFg,
         fontSize: 13,
         marginBottom: 12,
       }}
@@ -2539,19 +2563,19 @@ const tableStyle: CSSProperties = {
 };
 
 const tableHeadRow: CSSProperties = {
-  background: "#fafafa",
-  borderBottom: "1px solid #e5e7eb",
+  background: bg,
+  borderBottom: `1px solid ${rule}`,
 };
 
 const tableRow: CSSProperties = {
-  borderBottom: "1px solid #f3f4f6",
+  borderBottom: `1px solid ${ruleSoft}`,
 };
 
 const thStyle: CSSProperties = {
   textAlign: "left",
   padding: "8px 12px",
   fontSize: 11,
-  color: "#888",
+  color: inkMuted,
   textTransform: "uppercase",
   letterSpacing: 0.5,
   fontWeight: 500,
@@ -2564,59 +2588,63 @@ const tdStyle: CSSProperties = {
 const scoreInputStyle: CSSProperties = {
   width: 50,
   padding: "4px 6px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 4,
   fontSize: 13,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
   textAlign: "center",
 };
 
 function primaryBtn(busy: boolean): CSSProperties {
   return {
     padding: "8px 16px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: busy ? inkMuted : ink,
+    color: cream,
     border: "none",
     borderRadius: 6,
     fontSize: 13,
-    fontWeight: 500,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
     cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
   };
 }
 
 const tinyPrimaryBtn: CSSProperties = {
   padding: "4px 10px",
-  background: "#2563eb",
-  color: "#fff",
+  background: ink,
+  color: cream,
   border: "none",
   borderRadius: 4,
   fontSize: 12,
-  fontWeight: 500,
+  fontWeight: 600,
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
   cursor: "pointer",
-  fontFamily: "inherit",
 };
 
 const tinySecondaryBtn: CSSProperties = {
   padding: "4px 10px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "#ffffff",
+  color: inkSoft,
+  border: `1px solid ${rule}`,
   borderRadius: 4,
   fontSize: 12,
   fontWeight: 500,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
 };
 
 const tinyDangerBtn: CSSProperties = {
   padding: "4px 10px",
-  background: "#fff",
-  color: "#991b1b",
-  border: "1px solid #fecaca",
+  background: "#ffffff",
+  color: dangerFg,
+  border: `1px solid ${courtRed}`,
   borderRadius: 4,
   fontSize: 12,
   fontWeight: 500,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
 };
