@@ -251,7 +251,7 @@ export default function PublicTournamentPage() {
       .select("*, locations(id, name, address, address_line2, city, state, postal_code, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
-      .in("status", ["published", "closed", "completed"])
+      .in("status", ["published", "closed", "completed", "cancelled"])
       .is("deleted_at", null)
       .maybeSingle();
     if (tErr) {
@@ -751,6 +751,18 @@ export default function PublicTournamentPage() {
           </Link>
         </div>
       </header>
+
+      {tournament.status === "cancelled" && (
+        <div
+          style={{
+            ...statusPanelStyle("danger"),
+            marginBottom: 24,
+            fontWeight: 600,
+          }}
+        >
+          This tournament has been cancelled.
+        </div>
+      )}
 
       <div
         style={{

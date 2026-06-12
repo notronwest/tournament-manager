@@ -57,6 +57,14 @@ type EventSummary = {
   courtNumbers: number[];
 };
 
+type CancelResult = {
+  players_refunded: number;
+  registrations_refunded: number;
+  total_refunded_cents: number;
+  emailed: number;
+  failures: Array<{ event_registration_id: string; error: string }>;
+};
+
 // Tournament homepage: stats + events list with per-event status,
 // court allocation, and start/complete actions. The court manager
 // link sits at the top because it's tournament-wide — a single
@@ -75,6 +83,12 @@ export default function TournamentDetailPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [pendingDeleteEvent, setPendingDeleteEvent] = useState<EventSummary | null>(null);
   const [deletingEvent, setDeletingEvent] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelResult, setCancelResult] = useState<CancelResult | null>(null);
+  const [retryBusy, setRetryBusy] = useState(false);
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug) return;
@@ -280,6 +294,42 @@ export default function TournamentDetailPage() {
     await reload();
   };
 
+  const cancelTournament = async () => {
+    if (!t || !cancelReason.trim()) {
+      setCancelError("Please enter a reason for the cancellation.");
+      return;
+    }
+    setCancelBusy(true);
+    setCancelError(null);
+    const { data, error: fnErr } = await supabase.functions.invoke(
+      "cancel-tournament",
+      { body: { tournament_id: t.id, reason: cancelReason.trim() } },
+    );
+    setCancelBusy(false);
+    if (fnErr) {
+      setCancelError(await extractFnError(fnErr));
+      return;
+    }
+    setCancelResult(data as CancelResult);
+    setShowCancelModal(false);
+    await reload();
+  };
+
+  const retryFailedRefunds = async () => {
+    if (!t) return;
+    setRetryBusy(true);
+    const { data, error: fnErr } = await supabase.functions.invoke(
+      "cancel-tournament",
+      { body: { tournament_id: t.id, reason: cancelReason.trim() || "Retry" } },
+    );
+    setRetryBusy(false);
+    if (fnErr) {
+      setError(await extractFnError(fnErr));
+      return;
+    }
+    setCancelResult(data as CancelResult);
+  };
+
   const toggleCourt = async (eventId: string, courtNumber: number) => {
     setBusyAction(`court:${eventId}:${courtNumber}`);
     const existing = eventCourts.find(
@@ -363,6 +413,11 @@ export default function TournamentDetailPage() {
             status={t.status}
             busy={busyAction === "tstatus"}
             onSetStatus={setTournamentStatus}
+            onRequestCancel={() => {
+              setCancelReason("");
+              setCancelError(null);
+              setShowCancelModal(true);
+            }}
           />
           {/* Edit tournament details — name, dates, description,
               location, registration window, entry fee, court count.
@@ -434,6 +489,54 @@ export default function TournamentDetailPage() {
           </Link>
         </div>
       </div>
+
+      {/* Cancellation result — shown after a successful cancel or retry */}
+      {cancelResult && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: "12px 16px",
+            background: successBg,
+            border: `1px solid ${successFg}`,
+            borderRadius: 8,
+            fontSize: 13,
+            color: successFg,
+          }}
+        >
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Tournament cancelled.</div>
+          <div>
+            {cancelResult.players_refunded}{" "}
+            {cancelResult.players_refunded === 1 ? "player" : "players"} refunded — $
+            {(cancelResult.total_refunded_cents / 100).toFixed(2)} total.
+          </div>
+          {cancelResult.failures.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ color: dangerFg }}>
+                {cancelResult.failures.length} refund
+                {cancelResult.failures.length === 1 ? "" : "s"} failed.
+              </div>
+              <button
+                onClick={retryFailedRefunds}
+                disabled={retryBusy}
+                style={{
+                  marginTop: 6,
+                  padding: "6px 14px",
+                  background: dangerBg,
+                  color: dangerFg,
+                  border: `1px solid ${dangerFg}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  cursor: retryBusy ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  fontWeight: 500,
+                }}
+              >
+                {retryBusy ? "Retrying…" : "Retry failed refunds"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats strip */}
       <div
@@ -609,6 +712,20 @@ export default function TournamentDetailPage() {
           confirmLabel={deletingEvent ? "Deleting…" : "Delete event"}
           onCancel={() => setPendingDeleteEvent(null)}
           onConfirm={confirmDeleteEvent}
+        />
+      )}
+
+      {showCancelModal && (
+        <CancelTournamentModal
+          reason={cancelReason}
+          onReasonChange={setCancelReason}
+          busy={cancelBusy}
+          error={cancelError}
+          onConfirm={cancelTournament}
+          onCancel={() => {
+            setShowCancelModal(false);
+            setCancelError(null);
+          }}
         />
       )}
     </div>
@@ -968,18 +1085,20 @@ function TournamentStatusActions({
   status,
   busy,
   onSetStatus,
+  onRequestCancel,
 }: {
   status: TournamentStatus;
   busy: boolean;
   onSetStatus: (s: TournamentStatus) => Promise<void>;
+  onRequestCancel: () => void;
 }) {
   const cancel = (
     <button
       key="cancel"
-      onClick={() => void onSetStatus("cancelled")}
+      onClick={onRequestCancel}
       disabled={busy}
       style={dangerStatusBtn(busy)}
-      title="Cancel the tournament. Stays in the org's history but won't run."
+      title="Cancel the tournament. All paid registrations will be refunded per the cancellation policy."
     >
       Cancel
     </button>
@@ -1488,6 +1607,172 @@ function dangerBtn(busy: boolean): CSSProperties {
     cursor: busy ? "not-allowed" : "pointer",
     fontFamily: bodyFontStack,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Cancel tournament modal
+// ─────────────────────────────────────────────────────────────────────
+
+function CancelTournamentModal({
+  reason,
+  onReasonChange,
+  busy,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  reason: string;
+  onReasonChange: (v: string) => void;
+  busy: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [busy, onCancel]);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "var(--overlay)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 1000,
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onCancel();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-tournament-modal-title"
+        style={{
+          background: "var(--surface)",
+          borderRadius: 8,
+          padding: 24,
+          maxWidth: 480,
+          width: "100%",
+          boxShadow: "0 10px 40px rgba(0, 0, 0, 0.2)",
+        }}
+      >
+        <h2
+          id="cancel-tournament-modal-title"
+          style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 600 }}
+        >
+          Cancel tournament?
+        </h2>
+        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.5 }}>
+          <p style={{ margin: "0 0 12px" }}>
+            All paid registrations will be refunded per the cancellation policy.
+            Every affected player will receive an email with their refund amount.
+            This action cannot be undone.
+          </p>
+          {error && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "8px 10px",
+                background: dangerBg,
+                border: `1px solid ${dangerFg}`,
+                borderRadius: 6,
+                color: dangerFg,
+              }}
+            >
+              {error}
+            </div>
+          )}
+          <label style={{ display: "block" }}>
+            <div style={{ fontWeight: 500, marginBottom: 4 }}>
+              Reason for cancellation (required)
+            </div>
+            <textarea
+              value={reason}
+              onChange={(e) => onReasonChange(e.target.value)}
+              disabled={busy}
+              rows={3}
+              placeholder="e.g. The venue is no longer available due to a scheduling conflict."
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                border: "1px solid #d1d5db",
+                borderRadius: 6,
+                fontSize: 13,
+                fontFamily: "inherit",
+                resize: "vertical",
+                boxSizing: "border-box",
+              }}
+            />
+          </label>
+        </div>
+        <div
+          style={{
+            marginTop: 20,
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            style={{
+              padding: "8px 16px",
+              background: "var(--surface)",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              fontSize: 13,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            Keep tournament
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy || !reason.trim()}
+            style={{
+              padding: "8px 16px",
+              background: busy || !reason.trim() ? "var(--text-subtle)" : "var(--danger)",
+              color: "var(--primary-contrast)",
+              border: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: busy || !reason.trim() ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            {busy ? "Cancelling…" : "Cancel tournament"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+async function extractFnError(fnErr: unknown): Promise<string> {
+  const ctx = (fnErr as { context?: Response }).context;
+  if (ctx) {
+    try {
+      const body = (await ctx.json()) as { error?: string };
+      if (body.error) return body.error;
+    } catch {
+      /* fall through */
+    }
+  }
+  return (fnErr as { message?: string }).message ?? "Unknown error.";
 }
 
 function courtChip(
