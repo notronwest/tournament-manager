@@ -17,6 +17,23 @@ import {
 } from "../../lib/matchLabel";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
+import {
+  bg,
+  ink,
+  inkSoft,
+  inkMuted,
+  cream,
+  rule,
+  ruleSoft,
+  courtBlue,
+  successBg,
+  successFg,
+  dangerBg,
+  dangerFg,
+  bodyFontStack,
+  headingFontStack,
+  monoFontStack,
+} from "../../lib/publicTheme";
 import type { Database } from "../../types/supabase";
 
 // Court count now lives on the selected venue (locations.court_count),
@@ -551,7 +568,7 @@ export default function TournamentCourtManagerPage() {
 
   if (!org) return null;
   if (loading)
-    return <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>;
+    return <div style={{ color: inkSoft, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
   if (error) return <ErrorBox message={error} />;
   if (!tournament) return null;
 
@@ -589,12 +606,12 @@ export default function TournamentCourtManagerPage() {
         <div>
           <Link
             to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-            style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}
+            style={{ color: courtBlue, textDecoration: "none", fontSize: 13, fontFamily: bodyFontStack }}
           >
             ← {tournament.name}
           </Link>
-          <h1 style={{ margin: "12px 0 4px", fontSize: 22 }}>Court manager</h1>
-          <p style={{ color: "#666", margin: 0, fontSize: 13 }}>
+          <h1 style={{ margin: "12px 0 4px", fontSize: 22, fontFamily: headingFontStack, color: ink }}>Court manager</h1>
+          <p style={{ color: inkSoft, margin: 0, fontSize: 13, fontFamily: bodyFontStack }}>
             {activeEvents.length}{" "}
             {activeEvents.length === 1 ? "active event" : "active events"} ·{" "}
             {completedCount} completed · {inProgressCount} in progress ·{" "}
@@ -606,15 +623,9 @@ export default function TournamentCourtManagerPage() {
           disabled={!canSimulate || simulating}
           title="Loads next-best suggestions onto empty courts and auto-scores every in-progress match. Useful for stress-testing the bracket — uses random sample scores."
           style={{
-            padding: "6px 12px",
-            background: "#fff",
-            color: "#7c3aed",
-            border: "1px solid #c4b5fd",
-            borderRadius: 6,
+            ...secondaryBtn,
             fontSize: 12,
-            fontWeight: 500,
             cursor: !canSimulate || simulating ? "not-allowed" : "pointer",
-            fontFamily: "inherit",
             opacity: !canSimulate || simulating ? 0.5 : 1,
           }}
         >
@@ -635,8 +646,8 @@ export default function TournamentCourtManagerPage() {
               key={ev.id}
               style={{
                 padding: "12px 16px",
-                background: "#eff6ff",
-                border: "1px solid #bfdbfe",
+                background: cream,
+                border: `1px solid ${ruleSoft}`,
                 borderRadius: 8,
                 display: "flex",
                 justifyContent: "space-between",
@@ -645,21 +656,18 @@ export default function TournamentCourtManagerPage() {
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ fontSize: 13, color: "#1e3a8a" }}>
+              <div style={{ fontSize: 13, color: inkSoft, fontFamily: bodyFontStack }}>
                 <strong>{ev.name}</strong>: round-robin complete. Time to
                 generate the playoff bracket.
               </div>
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${ev.id}`}
                 style={{
-                  padding: "6px 12px",
-                  background: "#2563eb",
-                  color: "#fff",
+                  ...primaryBtnBase,
                   textDecoration: "none",
-                  borderRadius: 6,
-                  fontSize: 13,
-                  fontWeight: 500,
                   whiteSpace: "nowrap",
+                  display: "inline-block",
+                  lineHeight: "normal",
                 }}
               >
                 Generate playoffs →
@@ -733,9 +741,9 @@ export default function TournamentCourtManagerPage() {
 
       {activeEvents.length > 0 && (
         <section>
-          <h2 style={{ margin: "0 0 12px", fontSize: 14, color: "#555" }}>
+          <h2 style={{ margin: "0 0 12px", fontSize: 14, color: inkSoft, fontFamily: headingFontStack }}>
             Available matches{" "}
-            <span style={{ color: "#888", fontWeight: 400 }}>
+            <span style={{ color: inkMuted, fontWeight: 400 }}>
               ({availableMatches.length})
             </span>
           </h2>
@@ -752,10 +760,11 @@ export default function TournamentCourtManagerPage() {
                   width: "100%",
                   borderCollapse: "collapse",
                   fontSize: 13,
+                  fontFamily: bodyFontStack,
                 }}
               >
                 <thead>
-                  <tr style={{ background: "#fafafa" }}>
+                  <tr style={{ background: bg }}>
                     <th style={thStyle}>#</th>
                     <th style={thStyle}>Match</th>
                     <th style={thStyle}>Event</th>
@@ -784,16 +793,15 @@ export default function TournamentCourtManagerPage() {
                     return (
                       <tr
                         key={match.id}
-                        style={{ borderBottom: "1px solid #f3f4f6" }}
+                        style={{ borderBottom: `1px solid ${rule}` }}
                       >
-                        <td style={{ ...tdStyle, color: "#888" }}>{i + 1}</td>
+                        <td style={{ ...tdStyle, color: inkMuted }}>{i + 1}</td>
                         <td
                           style={{
                             ...tdStyle,
-                            fontFamily:
-                              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+                            fontFamily: monoFontStack,
                             fontSize: 12,
-                            color: "#555",
+                            color: inkSoft,
                             whiteSpace: "nowrap",
                           }}
                         >
@@ -802,7 +810,7 @@ export default function TournamentCourtManagerPage() {
                         <td style={tdStyle}>{ev?.name ?? "—"}</td>
                         <td style={tdStyle}>{teamA?.label ?? "—"}</td>
                         <td style={tdStyle}>{teamB?.label ?? "—"}</td>
-                        <td style={{ ...tdStyle, color: "#888" }}>
+                        <td style={{ ...tdStyle, color: inkMuted }}>
                           {score === 0 ? "Never" : relativeMinutes(score)}
                         </td>
                       </tr>
@@ -883,18 +891,18 @@ function CourtCard({
     };
 
     return (
-      <div style={cardStyle("#dcfce7")}>
+      <div style={cardStyle(successBg)}>
         <CardHeader
           courtName={courtName}
           eventName={assignedEvent?.name ?? null}
           status="In progress"
-          statusColor="#166534"
+          statusColor={successFg}
         />
         <StageBadge label={assignedStageLabel} />
         <div style={teamRow}>
           <span style={teamNameStyle}>{teamLabel(assigned.team_a_reg_id)}</span>
         </div>
-        <div style={{ ...teamRow, color: "#999" }}>vs</div>
+        <div style={{ ...teamRow, color: inkMuted }}>vs</div>
         <div style={teamRow}>
           <span style={teamNameStyle}>{teamLabel(assigned.team_b_reg_id)}</span>
         </div>
@@ -919,7 +927,7 @@ function CourtCard({
             placeholder="A"
             autoFocus
           />
-          <span style={{ color: "#999", fontSize: 18 }}>–</span>
+          <span style={{ color: inkMuted, fontSize: 18 }}>–</span>
           <input
             type="number"
             inputMode="numeric"
@@ -935,7 +943,7 @@ function CourtCard({
         {err && (
           <div
             style={{
-              color: "#991b1b",
+              color: dangerFg,
               fontSize: 12,
               marginTop: 8,
               textAlign: "center",
@@ -970,19 +978,20 @@ function CourtCard({
 
   if (!owner) {
     return (
-      <div style={cardStyle("#fafafa")}>
+      <div style={cardStyle(bg)}>
         <CardHeader
           courtName={courtName}
           eventName={null}
           status="Unassigned"
-          statusColor="#888"
+          statusColor={inkMuted}
         />
         <div
           style={{
-            color: "#888",
+            color: inkMuted,
             fontSize: 13,
             padding: "20px 0",
             textAlign: "center",
+            fontFamily: bodyFontStack,
           }}
         >
           Assign this court to an event from the tournament page.
@@ -992,24 +1001,24 @@ function CourtCard({
   }
 
   return (
-    <div style={cardStyle("#fafafa")}>
+    <div style={cardStyle(bg)}>
       <CardHeader
         courtName={courtName}
         eventName={owner.name}
         status="Empty"
-        statusColor="#888"
+        statusColor={inkMuted}
       />
       <StageBadge label={suggestionStageLabel} />
 
       {suggestion ? (
         <>
-          <div style={{ ...teamRow, color: "#444" }}>
+          <div style={{ ...teamRow, color: inkSoft }}>
             <span style={{ ...teamNameStyle, fontWeight: 500 }}>
               {teamLabel(suggestion.team_a_reg_id)}
             </span>
           </div>
-          <div style={{ ...teamRow, color: "#999" }}>vs</div>
-          <div style={{ ...teamRow, color: "#444" }}>
+          <div style={{ ...teamRow, color: inkMuted }}>vs</div>
+          <div style={{ ...teamRow, color: inkSoft }}>
             <span style={{ ...teamNameStyle, fontWeight: 500 }}>
               {teamLabel(suggestion.team_b_reg_id)}
             </span>
@@ -1044,10 +1053,11 @@ function CourtCard({
       ) : (
         <div
           style={{
-            color: "#888",
+            color: inkMuted,
             fontSize: 13,
             padding: "20px 0",
             textAlign: "center",
+            fontFamily: bodyFontStack,
           }}
         >
           {pickerOptions.length === 0
@@ -1074,10 +1084,10 @@ function CourtCard({
             style={{
               width: "100%",
               padding: "6px 8px",
-              border: "1px solid #e2e2e2",
+              border: `1px solid ${rule}`,
               borderRadius: 6,
               fontSize: 13,
-              fontFamily: "inherit",
+              fontFamily: bodyFontStack,
             }}
           >
             <option value="">Pick a match…</option>
@@ -1145,7 +1155,7 @@ function CardHeader({
           alignItems: "center",
         }}
       >
-        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{courtName}</h3>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: headingFontStack, color: ink }}>{courtName}</h3>
         <span
           style={{
             fontSize: 11,
@@ -1159,7 +1169,7 @@ function CardHeader({
         </span>
       </div>
       {eventName && (
-        <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>
+        <div style={{ fontSize: 12, color: inkSoft, marginTop: 2, fontFamily: bodyFontStack }}>
           {eventName}
         </div>
       )}
@@ -1252,11 +1262,12 @@ function ErrorBox({ message }: { message: string }) {
     <div
       style={{
         padding: 10,
-        background: "#fef2f2",
-        border: "1px solid #fecaca",
+        background: dangerBg,
+        border: `1px solid ${dangerFg}`,
         borderRadius: 6,
-        color: "#991b1b",
+        color: dangerFg,
         fontSize: 13,
+        fontFamily: bodyFontStack,
       }}
     >
       {message}
@@ -1270,11 +1281,12 @@ function Empty({ children }: { children: ReactNode }) {
       style={{
         padding: 24,
         textAlign: "center",
-        background: "#fafafa",
-        border: "1px dashed #d1d5db",
+        background: cream,
+        border: `1px dashed ${ruleSoft}`,
         borderRadius: 6,
-        color: "#666",
+        color: inkSoft,
         fontSize: 13,
+        fontFamily: bodyFontStack,
       }}
     >
       {children}
@@ -1282,11 +1294,11 @@ function Empty({ children }: { children: ReactNode }) {
   );
 }
 
-function cardStyle(bg: string): CSSProperties {
+function cardStyle(bgColor: string): CSSProperties {
   return {
     padding: 16,
-    background: bg,
-    border: "1px solid #e5e7eb",
+    background: bgColor,
+    border: `1px solid ${rule}`,
     borderRadius: 8,
   };
 }
@@ -1295,6 +1307,8 @@ const teamRow: CSSProperties = {
   fontSize: 14,
   textAlign: "center",
   padding: "4px 0",
+  fontFamily: bodyFontStack,
+  color: ink,
 };
 const teamNameStyle: CSSProperties = { fontWeight: 500 };
 
@@ -1302,14 +1316,17 @@ const thStyle: CSSProperties = {
   textAlign: "left",
   padding: "8px 12px",
   fontSize: 11,
-  color: "#888",
+  color: inkMuted,
   textTransform: "uppercase",
   letterSpacing: 0.5,
   fontWeight: 500,
+  fontFamily: bodyFontStack,
 };
 
 const tdStyle: CSSProperties = {
   padding: "8px 12px",
+  fontFamily: bodyFontStack,
+  color: ink,
 };
 
 function relativeMinutes(ts: number): string {
@@ -1323,35 +1340,46 @@ function relativeMinutes(ts: number): string {
 const bigScoreInput: CSSProperties = {
   width: 64,
   padding: "8px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 24,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
   textAlign: "center",
   fontWeight: 600,
 };
 
+const primaryBtnBase: CSSProperties = {
+  padding: "8px 16px",
+  background: ink,
+  color: bg,
+  border: "none",
+  borderRadius: 6,
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
+};
+
 function primaryBtn(busy: boolean): CSSProperties {
   return {
-    padding: "8px 16px",
-    background: busy ? "#9ca3af" : "#2563eb",
-    color: "#fff",
-    border: "none",
-    borderRadius: 6,
-    fontSize: 13,
-    fontWeight: 500,
+    ...primaryBtnBase,
+    background: busy ? inkMuted : ink,
     cursor: busy ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
   };
 }
 
 const secondaryBtn: CSSProperties = {
   padding: "8px 16px",
-  background: "#fff",
-  color: "#555",
-  border: "1px solid #e2e2e2",
+  background: "transparent",
+  color: ink,
+  border: `2px solid ${ink}`,
   borderRadius: 6,
   fontSize: 13,
+  fontWeight: 600,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: headingFontStack,
+  letterSpacing: "0.04em",
+  textTransform: "uppercase",
 };
