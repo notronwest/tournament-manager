@@ -10,6 +10,11 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import type { Database } from "../../types/supabase";
+import { computeLineItems, formatUsd } from "../../lib/pricing";
+import {
+  pickActivePricingTier,
+  type PricingTier,
+} from "../../lib/pricingTiers";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
@@ -76,6 +81,11 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
 
+  // Per-event fee override. Stored in dollars for the input; converted
+  // to cents in buildPayload. A value > 0 overrides the tournament tiers.
+  const [eventFeeStr, setEventFeeStr] = useState("0");
+  const [pricingTiers, setPricingTiers] = useState<PricingTier[]>([]);
+
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +130,14 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         return;
       }
       setTournament(tData);
+
+      const { data: tierRows } = await supabase
+        .from("tournament_pricing_tiers")
+        .select("*")
+        .eq("tournament_id", tData.id)
+        .order("sort_order", { ascending: true });
+      if (cancelled) return;
+      setPricingTiers(tierRows ?? []);
 
       if (mode === "edit" && eventId) {
         const { data: ev, error: evErr } = await supabase
@@ -166,6 +184,11 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setRatingSource(ev.rating_source ?? "");
         setMinAge(ev.min_age != null ? String(ev.min_age) : "");
         setMaxAge(ev.max_age != null ? String(ev.max_age) : "");
+        setEventFeeStr(
+          ev.event_fee_cents > 0
+            ? (ev.event_fee_cents / 100).toFixed(2)
+            : "0",
+        );
 
         // Pull match counts so we know whether to warn on save.
         // Also pull every playoff match — we surface per-match
@@ -234,7 +257,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       gender,
       max_teams: max,
       bracket_type: "round_robin" as const,
-      event_fee_cents: 0,
+      event_fee_cents: Math.round(
+        parseFloat(eventFeeStr || "0") * 100,
+      ),
       pool_count: clampInt(poolCount, 1, 1, 16),
       play_each_team_times: clampInt(playEachTeamTimes, 1, 1, 5),
       points_to_win: clampInt(pointsToWin, 11, 1, 99),
@@ -498,6 +523,42 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
               />
             </Field>
           </FieldRow>
+        </FieldGroup>
+
+        {/* Pricing */}
+        <FieldGroup title="Pricing">
+          <Field label="Per-event fee override ($)">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={eventFeeStr}
+              onChange={(e) => setEventFeeStr(e.target.value)}
+              style={inputStyle}
+              placeholder="0"
+            />
+          </Field>
+          <div
+            style={{
+              padding: "10px 12px",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: 6,
+              fontSize: 12,
+              color: "#78350f",
+              lineHeight: 1.5,
+            }}
+          >
+            Leave at $0 to use the tournament&rsquo;s first/additional event
+            pricing. Set a value to <strong>OVERRIDE</strong> with a flat
+            per-event fee that ignores the tournament tiers.
+          </div>
+          <PricingPreview
+            eventFeeCents={Math.round(
+              parseFloat(eventFeeStr || "0") * 100,
+            )}
+            pricingTiers={pricingTiers}
+          />
         </FieldGroup>
 
         {/* Pool play */}
@@ -1361,6 +1422,67 @@ function tinyPrimaryBtn(disabled: boolean): CSSProperties {
     cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "inherit",
   };
+}
+
+function PricingPreview({
+  eventFeeCents,
+  pricingTiers,
+}: {
+  eventFeeCents: number;
+  pricingTiers: PricingTier[];
+}) {
+  const activeTier = pickActivePricingTier(pricingTiers);
+  if (!activeTier && pricingTiers.length === 0) return null;
+
+  const rates = activeTier
+    ? {
+        firstEventFeeCents: activeTier.first_event_fee_cents,
+        additionalEventFeeCents: activeTier.additional_event_fee_cents,
+      }
+    : null;
+
+  // A synthetic event row with the current override value (or 0 for
+  // tier-based pricing). id is unused by computeLineItems but required
+  // by the Event type.
+  const syntheticEvent = { id: "preview", event_fee_cents: eventFeeCents };
+
+  const oneEventTotal = rates
+    ? computeLineItems([syntheticEvent], rates).totalCents
+    : eventFeeCents > 0
+      ? eventFeeCents
+      : null;
+
+  const twoEventTotal = rates
+    ? computeLineItems([syntheticEvent, syntheticEvent], rates).totalCents
+    : eventFeeCents > 0
+      ? eventFeeCents * 2
+      : null;
+
+  if (oneEventTotal === null) return null;
+
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: "#f0fdf4",
+        border: "1px solid #bbf7d0",
+        borderRadius: 6,
+        fontSize: 12,
+        color: "#14532d",
+      }}
+    >
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Pricing preview</div>
+      <div>1 event &rarr; <strong>{formatUsd(oneEventTotal)}</strong></div>
+      {twoEventTotal !== null && (
+        <div>2 events &rarr; <strong>{formatUsd(twoEventTotal)}</strong></div>
+      )}
+      {!activeTier && pricingTiers.length > 0 && (
+        <div style={{ color: "#6b7280", marginTop: 4 }}>
+          No active pricing tier — prices may differ at checkout.
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ErrorBox({ message }: { message: string }) {
