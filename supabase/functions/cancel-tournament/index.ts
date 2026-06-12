@@ -120,13 +120,19 @@ Deno.serve(async (req: Request) => {
       email: string | null; firstName: string | null; eventName: string;
       error?: string;
     };
+    // The embedded-resource select confuses supabase-js's type-level parser
+    // (same reason stripe-refund uses @ts-expect-error on its joins); cast the
+    // rows to the shape we actually selected.
+    type RegRow = {
+      id: string;
+      player_id: string;
+      events: { name: string | null } | null;
+      player: { email: string | null; first_name: string | null } | null;
+    };
     const results: Row[] = [];
-    for (const r of regs ?? []) {
-      // @ts-expect-error to-one join shapes
+    for (const r of (regs ?? []) as unknown as RegRow[]) {
       const email: string | null = r.player?.email ?? null;
-      // @ts-expect-error
       const firstName: string | null = r.player?.first_name ?? null;
-      // @ts-expect-error
       const eventName: string = r.events?.name ?? "your event";
       try {
         const resp = await fetch(refundUrl, {
