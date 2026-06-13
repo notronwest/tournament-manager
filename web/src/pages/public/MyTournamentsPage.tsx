@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import type { Database } from "../../types/supabase";
 import {
   bg,
@@ -189,6 +190,7 @@ function isPast(group: TournamentGroup): boolean {
 
 export default function MyTournamentsPage() {
   const { user } = useAuth();
+  const { refresh: refreshPendingBar } = usePendingPayments();
   const [groups, setGroups] = useState<TournamentGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -367,6 +369,8 @@ export default function MyTournamentsPage() {
           };
         })
       );
+      // Sync the site-wide pending-payments bar — the reg left pending_payment.
+      await refreshPendingBar();
     }
 
     setWithdrawFlow(null);
