@@ -204,6 +204,7 @@ export type Database = {
         Row: {
           created_at: string
           deleted_at: string | null
+          entitled_refund_cents: number | null
           event_fee_cents: number
           event_id: string
           id: string
@@ -215,10 +216,15 @@ export type Database = {
           seed: number | null
           status: Database["public"]["Enums"]["registration_status"]
           updated_at: string
+          withdrawal_decided_at: string | null
+          withdrawal_decision: Database["public"]["Enums"]["withdrawal_decision"] | null
+          withdrawal_reason: string | null
+          withdrawal_requested_at: string | null
         }
         Insert: {
           created_at?: string
           deleted_at?: string | null
+          entitled_refund_cents?: number | null
           event_fee_cents: number
           event_id: string
           id?: string
@@ -230,10 +236,15 @@ export type Database = {
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
+          withdrawal_decided_at?: string | null
+          withdrawal_decision?: Database["public"]["Enums"]["withdrawal_decision"] | null
+          withdrawal_reason?: string | null
+          withdrawal_requested_at?: string | null
         }
         Update: {
           created_at?: string
           deleted_at?: string | null
+          entitled_refund_cents?: number | null
           event_fee_cents?: number
           event_id?: string
           id?: string
@@ -245,6 +256,10 @@ export type Database = {
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
+          withdrawal_decided_at?: string | null
+          withdrawal_decision?: Database["public"]["Enums"]["withdrawal_decision"] | null
+          withdrawal_reason?: string | null
+          withdrawal_requested_at?: string | null
         }
         Relationships: [
           {
@@ -1368,6 +1383,17 @@ export type Database = {
         }
         Returns: Json
       }
+      withdraw_self: {
+        Args: { p_reg_id: string }
+        Returns: {
+          new_status: Database["public"]["Enums"]["registration_status"]
+          entitled_cents: number | null
+        }[]
+      }
+      file_refund_request: {
+        Args: { p_reg_id: string; p_reason?: string }
+        Returns: boolean
+      }
     }
     Enums: {
       bracket_type:
@@ -1440,6 +1466,7 @@ export type Database = {
         | "closed"
         | "completed"
         | "cancelled"
+      withdrawal_decision: "approved" | "denied"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1649,6 +1676,7 @@ export const Constants = {
         "completed",
         "cancelled",
       ],
+      withdrawal_decision: ["approved", "denied"],
     },
   },
 } as const
