@@ -81,10 +81,15 @@ Deno.serve(async (req: Request) => {
     // no entry_fee_cents — the total comes from compute_checkout_total.)
     const { data: tournament, error: tErr } = await admin
       .from("tournaments")
-      .select("id, organization_id, organizations!inner(slug, stripe_account_id, stripe_account_status)")
+      .select("id, organization_id, status, organizations!inner(slug, stripe_account_id, stripe_account_status)")
       .eq("slug", tournamentSlug)
       .single();
     if (tErr || !tournament) return json({ error: "tournament_not_found" }, 404);
+
+    // Guard: only published tournaments accept payment.
+    if (tournament.status !== "published") {
+      return json({ error: "tournament_not_accepting_payment" }, 409);
+    }
 
     // @ts-expect-error to-one join shape
     const org = tournament.organizations;
@@ -115,6 +120,27 @@ Deno.serve(async (req: Request) => {
     const lineItems: Array<{ event_registration_id: string | null; description: string; amount_cents: number }> =
       totalRes.line_items ?? [];
     if (totalCents <= 0) return json({ error: "nothing_to_charge" }, 400);
+
+    // Guard: verify the regs we're about to charge are still pending_payment,
+    // not soft-deleted, and belong to this tournament's events. Prevents
+    // charging for a reg that was cancelled/withdrawn between page-load and
+    // payment-form submit.
+    const regIdsToCharge = lineItems
+      .map((li) => li.event_registration_id)
+      .filter((id): id is string => !!id);
+    if (regIdsToCharge.length > 0) {
+      const { data: validRegs, error: verifyErr } = await admin
+        .from("event_registrations")
+        .select("id, events!inner(tournament_id)")
+        .in("id", regIdsToCharge)
+        .eq("status", "pending_payment")
+        .is("deleted_at", null)
+        .eq("events.tournament_id", tournament.id);
+      if (verifyErr) return json({ error: "reg_verify_failed" }, 500);
+      if (!validRegs || validRegs.length !== regIdsToCharge.length) {
+        return json({ error: "regs_not_payable" }, 409);
+      }
+    }
 
     // ── 3. Optional coupon ──────────────────────────────────────────
     let couponId: string | null = null;
