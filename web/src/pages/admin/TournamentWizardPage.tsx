@@ -19,6 +19,29 @@ import {
   type TierDraft,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
+import {
+  ink,
+  inkSoft,
+  inkMuted,
+  bg,
+  cream,
+  creamDeep,
+  rule,
+  ruleSoft,
+  courtBlue,
+  courtGreen,
+  courtRed,
+  courtYellow,
+  warnBg,
+  warnFg,
+  dangerBg,
+  dangerFg,
+  successBg,
+  successFg,
+  bodyFontStack,
+  headingFontStack,
+  monoFontStack,
+} from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Event = Database["public"]["Tables"]["events"]["Row"];
@@ -255,7 +278,7 @@ export default function TournamentWizardPage() {
 
   if (!org) return null;
   if (loadingDraft) {
-    return <div style={{ padding: 24, color: "#666" }}>Loading draft…</div>;
+    return <div style={{ padding: 24, color: inkSoft, fontFamily: bodyFontStack }}>Loading draft…</div>;
   }
 
   // ── Save handlers ───────────────────────────────────────────────
@@ -729,11 +752,12 @@ export default function TournamentWizardPage() {
             style={{
               marginTop: 16,
               padding: 12,
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
+              background: dangerBg,
+              border: `1px solid ${courtRed}`,
               borderRadius: 6,
-              color: "#991b1b",
+              color: dangerFg,
               fontSize: 13,
+              fontFamily: bodyFontStack,
             }}
           >
             {error}
@@ -851,10 +875,10 @@ function Rail({
   return (
     <aside style={railStyle}>
       <div>
-        <div style={{ fontSize: 11, color: "#888", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        <div style={{ fontSize: 11, color: inkMuted, textTransform: "uppercase", letterSpacing: 0.5, fontFamily: bodyFontStack }}>
           Tournament
         </div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: "#222", marginTop: 4 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: ink, marginTop: 4, fontFamily: bodyFontStack }}>
           {tournamentName}
         </div>
         <div
@@ -862,13 +886,14 @@ function Rail({
             display: "inline-block",
             marginTop: 6,
             padding: "2px 8px",
-            background: "#f3f4f6",
-            color: "#666",
+            background: ruleSoft,
+            color: inkMuted,
             borderRadius: 3,
             fontSize: 10,
             fontWeight: 600,
             textTransform: "uppercase",
             letterSpacing: 0.5,
+            fontFamily: bodyFontStack,
           }}
         >
           Draft
@@ -907,7 +932,7 @@ function Rail({
                     {s.title}
                   </div>
                   {!s.required && (
-                    <div style={{ fontSize: 11, color: "#888" }}>
+                    <div style={{ fontSize: 11, color: inkMuted }}>
                       Optional
                     </div>
                   )}
@@ -922,12 +947,13 @@ function Rail({
         <div
           style={{
             padding: "8px 10px",
-            background: "#fffbeb",
-            border: "1px solid #fde68a",
+            background: warnBg,
+            border: `1px solid ${courtYellow}`,
             borderRadius: 6,
             fontSize: 11,
-            color: "#7a5d00",
+            color: warnFg,
             lineHeight: 1.5,
+            fontFamily: bodyFontStack,
           }}
         >
           🔒 {forwardBlocker}
@@ -945,16 +971,16 @@ function Rail({
           title={forwardBlocker ?? undefined}
           style={{
             padding: "10px 14px",
-            background:
-              publishable && !forwardBlocker ? "#16a34a" : "#e5e7eb",
-            color: publishable && !forwardBlocker ? "#fff" : "#888",
+            background: publishable && !forwardBlocker ? courtGreen : rule,
+            color: publishable && !forwardBlocker ? "#ffffff" : inkMuted,
             border: "none",
             borderRadius: 6,
             fontSize: 13,
-            fontWeight: 600,
-            cursor:
-              publishable && !forwardBlocker ? "pointer" : "not-allowed",
-            fontFamily: "inherit",
+            fontWeight: 700,
+            cursor: publishable && !forwardBlocker ? "pointer" : "not-allowed",
+            fontFamily: headingFontStack,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
           }}
         >
           {publishable ? "Review & publish →" : "Publish (needs more info)"}
@@ -964,13 +990,13 @@ function Rail({
           onClick={onSaveExit}
           style={{
             padding: "8px 14px",
-            background: "#fff",
-            color: "#555",
-            border: "1px solid #e2e2e2",
+            background: "transparent",
+            color: inkSoft,
+            border: `1px solid ${rule}`,
             borderRadius: 6,
             fontSize: 12,
             cursor: "pointer",
-            fontFamily: "inherit",
+            fontFamily: bodyFontStack,
           }}
         >
           Save &amp; exit
@@ -1054,7 +1080,7 @@ function BasicsStep(props: {
           value={props.description}
           onChange={(e) => props.setDescription(e.target.value)}
           rows={3}
-          style={{ ...inputStyle, fontFamily: "inherit", resize: "vertical" }}
+          style={{ ...inputStyle, resize: "vertical" }}
         />
       </Field>
 
@@ -1243,8 +1269,9 @@ function EventsStep({
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: "#333",
+              color: ink,
               marginBottom: 8,
+              fontFamily: bodyFontStack,
             }}
           >
             Added so far ({events.length})
@@ -1253,8 +1280,8 @@ function EventsStep({
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 6,
-              border: "1px solid #e5e7eb",
+              gap: 0,
+              border: `1px solid ${rule}`,
               borderRadius: 8,
               overflow: "hidden",
             }}
@@ -1267,14 +1294,15 @@ function EventsStep({
                   alignItems: "center",
                   justifyContent: "space-between",
                   padding: "10px 14px",
-                  background: "#fff",
-                  borderTop: "1px solid #f3f4f6",
+                  background: "#ffffff",
+                  borderTop: `1px solid ${ruleSoft}`,
                   fontSize: 13,
+                  fontFamily: bodyFontStack,
                 }}
               >
                 <div>
                   <strong>{e.name}</strong>
-                  <span style={{ color: "#888", marginLeft: 8 }}>
+                  <span style={{ color: inkMuted, marginLeft: 8 }}>
                     {formatEventSummary(e)}
                   </span>
                 </div>
@@ -1284,13 +1312,13 @@ function EventsStep({
                   disabled={busy}
                   style={{
                     background: "transparent",
-                    border: "1px solid #fecaca",
-                    color: "#b91c1c",
+                    border: `1px solid ${courtRed}`,
+                    color: dangerFg,
                     borderRadius: 4,
                     padding: "3px 10px",
                     fontSize: 12,
                     cursor: busy ? "not-allowed" : "pointer",
-                    fontFamily: "inherit",
+                    fontFamily: bodyFontStack,
                   }}
                 >
                   Remove
@@ -1307,8 +1335,9 @@ function EventsStep({
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: "#333",
+              color: ink,
               marginBottom: 8,
+              fontFamily: bodyFontStack,
             }}
           >
             {events.length > 0
@@ -1317,7 +1346,7 @@ function EventsStep({
           </div>
           <div
             style={{
-              border: "1px solid #e5e7eb",
+              border: `1px solid ${rule}`,
               borderRadius: 8,
               overflow: "hidden",
               marginBottom: 12,
@@ -1331,7 +1360,7 @@ function EventsStep({
               }}
             >
               <thead>
-                <tr style={{ background: "#fafafa" }}>
+                <tr style={{ background: bg }}>
                   <th style={templateThStyle}>Skill</th>
                   {GENDER_COLS.map((g) => (
                     <th key={g.id} style={templateThStyle}>
@@ -1344,13 +1373,14 @@ function EventsStep({
                 {SKILL_LEVELS.map((s) => (
                   <tr
                     key={s.label}
-                    style={{ borderTop: "1px solid #f0f0f0" }}
+                    style={{ borderTop: `1px solid ${ruleSoft}` }}
                   >
                     <td
                       style={{
                         padding: "8px 12px",
                         fontWeight: 500,
-                        color: "#333",
+                        color: ink,
+                        fontFamily: bodyFontStack,
                       }}
                     >
                       {s.label}
@@ -1366,8 +1396,9 @@ function EventsStep({
                             key={g.id}
                             style={{
                               padding: "8px 12px",
-                              color: "#16a34a",
+                              color: successFg,
                               fontSize: 12,
+                              fontFamily: bodyFontStack,
                             }}
                           >
                             ✓ added
@@ -1397,7 +1428,7 @@ function EventsStep({
                                 setChecked(next);
                               }}
                             />
-                            <span style={{ color: "#333" }}>Include</span>
+                            <span style={{ color: ink, fontFamily: bodyFontStack }}>Include</span>
                           </label>
                         </td>
                       );
@@ -1426,16 +1457,16 @@ function EventsStep({
               disabled={busy || checkedCount === 0}
               style={{
                 padding: "9px 18px",
-                background:
-                  busy || checkedCount === 0 ? "#9ca3af" : "#2563eb",
-                color: "#fff",
+                background: busy || checkedCount === 0 ? inkMuted : ink,
+                color: "#ffffff",
                 border: "none",
                 borderRadius: 6,
                 fontSize: 13,
-                fontWeight: 500,
-                cursor:
-                  busy || checkedCount === 0 ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
+                fontWeight: 700,
+                cursor: busy || checkedCount === 0 ? "not-allowed" : "pointer",
+                fontFamily: headingFontStack,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
               }}
             >
               {busy
@@ -1446,7 +1477,7 @@ function EventsStep({
             </button>
             <Link
               to={`/admin/${orgSlug}/tournaments/${tournament.slug}/events/edit`}
-              style={{ fontSize: 12, color: "#2563eb", textDecoration: "none" }}
+              style={{ fontSize: 12, color: courtBlue, textDecoration: "none", fontFamily: bodyFontStack }}
             >
               Need a custom event (singles, age group, mixed format)? Open the
               full events editor →
@@ -1459,17 +1490,18 @@ function EventsStep({
         <div
           style={{
             padding: 14,
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
+            background: successBg,
+            border: `1px solid ${courtGreen}`,
             borderRadius: 8,
             fontSize: 13,
-            color: "#166534",
+            color: successFg,
+            fontFamily: bodyFontStack,
           }}
         >
           All standard divisions added. Use the{" "}
           <Link
             to={`/admin/${orgSlug}/tournaments/${tournament.slug}/events/edit`}
-            style={{ color: "#15803d", fontWeight: 500 }}
+            style={{ color: successFg, fontWeight: 600 }}
           >
             full events editor
           </Link>{" "}
@@ -1502,10 +1534,11 @@ const templateThStyle: CSSProperties = {
   padding: "10px 12px",
   fontSize: 11,
   fontWeight: 600,
-  color: "#666",
+  color: inkSoft,
   textTransform: "uppercase",
   letterSpacing: 0.5,
-  background: "#fafafa",
+  background: bg,
+  fontFamily: bodyFontStack,
 };
 
 // ─────────────────────────────────────────────────────────────────────
@@ -1618,10 +1651,11 @@ function CancellationPolicyStep({
                   fontWeight: 600,
                   fontSize: 14,
                   marginBottom: 8,
-                  color: "#222",
+                  color: ink,
                   display: "flex",
                   alignItems: "center",
                   gap: 8,
+                  fontFamily: bodyFontStack,
                 }}
               >
                 <span style={cancellationRadioStyle(selected)} />
@@ -1632,8 +1666,9 @@ function CancellationPolicyStep({
                   margin: 0,
                   paddingLeft: 18,
                   fontSize: 12,
-                  color: "#444",
+                  color: inkSoft,
                   lineHeight: 1.55,
+                  fontFamily: bodyFontStack,
                 }}
               >
                 {p.bullets.map((b) => (
@@ -1644,8 +1679,9 @@ function CancellationPolicyStep({
                 style={{
                   marginTop: 10,
                   fontSize: 11,
-                  color: "#888",
+                  color: inkMuted,
                   fontStyle: "italic",
+                  fontFamily: bodyFontStack,
                 }}
               >
                 Good for: {p.goodFor}
@@ -1657,19 +1693,20 @@ function CancellationPolicyStep({
 
       <details
         style={{
-          background: "#eff6ff",
-          border: "1px solid #bfdbfe",
+          background: cream,
+          border: `1px solid ${creamDeep}`,
           borderRadius: 6,
           padding: "10px 12px",
           fontSize: 12,
-          color: "#1e40af",
+          color: inkSoft,
           lineHeight: 1.55,
+          fontFamily: bodyFontStack,
         }}
       >
         <summary style={{ cursor: "pointer", fontWeight: 500 }}>
           ⓘ Need something different? Custom is coming
         </summary>
-        <div style={{ marginTop: 8, color: "#1e3a8a" }}>
+        <div style={{ marginTop: 8, color: ink }}>
           A Custom preset (your own refund windows + percentages) will
           land in a follow-up slice. For now, pick whichever of the three
           presets is closest and we'll let you fine-tune later. Skipping
@@ -1683,13 +1720,13 @@ function CancellationPolicyStep({
 
 function cancellationCardStyle(selected: boolean): CSSProperties {
   return {
-    background: selected ? "#eff6ff" : "#fff",
-    border: `2px solid ${selected ? "#2563eb" : "#e5e7eb"}`,
+    background: selected ? cream : "#ffffff",
+    border: `2px solid ${selected ? ink : rule}`,
     borderRadius: 8,
     padding: 14,
     cursor: "pointer",
     textAlign: "left",
-    fontFamily: "inherit",
+    fontFamily: bodyFontStack,
     display: "flex",
     flexDirection: "column",
   };
@@ -1700,9 +1737,9 @@ function cancellationRadioStyle(selected: boolean): CSSProperties {
     width: 14,
     height: 14,
     borderRadius: "50%",
-    border: `2px solid ${selected ? "#2563eb" : "#cbd5e1"}`,
-    background: selected ? "#2563eb" : "#fff",
-    boxShadow: selected ? "inset 0 0 0 3px #fff" : "none",
+    border: `2px solid ${selected ? ink : rule}`,
+    background: selected ? ink : "#ffffff",
+    boxShadow: selected ? "inset 0 0 0 3px #ffffff" : "none",
     flexShrink: 0,
     boxSizing: "border-box",
   };
@@ -1762,22 +1799,24 @@ function MarkdownStep({
         style={{
           width: "100%",
           padding: "12px 14px",
-          border: "1px solid #e2e2e2",
+          border: `1px solid ${rule}`,
           borderRadius: 6,
           fontSize: 14,
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontFamily: monoFontStack,
           lineHeight: 1.55,
           resize: "vertical",
           boxSizing: "border-box",
           minHeight: 240,
+          color: ink,
         }}
       />
       <div
         style={{
           marginTop: 8,
           fontSize: 12,
-          color: "#888",
+          color: inkMuted,
           lineHeight: 1.55,
+          fontFamily: bodyFontStack,
         }}
       >
         Markdown supported: <code>**bold**</code>, <code>*italic*</code>,{" "}
@@ -1817,32 +1856,35 @@ function ContentSectionsStep({
   const sectionStyle: CSSProperties = {
     marginTop: 28,
     paddingTop: 24,
-    borderTop: "1px solid #f0f0f0",
+    borderTop: `1px solid ${ruleSoft}`,
   };
   const labelStyle: CSSProperties = {
     display: "block",
     fontSize: 14,
     fontWeight: 600,
-    color: "#222",
+    color: ink,
     marginBottom: 4,
+    fontFamily: bodyFontStack,
   };
   const hintStyle: CSSProperties = {
     fontSize: 12,
-    color: "#888",
+    color: inkMuted,
     marginBottom: 8,
     lineHeight: 1.55,
+    fontFamily: bodyFontStack,
   };
   const textareaStyle: CSSProperties = {
     width: "100%",
     padding: "10px 12px",
-    border: "1px solid #e2e2e2",
+    border: `1px solid ${rule}`,
     borderRadius: 6,
     fontSize: 14,
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontFamily: monoFontStack,
     lineHeight: 1.55,
     resize: "vertical",
     boxSizing: "border-box",
     minHeight: 120,
+    color: ink,
   };
   return (
     <div>
@@ -1908,7 +1950,7 @@ function ContentSectionsStep({
           style={textareaStyle}
         />
       </div>
-      <div style={{ marginTop: 8, fontSize: 12, color: "#888", lineHeight: 1.55 }}>
+      <div style={{ marginTop: 8, fontSize: 12, color: inkMuted, lineHeight: 1.55, fontFamily: bodyFontStack }}>
         Markdown supported: <code>**bold**</code>, <code>*italic*</code>,{" "}
         <code>[link](url)</code>, <code>- bullet</code>, blank line for a
         paragraph break.
@@ -1962,12 +2004,15 @@ function PaymentStep({
           to={`/admin/${orgSlug}/settings/stripe`}
           style={{
             padding: "10px 18px",
-            background: "#2563eb",
-            color: "#fff",
+            background: ink,
+            color: bg,
             textDecoration: "none",
             borderRadius: 6,
-            fontSize: 14,
-            fontWeight: 500,
+            fontSize: 13,
+            fontWeight: 700,
+            fontFamily: headingFontStack,
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
           }}
         >
           {ctaLabel}
@@ -1979,12 +2024,13 @@ function PaymentStep({
           style={{
             marginTop: 16,
             padding: "10px 14px",
-            background: "#eff6ff",
-            border: "1px solid #bfdbfe",
+            background: cream,
+            border: `1px solid ${creamDeep}`,
             borderRadius: 6,
             fontSize: 12,
-            color: "#1e40af",
+            color: inkSoft,
             lineHeight: 1.55,
+            fontFamily: bodyFontStack,
           }}
         >
           Skipping is fine for now — registrations will save and partner
@@ -2010,33 +2056,33 @@ function StripeStatusCard({
     { bg: string; border: string; fg: string; label: string; desc: string }
   > = {
     not_connected: {
-      bg: "#fffbeb",
-      border: "#fde68a",
-      fg: "#7a5d00",
+      bg: warnBg,
+      border: courtYellow,
+      fg: warnFg,
       label: "Not connected",
       desc:
         "No Stripe account is linked to this organization yet. Until one is connected, registrations save as 'paid' without actually charging — fine for testing, not for production.",
     },
     pending: {
-      bg: "#fef3c7",
-      border: "#fde68a",
-      fg: "#92400e",
+      bg: warnBg,
+      border: courtYellow,
+      fg: warnFg,
       label: "Onboarding in progress",
       desc:
         "Your Stripe account exists but verification isn't complete. Stripe usually finishes in a few minutes once you've submitted all required info.",
     },
     active: {
-      bg: "#dcfce7",
-      border: "#bbf7d0",
-      fg: "#166534",
+      bg: successBg,
+      border: courtGreen,
+      fg: successFg,
       label: "✓ Stripe connected",
       desc:
         "Your organization is ready to accept payments. Each registration moves money directly into your account (we take a platform fee on top).",
     },
     restricted: {
-      bg: "#fef2f2",
-      border: "#fecaca",
-      fg: "#991b1b",
+      bg: dangerBg,
+      border: courtRed,
+      fg: dangerFg,
       label: "⚠ Account restricted",
       desc:
         "Stripe has restricted this account — usually because of missing verification documents or a compliance flag. Resolve from your Stripe dashboard.",
@@ -2072,7 +2118,7 @@ function StripeStatusCard({
             fontSize: 11,
             color: p.fg,
             opacity: 0.7,
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontFamily: monoFontStack,
           }}
         >
           Account: {accountId}
@@ -2134,11 +2180,12 @@ function ReviewStep({
           style={{
             marginBottom: 16,
             padding: 14,
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
+            background: dangerBg,
+            border: `1px solid ${courtRed}`,
             borderRadius: 8,
             fontSize: 13,
-            color: "#991b1b",
+            color: dangerFg,
+            fontFamily: bodyFontStack,
           }}
         >
           <strong>Not ready to publish yet — {blockers.length} item{blockers.length === 1 ? "" : "s"} required:</strong>
@@ -2153,20 +2200,21 @@ function ReviewStep({
           style={{
             marginBottom: 16,
             padding: 14,
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
+            background: successBg,
+            border: `1px solid ${courtGreen}`,
             borderRadius: 8,
             fontSize: 13,
-            color: "#15803d",
+            color: successFg,
             display: "flex",
             alignItems: "center",
             gap: 8,
+            fontFamily: bodyFontStack,
           }}
         >
           <span style={{ fontSize: 16 }}>✓</span>
           <strong>Ready to publish</strong>
           {softBlockers.length > 0 && (
-            <span style={{ color: "#854d0e", marginLeft: 8 }}>
+            <span style={{ color: warnFg, marginLeft: 8 }}>
               — {softBlockers.length} optional item{softBlockers.length === 1 ? "" : "s"} worth reviewing before you go live
             </span>
           )}
@@ -2190,17 +2238,17 @@ function ReviewStep({
               <div>
                 <strong>{tournament.name}</strong>
               </div>
-              <div style={{ color: "#666", marginTop: 4 }}>
+              <div style={{ color: inkSoft, marginTop: 4, fontFamily: bodyFontStack }}>
                 {fmtDate(tournament.starts_at)} – {fmtDate(tournament.ends_at)}
               </div>
               {tournament.location_name && (
-                <div style={{ color: "#666", marginTop: 2 }}>
+                <div style={{ color: inkSoft, marginTop: 2, fontFamily: bodyFontStack }}>
                   {tournament.location_name}
                 </div>
               )}
             </>
           ) : (
-            <div style={{ color: "#7a5d00" }}>Not saved yet.</div>
+            <div style={{ color: warnFg, fontFamily: bodyFontStack }}>Not saved yet.</div>
           )}
         </ReviewCard>
 
@@ -2210,11 +2258,11 @@ function ReviewStep({
           done={eventCount > 0}
         >
           {eventCount > 0 ? (
-            <div>
+            <div style={{ fontFamily: bodyFontStack }}>
               {eventCount} event{eventCount === 1 ? "" : "s"} configured
             </div>
           ) : (
-            <div style={{ color: "#7a5d00" }}>
+            <div style={{ color: warnFg, fontFamily: bodyFontStack }}>
               At least one event is required.
             </div>
           )}
@@ -2225,10 +2273,10 @@ function ReviewStep({
           onEdit={() => onJumpTo("pricing")}
           done={pricingTiers.length > 0}
         >
-          <div>
+          <div style={{ fontFamily: bodyFontStack }}>
             Pattern: <strong>{prettyPattern(pricingPattern)}</strong>
           </div>
-          <div style={{ color: "#666", marginTop: 4 }}>
+          <div style={{ color: inkSoft, marginTop: 4, fontFamily: bodyFontStack }}>
             {pricingTiers.length} tier
             {pricingTiers.length === 1 ? "" : "s"}
           </div>
@@ -2241,15 +2289,15 @@ function ReviewStep({
         >
           {cancellationPreset ? (
             <>
-              <div>
+              <div style={{ fontFamily: bodyFontStack }}>
                 <strong>{prettyCancellationPreset(cancellationPreset)}</strong>
               </div>
-              <div style={{ color: "#666", marginTop: 4 }}>
+              <div style={{ color: inkSoft, marginTop: 4, fontFamily: bodyFontStack }}>
                 {cancellationPresetSummary(cancellationPreset)}
               </div>
             </>
           ) : (
-            <div style={{ color: "#7a5d00" }}>
+            <div style={{ color: warnFg, fontFamily: bodyFontStack }}>
               Not set — public page will show "Contact organizer for refunds."
             </div>
           )}
@@ -2260,11 +2308,11 @@ function ReviewStep({
           onEdit={() => onJumpTo("payment")}
           done={stripeStatus === "active"}
         >
-          <div>
+          <div style={{ fontFamily: bodyFontStack }}>
             <strong>{prettyStripeStatus(stripeStatus)}</strong>
           </div>
           {stripeStatus !== "active" && (
-            <div style={{ color: "#7a5d00", marginTop: 4 }}>
+            <div style={{ color: warnFg, marginTop: 4, fontFamily: bodyFontStack }}>
               Registrations will save without charging until Stripe is
               connected — fine for testing, not for production.
             </div>
@@ -2276,7 +2324,7 @@ function ReviewStep({
           onEdit={() => onJumpTo("sponsors")}
           done={true}
         >
-          <div style={{ color: "#666" }}>
+          <div style={{ color: inkSoft, fontFamily: bodyFontStack }}>
             Sponsors, FAQs — fill in either now or after publish.
           </div>
         </ReviewCard>
@@ -2301,10 +2349,11 @@ function ReviewCard({
     <div
       style={{
         padding: 14,
-        background: done ? "#fff" : "#fffbeb",
-        border: `1px solid ${done ? "#e5e7eb" : "#fde68a"}`,
+        background: done ? "#ffffff" : warnBg,
+        border: `1px solid ${done ? rule : courtYellow}`,
         borderRadius: 8,
         fontSize: 13,
+        fontFamily: bodyFontStack,
       }}
     >
       <div
@@ -2315,17 +2364,17 @@ function ReviewCard({
           marginBottom: 8,
         }}
       >
-        <strong>{title}</strong>
+        <strong style={{ color: ink }}>{title}</strong>
         <button
           type="button"
           onClick={onEdit}
           style={{
             background: "transparent",
             border: "none",
-            color: "#2563eb",
+            color: courtBlue,
             cursor: "pointer",
             fontSize: 12,
-            fontFamily: "inherit",
+            fontFamily: bodyFontStack,
           }}
         >
           Edit
@@ -2343,8 +2392,8 @@ function ReviewCard({
 function StepHeader({ title, lede }: { title: string; lede: string }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>{title}</h1>
-      <p style={{ margin: "4px 0 0", color: "#666", fontSize: 14, lineHeight: 1.55 }}>
+      <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: ink, fontFamily: headingFontStack, textTransform: "uppercase", letterSpacing: "0.04em" }}>{title}</h1>
+      <p style={{ margin: "6px 0 0", color: inkSoft, fontSize: 14, lineHeight: 1.55, fontFamily: bodyFontStack }}>
         {lede}
       </p>
     </div>
@@ -2369,17 +2418,18 @@ function Field({
         flexDirection: "column",
         gap: 4,
         fontSize: 13,
-        color: "#555",
+        color: inkSoft,
         marginBottom: 14,
+        fontFamily: bodyFontStack,
       }}
     >
       <span>
         {label}
-        {required && <span style={{ color: "#ef4444", marginLeft: 4 }}>*</span>}
+        {required && <span style={{ color: courtRed, marginLeft: 4 }}>*</span>}
       </span>
       {children}
       {hint && (
-        <span style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+        <span style={{ fontSize: 12, color: inkMuted, marginTop: 2 }}>
           {hint}
         </span>
       )}
@@ -2415,8 +2465,8 @@ const shellStyle: CSSProperties = {
 const railStyle: CSSProperties = {
   position: "sticky",
   top: 24,
-  background: "#fafafa",
-  border: "1px solid #e5e7eb",
+  background: bg,
+  border: `1px solid ${rule}`,
   borderRadius: 10,
   padding: 18,
   display: "flex",
@@ -2440,13 +2490,13 @@ function stepBtnStyle(state: "done" | "active" | "todo"): CSSProperties {
     gap: 10,
     width: "100%",
     padding: "8px 10px",
-    background: state === "active" ? "#fff" : "transparent",
-    border: state === "active" ? "1px solid #d1d5db" : "1px solid transparent",
+    background: state === "active" ? "#ffffff" : "transparent",
+    border: state === "active" ? `1px solid ${rule}` : "1px solid transparent",
     borderRadius: 6,
     cursor: "pointer",
     textAlign: "left",
-    fontFamily: "inherit",
-    color: state === "todo" ? "#888" : "#333",
+    fontFamily: bodyFontStack,
+    color: state === "todo" ? inkMuted : ink,
   };
 }
 
@@ -2457,11 +2507,11 @@ function indicatorStyle(state: "done" | "active" | "todo"): CSSProperties {
     borderRadius: "50%",
     background:
       state === "done"
-        ? "#16a34a"
+        ? courtGreen
         : state === "active"
-          ? "#2563eb"
-          : "#e5e7eb",
-    color: state === "todo" ? "#888" : "#fff",
+          ? ink
+          : rule,
+    color: state === "todo" ? inkMuted : "#ffffff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -2472,27 +2522,29 @@ function indicatorStyle(state: "done" | "active" | "todo"): CSSProperties {
 }
 
 const paneStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
+  background: "#ffffff",
+  border: `1px solid ${rule}`,
   borderRadius: 10,
   padding: "26px 30px",
   minHeight: 400,
+  fontFamily: bodyFontStack,
 };
 
 const inputStyle: CSSProperties = {
   width: "100%",
   padding: "9px 12px",
-  border: "1px solid #e2e2e2",
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 14,
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
+  color: ink,
   boxSizing: "border-box",
 };
 
 const actionBarStyle: CSSProperties = {
   marginTop: 22,
   paddingTop: 16,
-  borderTop: "1px solid #f0f0f0",
+  borderTop: `1px solid ${ruleSoft}`,
   display: "flex",
   alignItems: "center",
   gap: 8,
@@ -2502,36 +2554,41 @@ const actionBarStyle: CSSProperties = {
 const btnGhost: CSSProperties = {
   padding: "9px 18px",
   background: "transparent",
-  color: "#666",
-  border: "1px solid #e2e2e2",
+  color: inkSoft,
+  border: `1px solid ${rule}`,
   borderRadius: 6,
   fontSize: 13,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: bodyFontStack,
 };
 
 const btnSecondary: CSSProperties = {
   padding: "9px 18px",
-  background: "#fff",
-  color: "#2563eb",
-  border: "1px solid #2563eb",
+  background: "transparent",
+  color: ink,
+  border: `2px solid ${ink}`,
   borderRadius: 6,
   fontSize: 13,
+  fontWeight: 700,
   cursor: "pointer",
-  fontFamily: "inherit",
+  fontFamily: headingFontStack,
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
 };
 
 function btnPrimary(disabled: boolean): CSSProperties {
   return {
     padding: "9px 22px",
-    background: disabled ? "#9ca3af" : "#2563eb",
-    color: "#fff",
+    background: disabled ? inkMuted : ink,
+    color: "#ffffff",
     border: "none",
     borderRadius: 6,
     fontSize: 13,
-    fontWeight: 500,
+    fontWeight: 700,
     cursor: disabled ? "not-allowed" : "pointer",
-    fontFamily: "inherit",
+    fontFamily: headingFontStack,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
   };
 }
 
