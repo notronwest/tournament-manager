@@ -188,11 +188,15 @@ Deno.serve(async (req: Request) => {
       if (roleErr) return json({ error: "auth_check_failed" }, 500);
       if (!authorized) return json({ error: "forbidden_not_organizer" }, 403);
 
-      // Must be a queued (filed, not-yet-decided) request on a paid reg.
+      // Must be a queued (filed, not-yet-decided) request on a paid or withdrawn reg.
+      // Old flow (mode:"self", manual_required): reg stays paid when request is filed.
+      // New flow (#289, file_refund_request RPC): reg is already withdrawn.
       if (!reg.withdrawal_requested_at || reg.withdrawal_decided_at) {
         return json({ error: "no_pending_request" }, 409);
       }
-      if (reg.status !== "paid") return json({ error: "not_resolvable" }, 409);
+      if (reg.status !== "paid" && reg.status !== "withdrawn") {
+        return json({ error: "not_resolvable" }, 409);
+      }
 
       if (decision !== "approve" && decision !== "deny") {
         return json({ error: "missing_decision" }, 400);
@@ -272,7 +276,7 @@ Deno.serve(async (req: Request) => {
           withdrawal_decision: decision === "approve" ? "approved" : "denied",
         })
         .eq("id", eventRegistrationId)
-        .eq("status", "paid")
+        .in("status", ["paid", "withdrawn"])
         .is("withdrawal_decided_at", null)
         .select("id");
       if (upd && upd.length > 0) await unpairPartner();
