@@ -17,6 +17,41 @@ Two server pieces implement this:
 
 ---
 
+## Flow — REVISED 2026-06-13 (supersedes the auto-refund model)
+
+Ron reworked the UX into **one path: organizer holds the money, full
+transparency to the player.** This supersedes the earlier "withdraw =
+instant auto-refund (or manual_required hand-off)" model — **there is no
+longer any instant/automatic refund.** The refund *math* below is unchanged;
+only the flow around it changed.
+
+```
+paid ─[1. withdraw]→ withdrawn ─[2. request refund]→ refund_requested ($Y frozen)
+                                                            └─[3. organizer decides]→ refunded | stays withdrawn
+```
+
+1. **Withdraw is just withdraw** (player side, #289). Confirm + partner-unpair →
+   reg `withdrawn`. **No `stripe-refund` call, no money.** `unpaid` regs just
+   cancel.
+2. **Request refund** (player side, #289). On a withdrawn, previously-paid reg,
+   show **paid `$X`** + **entitled `$Y`** (from `refund_compute` via `dry_run`).
+   On submit, **snapshot `$Y` into `entitled_refund_cents` (frozen to the
+   withdrawal date)** + stamp `withdrawal_requested_at`/reason.
+3. **Organizer decides** (#200). Queue shows the frozen `$Y`; organizer approves
+   (pre-filled `$Y`, adjustable `$0–$X`) → `stripe-refund` **manual**, or denies
+   → stays `withdrawn`.
+
+**Locked decisions (Ron, 2026-06-13):** (a) every refund routes through an
+organizer decision — no auto-refund; (b) entitlement is **snapshotted at request
+time**, frozen to the withdrawal date, so an organizer's delay can't shrink it
+(`refund_compute` uses `now()`, hence the snapshot column); (c) withdraw and
+request-refund are **two separate steps**.
+
+> `stripe-refund` **auto** execute mode is no longer used by the player flow —
+> only `dry_run` (entitlement preview) and **manual** (organizer execute).
+
+---
+
 ## What is refundable (locked decisions — Ron, 2026-06-11)
 
 - **Event fee only.** A single-event withdrawal refunds *that event's* fee — the
@@ -156,16 +191,19 @@ adds, on `event_registrations`:
 
 | column | type | meaning |
 |---|---|---|
-| `withdrawal_requested_at` | `timestamptz` | player filed the request (reg stays `paid`, no status change) |
+| `withdrawal_requested_at` | `timestamptz` | player filed the refund request (reg is already `withdrawn`) |
 | `withdrawal_reason` | `text` | optional reason from the player |
+| `entitled_refund_cents` | `integer` | **(revised flow, #289)** `refund_compute`'s `$Y` **snapshotted at request time**, frozen to the withdrawal date — what the organizer's Approve pre-fills. NOT recomputed at decision time. |
 | `withdrawal_decided_at` | `timestamptz` | organizer resolved it |
 | `withdrawal_decision` | `withdrawal_decision` enum (`approved`/`denied`) | the organizer's call |
 
 The **pending queue** = `withdrawal_requested_at is not null and
-withdrawal_decided_at is null` (a partial index backs this). The chosen refund
-**amount** is not stored here — it's passed to `stripe-refund` (manual mode,
-not yet built) at approve time and recorded in `payments`. Approve → manual
-refund → status `refunded` (or `withdrawn` if $0); deny → `withdrawn`, no refund.
+withdrawal_decided_at is null` (a partial index backs this). At approve time
+the organizer's amount (default `entitled_refund_cents`, adjustable $0–paid) is
+passed to `stripe-refund` **manual** mode and recorded in `payments`. Approve →
+manual refund → status `refunded` (or `withdrawn` if $0); deny → stays
+`withdrawn`, no refund. (Note: in the revised flow the reg is already
+`withdrawn` before the request — the request no longer happens on a `paid` reg.)
 
 ---
 
