@@ -107,6 +107,23 @@ Deno.serve(async (req: Request) => {
       .eq("id", t.id);
     if (updErr) return json({ error: updErr.message }, 500);
 
+    // ── 5a. Void pending_payment regs (never paid — no refund needed) ─
+    // Two-step since supabase-js doesn't support subqueries: fetch the
+    // event IDs for this tournament, then cancel matching regs.
+    const { data: tournamentEvents } = await admin
+      .from("events")
+      .select("id")
+      .eq("tournament_id", t.id)
+      .is("deleted_at", null);
+    if (tournamentEvents && tournamentEvents.length > 0) {
+      await admin
+        .from("event_registrations")
+        .update({ status: "cancelled" })
+        .in("event_id", tournamentEvents.map((e: { id: string }) => e.id))
+        .eq("status", "pending_payment")
+        .is("deleted_at", null);
+    }
+
     // ── 6. Every PAID registration (idempotent set — refunded/withdrawn
     //       regs are already excluded, so a re-run skips finished ones) ──
     const { data: regs, error: regErr } = await admin
