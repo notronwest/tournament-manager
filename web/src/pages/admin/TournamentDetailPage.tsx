@@ -65,6 +65,19 @@ type CancelResult = {
   failures: Array<{ event_registration_id: string; error: string }>;
 };
 
+type PendingWithdrawal = {
+  id: string;
+  playerFirstName: string | null;
+  playerLastName: string | null;
+  eventName: string;
+  eventFeeCents: number;
+  entitledRefundCents: number | null;
+  withdrawalRequestedAt: string;
+  withdrawalReason: string | null;
+  daysToStart: number | null;
+  requestedDaysAgo: number;
+};
+
 // Tournament homepage: stats + events list with per-event status,
 // court allocation, and start/complete actions. The court manager
 // link sits at the top because it's tournament-wide — a single
@@ -89,6 +102,13 @@ export default function TournamentDetailPage() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelResult, setCancelResult] = useState<CancelResult | null>(null);
   const [retryBusy, setRetryBusy] = useState(false);
+  const [pendingWithdrawals, setPendingWithdrawals] = useState<PendingWithdrawal[]>([]);
+  const [approvingWithdrawal, setApprovingWithdrawal] = useState<PendingWithdrawal | null>(null);
+  const [approveAmountStr, setApproveAmountStr] = useState("");
+  const [approveBusy, setApproveBusy] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [denyingWithdrawal, setDenyingWithdrawal] = useState<PendingWithdrawal | null>(null);
+  const [denyBusy, setDenyBusy] = useState(false);
 
   const reload = useCallback(async () => {
     if (!org || !tournamentSlug) return;
@@ -116,8 +136,8 @@ export default function TournamentDetailPage() {
     }
 
     // Events + their registrations + court allocations + pricing
-    // tiers + open change request count, in parallel.
-    const [evRes, regsRes, courtsRes, tiersRes, openCrRes] = await Promise.all([
+    // tiers + open change request count + pending refund requests, in parallel.
+    const [evRes, regsRes, courtsRes, tiersRes, openCrRes, withdrawRes] = await Promise.all([
       supabase
         .from("events")
         .select("*")
@@ -143,10 +163,59 @@ export default function TournamentDetailPage() {
         .select("id", { count: "exact", head: true })
         .eq("tournament_id", tData.id)
         .eq("status", "open"),
+      supabase
+        .from("event_registrations")
+        .select(
+          "id, withdrawal_requested_at, withdrawal_reason, entitled_refund_cents, players(first_name, last_name), events!inner(name, event_fee_cents, tournament_id)",
+        )
+        .eq("events.tournament_id", tData.id)
+        .not("withdrawal_requested_at", "is", null)
+        .is("withdrawal_decided_at", null)
+        .is("deleted_at", null)
+        .in("status", ["paid", "withdrawn"])
+        .order("withdrawal_requested_at", { ascending: true }),
     ]);
 
     setTiers(tiersRes.data ?? []);
     setOpenChangeRequestCount(openCrRes.count ?? 0);
+
+    type WithdrawRow = {
+      id: string;
+      withdrawal_requested_at: string;
+      withdrawal_reason: string | null;
+      entitled_refund_cents: number | null;
+      players: { first_name: string | null; last_name: string | null } | null;
+      events: { name: string; event_fee_cents: number };
+    };
+    const wdRows = (withdrawRes.data ?? []) as unknown as WithdrawRow[];
+    const fetchTime = new Date();
+    const tournamentStart = tData.starts_at ? new Date(tData.starts_at) : null;
+    setPendingWithdrawals(
+      wdRows.map((row) => {
+        const requestedAt = new Date(row.withdrawal_requested_at);
+        return {
+          id: row.id,
+          playerFirstName: row.players?.first_name ?? null,
+          playerLastName: row.players?.last_name ?? null,
+          eventName: row.events.name,
+          eventFeeCents: row.events.event_fee_cents,
+          entitledRefundCents: row.entitled_refund_cents,
+          withdrawalRequestedAt: row.withdrawal_requested_at,
+          withdrawalReason: row.withdrawal_reason,
+          daysToStart: tournamentStart
+            ? Math.max(
+                0,
+                Math.ceil(
+                  (tournamentStart.getTime() - fetchTime.getTime()) / 86_400_000,
+                ),
+              )
+            : null,
+          requestedDaysAgo: Math.floor(
+            (fetchTime.getTime() - requestedAt.getTime()) / 86_400_000,
+          ),
+        };
+      }),
+    );
 
     if (evRes.error) {
       setError(evRes.error.message);
@@ -328,6 +397,69 @@ export default function TournamentDetailPage() {
       return;
     }
     setCancelResult(data as CancelResult);
+  };
+
+  const openApproveModal = (wd: PendingWithdrawal) => {
+    const defaultStr =
+      wd.entitledRefundCents !== null
+        ? (wd.entitledRefundCents / 100).toFixed(2)
+        : "0.00";
+    setApproveAmountStr(defaultStr);
+    setApproveError(null);
+    setApprovingWithdrawal(wd);
+  };
+
+  const submitApprove = async () => {
+    if (!approvingWithdrawal) return;
+    const parsed = parseFloat(approveAmountStr);
+    if (isNaN(parsed) || parsed < 0) {
+      setApproveError("Enter a valid amount ($0.00 or more).");
+      return;
+    }
+    const amountCents = Math.round(parsed * 100);
+    if (amountCents > approvingWithdrawal.eventFeeCents) {
+      setApproveError(
+        `Amount cannot exceed $${(approvingWithdrawal.eventFeeCents / 100).toFixed(2)}.`,
+      );
+      return;
+    }
+    setApproveBusy(true);
+    setApproveError(null);
+    const { error: fnErr } = await supabase.functions.invoke("stripe-refund", {
+      body: {
+        eventRegistrationId: approvingWithdrawal.id,
+        mode: "resolve",
+        decision: "approve",
+        amountCents,
+        dryRun: false,
+      },
+    });
+    setApproveBusy(false);
+    if (fnErr) {
+      setApproveError(await extractFnError(fnErr));
+      return;
+    }
+    setApprovingWithdrawal(null);
+    await reload();
+  };
+
+  const submitDeny = async () => {
+    if (!denyingWithdrawal) return;
+    setDenyBusy(true);
+    const { error: fnErr } = await supabase.functions.invoke("stripe-refund", {
+      body: {
+        eventRegistrationId: denyingWithdrawal.id,
+        mode: "resolve",
+        decision: "deny",
+        dryRun: false,
+      },
+    });
+    setDenyBusy(false);
+    if (fnErr) {
+      setError(await extractFnError(fnErr));
+    }
+    setDenyingWithdrawal(null);
+    await reload();
   };
 
   const toggleCourt = async (eventId: string, courtNumber: number) => {
@@ -635,6 +767,114 @@ export default function TournamentDetailPage() {
         </dd>
       </dl>
 
+      {/* Pending refund requests — admin/owner only */}
+      {(role === "owner" || role === "admin") && pendingWithdrawals.length > 0 && (
+        <section style={{ marginTop: 32 }}>
+          <h2 style={{ ...sectionH2Style, marginBottom: 12 }}>
+            Pending refund requests ({pendingWithdrawals.length})
+          </h2>
+          <div
+            style={{
+              border: `1px solid ${warnFg}`,
+              borderRadius: 8,
+              overflow: "hidden",
+              background: warnBg,
+            }}
+          >
+            {pendingWithdrawals.map((wd, i) => {
+              const playerName =
+                [wd.playerFirstName, wd.playerLastName].filter(Boolean).join(" ") ||
+                "Unknown player";
+              return (
+                <div
+                  key={wd.id}
+                  style={{
+                    padding: "14px 16px",
+                    borderTop: i === 0 ? "none" : `1px solid ${warnFg}`,
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "start",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: ink }}>
+                      {playerName}
+                    </div>
+                    <div style={{ fontSize: 13, color: inkSoft, marginTop: 2 }}>
+                      {wd.eventName}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: inkMuted,
+                        marginTop: 4,
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span>
+                        Paid: <strong>${(wd.eventFeeCents / 100).toFixed(2)}</strong>
+                      </span>
+                      <span>
+                        Entitled:{" "}
+                        <strong>
+                          {wd.entitledRefundCents !== null
+                            ? `$${(wd.entitledRefundCents / 100).toFixed(2)}`
+                            : "organizer decides"}
+                        </strong>
+                      </span>
+                      {wd.daysToStart !== null && (
+                        <span>
+                          {wd.daysToStart === 0
+                            ? "Tournament today"
+                            : `${wd.daysToStart}d to start`}
+                        </span>
+                      )}
+                      <span>
+                        Requested{" "}
+                        {wd.requestedDaysAgo === 0 ? "today" : `${wd.requestedDaysAgo}d ago`}
+                      </span>
+                    </div>
+                    {wd.withdrawalReason && (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 13,
+                          color: inkSoft,
+                          fontStyle: "italic",
+                        }}
+                      >
+                        "{wd.withdrawalReason}"
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      flexShrink: 0,
+                      alignItems: "center",
+                    }}
+                  >
+                    <button onClick={() => openApproveModal(wd)} style={primaryBtn(false)}>
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => setDenyingWithdrawal(wd)}
+                      style={secondaryBtn}
+                    >
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Events list */}
       <section style={{ marginTop: 32 }}>
         <header
@@ -726,6 +966,47 @@ export default function TournamentDetailPage() {
             setShowCancelModal(false);
             setCancelError(null);
           }}
+        />
+      )}
+
+      {approvingWithdrawal && (
+        <ApproveWithdrawalModal
+          withdrawal={approvingWithdrawal}
+          amountStr={approveAmountStr}
+          onAmountChange={setApproveAmountStr}
+          busy={approveBusy}
+          error={approveError}
+          onConfirm={submitApprove}
+          onCancel={() => {
+            setApprovingWithdrawal(null);
+            setApproveError(null);
+          }}
+        />
+      )}
+
+      {denyingWithdrawal && (
+        <ConfirmModal
+          title="Deny refund request?"
+          body={
+            <div style={{ fontSize: 13, color: inkSoft, lineHeight: 1.5 }}>
+              <p style={{ margin: "0 0 8px" }}>
+                <strong>
+                  {[denyingWithdrawal.playerFirstName, denyingWithdrawal.playerLastName]
+                    .filter(Boolean)
+                    .join(" ")}
+                </strong>{" "}
+                will not receive a refund for their{" "}
+                <strong>{denyingWithdrawal.eventName}</strong> registration. Their
+                status will remain "withdrawn."
+              </p>
+              {denyBusy && (
+                <p style={{ margin: 0, color: inkMuted }}>Processing…</p>
+              )}
+            </div>
+          }
+          confirmLabel={denyBusy ? "Denying…" : "Deny refund"}
+          onCancel={() => setDenyingWithdrawal(null)}
+          onConfirm={submitDeny}
         />
       )}
     </div>
@@ -1607,6 +1888,193 @@ function dangerBtn(busy: boolean): CSSProperties {
     cursor: busy ? "not-allowed" : "pointer",
     fontFamily: bodyFontStack,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Approve withdrawal modal
+// ─────────────────────────────────────────────────────────────────────
+
+function ApproveWithdrawalModal({
+  withdrawal,
+  amountStr,
+  onAmountChange,
+  busy,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  withdrawal: PendingWithdrawal;
+  amountStr: string;
+  onAmountChange: (v: string) => void;
+  busy: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [busy, onCancel]);
+
+  const playerName =
+    [withdrawal.playerFirstName, withdrawal.playerLastName].filter(Boolean).join(" ") ||
+    "Unknown player";
+  const maxDollars = (withdrawal.eventFeeCents / 100).toFixed(2);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "var(--overlay)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 1000,
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onCancel();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="approve-withdrawal-modal-title"
+        style={{
+          background: "var(--surface)",
+          borderRadius: 8,
+          padding: 24,
+          maxWidth: 440,
+          width: "100%",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+        }}
+      >
+        <h2
+          id="approve-withdrawal-modal-title"
+          style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 600 }}
+        >
+          Approve refund
+        </h2>
+        <p style={{ margin: "0 0 16px", fontSize: 13, color: inkSoft }}>
+          {playerName} — {withdrawal.eventName}
+        </p>
+
+        <div style={{ fontSize: 13, color: inkSoft, marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
+            <span>
+              Paid: <strong style={{ color: ink }}>${maxDollars}</strong>
+            </span>
+            <span>
+              Entitled:{" "}
+              <strong style={{ color: ink }}>
+                {withdrawal.entitledRefundCents !== null
+                  ? `$${(withdrawal.entitledRefundCents / 100).toFixed(2)}`
+                  : "—"}
+              </strong>
+            </span>
+          </div>
+          {withdrawal.withdrawalReason && (
+            <div style={{ fontStyle: "italic", color: inkMuted, marginBottom: 8 }}>
+              "{withdrawal.withdrawalReason}"
+            </div>
+          )}
+        </div>
+
+        <label style={{ display: "block", marginBottom: 16 }}>
+          <div
+            style={{ fontSize: 13, fontWeight: 500, color: ink, marginBottom: 4 }}
+          >
+            Refund amount (max ${maxDollars})
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 14, color: inkSoft }}>$</span>
+            <input
+              type="number"
+              min="0"
+              max={maxDollars}
+              step="0.01"
+              value={amountStr}
+              onChange={(e) => onAmountChange(e.target.value)}
+              disabled={busy}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                border: `1px solid ${error ? "#dc2626" : "#d1d5db"}`,
+                borderRadius: 6,
+                fontSize: 14,
+                fontFamily: "inherit",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+          {error && (
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                color: "#dc2626",
+              }}
+            >
+              {error}
+            </div>
+          )}
+        </label>
+
+        <p style={{ margin: "0 0 16px", fontSize: 12, color: inkMuted }}>
+          $0.00 approves the request with no refund (status stays "withdrawn").
+          The server enforces the final cap.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+          }}
+        >
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            style={{
+              padding: "8px 16px",
+              background: "var(--surface)",
+              color: "var(--text-muted)",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              fontSize: 13,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            style={{
+              padding: "8px 16px",
+              background: busy ? inkMuted : ink,
+              color: bg,
+              border: "none",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              opacity: busy ? 0.7 : 1,
+            }}
+          >
+            {busy ? "Processing…" : "Approve refund"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────
