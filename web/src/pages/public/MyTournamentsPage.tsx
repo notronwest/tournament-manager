@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import type { Database } from "../../types/supabase";
 import {
   bg,
@@ -9,7 +10,6 @@ import {
   contentColStyle,
   courtBlue,
   courtRed,
-  ctaPrimaryStyle,
   ink,
   inkMuted,
   inkSoft,
@@ -26,8 +26,6 @@ import {
 
 type RegistrationStatus = Database["public"]["Enums"]["registration_status"];
 type PartnerStatus = Database["public"]["Enums"]["partner_status"];
-type CancellationPolicyPreset =
-  Database["public"]["Enums"]["cancellation_policy_preset"];
 
 type EventReg = {
   id: string;
@@ -36,6 +34,9 @@ type EventReg = {
   event_fee_cents: number;
   event_name: string;
   event_format: string;
+  partner_registration_id: string | null;
+  withdrawal_requested_at: string | null;
+  entitled_refund_cents: number | null;
 };
 
 type TournamentGroup = {
@@ -48,62 +49,53 @@ type TournamentGroup = {
   ends_at: string;
   location_name: string | null;
   tournament_status: Database["public"]["Enums"]["tournament_status"];
-  cancellation_policy_preset: CancellationPolicyPreset | null;
   regs: EventReg[];
 };
 
-type WithdrawPreview = {
-  decision: "full" | "partial" | "none" | "unpaid" | "manual_required";
-  paidCents: number;
-  refundCents: number;
-  partner: { name: string; willUnpair: boolean } | null;
+// Which step of the withdraw flow is active.
+type WithdrawConfirm = {
+  regId: string;
+  tournamentId: string;
+  eventName: string;
+  hasPartner: boolean;
 };
 
-type WithdrawFlow =
-  | { regId: string; tournamentId: string; eventName: string; phase: "loading" }
-  | {
-      regId: string;
-      tournamentId: string;
-      eventName: string;
-      phase: "preview";
-      preview: WithdrawPreview;
-    }
-  | {
-      regId: string;
-      tournamentId: string;
-      eventName: string;
-      phase: "error";
-      message: string;
-    };
+// Which reg is in the "request refund" flow.
+type RefundRequest = {
+  regId: string;
+  tournamentId: string;
+  eventName: string;
+  eventFeeCents: number;
+  entitledCents: number | null;
+  reason: string;
+};
 
-function statusLabel(
-  regStatus: RegistrationStatus,
-  partnerStatus: PartnerStatus
-): string {
-  if (regStatus === "cancelled") return "Cancelled";
-  if (regStatus === "withdrawn") return "Withdrawn";
-  if (regStatus === "refunded") return "Refunded";
-  if (regStatus === "pending_payment") return "Pending payment";
-  if (partnerStatus === "seeking") return "Paid · Seeking partner";
-  if (partnerStatus === "pending") return "Paid · Awaiting partner";
+function statusLabel(reg: EventReg): string {
+  if (reg.status === "cancelled") return "Cancelled";
+  if (reg.status === "withdrawn") {
+    return reg.withdrawal_requested_at
+      ? "Withdrawn · Refund requested"
+      : "Withdrawn";
+  }
+  if (reg.status === "refunded") return "Refunded";
+  if (reg.status === "pending_payment") return "Pending payment";
+  if (reg.partner_status === "seeking") return "Paid · Seeking partner";
+  if (reg.partner_status === "pending") return "Paid · Awaiting partner";
   return "Paid";
 }
 
 type StatusTone = { color: string; background: string };
 
-function statusTone(
-  regStatus: RegistrationStatus,
-  partnerStatus: PartnerStatus
-): StatusTone {
+function statusTone(reg: EventReg): StatusTone {
   if (
-    regStatus === "cancelled" ||
-    regStatus === "withdrawn" ||
-    regStatus === "refunded"
+    reg.status === "cancelled" ||
+    reg.status === "withdrawn" ||
+    reg.status === "refunded"
   )
     return { color: inkMuted, background: `${inkMuted}18` };
-  if (regStatus === "pending_payment")
+  if (reg.status === "pending_payment")
     return { color: warnFg, background: warnBg };
-  if (partnerStatus === "seeking" || partnerStatus === "pending")
+  if (reg.partner_status === "seeking" || reg.partner_status === "pending")
     return { color: courtBlue, background: `${courtBlue}18` };
   return { color: successFg, background: successBg };
 }
@@ -112,50 +104,8 @@ function isWithdrawable(status: RegistrationStatus): boolean {
   return status === "paid" || status === "pending_payment";
 }
 
-function policyText(preset: CancellationPolicyPreset | null): string {
-  switch (preset) {
-    case "generous":
-      return "Full refund if more than 7 days before start; no refund within 7 days of start.";
-    case "standard":
-      return "Full refund within 7 days of registration; half refund if more than 7 days before start; no refund within 7 days of start.";
-    case "strict":
-      return "No refunds after registration.";
-    case "custom":
-    case null:
-    default:
-      return "This tournament has a custom or unset cancellation policy.";
-  }
-}
-
-function refundSummaryText(preview: WithdrawPreview): string {
-  const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
-  switch (preview.decision) {
-    case "full":
-      return `You'll receive a full refund of ${fmt(preview.refundCents)}.`;
-    case "partial":
-      return `You'll receive a partial refund of ${fmt(preview.refundCents)} (of ${fmt(preview.paidCents)} paid).`;
-    case "none":
-      return "No refund will be issued per the cancellation policy.";
-    case "unpaid":
-      return "Your registration will be cancelled. No payment was charged.";
-    case "manual_required":
-      return "Your refund requires organizer review.";
-  }
-}
-
-// Mirrors OrgStripeSettingsPage.extractError — reads the JSON body from
-// fnErr.context where edge functions put their { error } payload.
-async function extractError(fnErr: unknown): Promise<string> {
-  const ctx = (fnErr as { context?: Response }).context;
-  if (ctx) {
-    try {
-      const body = (await ctx.json()) as { error?: string };
-      if (body.error) return body.error;
-    } catch {
-      /* fall through */
-    }
-  }
-  return (fnErr as { message?: string }).message ?? "Unknown error.";
+function formatMoney(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 function formatDateRange(startsAt: string, endsAt: string): string {
@@ -192,7 +142,15 @@ export default function MyTournamentsPage() {
   const [groups, setGroups] = useState<TournamentGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [withdrawFlow, setWithdrawFlow] = useState<WithdrawFlow | null>(null);
+
+  // Withdraw confirm state.
+  const [withdrawConfirm, setWithdrawConfirm] =
+    useState<WithdrawConfirm | null>(null);
+
+  // Request-refund flow state.
+  const [refundRequest, setRefundRequest] = useState<RefundRequest | null>(
+    null
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -226,6 +184,9 @@ export default function MyTournamentsPage() {
           status,
           partner_status,
           event_fee_cents,
+          partner_registration_id,
+          withdrawal_requested_at,
+          entitled_refund_cents,
           events (
             id,
             name,
@@ -239,7 +200,6 @@ export default function MyTournamentsPage() {
               ends_at,
               status,
               location_name,
-              cancellation_policy_preset,
               organizations (
                 name,
                 slug
@@ -284,9 +244,6 @@ export default function MyTournamentsPage() {
             ends_at: tour.ends_at,
             location_name: tour.location_name,
             tournament_status: tour.status,
-            cancellation_policy_preset:
-              (tour.cancellation_policy_preset as CancellationPolicyPreset | null) ??
-              null,
             regs: [],
           };
           byTournament.set(tour.id, group);
@@ -298,6 +255,9 @@ export default function MyTournamentsPage() {
           event_fee_cents: row.event_fee_cents,
           event_name: ev.name,
           event_format: ev.format,
+          partner_registration_id: row.partner_registration_id,
+          withdrawal_requested_at: row.withdrawal_requested_at,
+          entitled_refund_cents: row.entitled_refund_cents,
         });
       }
 
@@ -311,73 +271,91 @@ export default function MyTournamentsPage() {
     };
   }, [user]);
 
-  const startWithdraw = async (
-    regId: string,
-    tournamentId: string,
-    eventName: string
-  ) => {
-    setWithdrawFlow({ regId, tournamentId, eventName, phase: "loading" });
+  // ── Withdraw flow ─────────────────────────────────────────────────────────
 
-    const { data, error: fnErr } = await supabase.functions.invoke(
-      "stripe-refund",
-      { body: { eventRegistrationId: regId, dryRun: true } }
-    );
-
-    if (fnErr) {
-      const message = await extractError(fnErr);
-      setWithdrawFlow({ regId, tournamentId, eventName, phase: "error", message });
-      return;
-    }
-
-    const preview = data as WithdrawPreview;
-    setWithdrawFlow({ regId, tournamentId, eventName, phase: "preview", preview });
+  const handleWithdrawClick = (reg: EventReg, tournamentId: string) => {
+    setWithdrawConfirm({
+      regId: reg.id,
+      tournamentId,
+      eventName: reg.event_name,
+      hasPartner: reg.partner_registration_id !== null,
+    });
   };
 
   const executeWithdraw = async () => {
-    if (!withdrawFlow || withdrawFlow.phase !== "preview") return;
-    const { regId, tournamentId, eventName } = withdrawFlow;
+    if (!withdrawConfirm) return;
+    const { regId, tournamentId } = withdrawConfirm;
 
-    const { data, error: fnErr } = await supabase.functions.invoke(
-      "stripe-refund",
-      { body: { eventRegistrationId: regId, dryRun: false } }
+    const { data, error: rpcErr } = await supabase.rpc("withdraw_self", {
+      p_reg_id: regId,
+    });
+
+    if (rpcErr) throw new Error(rpcErr.message);
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const newStatus = row?.new_status ?? "withdrawn";
+    const entitledCents = row?.entitled_cents ?? null;
+
+    setGroups((prev) =>
+      prev.map((g) => {
+        if (g.tournament_id !== tournamentId) return g;
+        return {
+          ...g,
+          regs: g.regs.map((r) =>
+            r.id === regId
+              ? {
+                  ...r,
+                  status: newStatus as RegistrationStatus,
+                  entitled_refund_cents: entitledCents,
+                  partner_registration_id: null,
+                }
+              : r
+          ),
+        };
+      })
     );
-
-    if (fnErr) {
-      const message = await extractError(fnErr);
-      setWithdrawFlow({ regId, tournamentId, eventName, phase: "error", message });
-      return;
-    }
-
-    const result = data as {
-      applied: boolean;
-      newStatus: string | null;
-    };
-
-    if (result.newStatus) {
-      setGroups((prev) =>
-        prev.map((g) => {
-          if (g.tournament_id !== tournamentId) return g;
-          return {
-            ...g,
-            regs: g.regs.map((r) =>
-              r.id === regId
-                ? { ...r, status: result.newStatus as RegistrationStatus }
-                : r
-            ),
-          };
-        })
-      );
-    }
-
-    setWithdrawFlow(null);
+    setWithdrawConfirm(null);
   };
 
-  const cancelWithdraw = () => setWithdrawFlow(null);
+  // ── Request refund flow ───────────────────────────────────────────────────
 
-  const activeGroup = withdrawFlow
-    ? (groups.find((g) => g.tournament_id === withdrawFlow.tournamentId) ??
-      null)
-    : null;
+  const handleRequestRefundClick = (reg: EventReg, tournamentId: string) => {
+    setRefundRequest({
+      regId: reg.id,
+      tournamentId,
+      eventName: reg.event_name,
+      eventFeeCents: reg.event_fee_cents,
+      entitledCents: reg.entitled_refund_cents,
+      reason: "",
+    });
+  };
+
+  const executeRefundRequest = async () => {
+    if (!refundRequest) return;
+    const { regId, tournamentId, reason } = refundRequest;
+
+    const { error: rpcErr } = await supabase.rpc("file_refund_request", {
+      p_reg_id: regId,
+      p_reason: reason.trim() || undefined,
+    });
+
+    if (rpcErr) throw new Error(rpcErr.message);
+
+    setGroups((prev) =>
+      prev.map((g) => {
+        if (g.tournament_id !== tournamentId) return g;
+        return {
+          ...g,
+          regs: g.regs.map((r) =>
+            r.id === regId
+              ? { ...r, withdrawal_requested_at: new Date().toISOString() }
+              : r
+          ),
+        };
+      })
+    );
+    setRefundRequest(null);
+  };
 
   const upcoming = groups
     .filter((g) => !isPast(g))
@@ -398,19 +376,30 @@ export default function MyTournamentsPage() {
         <h1 style={pageH1Style}>My Tournaments</h1>
 
         {loading && (
-          <p style={{ color: inkMuted, marginTop: 24, fontFamily: bodyFontStack }}>Loading…</p>
+          <p style={{ color: inkMuted, marginTop: 24, fontFamily: bodyFontStack }}>
+            Loading…
+          </p>
         )}
 
         {error && (
-          <p style={{ color: courtRed, marginTop: 24, fontFamily: bodyFontStack }}>{error}</p>
+          <p style={{ color: courtRed, marginTop: 24, fontFamily: bodyFontStack }}>
+            {error}
+          </p>
         )}
 
         {!loading && !error && groups.length === 0 && (
           <div style={emptyStyle}>
-            <p style={{ margin: 0, fontSize: 16, color: inkSoft, fontFamily: bodyFontStack }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 16,
+                color: inkSoft,
+                fontFamily: bodyFontStack,
+              }}
+            >
               You haven't registered for any tournaments yet.
             </p>
-            <Link to="/" style={ctaPrimaryStyle}>
+            <Link to="/" style={browseLinkStyle}>
               Browse upcoming events
             </Link>
           </div>
@@ -420,21 +409,56 @@ export default function MyTournamentsPage() {
           <Section
             title="Upcoming & Running"
             groups={upcoming}
-            onWithdraw={startWithdraw}
+            onWithdraw={handleWithdrawClick}
+            onRequestRefund={handleRequestRefundClick}
           />
         )}
 
         {!loading && !error && past.length > 0 && (
-          <Section title="Past" groups={past} onWithdraw={startWithdraw} />
+          <Section
+            title="Past"
+            groups={past}
+            onWithdraw={handleWithdrawClick}
+            onRequestRefund={handleRequestRefundClick}
+          />
         )}
       </div>
 
-      {withdrawFlow && (
-        <WithdrawModal
-          flow={withdrawFlow}
-          policy={activeGroup?.cancellation_policy_preset ?? null}
+      {/* Withdraw confirm modal */}
+      {withdrawConfirm && (
+        <ConfirmModal
+          title={`Withdraw from ${withdrawConfirm.eventName}`}
+          body={
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <p style={{ margin: 0 }}>
+                Your spot will be released. You won't be able to undo this.
+              </p>
+              {withdrawConfirm.hasPartner && (
+                <div style={partnerWarningStyle}>
+                  <strong>Partner notice:</strong> Withdrawing will unpair your
+                  doubles partner. They will be moved back to "Seeking partner."
+                </div>
+              )}
+              <p style={{ margin: 0 }}>
+                Once withdrawn, you can request a refund from the next screen.
+              </p>
+            </div>
+          }
+          confirmLabel="Confirm Withdrawal"
+          onCancel={() => setWithdrawConfirm(null)}
           onConfirm={executeWithdraw}
-          onCancel={cancelWithdraw}
+        />
+      )}
+
+      {/* Request refund modal */}
+      {refundRequest && (
+        <RequestRefundModal
+          flow={refundRequest}
+          onChange={(reason) =>
+            setRefundRequest((f) => (f ? { ...f, reason } : f))
+          }
+          onConfirm={executeRefundRequest}
+          onCancel={() => setRefundRequest(null)}
         />
       )}
     </div>
@@ -445,21 +469,24 @@ function Section({
   title,
   groups,
   onWithdraw,
+  onRequestRefund,
 }: {
   title: string;
   groups: TournamentGroup[];
-  onWithdraw: (
-    regId: string,
-    tournamentId: string,
-    eventName: string
-  ) => void;
+  onWithdraw: (reg: EventReg, tournamentId: string) => void;
+  onRequestRefund: (reg: EventReg, tournamentId: string) => void;
 }) {
   return (
     <section style={{ marginTop: 32 }}>
       <h2 style={sectionH2Style}>{title}</h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {groups.map((g) => (
-          <TournamentCard key={g.tournament_id} group={g} onWithdraw={onWithdraw} />
+          <TournamentCard
+            key={g.tournament_id}
+            group={g}
+            onWithdraw={onWithdraw}
+            onRequestRefund={onRequestRefund}
+          />
         ))}
       </div>
     </section>
@@ -469,13 +496,11 @@ function Section({
 function TournamentCard({
   group,
   onWithdraw,
+  onRequestRefund,
 }: {
   group: TournamentGroup;
-  onWithdraw: (
-    regId: string,
-    tournamentId: string,
-    eventName: string
-  ) => void;
+  onWithdraw: (reg: EventReg, tournamentId: string) => void;
+  onRequestRefund: (reg: EventReg, tournamentId: string) => void;
 }) {
   const href = `/t/${group.org_slug}/${group.tournament_slug}`;
   const navigate = useNavigate();
@@ -501,7 +526,10 @@ function TournamentCard({
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {group.regs.map((reg) => {
-          const tone = statusTone(reg.status, reg.partner_status);
+          const tone = statusTone(reg);
+          const canWithdraw = isWithdrawable(reg.status);
+          const canRequestRefund =
+            reg.status === "withdrawn" && reg.withdrawal_requested_at === null;
           return (
             <div key={reg.id} style={regRowStyle}>
               <span style={eventNameStyle}>{reg.event_name}</span>
@@ -513,17 +541,28 @@ function TournamentCard({
                     background: tone.background,
                   }}
                 >
-                  {statusLabel(reg.status, reg.partner_status)}
+                  {statusLabel(reg)}
                 </span>
-                {isWithdrawable(reg.status) && (
+                {canWithdraw && (
                   <button
-                    style={withdrawBtnStyle}
+                    style={actionBtnStyle}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onWithdraw(reg.id, group.tournament_id, reg.event_name);
+                      onWithdraw(reg, group.tournament_id);
                     }}
                   >
                     Withdraw
+                  </button>
+                )}
+                {canRequestRefund && (
+                  <button
+                    style={actionBtnStyle}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRequestRefund(reg, group.tournament_id);
+                    }}
+                  >
+                    Request refund
                   </button>
                 )}
               </div>
@@ -544,35 +583,38 @@ function TournamentCard({
   );
 }
 
-function WithdrawModal({
+function RequestRefundModal({
   flow,
-  policy,
+  onChange,
   onConfirm,
   onCancel,
 }: {
-  flow: WithdrawFlow;
-  policy: CancellationPolicyPreset | null;
+  flow: RefundRequest;
+  onChange: (reason: string) => void;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
 }) {
-  const [executing, setExecuting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   const handleConfirm = async () => {
-    setExecuting(true);
+    setBusy(true);
+    setErr(null);
     try {
       await onConfirm();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
-      setExecuting(false);
+      setBusy(false);
     }
   };
 
-  const isLoading = flow.phase === "loading";
-  const isError = flow.phase === "error";
-  const isPreview = flow.phase === "preview";
-  const isManual =
-    isPreview && (flow as { preview: WithdrawPreview }).preview.decision === "manual_required";
-  const busy = isLoading || executing;
-  const showConfirm = isPreview && !isManual;
+  const entitledLine =
+    flow.entitledCents === null
+      ? "Refund amount will be reviewed by the organizer."
+      : flow.entitledCents === 0
+        ? `${formatMoney(0)} per the cancellation policy. You may still submit a review request.`
+        : formatMoney(flow.entitledCents);
 
   return (
     <div
@@ -584,64 +626,60 @@ function WithdrawModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-labelledby="withdraw-modal-title"
+        aria-labelledby="refund-modal-title"
         style={modalStyle}
       >
         <h2
-          id="withdraw-modal-title"
+          id="refund-modal-title"
           style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 600 }}
         >
-          {isManual
-            ? "Withdrawal requires organizer review"
-            : `Withdraw from ${flow.eventName}`}
+          Request refund — {flow.eventName}
         </h2>
 
-        <div style={{ fontSize: 13, color: "#444", lineHeight: 1.6 }}>
-          {isLoading && (
-            <p style={{ margin: 0, color: "#6b7280" }}>
-              Loading refund preview…
-            </p>
+        <div
+          style={{
+            fontSize: 13,
+            color: "#444",
+            lineHeight: 1.6,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <div style={refundRowStyle}>
+            <span style={refundLabelStyle}>Amount paid</span>
+            <span>{formatMoney(flow.eventFeeCents)}</span>
+          </div>
+          <div style={refundRowStyle}>
+            <span style={refundLabelStyle}>Entitled refund</span>
+            <span>{entitledLine}</span>
+          </div>
+          <p style={{ margin: 0, color: "#6b7280", fontSize: 12 }}>
+            The organizer will review your request and approve or deny it. You
+            will be notified of their decision.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label
+              htmlFor="refund-reason"
+              style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}
+            >
+              Reason (optional)
+            </label>
+            <textarea
+              id="refund-reason"
+              value={flow.reason}
+              onChange={(e) => onChange(e.target.value)}
+              disabled={busy}
+              rows={3}
+              maxLength={2000}
+              placeholder="Let the organizer know why you're withdrawing…"
+              style={reasonTextareaStyle}
+            />
+          </div>
+
+          {err && (
+            <p style={{ margin: 0, color: "#dc2626" }}>{err}</p>
           )}
-
-          {isError && (
-            <p style={{ margin: 0, color: "#dc2626" }}>
-              {(flow as { message: string }).message}
-            </p>
-          )}
-
-          {isPreview && (() => {
-            const { preview } = flow as {
-              preview: WithdrawPreview;
-            };
-            return (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={previewRowStyle}>
-                  <span style={previewLabelStyle}>Cancellation policy</span>
-                  <span>{policyText(policy)}</span>
-                </div>
-
-                <div style={previewRowStyle}>
-                  <span style={previewLabelStyle}>Refund</span>
-                  <span>{refundSummaryText(preview)}</span>
-                </div>
-
-                {isManual && (
-                  <p style={{ margin: 0, color: "#374151" }}>
-                    Contact the organizer to request your refund. They will
-                    review your case and process it manually.
-                  </p>
-                )}
-
-                {preview.partner?.willUnpair && (
-                  <div style={partnerWarningStyle}>
-                    <strong>Partner notice:</strong> Withdrawing will unpair
-                    your doubles partner, {preview.partner.name}. They will be
-                    moved back to "Seeking partner."
-                  </div>
-                )}
-              </div>
-            );
-          })()}
         </div>
 
         <div style={modalFooterStyle}>
@@ -650,18 +688,15 @@ function WithdrawModal({
             disabled={busy}
             style={secondaryBtnStyle(busy)}
           >
-            {isManual || isError ? "Close" : "Cancel"}
+            Cancel
           </button>
-
-          {showConfirm && (
-            <button
-              onClick={handleConfirm}
-              disabled={executing}
-              style={destructiveBtnStyle(executing)}
-            >
-              {executing ? "Working…" : "Confirm Withdrawal"}
-            </button>
-          )}
+          <button
+            onClick={handleConfirm}
+            disabled={busy}
+            style={primaryBtnStyle(busy)}
+          >
+            {busy ? "Submitting…" : "Submit request"}
+          </button>
         </div>
       </div>
     </div>
@@ -677,6 +712,17 @@ const emptyStyle: CSSProperties = {
   flexDirection: "column",
   alignItems: "center",
   gap: 16,
+};
+
+const browseLinkStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "10px 20px",
+  background: "#f3d111",
+  color: "#14181f",
+  borderRadius: 8,
+  textDecoration: "none",
+  fontWeight: 600,
+  fontSize: 14,
 };
 
 const cardStyle: CSSProperties = {
@@ -732,7 +778,7 @@ const statusPillStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-const withdrawBtnStyle: CSSProperties = {
+const actionBtnStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 500,
   padding: "2px 10px",
@@ -758,6 +804,15 @@ const viewLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
+const partnerWarningStyle: CSSProperties = {
+  background: "#fffbeb",
+  border: "1px solid #fcd34d",
+  borderRadius: 6,
+  padding: "8px 12px",
+  fontSize: 13,
+  color: "#92400e",
+};
+
 const overlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
@@ -778,13 +833,13 @@ const modalStyle: CSSProperties = {
   boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
 };
 
-const previewRowStyle: CSSProperties = {
+const refundRowStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: 2,
 };
 
-const previewLabelStyle: CSSProperties = {
+const refundLabelStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   textTransform: "uppercase",
@@ -792,13 +847,15 @@ const previewLabelStyle: CSSProperties = {
   color: "#6b7280",
 };
 
-const partnerWarningStyle: CSSProperties = {
-  background: "#fffbeb",
-  border: "1px solid #fcd34d",
-  borderRadius: 6,
-  padding: "8px 12px",
+const reasonTextareaStyle: CSSProperties = {
+  width: "100%",
+  padding: "8px 10px",
   fontSize: 13,
-  color: "#92400e",
+  borderRadius: 6,
+  border: "1px solid #d1d5db",
+  fontFamily: "inherit",
+  resize: "vertical",
+  boxSizing: "border-box",
 };
 
 const modalFooterStyle: CSSProperties = {
@@ -808,10 +865,10 @@ const modalFooterStyle: CSSProperties = {
   justifyContent: "flex-end",
 };
 
-function destructiveBtnStyle(busy: boolean): CSSProperties {
+function primaryBtnStyle(busy: boolean): CSSProperties {
   return {
     padding: "8px 16px",
-    background: busy ? "var(--text-subtle)" : "var(--danger)",
+    background: busy ? "var(--text-subtle)" : "var(--primary)",
     color: "var(--primary-contrast)",
     border: "none",
     borderRadius: 6,

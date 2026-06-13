@@ -1,192 +1,176 @@
 # Refunds & withdrawals — design
 
-Source of truth for the **player self-withdraw + policy-aware refund** flow
-(epic #22, surface (a) = #199). The UI carries **no money logic**: it calls the
-`stripe-refund` edge function with `dry_run: true` for a preview, then again to
-execute. All math + the Stripe call live server-side.
+Source of truth for the player withdraw + refund-request flow (epic #22,
+surfaces #289 player side / #200 organizer side). The UI carries **no money
+logic**: amounts come from server-side RPCs and edge functions.
 
-Two server pieces implement this:
+---
 
-1. **`public.refund_compute(p_event_registration_id uuid)`** — a pure,
-   read-only SQL function (migration `20260611120000_refund_compute.sql`) that
-   returns the refund *decision* and *amount* for one event registration. No
-   writes, no Stripe.
-2. **`stripe-refund` edge function** — authenticates the caller, calls
-   `refund_compute`, and (on execute) issues the Stripe refund + flips the
-   registration status + unpairs the partner. Idempotent.
+## Model — revised 2026-06-13 (supersedes the auto-refund model from #199)
+
+Every refund now routes through an organizer decision. There is no more instant
+auto-refund. Two separate player actions replace the old single "withdraw +
+optional instant refund" step:
+
+```
+paid ─[1. withdraw]→ withdrawn ─[2. request refund]→ ($Y frozen, pending queue)
+                                                            └─[3. organizer decides → #200]→ refunded | stays withdrawn
+```
+
+1. **Withdraw** (player, #289). Confirm modal + partner-unpair →
+   reg `withdrawn`. `pending_payment` regs → `cancelled`. **No Stripe call, no
+   money movement.** The entitled refund `$Y` is computed from `refund_compute`
+   and **snapshotted at withdraw time** into `entitled_refund_cents` so an
+   organizer delay cannot shrink it.
+2. **Request refund** (player, #289). After withdrawing, a withdrawn+paid reg
+   shows a "Request refund" affordance. The player sees **paid `$X`** (event fee)
+   and **entitled `$Y`** (from `entitled_refund_cents` — already frozen). On
+   submit, `file_refund_request()` stamps `withdrawal_requested_at` and
+   (optional) `withdrawal_reason`. Idempotent — can't re-file.
+3. **Organizer decides** (#200). Queue shows `entitled_refund_cents` as the
+   pre-filled approve amount (adjustable $0–paid); organizer approves or denies
+   via `stripe-refund` **manual** mode.
+
+**Locked decisions (Ron, 2026-06-13):**
+- (a) Every refund routes through an organizer decision — no auto-refund.
+- (b) Entitlement is **snapshotted at withdraw time** (not request-filing time),
+  frozen to the moment of withdrawal.
+- (c) Withdraw and request-refund are two separate steps.
+
+---
+
+## Server pieces
+
+### 1. `public.refund_compute(p_event_registration_id uuid)`
+
+Pure, read-only SQL function (migration `20260611120000_refund_compute.sql`).
+Returns `decision` + `paid_cents` + `refund_cents` for one event registration.
+No writes, no Stripe. `SECURITY DEFINER`, granted to `service_role` only.
+
+Called by:
+- `withdraw_self()` (below) — at withdraw time, while the reg is still `paid`,
+  to compute the entitled amount before snapshotting it.
+- `stripe-refund` edge function — for the organizer manual-resolve path (#200).
+
+### 2. `public.withdraw_self(p_reg_id uuid)` (added in #289)
+
+`SECURITY DEFINER` RPC granted to `authenticated`. Explicit `auth.uid()` →
+`player_id` ownership check.
+
+- `paid` → `withdrawn`. Calls `refund_compute()` first (while still `paid`) and
+  snapshots `entitled_refund_cents` atomically with the status flip.
+  - `decision = full/partial` → snapshot the computed amount.
+  - `decision = none` → snapshot 0 (player sees $0.00 and may still submit a
+    review request).
+  - `decision = manual_required` → snapshot `null` (organizer determines amount).
+- `pending_payment` → `cancelled`. No refund step offered.
+- Clears both sides of a doubles pair; the remaining partner returns to
+  `partner_status = 'seeking'`.
+- Returns `(new_status, entitled_cents)`.
+
+### 3. `public.file_refund_request(p_reg_id uuid, p_reason text)` (added in #289)
+
+`SECURITY DEFINER` RPC granted to `authenticated`.
+
+- Must be called on a `withdrawn` reg owned by the caller.
+- Stamps `withdrawal_requested_at = now()` and `withdrawal_reason`.
+- Idempotent: re-filing returns `false` (no-op).
+- Enqueues the reg into the organizer pending-withdrawals queue (#200).
+
+### 4. `stripe-refund` edge function
+
+`POST /functions/v1/stripe-refund` — `Authorization: Bearer <user JWT>`.
+
+**`mode: "resolve"` (organizer, #200).** Resolves a queued withdrawal request.
+
+```jsonc
+// Organizer approve
+{ "eventRegistrationId": "uuid", "mode": "resolve",
+  "decision": "approve", "amountCents": 1500, "dryRun": false }
+
+// Organizer deny
+{ "eventRegistrationId": "uuid", "mode": "resolve",
+  "decision": "deny", "dryRun": false }
+```
+
+Approve + `amountCents > 0` → Stripe refund → `refunded`; approve + $0 or deny
+→ `withdrawn`. Both stamp `withdrawal_decided_at` + `withdrawal_decision`.
+`amountCents` is server-capped at the net amount charged on the covering payment
+(`min(paid_cents, payments.amount_cents)`) to prevent over-refund when a coupon
+reduced the payment below the per-event gross. Stripe is the hard backstop.
+
+Response codes: `unauthorized` (401), `registration_not_found` (404),
+`forbidden` (403), `not_withdrawable` / `no_pending_request` (409),
+`refund_failed` (502).
+
+The legacy `mode: "self"` / `dryRun: false` execute path is no longer called by
+the player UI (replaced by `withdraw_self` + `file_refund_request`), but remains
+available.
 
 ---
 
 ## What is refundable (locked decisions — Ron, 2026-06-11)
 
-- **Event fee only.** A single-event withdrawal refunds *that event's* fee — the
-  `payment_line_items` row tied to the `event_registration_id`. The
-  tournament-level **entry fee is never refunded** on a single-event withdraw
-  (it's a separate line item with no `event_registration_id`).
-- **Platform fee non-refundable.** The platform's `application_fee_amount` is
-  **kept**. Stripe refunds use `refund_application_fee: false`; the connected
-  (organizer) account absorbs the refunded event fee via `reverse_transfer:
-  true` (these are Connect **destination** charges).
-- **Half rounds to the nearest cent.** A "half refund" window returns
-  `round(paid_cents / 2)` — `round(paid::numeric / 2.0)::int`, i.e. round half
-  up. `dry_run` and execute use the same function, so the previewed number and
-  the charged number always agree.
+- **Event fee only.** A single-event withdrawal refunds the `payment_line_items`
+  row tied to the `event_registration_id`. The tournament-level **entry fee is
+  never refunded** on a single-event withdraw (it's a separate line item with no
+  `event_registration_id`).
+- **Platform fee non-refundable.** `refund_application_fee: false`;
+  `reverse_transfer: true` (Connect destination charges — organizer absorbs).
+- **Half rounds to the nearest cent.** `round(paid_cents::numeric / 2.0)::int`.
 
 ---
 
 ## Policy → decision
 
-`tournaments.cancellation_policy_preset` drives the math. Windows are measured
-against `tournaments.starts_at` ("before start") and the registration's
-`registered_at` ("after registering"). `now()` is server time.
+`tournaments.cancellation_policy_preset` drives the math.
 
 | preset | rule |
 |---|---|
-| **generous** | `> 7 days before start` → **full**; within 7 days of start → **none** |
-| **standard** | `≤ 7 days after registering` → **full**; else `≥ 7 days before start` → **half**; else (within 7 days of start) → **none** |
+| **generous** | `> 7 days before start` → **full**; otherwise → **none** |
+| **standard** | `≤ 7 days after registering` → **full** (cooling-off); else `≥ 7 days before start` → **half**; else → **none** |
 | **strict** | always **none** (no refund after registration) |
-| **custom** | **manual_required** — organizer-defined windows aren't modelled yet |
+| **custom** | **manual_required** — organizer-defined windows not modelled yet |
 | `NULL` (unchosen) | **manual_required** |
 
-### Decision values returned by `refund_compute`
+| `decision` | `refund_cents` snapshotted in `entitled_refund_cents` |
+|---|---|
+| `full` | `= paid_cents` |
+| `partial` | `= round(paid_cents / 2)` |
+| `none` | `0` |
+| `manual_required` | `null` (organizer decides) |
+| `unpaid` | `null` (no payment; reg → `cancelled`) |
 
-| `decision` | meaning | `refund_cents` |
-|---|---|---|
-| `full` | full event fee back | = `paid_cents` |
-| `partial` | half (rounded) | = `round(paid_cents/2)` |
-| `none` | policy allows withdraw but $0 back | `0` |
-| `unpaid` | reg is `pending_payment` — no charge to refund | `0` |
-| `manual_required` | can't auto-decide → organizer review (#200) | `0` |
+### Edge cases
 
-### Flagged / tunable (Ron can change in one place)
-
-- **standard, the 7–30 day-before window.** The published preset summary says
-  "half > 30d before, none < 7d before," leaving 7–30 days undefined. We resolve
-  it **in the player's favor as half** (half applies whenever `≥ 7 days before
-  start`, after the registration cooling-off). The literal "30d" is therefore
-  informational. To make 7–30 days *none* instead, change the single threshold
-  in `refund_compute`. This is the only place the math diverges from a strict
-  reading of the preset text.
-- **Coupons → manual_required (safety).** If the covering payment carried a
-  coupon (any `payment_line_items` row on that payment with `amount_cents < 0`),
-  the per-event line item overstates what the player *net* paid, so a naive
-  refund could exceed it. `refund_compute` returns **manual_required** in that
-  case rather than risk over-refunding. (A proportional-refund follow-up can
-  remove this restriction.)
-- **No succeeded payment for a `paid` reg** (data inconsistency) →
-  **manual_required** (a human verifies before money moves).
+- **Coupons → `manual_required`.** If the covering payment has a negative line
+  item (coupon), `refund_compute` returns `manual_required` to avoid risk of
+  over-refund. `entitled_refund_cents` is snapshotted as `null`.
+- **No succeeded payment for a `paid` reg** → `manual_required`.
+- **standard, 7–30 day window.** We resolve in the player's favor: half applies
+  whenever `≥ 7 days before start` after the cooling-off period.
 
 ---
 
-## `stripe-refund` edge function contract
-
-`POST /functions/v1/stripe-refund` — `Authorization: Bearer <user JWT>`.
-
-**Request**
-
-```jsonc
-// mode "self" (default) — the PLAYER withdraws (owner-authorized)
-{ "eventRegistrationId": "uuid", "dryRun": true }   // preview
-{ "eventRegistrationId": "uuid", "dryRun": false, "reason": "..." }  // execute
-//   On execute, if the policy can't auto-decide (manual_required), this FILES
-//   a withdrawal request (withdrawal_requested_at + withdrawal_reason) for the
-//   organizer queue (#200) and returns { applied:false, requested:true }.
-
-// mode "resolve" — an ORGANIZER resolves a queued request (#200).
-//   Authorized as has_org_role(<reg's tournament org>, 'admin').
-{ "eventRegistrationId": "uuid", "mode": "resolve",
-  "decision": "approve", "amountCents": 1500, "dryRun": false }  // refund $15
-{ "eventRegistrationId": "uuid", "mode": "resolve", "decision": "deny" }
-//   approve + amount>0 → refund that amount → 'refunded'; approve+$0 or deny →
-//   'withdrawn'. Either stamps withdrawal_decided_at + withdrawal_decision.
-//   amountCents is server-capped at the NET charged on the covering payment
-//   (min of the per-event gross and payments.amount_cents) — so a coupon
-//   (a payment-level negative line, charge clamped at $0) can't enable an
-//   over-refund. The preview returns maxRefundableCents (the slider max);
-//   Stripe is the hard backstop (can't refund more than was captured).
-```
-
-**Response (200)**
-
-```jsonc
-{
-  "decision": "full | partial | none | unpaid | manual_required",
-  "paidCents": 4000,
-  "refundCents": 2000,
-  "currency": "usd",
-  "partner": { "name": "Tom Edwards", "willUnpair": true } | null,
-  // execute only:
-  "applied": true,
-  "newStatus": "refunded | withdrawn | cancelled | null"  // null when manual_required
-}
-```
-
-Error bodies are `{ "error": "<code>" }` with a 4xx/5xx status, decoded by the
-client via the `fnErr.context` pattern (see `CheckoutPage`). Codes:
-`unauthorized` (401), `player_not_found` / `registration_not_found` (404),
-`forbidden` (403, not the caller's registration), `not_withdrawable` (409,
-already withdrawn/refunded/cancelled), `refund_failed` (502, Stripe error).
-
-### Execute semantics
-
-| situation | Stripe call | new `event_registrations.status` |
-|---|---|---|
-| `manual_required` | none | unchanged (hand off to organizer review #200) |
-| `unpaid` (pending) | none | `cancelled` |
-| paid, `refund_cents == 0` | none | `withdrawn` |
-| paid, `refund_cents > 0` | `refunds.create` | `refunded` |
-
-- **Idempotent.** The Stripe refund is created with `idempotencyKey =
-  refund_<eventRegistrationId>`, and the status flip is guarded
-  (`... where id = $1 and status = 'paid'`), so a double-submit never
-  double-refunds.
-- **Partner unpair.** If the withdrawing reg has a `partner_registration_id`,
-  both sides are cleared and the *remaining* partner is set back to
-  `partner_status = 'seeking'` (they're looking again). The preview reports the
-  partner's name + `willUnpair: true` so the ConfirmModal can warn first.
-- The refund is by `payment_intent` with `reverse_transfer: true,
-  refund_application_fee: false` (keep the platform fee; debit the organizer).
-
-## Late-withdrawal queue columns (#200)
-
-When surface (a) can't auto-decide (`manual_required`), the player files a
-withdrawal **request** instead of an instant refund, and the organizer resolves
-it from a queue (#200). Migration `20260611130000_withdrawal_request_columns`
-adds, on `event_registrations`:
+## Database columns on `event_registrations`
 
 | column | type | meaning |
 |---|---|---|
-| `withdrawal_requested_at` | `timestamptz` | player filed the request (reg stays `paid`, no status change) |
-| `withdrawal_reason` | `text` | optional reason from the player |
-| `withdrawal_decided_at` | `timestamptz` | organizer resolved it |
-| `withdrawal_decision` | `withdrawal_decision` enum (`approved`/`denied`) | the organizer's call |
+| `entitled_refund_cents` | `integer` (nullable) | Policy `$Y` frozen at withdraw time. Pre-fills the organizer's Approve amount. `null` = manual_required; `0` = policy denies but player can still request review. |
+| `withdrawal_requested_at` | `timestamptz` (nullable) | Player filed the refund request. `null` = not yet requested. |
+| `withdrawal_reason` | `text` (nullable) | Optional player-provided reason. |
+| `withdrawal_decided_at` | `timestamptz` (nullable) | Organizer resolved the request. |
+| `withdrawal_decision` | `withdrawal_decision` enum (nullable) | `approved` or `denied`. |
 
-The **pending queue** = `withdrawal_requested_at is not null and
-withdrawal_decided_at is null` (a partial index backs this). The chosen refund
-**amount** is not stored here — it's passed to `stripe-refund` (manual mode,
-not yet built) at approve time and recorded in `payments`. Approve → manual
-refund → status `refunded` (or `withdrawn` if $0); deny → `withdrawn`, no refund.
+Pending queue = `withdrawal_requested_at IS NOT NULL AND withdrawal_decided_at IS
+NULL` (backed by a partial index for the organizer queue view in #200).
 
 ---
 
-## Deploy — happens on merge (do NOT hand-run)
+## Deploy — happens on merge
 
-Per the WMPC convention, schema and edge functions deploy via **CI on merge to
-`main`** — never a hand-run `supabase db push` / `functions deploy` (that's what
-caused drift). So **merging this PR is the deploy:**
+Per WMPC convention, schema and edge functions deploy via CI on merge to `main`.
+Never hand-run `supabase db push` or `functions deploy`.
 
-1. **Migration** → applied to prod by `.github/workflows/migrations.yml`
-   (`db push --include-all`) on merge.
-2. **`stripe-refund` function** → deployed by
-   `.github/workflows/edge-functions.yml` on merge. **No new secrets** —
-   `STRIPE_SECRET_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` are already
-   set and auto-injected.
-3. **Types** → `refund_compute` is `service_role`-only and called by the edge
-   function (not the browser), so the frontend `supabase.ts` does **not** need
-   regenerating for it.
-
-**The one human step (Ron):** verify a **test-mode** payment → withdraw before
-relying on it in prod. There's no safe pre-prod Stripe path yet — that's what
-the `.test` environment + Stripe-test-mode enabler (#255) and the staging
-release process (#227) are for; until then this can only be exercised carefully
-against prod.
+**New secrets needed:** none. Existing `STRIPE_SECRET_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL` already set.
