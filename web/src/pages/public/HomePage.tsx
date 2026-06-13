@@ -355,8 +355,54 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <AboutSection />
       <SiteFooter />
     </main>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// About / purpose — states plainly what the app is and who it's for.
+// (Resolves "home page doesn't explain the purpose of your app".)
+// ─────────────────────────────────────────────────────────────────────
+function AboutSection() {
+  return (
+    <section style={aboutSectionStyle} aria-labelledby="about-heading">
+      <div style={aboutInnerStyle}>
+        <h2 id="about-heading" style={aboutH2Style}>
+          What is bert &amp; erne?
+        </h2>
+        <p style={aboutLeadStyle}>
+          <strong>bert &amp; erne is a pickleball tournament platform.</strong>{" "}
+          Players discover and register for tournaments, pay their entry fees
+          securely, find doubles partners, and follow their schedule and
+          results. Organizers run the whole event — registration, brackets,
+          court scheduling, and payouts — without the spreadsheet chaos. Built
+          by a club, for clubs.
+        </p>
+        <div style={aboutColsStyle}>
+          <div style={aboutColStyle}>
+            <h3 style={aboutColH3Style}>For players</h3>
+            <ul style={aboutListStyle}>
+              <li>Browse upcoming tournaments and register in minutes</li>
+              <li>Pay your entry fee securely online</li>
+              <li>Find a doubles partner or accept an invite</li>
+              <li>Track your schedule, brackets, and results</li>
+            </ul>
+          </div>
+          <div style={aboutColStyle}>
+            <h3 style={aboutColH3Style}>For organizers</h3>
+            <ul style={aboutListStyle}>
+              <li>Create tournaments and events with tiered pricing</li>
+              <li>Auto-generate brackets and dispatch courts on the day</li>
+              <li>Collect entry fees with direct Stripe payouts</li>
+              <li>Manage attendees, scorecards, and player communication</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -731,4 +777,59 @@ const emptyStyle: CSSProperties = {
   borderRadius: 8,
   color: inkSoft,
   fontSize: 14,
+};
+
+// ─── About / purpose section ──────────────────────────────────────────
+const aboutSectionStyle: CSSProperties = {
+  background: cream,
+  borderTop: `1px solid ${creamDeep}`,
+  padding: "clamp(40px, 7vw, 72px) clamp(20px, 5vw, 48px)",
+};
+
+const aboutInnerStyle: CSSProperties = {
+  maxWidth: 1080,
+  margin: "0 auto",
+};
+
+const aboutH2Style: CSSProperties = {
+  fontFamily: headingFontStack,
+  fontSize: "clamp(22px, 4vw, 30px)",
+  color: ink,
+  margin: "0 0 16px",
+};
+
+const aboutLeadStyle: CSSProperties = {
+  fontFamily: bodyFontStack,
+  fontSize: 17,
+  lineHeight: 1.65,
+  color: inkSoft,
+  maxWidth: 760,
+  margin: "0 0 32px",
+};
+
+const aboutColsStyle: CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "24px 48px",
+};
+
+const aboutColStyle: CSSProperties = {
+  flex: "1 1 280px",
+  minWidth: 260,
+};
+
+const aboutColH3Style: CSSProperties = {
+  fontFamily: headingFontStack,
+  fontSize: 16,
+  color: ink,
+  margin: "0 0 10px",
+};
+
+const aboutListStyle: CSSProperties = {
+  fontFamily: bodyFontStack,
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: inkSoft,
+  margin: 0,
+  paddingLeft: 18,
 };
