@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import type { Database } from "../../types/supabase";
 import {
   bg,
@@ -139,6 +140,10 @@ function isPast(group: TournamentGroup): boolean {
 
 export default function MyTournamentsPage() {
   const { user } = useAuth();
+  // Refresh the site-wide pending-payments bar after a withdraw — withdrawing a
+  // pending_payment reg cancels it, so it must drop out of the bar without a
+  // full page reload (#286).
+  const { refresh: refreshPendingBar } = usePendingPayments();
   const [groups, setGroups] = useState<TournamentGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -315,6 +320,9 @@ export default function MyTournamentsPage() {
       })
     );
     setWithdrawConfirm(null);
+    // The withdrawn reg is no longer pending_payment → refresh the bar so it
+    // disappears immediately (no manual reload). #286.
+    await refreshPendingBar();
   };
 
   // ── Request refund flow ───────────────────────────────────────────────────
