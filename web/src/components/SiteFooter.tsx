@@ -17,6 +17,7 @@ export default function SiteFooter() {
         </span>
         <nav style={linksStyle} aria-label="Footer">
           <Link to="/privacy" style={linkStyle}>Privacy Policy</Link>
+          <Link to="/terms" style={linkStyle}>Terms of Service</Link>
         </nav>
       </div>
     </footer>
