@@ -57,31 +57,42 @@ export default function SiteHeader() {
     userId: string;
     firstName: string | null;
     isOrgMember: boolean;
+    isPlatformAdmin: boolean;
   } | null>(null);
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     (async () => {
-      // Two reads in parallel — neither blocks the other.
-      const [{ data: player }, { data: memberships }] = await Promise.all([
-        supabase
-          .from("players")
-          .select("first_name")
-          .eq("auth_user_id", user.id)
-          .is("deleted_at", null)
-          .maybeSingle(),
-        supabase
-          .from("organization_members")
-          .select("organization_id")
-          .eq("user_id", user.id)
-          .limit(1),
-      ]);
+      // Three reads in parallel — none blocks the others.
+      const [{ data: player }, { data: memberships }, { data: adminRow }] =
+        await Promise.all([
+          supabase
+            .from("players")
+            .select("first_name")
+            .eq("auth_user_id", user.id)
+            .is("deleted_at", null)
+            .maybeSingle(),
+          supabase
+            .from("organization_members")
+            .select("organization_id")
+            .eq("user_id", user.id)
+            .limit(1),
+          // Platform admins have implicit org access (see useCurrentOrg), so
+          // they get the Admin link even with no organization_members row —
+          // otherwise a super-admin can't reach the admin area from the header.
+          supabase
+            .from("platform_admins")
+            .select("user_id")
+            .eq("user_id", user.id)
+            .maybeSingle(),
+        ]);
       if (cancelled) return;
       setCache({
         userId: user.id,
         firstName: player?.first_name ?? null,
         isOrgMember: !!memberships && memberships.length > 0,
+        isPlatformAdmin: !!adminRow,
       });
     })();
     return () => {
@@ -93,6 +104,9 @@ export default function SiteHeader() {
   const matches = !!user && cache?.userId === user.id;
   const firstName = matches ? cache!.firstName : null;
   const isOrgMember = matches ? cache!.isOrgMember : false;
+  const isPlatformAdmin = matches ? cache!.isPlatformAdmin : false;
+  // Platform admins reach the admin area even without an org membership.
+  const showAdminLink = isOrgMember || isPlatformAdmin;
 
   // Impersonation: if there's a stashed admin session in sessionStorage
   // it means TestPlayersPage signed us in as a test user and the admin
@@ -268,7 +282,7 @@ export default function SiteHeader() {
               <Link to="/my-tournaments" style={myTournamentsLinkStyle}>
                 My Tournaments
               </Link>
-              {isOrgMember && (
+              {showAdminLink && (
                 <Link to="/admin" style={ghostLinkStyle}>
                   Admin
                 </Link>
