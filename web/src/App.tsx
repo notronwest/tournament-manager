@@ -29,6 +29,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
+import CustomerQuotePage from "./pages/public/CustomerQuotePage";
 import EstimatePage from "./pages/public/EstimatePage";
 import GettingStartedPage from "./pages/public/GettingStartedPage";
 import HomePage from "./pages/public/HomePage";
@@ -338,6 +339,8 @@ export default function App() {
         <Route path="/getting-started" element={<GettingStartedPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        {/* Customer quote view — public, token-gated, no auth required */}
+        <Route path="/q/:token" element={<CustomerQuotePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {/* Persistent pending-payments bar — sticky at the bottom of

@@ -129,6 +129,14 @@ export default function QuoteEditorPage() {
   // ── Revision history ───────────────────────────────────────────────────
   const [viewingRevision, setViewingRevision] = useState<RevisionWithLines | null>(null);
 
+  // ── Share token ────────────────────────────────────────────────────────
+  type ShareTokenRow = Database["public"]["Tables"]["quote_share_tokens"]["Row"];
+  const [shareToken, setShareToken] = useState<ShareTokenRow | null>(null);
+  const [shareTokenLoaded, setShareTokenLoaded] = useState(false);
+  const [generatingToken, setGeneratingToken] = useState(false);
+  const [revokingToken, setRevokingToken] = useState(false);
+  const [shareTokenError, setShareTokenError] = useState<string | null>(null);
+
   // ── Save state ─────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -231,6 +239,58 @@ export default function QuoteEditorPage() {
     })();
     return () => { cancelled = true; };
   }, [isNew, quoteId, isPlatformAdmin]);
+
+  // Load active share token for this quote
+  useEffect(() => {
+    if (isNew || !isPlatformAdmin || !quoteId) return;
+    supabase
+      .from("quote_share_tokens")
+      .select("*")
+      .eq("quote_id", quoteId)
+      .eq("revoked", false)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        const active = (data ?? []).find(
+          (t) => !t.expires_at || new Date(t.expires_at) > new Date()
+        );
+        setShareToken(active ?? null);
+        setShareTokenLoaded(true);
+      });
+  }, [isNew, quoteId, isPlatformAdmin]);
+
+  async function handleGenerateShareLink() {
+    if (!quoteId) return;
+    setGeneratingToken(true);
+    setShareTokenError(null);
+    const { data, error } = await supabase
+      .from("quote_share_tokens")
+      .insert({ quote_id: quoteId })
+      .select("*")
+      .single();
+    setGeneratingToken(false);
+    if (error || !data) {
+      setShareTokenError(error?.message ?? "Failed to generate share link.");
+      return;
+    }
+    setShareToken(data);
+  }
+
+  async function handleRevokeShareLink() {
+    if (!shareToken) return;
+    setRevokingToken(true);
+    setShareTokenError(null);
+    const { error } = await supabase
+      .from("quote_share_tokens")
+      .update({ revoked: true })
+      .eq("id", shareToken.id);
+    setRevokingToken(false);
+    if (error) {
+      setShareTokenError(error.message ?? "Failed to revoke share link.");
+      return;
+    }
+    setShareToken(null);
+  }
 
   // ── Derive line items for pricing engine ───────────────────────────────
   const totalEntrants = numEntries + multiEventPlayers;
@@ -851,6 +911,71 @@ export default function QuoteEditorPage() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* ── Share link ── */}
+      {!isNew && shareTokenLoaded && (
+        <section style={{ ...panelMutedStyle, marginBottom: 20 }}>
+          <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Customer share link</h2>
+          <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 12px" }}>
+            Send this link to the customer so they can review and customize their quote — no login required.
+          </p>
+          {shareTokenError && (
+            <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }}>{shareTokenError}</div>
+          )}
+          {shareToken ? (
+            <div>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 14px",
+                background: "#fff",
+                border: `1px solid ${rule}`,
+                borderRadius: 8,
+                marginBottom: 10,
+                flexWrap: "wrap",
+              }}>
+                <code style={{ fontSize: 13, color: ink, flex: 1, wordBreak: "break-all", fontFamily: "monospace" }}>
+                  {window.location.origin}/q/{shareToken.token}
+                </code>
+                <button
+                  onClick={() => {
+                    void navigator.clipboard.writeText(`${window.location.origin}/q/${shareToken.token}`);
+                  }}
+                  style={{ ...ctaSecondaryStyle, fontSize: 12, padding: "5px 12px", flexShrink: 0 }}
+                >
+                  Copy
+                </button>
+              </div>
+              <button
+                onClick={handleRevokeShareLink}
+                disabled={revokingToken}
+                style={{
+                  fontSize: 12,
+                  color: courtRed,
+                  background: "none",
+                  border: `1px solid ${courtRed}`,
+                  borderRadius: 6,
+                  padding: "5px 12px",
+                  cursor: revokingToken ? "not-allowed" : "pointer",
+                  fontFamily: bodyFontStack,
+                  opacity: revokingToken ? 0.5 : 1,
+                }}
+              >
+                {revokingToken ? "Revoking…" : "Revoke link"}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleGenerateShareLink}
+              disabled={generatingToken}
+              style={generatingToken ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+            >
+              {generatingToken ? "Generating…" : "Generate share link"}
+            </button>
+          )}
         </section>
       )}
 
