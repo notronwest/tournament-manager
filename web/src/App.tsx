@@ -36,6 +36,7 @@ import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import TournamentContactPage from "./pages/public/TournamentContactPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import RegisterPage from "./pages/public/RegisterPage";
+import ResetPasswordPage from "./pages/public/ResetPasswordPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
@@ -61,6 +62,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Public tournament pages — anonymous-readable. RLS already
           restricts to status in (published, closed, completed). */}
