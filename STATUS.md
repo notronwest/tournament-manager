@@ -7,7 +7,7 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-14**
+Last updated: **2026-06-15**
 
 > ⚠️ **Continuity gap fixed (2026-06-14):** entries between 06-09 and 06-14
 > (login/onboarding batch, Resend SMTP, Quote Studio epic) were written to a
@@ -16,6 +16,86 @@ Last updated: **2026-06-14**
 > 06-09. This entry resyncs the front door. Durable record of that work lives on
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
+
+## 2026-06-15 — Quote Studio P4 in review (contract generation, #315)
+
+Builder ran on #315. Split into two stacked PRs per the schema/infra rule:
+
+- **PR #335 `[DB]`** (`db/issue-315-contracts-schema` → `main`): migration
+  `20260615130000_quote_studio_p4.sql` — `contract_status` enum, `contracts` table
+  (id, quote_id, revision_id, terms_version, generated_at, status, document_html,
+  created_by, created_at), platform_admin-only RLS, updated TS types. Closes sub-issue #333.
+- **PR #336 `[UX]`** (`feature/issue-315-contract-generation` →
+  `db/issue-315-contracts-schema`): `ContractPage` (`/admin/quotes/:quoteId/contract/:contractId`),
+  "Contracts" section in `QuoteEditorPage` (visible when status=accepted, lists existing
+  contracts, Generate contract button), route in `App.tsx`. Closes sub-issue #334.
+
+Card #315 → **In Review**. 🔜 **Ron:** merge DB PR #335 first → CI applies migration →
+validate UX PR #336 on preview → merge UX. Then #315 parent closes once both sub-issues close.
+
+## 2026-06-15 — Prod Google OAuth fixed; First Responder paired-doubles design
+
+Two things, both config/design (no repo code changed):
+
+- **Prod Google login was broken** (`Unable to exchange external code`, dumped on
+  the Site-URL fallback `bertanderne.com`). Root cause: the Google OAuth client
+  secret was rotated for local testing and never updated on prod, so Supabase
+  presented a dead secret. Resolved by re-pasting the current secret into
+  Supabase → Auth → Providers → Google. Note for next time: one secret at a time —
+  any rotation must propagate to every Supabase project; consider separate
+  dev/prod OAuth clients. (Redirect URL allow-list confirmed correct; `bertanderne.com`
+  is Ron's own domain sharing this Supabase project — Site URL points there.)
+
+- **Design direction settled for a "First Responder Community Doubles" event**
+  (charity mixer: every team = 1 first responder + 1 community member; MM/FF/mixed
+  all allowed). Chosen approach over Ron's "two singles events then migrate" idea:
+  **one open/coed doubles event + a per-registration `role` tag** (`first_responder`
+  / `community`), reusing the existing `partner_registration_id` self-FK and
+  `partner_invites` flow. Pre-formed pairs lock via invites; solo "match me" signups
+  sit unpaired (null partner) and the organizer pairs them on a new pairing board.
+  Avoids the payment-line-item orphaning + wrong-format history that row-migration
+  would cause. Net-new build: role capture at registration, a "Paired roles" event
+  toggle with two side labels, and the organizer pairing board. Mockups produced
+  for all three. **Not yet committed to build** — pending Ron's go-ahead to file a
+  `story` issue / draft the `role` migration.
+
+## 2026-06-15 — Quote Studio P3 UX typecheck fix + #329 card advanced to In Review
+
+Builder single-item run on #329 (`[UX] Quote Studio P3 — customer share link`).
+PR #331 existed from a prior run but had a TypeScript error: `setCatalog` in
+`CustomerQuotePage.tsx` was typed as `ServiceRow[]` while the query only fetched
+`key, category` — causing a TS2345 error. Fixed by narrowing the state type to
+`Pick<ServiceRow, 'key' | 'category'>[]` and dropping the unused `id` from the
+select. `typecheck`, `build`, and lint (no new errors) all pass. Fix pushed to
+`feature/issue-314-quote-share-link`; card #329 moved **Agent Ready → In Review**.
+
+🔜 **Ron:** merge DB PR #330 first → CI applies migration → validate UX PR #331
+on the Cloudflare preview → merge. Then promote P4 (#315, contract generation)
+to Agent Ready if ready.
+
+## 2026-06-15 — Board correction: #328 card advanced to In Review
+
+Builder orphan-recovery run: issue #328 `[DB] Quote Studio P3 — share tokens schema + RPCs`
+card was stuck in **In Progress** with no open PR visible, but PR #330 (Closes #328) already
+existed and was open. Card moved **In Progress → In Review** to match the PR state.
+No code changed; purely a board state fix.
+
+## 2026-06-15 — Quote Studio P3 in review (shareable customer link, #314)
+
+Builder ran on #314. Split into two stacked PRs per the schema/infra rule:
+
+- **PR #330 `[DB]`** (`db/issue-314-quote-share-tokens` → `main`): migration
+  `20260615120000_quote_studio_p3.sql` — `quote_share_tokens` table, two
+  security-definer RPCs (`get_quote_by_token`, `submit_customer_revision`) with
+  anon grants, updated TS types. Closes sub-issue #328.
+- **PR #331 `[UX]`** (`feature/issue-314-quote-share-link` →
+  `db/issue-314-quote-share-tokens`): `CustomerQuotePage` (`/q/:token`),
+  share-link section in `QuoteEditorPage` (generate + revoke), "Customer
+  updated" badge in `QuotesListPage`. Closes sub-issue #329.
+
+Card #314 → **In Review**. 🔜 **Ron:** merge DB PR first → CI applies migration
+→ validate UX PR on preview → merge UX. Then promote **P4 (#315, contract
+generation)** to Agent Ready if ready.
 
 ## 2026-06-14 — #303 + #304 resolved (auth-email branding + welcome email)
 
