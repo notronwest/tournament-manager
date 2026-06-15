@@ -83,7 +83,9 @@ type LineState = {
 
 export default function QuoteEditorPage() {
   const { quoteId } = useParams<{ quoteId: string }>();
-  const isNew = quoteId === "new";
+  // quoteId is undefined when mounted via the static /admin/quotes/new route
+  // (no :quoteId segment), and "new" when mounted via the dynamic route.
+  const isNew = !quoteId || quoteId === "new";
   const isPlatformAdmin = usePlatformAdmin();
   const navigate = useNavigate();
 
