@@ -582,7 +582,9 @@ export default function TournamentWizardPage() {
   if (!tournament) {
     publishBlockers.push("Complete the Basics step and save the draft first");
   } else {
-    if (!tournament.location_name?.trim())
+    // A venue can be set either as a saved location (location_id) or as
+    // free-text (location_name). Either satisfies the requirement.
+    if (!tournament.location_id && !tournament.location_name?.trim())
       publishBlockers.push("Add a venue location (Basics step)");
     if (eventCount === 0)
       publishBlockers.push("Add at least one event (Events step)");
@@ -2168,6 +2170,30 @@ function ReviewStep({
   softBlockers: string[];
   onJumpTo: (id: StepId) => void;
 }) {
+  // A saved venue is stored as location_id (location_name is null in that
+  // case), so resolve its display name for the summary card below.
+  const [savedVenueName, setSavedVenueName] = useState<string | null>(null);
+  const venueLocationId = tournament?.location_id ?? null;
+  useEffect(() => {
+    if (!venueLocationId) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("locations")
+        .select("name")
+        .eq("id", venueLocationId)
+        .maybeSingle();
+      if (!cancelled) setSavedVenueName(data?.name ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [venueLocationId]);
+
+  const venueLabel =
+    tournament?.location_name?.trim() ||
+    (venueLocationId ? savedVenueName : null);
+
   return (
     <div>
       <StepHeader
@@ -2241,9 +2267,9 @@ function ReviewStep({
               <div style={{ color: inkSoft, marginTop: 4, fontFamily: bodyFontStack }}>
                 {fmtDate(tournament.starts_at)} – {fmtDate(tournament.ends_at)}
               </div>
-              {tournament.location_name && (
+              {venueLabel && (
                 <div style={{ color: inkSoft, marginTop: 2, fontFamily: bodyFontStack }}>
-                  {tournament.location_name}
+                  {venueLabel}
                 </div>
               )}
             </>

@@ -17,6 +17,26 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-15 — Fix: saved-venue selection wrongly tripped the publish gate
+
+- **Bug:** In the tournament create wizard, picking a **saved venue** from the
+  Basics dropdown (incl. the org default, which auto-selects on a new
+  tournament) left the Review & Publish step blocking on "Add a venue location"
+  — so a tournament with a valid venue couldn't publish.
+- **Cause:** field mismatch. `saveBasics` stores a saved venue as `location_id`
+  and deliberately *nulls* `location_name`; the publish gate at
+  `TournamentWizardPage.tsx:585` checked **only** `location_name`. The Review
+  card had the same blind spot (hid the venue line whenever `location_name` was
+  null).
+- **Fix:** publish gate now passes if **either** `location_id` *or*
+  `location_name` is set. Review card resolves the saved venue's name via a
+  `locations` lookup on `location_id` so it actually shows the venue. UI/
+  validation only — no migration, no RLS change. Typecheck clean; no new lint
+  errors (pre-existing error at line ~1236 is unrelated).
+- Shipped as PR #343 (branch `fix/saved-venue-publish-gate`).
+- 🔜 **Next:** consider extending the same either-field check to the standalone
+  tournament edit form if it has a parallel venue validation.
+
 ## 2026-06-15 — Quote Studio P4 in review (contract generation, #315)
 
 Builder ran on #315. Split into two stacked PRs per the schema/infra rule:
