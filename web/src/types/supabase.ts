@@ -118,6 +118,64 @@ export type Database = {
           },
         ]
       }
+      contracts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          document_html: string | null
+          generated_at: string
+          id: string
+          quote_id: string
+          revision_id: string
+          status: Database["public"]["Enums"]["contract_status"]
+          terms_version: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          document_html?: string | null
+          generated_at?: string
+          id?: string
+          quote_id: string
+          revision_id: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          terms_version: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          document_html?: string | null
+          generated_at?: string
+          id?: string
+          quote_id?: string
+          revision_id?: string
+          status?: Database["public"]["Enums"]["contract_status"]
+          terms_version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contracts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "quote_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coupons: {
         Row: {
           active: boolean
@@ -1680,6 +1738,7 @@ export type Database = {
         | "withdrawal"
         | "other"
       change_request_status: "open" | "approved" | "denied" | "cancelled"
+      contract_status: "draft" | "sent" | "signed_offline"
       coupon_discount_type: "percent" | "fixed_amount"
       event_format: "singles" | "doubles"
       event_gender: "men" | "women" | "mixed"
