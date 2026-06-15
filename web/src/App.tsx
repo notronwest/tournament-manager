@@ -26,6 +26,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
+import EstimatePage from "./pages/public/EstimatePage";
 import GettingStartedPage from "./pages/public/GettingStartedPage";
 import HomePage from "./pages/public/HomePage";
 import PrivacyPage from "./pages/public/PrivacyPage";
@@ -295,6 +296,7 @@ export default function App() {
         />
       </Route>
 
+        <Route path="/estimate" element={<EstimatePage />} />
         <Route path="/getting-started" element={<GettingStartedPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />

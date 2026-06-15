@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // Cloudflare Workers (and most static hosts) expect the build output in
@@ -16,5 +16,9 @@ export default defineConfig({
   build: {
     outDir,
     emptyOutDir: true,
+  },
+  test: {
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    exclude: ['e2e/**', 'node_modules/**'],
   },
 })
