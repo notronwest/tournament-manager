@@ -17,6 +17,23 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-15 — Fix: platform admin saw "No organizations" at /admin
+
+- **Bug:** A platform admin with no explicit `organization_members` rows (ron —
+  never ran the WMPC ownership-claim SQL) hit "No organizations" at `/admin`
+  even though the override list held every org. `AdminIndexPage`'s empty-state
+  guard returned early on `orgs.length === 0` alone, before the render that
+  shows `overrideOrgs`. Confirmed RLS (`orgs read public`) returns all orgs to
+  the anon key, so RLS was never the blocker; ron confirmed he's a platform
+  admin (the "+ Create organization" button shows).
+- **Fix:** empty-state guard now requires **both** `orgs` and `overrideOrgs`
+  empty; effect sets `overrideOrgs` before `orgs` so the guard sees both at once
+  (no empty-state flash). UI only. Shipped as PR for #345.
+- 🔜 **Next:** ron can now reach WMPC + Pickleball Angels under "platform-admin
+  access". Latent follow-up: the `seed_platform_admin_ron` migration is a no-op
+  if run before ron's auth row exists — consider an `auth.users` trigger so the
+  platform-admin bootstrap self-heals across env rebuilds (not done here).
+
 ## 2026-06-15 — Fix: saved-venue selection wrongly tripped the publish gate
 
 - **Bug:** In the tournament create wizard, picking a **saved venue** from the
