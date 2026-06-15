@@ -20,6 +20,7 @@ import PlatformSettingsPage from "./pages/admin/PlatformSettingsPage";
 import QuotesListPage from "./pages/admin/quotes/QuotesListPage";
 import QuoteEditorPage from "./pages/admin/quotes/QuoteEditorPage";
 import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
+import ContractPage from "./pages/admin/quotes/ContractPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
@@ -205,6 +206,14 @@ export default function App() {
         element={
           <RequireAuth>
             <QuoteEditorPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/quotes/:quoteId/contract/:contractId"
+        element={
+          <RequireAuth>
+            <ContractPage />
           </RequireAuth>
         }
       />

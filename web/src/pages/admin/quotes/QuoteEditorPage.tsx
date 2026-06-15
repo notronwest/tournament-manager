@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../../supabase";
+import { useAuth } from "../../../auth/AuthProvider";
 import { usePlatformAdmin } from "../../../hooks/usePlatformAdmin";
 import { computeQuote } from "../../../lib/quotePricing";
 import type { QuoteLineInput, QuotePlatform } from "../../../lib/quotePricing";
@@ -34,12 +35,22 @@ import {
 import type { Database } from "../../../types/supabase";
 
 type QuoteStatus = Database["public"]["Enums"]["quote_status"];
+type ContractStatus = Database["public"]["Enums"]["contract_status"];
+type ContractRow = Database["public"]["Tables"]["contracts"]["Row"];
 type ServiceRow = Database["public"]["Tables"]["service_catalog"]["Row"];
 type ServiceCategory = Database["public"]["Enums"]["service_category"];
 type QuoteRow = Database["public"]["Tables"]["quotes"]["Row"];
 type CustomerRow = Database["public"]["Tables"]["quote_customers"]["Row"];
 type RevisionRow = Database["public"]["Tables"]["quote_revisions"]["Row"];
 type LineItemRow = Database["public"]["Tables"]["quote_line_items"]["Row"];
+
+const CONTRACT_TERMS_VERSION = "v1.0-2026";
+
+const CONTRACT_STATUS_LABELS: Record<ContractStatus, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  signed_offline: "Signed",
+};
 
 type RevisionWithLines = RevisionRow & { quote_line_items: LineItemRow[] };
 type QuoteWithAll = QuoteRow & {
@@ -87,6 +98,7 @@ export default function QuoteEditorPage() {
   // (no :quoteId segment), and "new" when mounted via the dynamic route.
   const isNew = !quoteId || quoteId === "new";
   const isPlatformAdmin = usePlatformAdmin();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   // ── Load quote (edit mode) ─────────────────────────────────────────────
@@ -141,6 +153,11 @@ export default function QuoteEditorPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  // ── Contract state ────────────────────────────────────────────────────
+  const [contracts, setContracts] = useState<ContractRow[]>([]);
+  const [generatingContract, setGeneratingContract] = useState(false);
+  const [contractError, setContractError] = useState<string | null>(null);
 
   // Load service catalog
   useEffect(() => {
@@ -240,6 +257,17 @@ export default function QuoteEditorPage() {
     return () => { cancelled = true; };
   }, [isNew, quoteId, isPlatformAdmin]);
 
+  // Load contracts for this quote
+  useEffect(() => {
+    if (isNew || !isPlatformAdmin || !quoteId) return;
+    supabase
+      .from("contracts")
+      .select("*")
+      .eq("quote_id", quoteId)
+      .order("generated_at", { ascending: false })
+      .then(({ data }) => setContracts(data ?? []));
+  }, [isNew, quoteId, isPlatformAdmin]);
+
   // Load active share token for this quote
   useEffect(() => {
     if (isNew || !isPlatformAdmin || !quoteId) return;
@@ -290,6 +318,33 @@ export default function QuoteEditorPage() {
       return;
     }
     setShareToken(null);
+  }
+
+  async function handleGenerateContract() {
+    if (!quoteId || !quoteData) return;
+    const currentRev = quoteData.quote_revisions.find((r) => r.is_current);
+    if (!currentRev) {
+      setContractError("Save a revision first before generating a contract.");
+      return;
+    }
+    setGeneratingContract(true);
+    setContractError(null);
+    const { data, error } = await supabase
+      .from("contracts")
+      .insert({
+        quote_id: quoteId,
+        revision_id: currentRev.id,
+        terms_version: CONTRACT_TERMS_VERSION,
+        created_by: user?.id ?? null,
+      })
+      .select("id")
+      .single();
+    setGeneratingContract(false);
+    if (error || !data) {
+      setContractError(error?.message ?? "Failed to generate contract.");
+      return;
+    }
+    navigate(`/admin/quotes/${quoteId}/contract/${data.id}`);
   }
 
   // ── Derive line items for pricing engine ───────────────────────────────
@@ -976,6 +1031,59 @@ export default function QuoteEditorPage() {
               {generatingToken ? "Generating…" : "Generate share link"}
             </button>
           )}
+        </section>
+      )}
+
+      {/* ── Contracts (accepted quotes only) ── */}
+      {!isNew && status === "accepted" && (
+        <section style={{ ...panelMutedStyle, marginBottom: 20 }}>
+          <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Contracts</h2>
+          <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 12px" }}>
+            Generate an independent-contractor agreement from the current accepted revision. Download or print it as a PDF.
+          </p>
+          {contractError && (
+            <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }}>{contractError}</div>
+          )}
+          {contracts.length > 0 && (
+            <div style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: "hidden", marginBottom: 14 }}>
+              {contracts.map((c, i) => (
+                <div
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 14px",
+                    borderTop: i > 0 ? `1px solid ${ruleSoft}` : "none",
+                    background: "#fff",
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+                      {CONTRACT_STATUS_LABELS[c.status]}
+                    </span>
+                    <span style={{ fontSize: 12, color: inkMuted, marginLeft: 10 }}>
+                      {new Date(c.generated_at).toLocaleString()} · terms {c.terms_version}
+                    </span>
+                  </div>
+                  <Link
+                    to={`/admin/quotes/${quoteId}/contract/${c.id}`}
+                    style={{ ...breadcrumbLinkStyle, fontSize: 13 }}
+                  >
+                    View
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            onClick={handleGenerateContract}
+            disabled={generatingContract}
+            style={generatingContract ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+          >
+            {generatingContract ? "Generating…" : "Generate contract"}
+          </button>
         </section>
       )}
 
