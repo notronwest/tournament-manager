@@ -55,6 +55,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [format, setFormat] = useState<EventFormat>("doubles");
   const [gender, setGender] = useState<EventGender>("mixed");
   const [maxTeams, setMaxTeams] = useState("10");
+  const [isPairedRoles, setIsPairedRoles] = useState(false);
+  const [sideALabel, setSideALabel] = useState("First Responder");
+  const [sideBLabel, setSideBLabel] = useState("Community Member");
   // Per-event fee override. $0 means "use the tournament's pricing tiers".
   // Any positive value is a flat charge for this event that ignores tiers.
   const [eventFeeDollars, setEventFeeDollars] = useState("0");
@@ -166,6 +169,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setFormat(ev.format);
         setGender(ev.gender);
         setMaxTeams(String(ev.max_teams ?? 10));
+        setIsPairedRoles(ev.is_paired_roles);
+        setSideALabel(ev.side_a_label);
+        setSideBLabel(ev.side_b_label);
         setPoolCount(String(ev.pool_count));
         setPlayEachTeamTimes(String(ev.play_each_team_times));
         setPointsToWin(String(ev.points_to_win));
@@ -282,6 +288,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       rating_source: ratingSource || null,
       min_age: minAgeNum,
       max_age: maxAgeNum,
+      is_paired_roles: isPairedRoles && format === "doubles",
+      side_a_label: sideALabel.trim() || "First Responder",
+      side_b_label: sideBLabel.trim() || "Community Member",
     };
   };
 
@@ -419,7 +428,14 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
             <Field label="Format" required>
               <select
                 value={format}
-                onChange={(e) => setFormat(e.target.value as EventFormat)}
+                onChange={(e) => {
+                  const f = e.target.value as EventFormat;
+                  setFormat(f);
+                  if (f !== "doubles") {
+                    setIsPairedRoles(false);
+                    if (gender === "open") setGender("mixed");
+                  }
+                }}
                 style={inputStyle}
               >
                 <option value="doubles">Doubles</option>
@@ -435,6 +451,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                 <option value="mixed">Mixed</option>
                 <option value="men">Men</option>
                 <option value="women">Women</option>
+                {format === "doubles" && isPairedRoles && (
+                  <option value="open">Open / any combination</option>
+                )}
               </select>
             </Field>
             <Field label="Max teams" required>
@@ -449,6 +468,84 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
               />
             </Field>
           </FieldRow>
+          {format === "doubles" && (
+            <div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  cursor: "pointer",
+                  fontSize: 14,
+                  color: ink,
+                  userSelect: "none",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isPairedRoles}
+                  onChange={(e) => {
+                    setIsPairedRoles(e.target.checked);
+                    if (!e.target.checked && gender === "open") {
+                      setGender("mixed");
+                    }
+                  }}
+                  style={{ accentColor: courtBlue, width: 16, height: 16 }}
+                />
+                <span>
+                  <strong>Paired roles</strong> — each team must have one player
+                  from each side (e.g. First Responder + Community Member)
+                </span>
+              </label>
+              {isPairedRoles && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "12px 14px",
+                    background: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 6,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 12,
+                      color: "#1e40af",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    Registrants choose which side they're on. A team must be one
+                    of each side. Set "Gender" to "Open / any combination" to
+                    allow MM, FF, and mixed teams.
+                  </p>
+                  <FieldRow>
+                    <Field label="Side A label">
+                      <input
+                        type="text"
+                        value={sideALabel}
+                        onChange={(e) => setSideALabel(e.target.value)}
+                        placeholder="First Responder"
+                        style={inputStyle}
+                      />
+                    </Field>
+                    <Field label="Side B label">
+                      <input
+                        type="text"
+                        value={sideBLabel}
+                        onChange={(e) => setSideBLabel(e.target.value)}
+                        placeholder="Community Member"
+                        style={inputStyle}
+                      />
+                    </Field>
+                  </FieldRow>
+                </div>
+              )}
+            </div>
+          )}
           <Field
             label="Event fee override (USD)"
             hint="Leave at $0.00 to use the tournament's first-event / additional-event pricing tiers. Set a value to charge every player a flat fee for this event — this overrides the tournament pricing tiers entirely and the same amount is charged regardless of how many events the player registers for."

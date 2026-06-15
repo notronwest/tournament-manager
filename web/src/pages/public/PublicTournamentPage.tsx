@@ -1188,6 +1188,7 @@ function eventTypeColor(
   if (format === "doubles" && gender === "men")   return courtGreen;   // #2c8a3d
   if (format === "doubles" && gender === "women") return "#9333ea";    // purple
   if (format === "doubles" && gender === "mixed") return courtRed;     // #d8341c
+  if (format === "doubles" && gender === "open")  return "#0891b2";    // teal — paired roles
   return inkMuted; // fallback: singles·mixed or any unexpected combo
 }
 
@@ -1262,6 +1263,10 @@ function EventCard({
   // path skips the partner-invite insert and stamps
   // partner_status='seeking' on the reg.
   const [seekingPartner, setSeekingPartner] = useState(false);
+  // Paired-roles: which of the two sides the registrant is on ('a'
+  // or 'b'). Only relevant when event.is_paired_roles is true; null
+  // otherwise. Must be set before submitting a paired-roles reg.
+  const [registrationSide, setRegistrationSide] = useState<"a" | "b" | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   // #9: gate the partner-dropping Cancel behind a confirm step.
@@ -1316,6 +1321,7 @@ function EventCard({
     setEditMode("register");
     setPartner(emptySelection);
     setSeekingPartner(false);
+    setRegistrationSide(null);
     setFormError(null);
   };
 
@@ -1336,6 +1342,7 @@ function EventCard({
     setEditMode(null);
     setPartner(emptySelection);
     setSeekingPartner(false);
+    setRegistrationSide(null);
     setFormError(null);
     onReleaseFocus();
   };
@@ -1350,6 +1357,7 @@ function EventCard({
       setEditMode(null);
       setPartner(emptySelection);
       setSeekingPartner(false);
+      setRegistrationSide(null);
       setFormError(null);
     }
   // Intentionally omit editMode from deps: only fire when isFocused
@@ -1439,6 +1447,14 @@ function EventCard({
       return;
     }
     setFormError(null);
+
+    // Validate paired-roles side selection (required before partner pick).
+    if (event.is_paired_roles && isDoubles && !registrationSide) {
+      setFormError(
+        `Choose which side you're registering as — ${event.side_a_label} or ${event.side_b_label}.`,
+      );
+      return;
+    }
 
     // Validate doubles partner pick. Singles events bypass
     // entirely. So does "I need a partner" — they're registering
@@ -1547,6 +1563,9 @@ function EventCard({
         event_fee_cents: 0,
         status: "pending_payment",
         partner_status: partnerStatusOnInsert,
+        ...(event.is_paired_roles && registrationSide
+          ? { registration_side: registrationSide }
+          : {}),
       })
       .select()
       .single();
@@ -1939,7 +1958,8 @@ function EventCard({
 
   // Submit gate: singles always submit-able. Doubles need EITHER a
   // partner picked OR the "I need a partner" toggle on.
-  const canSubmit = !isDoubles || partnerPicked || seekingPartner;
+  const sideChosen = !event.is_paired_roles || !isDoubles || registrationSide !== null;
+  const canSubmit = sideChosen && (!isDoubles || partnerPicked || seekingPartner);
 
   // ─── #98: card visual state ───────────────────────────────────────
   // Lifted card (isFocused): position:relative + z-index:60 places it
@@ -2221,6 +2241,53 @@ function EventCard({
           )}
           {isDoubles && (
             <>
+              {/* Paired-roles: side selector — appears above the partner
+                  picker when event.is_paired_roles is true. Must be
+                  chosen before the registrant can submit. The label tiles
+                  reuse partnerModeTileStyle (the established choice-tile
+                  pattern) so they look consistent. */}
+              {event.is_paired_roles && (
+                <div style={{ marginBottom: 10 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: inkMuted,
+                      marginBottom: 6,
+                      fontWeight: 600,
+                    }}
+                  >
+                    I'm registering as
+                  </div>
+                  <div
+                    role="radiogroup"
+                    aria-label="Registration side"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 8,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={registrationSide === "a"}
+                      onClick={() => setRegistrationSide("a")}
+                      style={partnerModeTileStyle(registrationSide === "a")}
+                    >
+                      <span>{event.side_a_label}</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={registrationSide === "b"}
+                      onClick={() => setRegistrationSide("b")}
+                      style={partnerModeTileStyle(registrationSide === "b")}
+                    >
+                      <span>{event.side_b_label}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
               {/* F1: two-mode picker — pick a partner OR sign up
                   needing one. Defaults to "I have a partner."
                   Renders as compact choice tiles (icon + label) so
@@ -2279,9 +2346,9 @@ function EventCard({
                       lineHeight: 1.5,
                     }}
                   >
-                    Your doubles partner. Search by name, email, or
-                    phone — if they're not in the list yet, add them
-                    as a new player.
+                    {event.is_paired_roles && registrationSide
+                      ? `Your partner will join as ${registrationSide === "a" ? event.side_b_label : event.side_a_label}.`
+                      : "Your doubles partner. Search by name, email, or phone — if they're not in the list yet, add them as a new player."}
                   </div>
                   <PartnerSearch
                     selection={partner}
