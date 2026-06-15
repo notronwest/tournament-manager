@@ -28,6 +28,10 @@ type AuthContextValue = {
   signInWithGoogle: (
     redirectTo?: string,
   ) => Promise<{ error: AuthError | null }>;
+  resetPasswordForEmail: (
+    email: string,
+    redirectTo: string,
+  ) => Promise<{ error: AuthError | null }>;
   updatePassword: (
     password: string,
   ) => Promise<{ error: AuthError | null }>;
@@ -113,6 +117,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  const resetPasswordForEmail = async (email: string, redirectTo: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    return { error };
+  };
+
   // Lets the user set (or change) their password from inside the app —
   // primarily used from the first-fill ProfilePage so a magic-link
   // signup can opt into a password while they're already filling out
@@ -137,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUpWithPassword,
         signInWithMagicLink,
         signInWithGoogle,
+        resetPasswordForEmail,
         updatePassword,
         signOut,
       }}

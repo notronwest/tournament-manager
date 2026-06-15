@@ -22,7 +22,7 @@ import {
 } from "../lib/publicTheme";
 import brushMark from "../assets/bert-and-erne-brush-mark.svg";
 
-// Three modes:
+// Four modes:
 //   magic  — email-only "get a link" flow. Default for public-flow
 //            users (anyone bounced here from /t/...) because it's the
 //            simplest path for non-savvy users: one field, click a
@@ -32,7 +32,9 @@ import brushMark from "../assets/bert-and-erne-brush-mark.svg";
 //   signup — explicit "create an account with a password right now."
 //            Kept for users who'd rather pick their own password
 //            upfront; not the default.
-type Mode = "magic" | "signin" | "signup";
+//   forgot — password-reset request; not shown as a tab, entered via
+//            the "Forgot password?" link on the signin screen.
+type Mode = "magic" | "signin" | "signup" | "forgot";
 
 export default function LoginPage() {
   const {
@@ -40,6 +42,7 @@ export default function LoginPage() {
     signUpWithPassword,
     signInWithMagicLink,
     signInWithGoogle,
+    resetPasswordForEmail,
   } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,6 +69,7 @@ export default function LoginPage() {
   // differ slightly per flow if we want.
   const [magicSent, setMagicSent] = useState(false);
   const [signupPending, setSignupPending] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   // Absolute URL Supabase should redirect to from the confirmation /
   // magic-link email. We hand it the URL the user was *trying* to
@@ -94,6 +98,11 @@ export default function LoginPage() {
         // user isn't actually signed in yet — show them the "check
         // your email" panel instead of navigating away.
         setSignupPending(true);
+      } else if (mode === "forgot") {
+        const redirectTo = `${window.location.origin}/reset-password`;
+        const { error } = await resetPasswordForEmail(email, redirectTo);
+        if (error) throw new Error(error.message);
+        setResetSent(true);
       } else {
         const { error } = await signInWithMagicLink(email, emailRedirectTo);
         if (error) throw new Error(error.message);
@@ -306,15 +315,20 @@ export default function LoginPage() {
               ? "Get started"
               : mode === "signin"
                 ? "Sign in"
-                : "Create account"}
+                : mode === "forgot"
+                  ? "Reset password"
+                  : "Create account"}
           </h1>
           <p style={{ margin: "0 0 20px", color: inkSoft, fontSize: 13, lineHeight: 1.5 }}>
-            {isPublicFlow
-              ? "Sign in or get started — we just need to know who you are before you register."
-              : "Sign in to manage tournaments."}
+            {mode === "forgot"
+              ? "Enter your email and we’ll send you a reset link."
+              : isPublicFlow
+                ? "Sign in or get started — we just need to know who you are before you register."
+                : "Sign in to manage tournaments."}
           </p>
 
-          {/* Segmented control */}
+          {/* Segmented control — hidden in forgot mode */}
+          {mode !== "forgot" && (
           <div
             role="radiogroup"
             aria-label="Sign-in mode"
@@ -341,6 +355,7 @@ export default function LoginPage() {
                     setError(null);
                     setMagicSent(false);
                     setSignupPending(false);
+                    setResetSent(false);
                   }}
                   style={segTabStyle(active)}
                 >
@@ -353,6 +368,7 @@ export default function LoginPage() {
               );
             })}
           </div>
+          )}
 
           {magicSent
             ? sentToEmailPanel(
@@ -364,11 +380,35 @@ export default function LoginPage() {
                   "Confirm your email",
                   "We sent a confirmation link to verify your address. Click it to finish creating your account.",
                 )
-              : (
+              : resetSent
+                ? sentToEmailPanel(
+                    "Check your email",
+                    "We sent a password reset link. Click it to choose a new password.",
+                  )
+                : (
             <form
               onSubmit={onSubmit}
               style={{ display: "flex", flexDirection: "column", gap: 12 }}
             >
+              {mode === "forgot" && (
+                <button
+                  type="button"
+                  onClick={() => { setMode("signin"); setError(null); }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: inkMuted,
+                    fontSize: 12,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    padding: 0,
+                    textAlign: "left",
+                    marginBottom: 4,
+                  }}
+                >
+                  ← Back to sign in
+                </button>
+              )}
               {mode === "magic" && (
                 <p
                   style={{
@@ -394,7 +434,7 @@ export default function LoginPage() {
                 />
               </Field>
 
-              {mode !== "magic" && (
+              {(mode === "signin" || mode === "signup") && (
                 <Field label="Password">
                   <input
                     type="password"
@@ -410,6 +450,27 @@ export default function LoginPage() {
                 </Field>
               )}
 
+              {mode === "signin" && (
+                <div style={{ textAlign: "right", marginTop: -4 }}>
+                  <button
+                    type="button"
+                    onClick={() => { setMode("forgot"); setError(null); }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: inkMuted,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      padding: 0,
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+
               <button type="submit" disabled={busy} style={primaryBtnStyle(busy)}>
                 {busy
                   ? "Working…"
@@ -417,11 +478,15 @@ export default function LoginPage() {
                     ? "Email me a link"
                     : mode === "signin"
                       ? "Sign in"
-                      : "Create account"}
+                      : mode === "forgot"
+                        ? "Send reset link"
+                        : "Create account"}
               </button>
             </form>
           )}
 
+          {mode !== "forgot" && (
+          <>
           <div
             style={{
               display: "flex",
@@ -441,6 +506,8 @@ export default function LoginPage() {
           <button type="button" onClick={onGoogle} style={googleBtnStyle}>
             Continue with Google
           </button>
+          </>
+          )}
 
           {error && (
             <div
