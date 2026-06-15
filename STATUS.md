@@ -17,6 +17,18 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-15 — UX: paired-roles reg shows why Save is disabled
+
+- **What:** on a paired-roles doubles event, picking a partner without choosing
+  an "I'm registering as" side left Save greyed with no explanation. Added a
+  hint next to Save in `PublicTournamentPage` EventCard: *"Registration not
+  complete — pick an 'I'm registering as' option above to complete your
+  registration."* shown when `is_paired_roles && isDoubles && !registrationSide`.
+  Gated the existing "Pick a partner" hint behind `sideChosen` so only one shows
+  at a time (no-op for non-paired events, where `sideChosen` is always true).
+- **Verified:** typecheck ✓, no new lint (pre-existing errors at lines 509+ are
+  unrelated).
+
 ## 2026-06-15 — Builder: #338 paired-roles pairing board in review
 
 Builder ran on #338 (First Responder Community Doubles — P2, organizer pairing board).

@@ -2424,7 +2424,13 @@ function EventCard({
             >
               Not now
             </button>
-            {isDoubles && !partnerPicked && !seekingPartner && !submitting && (
+            {event.is_paired_roles && isDoubles && !registrationSide && !submitting && (
+              <span style={{ fontSize: 12, color: inkMuted }}>
+                Registration not complete — pick an "I'm registering as"
+                option above to complete your registration.
+              </span>
+            )}
+            {sideChosen && isDoubles && !partnerPicked && !seekingPartner && !submitting && (
               <span style={{ fontSize: 12, color: inkMuted }}>
                 Pick a partner to continue (or choose "I need a
                 partner" above).
