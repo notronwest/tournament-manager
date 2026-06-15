@@ -1073,6 +1073,41 @@ export type Database = {
           },
         ]
       }
+      quote_share_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          quote_id: string
+          revoked: boolean
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          quote_id: string
+          revoked?: boolean
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          quote_id?: string
+          revoked?: boolean
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_share_tokens_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quotes: {
         Row: {
           additional_event_fee_cents: number
@@ -1616,6 +1651,21 @@ export type Database = {
         Args: { p_reg_id: string; p_reason?: string }
         Returns: boolean
       }
+      get_quote_by_token: {
+        Args: { p_token: string }
+        Returns: Database["public"]["CompositeTypes"]["quote_share_payload"] | null
+      }
+      submit_customer_revision: {
+        Args: {
+          p_token: string
+          p_line_items: Json
+          p_subtotal_cents: number
+          p_estimated_revenue_cents: number
+          p_estimated_net_cents: number
+          p_notes?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       bracket_type:
@@ -1714,7 +1764,26 @@ export type Database = {
       withdrawal_decision: "approved" | "denied"
     }
     CompositeTypes: {
-      [_ in never]: never
+      quote_share_payload: {
+        quote_id: string | null
+        event_name: string | null
+        event_dates: string | null
+        num_days: number | null
+        num_events: number | null
+        num_entries: number | null
+        multi_event_players: number | null
+        distance_miles: number | null
+        platform: string | null
+        first_event_fee_cents: number | null
+        additional_event_fee_cents: number | null
+        revision_id: string | null
+        revision_number: number | null
+        revision_notes: string | null
+        subtotal_cents: number | null
+        estimated_revenue_cents: number | null
+        estimated_net_cents: number | null
+        line_items: Json | null
+      }
     }
   }
 }
