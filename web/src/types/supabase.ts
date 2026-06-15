@@ -1075,37 +1075,52 @@ export type Database = {
       }
       quotes: {
         Row: {
+          additional_event_fee_cents: number
           created_at: string
           customer_id: string | null
           distance_miles: number
           event_dates: string | null
           event_name: string | null
+          first_event_fee_cents: number
           id: string
+          multi_event_players: number
           num_days: number
+          num_entries: number
+          num_events: number
           platform: Database["public"]["Enums"]["quote_platform"]
           source: Database["public"]["Enums"]["quote_source"]
           status: Database["public"]["Enums"]["quote_status"]
         }
         Insert: {
+          additional_event_fee_cents?: number
           created_at?: string
           customer_id?: string | null
           distance_miles?: number
           event_dates?: string | null
           event_name?: string | null
+          first_event_fee_cents?: number
           id?: string
+          multi_event_players?: number
           num_days: number
+          num_entries?: number
+          num_events?: number
           platform?: Database["public"]["Enums"]["quote_platform"]
           source?: Database["public"]["Enums"]["quote_source"]
           status?: Database["public"]["Enums"]["quote_status"]
         }
         Update: {
+          additional_event_fee_cents?: number
           created_at?: string
           customer_id?: string | null
           distance_miles?: number
           event_dates?: string | null
           event_name?: string | null
+          first_event_fee_cents?: number
           id?: string
+          multi_event_players?: number
           num_days?: number
+          num_entries?: number
+          num_events?: number
           platform?: Database["public"]["Enums"]["quote_platform"]
           source?: Database["public"]["Enums"]["quote_source"]
           status?: Database["public"]["Enums"]["quote_status"]
