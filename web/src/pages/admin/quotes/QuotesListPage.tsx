@@ -26,7 +26,7 @@ type RevisionRow = Database["public"]["Tables"]["quote_revisions"]["Row"];
 
 type QuoteWithContext = QuoteRow & {
   quote_customers: Pick<CustomerRow, "id" | "name" | "email" | "org_name"> | null;
-  quote_revisions: Pick<RevisionRow, "subtotal_cents" | "estimated_net_cents" | "is_current">[];
+  quote_revisions: Pick<RevisionRow, "subtotal_cents" | "estimated_net_cents" | "is_current" | "created_by">[];
 };
 
 const STATUS_LABELS: Record<QuoteStatus, string> = {
@@ -57,6 +57,10 @@ function currentRevision(revisions: QuoteWithContext["quote_revisions"]) {
   return revisions.find((r) => r.is_current) ?? revisions[0] ?? null;
 }
 
+function hasCustomerRevision(revisions: QuoteWithContext["quote_revisions"]) {
+  return revisions.some((r) => r.created_by === "customer");
+}
+
 export default function QuotesListPage() {
   const isPlatformAdmin = usePlatformAdmin();
   const [quotes, setQuotes] = useState<QuoteWithContext[]>([]);
@@ -73,7 +77,7 @@ export default function QuotesListPage() {
         .select(`
           *,
           quote_customers (id, name, email, org_name),
-          quote_revisions (subtotal_cents, estimated_net_cents, is_current)
+          quote_revisions (subtotal_cents, estimated_net_cents, is_current, created_by)
         `)
         .order("created_at", { ascending: false });
       if (cancelled) return;
@@ -203,6 +207,7 @@ export default function QuotesListPage() {
           {filtered.map((q, i) => {
             const rev = currentRevision(q.quote_revisions);
             const customer = q.quote_customers;
+            const customerUpdated = hasCustomerRevision(q.quote_revisions);
             return (
               <Link
                 key={q.id}
@@ -238,6 +243,20 @@ export default function QuotesListPage() {
                         <>
                           <span style={{ fontSize: 11, color: inkMuted }}>·</span>
                           <span style={{ fontSize: 11, color: inkMuted }}>admin-created</span>
+                        </>
+                      )}
+                      {customerUpdated && (
+                        <>
+                          <span style={{ fontSize: 11, color: inkMuted }}>·</span>
+                          <span style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: courtBlue,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                          }}>
+                            Customer updated
+                          </span>
                         </>
                       )}
                     </div>
