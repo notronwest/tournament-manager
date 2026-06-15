@@ -17,6 +17,27 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-15 — Builder: #338 paired-roles pairing board in review
+
+Builder ran on #338 (First Responder Community Doubles — P2, organizer pairing board).
+No migration needed — the board writes `partner_registration_id` + `partner_status` via
+the existing RLS org-member UPDATE path (same channel as EventConsolePage's team-add).
+
+- **PR #349** (`feature/issue-338-pairing-board` → `main`): new `PairingBoardPage`
+  at `/admin/:orgSlug/tournaments/:tournamentSlug/events/:eventId/pair-teams`.
+  Unpaired registrants in two columns (one per side); click Side-A → select; click
+  Side-B → pair (links both registrations via `partner_registration_id`). Confirmed
+  teams table with invite-vs-organizer label and Undo button (ConfirmModal warns on
+  invite-formed pairs). Auto-match button pairs remaining solos in sign-up order.
+  Summary bar shows per-side unpaired counts and imbalance chip. "Pair teams" button
+  added to EventConsolePage header (only rendered for `is_paired_roles` events).
+  Closes #338.
+
+Card #338 → **In Review**.
+
+🔜 **Ron:** review and merge PR #349. Notification is in-app only (partner name
+shows on the public registration page once paired); email would need a future [FN] PR.
+
 ## 2026-06-15 — Fix: platform admin saw "No organizations" at /admin
 
 - **Bug:** A platform admin with no explicit `organization_members` rows (ron —
