@@ -76,7 +76,7 @@ export default function CustomerQuotePage() {
   const { token } = useParams<{ token: string }>();
 
   const [payload, setPayload] = useState<QuotePayload | null>(null);
-  const [catalog, setCatalog] = useState<ServiceRow[]>([]);
+  const [catalog, setCatalog] = useState<Pick<ServiceRow, 'key' | 'category'>[]>([]);
   // If there's no token segment in the URL, we're immediately invalid.
   const [loading, setLoading] = useState(!!token);
   const [invalid, setInvalid] = useState(!token);
@@ -93,7 +93,7 @@ export default function CustomerQuotePage() {
 
     Promise.all([
       supabase.rpc("get_quote_by_token", { p_token: token }),
-      supabase.from("service_catalog").select("id,key,category").eq("active", true),
+      supabase.from("service_catalog").select("key,category").eq("active", true),
     ]).then(([{ data: quoteData, error: quoteErr }, { data: catData }]) => {
       setLoading(false);
       if (quoteErr || !quoteData) {
