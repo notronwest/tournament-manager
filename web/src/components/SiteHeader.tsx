@@ -258,6 +258,9 @@ export default function SiteHeader() {
             fontSize: 13,
           }}
         >
+          <Link to="/getting-started" style={ghostLinkStyle}>
+            Getting Started
+          </Link>
           {loading ? null : !user ? (
             <Link
               to="/login"
