@@ -131,6 +131,9 @@ export default function AdminIndexPage() {
               <Link to="/admin/platform" style={ctaSecondaryStyle}>
                 Platform settings
               </Link>
+              <Link to="/admin/quotes" style={ctaSecondaryStyle}>
+                Quotes
+              </Link>
             </div>
           )}
         </div>
@@ -159,6 +162,9 @@ export default function AdminIndexPage() {
               </Link>
               <Link to="/admin/platform" style={ctaSecondaryStyle}>
                 Platform settings
+              </Link>
+              <Link to="/admin/quotes" style={ctaSecondaryStyle}>
+                Quotes
               </Link>
             </div>
           )}

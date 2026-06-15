@@ -17,6 +17,9 @@ import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
 import PlatformSettingsPage from "./pages/admin/PlatformSettingsPage";
+import QuotesListPage from "./pages/admin/quotes/QuotesListPage";
+import QuoteEditorPage from "./pages/admin/quotes/QuoteEditorPage";
+import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
@@ -166,6 +169,41 @@ export default function App() {
         element={
           <RequireAuth>
             <PlatformSettingsPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only Quote Studio. Defined before the :orgSlug
+          catch-all so "quotes" isn't treated as a slug. */}
+      <Route
+        path="/admin/quotes"
+        element={
+          <RequireAuth>
+            <QuotesListPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/quotes/catalog"
+        element={
+          <RequireAuth>
+            <CatalogAdminPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/quotes/new"
+        element={
+          <RequireAuth>
+            <QuoteEditorPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/quotes/:quoteId"
+        element={
+          <RequireAuth>
+            <QuoteEditorPage />
           </RequireAuth>
         }
       />
