@@ -271,6 +271,7 @@ export type Database = {
           player_id: string
           pool_index: number | null
           registered_at: string
+          registration_side: string | null
           seed: number | null
           status: Database["public"]["Enums"]["registration_status"]
           updated_at: string
@@ -291,6 +292,7 @@ export type Database = {
           player_id: string
           pool_index?: number | null
           registered_at?: string
+          registration_side?: string | null
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
@@ -311,6 +313,7 @@ export type Database = {
           player_id?: string
           pool_index?: number | null
           registered_at?: string
+          registration_side?: string | null
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
@@ -352,6 +355,7 @@ export type Database = {
           format: Database["public"]["Enums"]["event_format"]
           gender: Database["public"]["Enums"]["event_gender"]
           id: string
+          is_paired_roles: boolean
           max_age: number | null
           max_rating: number | null
           max_teams: number | null
@@ -373,6 +377,8 @@ export type Database = {
           semifinal_minutes_per_game: number
           semifinal_points_to_win: number
           semifinal_win_by: number
+          side_a_label: string
+          side_b_label: string
           status: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff: number
           timeouts_per_game: number
@@ -388,6 +394,7 @@ export type Database = {
           format: Database["public"]["Enums"]["event_format"]
           gender: Database["public"]["Enums"]["event_gender"]
           id?: string
+          is_paired_roles?: boolean
           max_age?: number | null
           max_rating?: number | null
           max_teams?: number | null
@@ -409,6 +416,8 @@ export type Database = {
           semifinal_minutes_per_game?: number
           semifinal_points_to_win?: number
           semifinal_win_by?: number
+          side_a_label?: string
+          side_b_label?: string
           status?: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff?: number
           timeouts_per_game?: number
@@ -424,6 +433,7 @@ export type Database = {
           format?: Database["public"]["Enums"]["event_format"]
           gender?: Database["public"]["Enums"]["event_gender"]
           id?: string
+          is_paired_roles?: boolean
           max_age?: number | null
           max_rating?: number | null
           max_teams?: number | null
@@ -445,6 +455,8 @@ export type Database = {
           semifinal_minutes_per_game?: number
           semifinal_points_to_win?: number
           semifinal_win_by?: number
+          side_a_label?: string
+          side_b_label?: string
           status?: Database["public"]["Enums"]["event_status"]
           teams_advancing_to_playoff?: number
           timeouts_per_game?: number
@@ -1741,7 +1753,7 @@ export type Database = {
       contract_status: "draft" | "sent" | "signed_offline"
       coupon_discount_type: "percent" | "fixed_amount"
       event_format: "singles" | "doubles"
-      event_gender: "men" | "women" | "mixed"
+      event_gender: "men" | "women" | "mixed" | "open"
       event_status:
         | "draft"
         | "active"
@@ -1986,7 +1998,7 @@ export const Constants = {
       change_request_status: ["open", "approved", "denied", "cancelled"],
       coupon_discount_type: ["percent", "fixed_amount"],
       event_format: ["singles", "doubles"],
-      event_gender: ["men", "women", "mixed"],
+      event_gender: ["men", "women", "mixed", "open"],
       event_status: [
         "draft",
         "active",
