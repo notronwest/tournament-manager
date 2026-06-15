@@ -7,7 +7,60 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-09**
+Last updated: **2026-06-14**
+
+> ⚠️ **Continuity gap fixed (2026-06-14):** entries between 06-09 and 06-14
+> (login/onboarding batch, Resend SMTP, Quote Studio epic) were written to a
+> **stale local checkout** (an abandoned `feature/issue-125` branch ~190 commits
+> behind `origin/main`) and never pushed — so `origin/main`'s STATUS.md sat at
+> 06-09. This entry resyncs the front door. Durable record of that work lives on
+> the **board** (#306–#318) and in merged PRs; the stranded local entries remain
+> in that checkout's working tree if finer detail is needed.
+
+## 2026-06-14 — #303 + #304 resolved (auth-email branding + welcome email)
+
+- **#303 — CLOSED.** PR #308 (branded auth email templates under
+  `supabase/email-templates/`) merged. 🔜 **Manual (Ron):** paste the 3
+  templates into Supabase **Auth → Email Templates** (test, then prod);
+  **prod still needs the Resend SMTP config** before prod auth emails send.
+- **#304 — CLOSED.** Welcome-email-on-confirmation flow:
+  - **#309** (edge fn `send-welcome-email`) merged — split its own tracking
+    issue **#317** to satisfy the linked-issue CI gate (`Part of #` isn't
+    enough; needs `Closes #`).
+  - **#318** (DB trigger on `auth.users`, replaces the orphaned **#310** —
+    #310 auto-closed when #309's branch was deleted out from under the stack)
+    merged → `migrations.yml` applied the trigger cleanly to **TEST** (target
+    correctly resolved to test; the Builder-flagged `pg_net` named-param risk
+    did not bite).
+  - 🔜 **Manual (Ron), per env:** (1) deploy the fn —
+    `supabase functions deploy send-welcome-email --no-verify-jwt` (NO CI
+    deploys functions); (2) one-time
+    `ALTER DATABASE postgres SET "app.settings.supabase_url" = 'https://<ref>.supabase.co';`
+    (else the trigger logs a warning and skips — safe default). Do on **test**
+    first, validate, then on **prod** when promoting.
+- **False alarm cleared:** suspected `migrations.yml` still pointed at prod —
+  it does **not**. #298 (commit `0dc0650`) already made it branch-aware
+  (`main`→TEST via `TEST_SUPABASE_PROJECT_REF`, `production`→PROD). The
+  confusion came from the stale local checkout. Tracking issue #320 opened then
+  closed as invalid.
+- 🔜 **Cleanup:** the local checkout at
+  `~/data/web/wmpc/projects/tournament-manager` is on a dead
+  `feature/issue-125` branch, 190 behind `origin/main`, with stale uncommitted
+  refund-era leftovers. Reset it to `origin/main` (or just always work in
+  worktrees) so STATUS edits land on main.
+
+## 2026-06-14 — Quote & Proposal Studio scoped onto the board (#312–#316)
+
+Turned the WMPC "Tournament Management — Services & Pricing" Google Doc into a
+phased Builder epic for the **platform admin** (services CPQ + contract).
+**Epic #316** + four sub-issues: **#312 P1** (service catalog + unit-tested
+`quotePricing.ts` engine + public `/estimate` form) → **🟢 Agent Ready**;
+**#313 P2** (admin quote builder, price overrides, append-only revisions,
+editable catalog), **#314 P3** (customer customization via shareable link),
+**#315 P4** (contract PDF/HTML from accepted quote) → Backlog. Only P1 is Agent
+Ready; promote the next as each merges. Decisions locked: phased · new
+`quote_customers` entity · PDF/HTML contract (no e-sign yet) · admin-editable
+catalog. Deferred: e-signature; wiring the $200 deposit to a Stripe charge.
 
 ## 2026-06-09 — Issue #150: court count now sourced from the venue
 
