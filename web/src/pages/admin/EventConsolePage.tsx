@@ -437,6 +437,24 @@ export default function EventConsolePage() {
           {/* Edit format moved into the Settings tab below — header
               keeps cross-cutting actions only (Print, Reset). */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {event.is_paired_roles && (
+              <Link
+                to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/pair-teams`}
+                style={{
+                  padding: "8px 16px",
+                  background: "#ffffff",
+                  color: courtBlue,
+                  textDecoration: "none",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  border: `1px solid ${courtBlue}`,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Pair teams
+              </Link>
+            )}
             {matches.length > 0 && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/scorecards`}
