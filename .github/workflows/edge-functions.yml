@@ -1,26 +1,27 @@
-name: Deploy edge functions (on merge)
+name: Deploy edge functions (test on main, prod on production)
 
-# Edge functions are CODE: drafted in a PR, reviewed by Ron, and deployed HERE
-# on merge to main — never by a hand-run `supabase functions deploy` (the same
-# "forgot the manual step" gap that bit migrations, but worse: there was NO
-# automation at all, so a merged function never reached prod until someone
-# remembered). This makes functions behave like migrations + the frontend:
-# merge = live. Per-function settings (e.g. stripe-webhook's verify_jwt=false)
-# come from supabase/config.toml, which `functions deploy` honors.
+# Edge functions are CODE: drafted in a PR, reviewed by Ron, deployed HERE.
+#   push to `main`        → TEST Supabase project
+#   push to `production`  → PROD Supabase project (the deliberate promotion)
+# Promote test→prod by merging `main` → `production`. Never hand-run
+# `supabase functions deploy`. Per-function settings (e.g. stripe-webhook's
+# verify_jwt=false) come from supabase/config.toml, which `functions deploy`
+# honors.
 #
 # NOT covered here (can't be — they're secret): per-function secrets like
 # SITE_ADMIN_EMAIL. A PR that needs a new secret must say so and the secret
-# must be set in the Supabase dashboard before merge, or the function 500s.
-# See supabase/FUNCTIONS.md.
+# must be set in BOTH projects' dashboards before merge/promote, or the
+# function 500s. See supabase/FUNCTIONS.md.
 #
-# FAIL-CLOSED / INERT: if the Supabase deploy secrets aren't set, this exits
-# green doing nothing (matches migrations.yml). It deploys ALL functions, not
-# just the changed ones — deploy is idempotent and this keeps prod in lockstep
-# with the repo with no per-function diffing to get wrong.
+# FAIL-CLOSED / INERT: if the TARGET's secrets aren't set, this exits green
+# doing nothing — so `main`→test stays inert until TEST_SUPABASE_PROJECT_REF
+# is added. ACCESS_TOKEN is account-level (one token covers both projects).
+# Deploys ALL functions (idempotent) so the target stays in lockstep with the
+# repo with no per-function diffing to get wrong.
 
 on:
   push:
-    branches: [main]
+    branches: [main, production]
     paths:
       - "supabase/functions/**"
       - "supabase/config.toml"   # verify_jwt / per-function settings live here
@@ -36,36 +37,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Are deploy secrets configured?
+      - name: Resolve target (PROD on production branch, TEST otherwise)
         id: cfg
         env:
           TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          PROD_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          TEST_REF: ${{ secrets.TEST_SUPABASE_PROJECT_REF }}
         run: |
+          if [ "$GITHUB_REF" = "refs/heads/production" ]; then
+            ENV=PROD; REF="$PROD_REF"
+          else
+            ENV=TEST; REF="$TEST_REF"
+          fi
+          echo "env=$ENV" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
           if [ -n "$TOKEN" ] && [ -n "$REF" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Deploy secrets not set — skipping edge-function deploy. See supabase/FUNCTIONS.md."
+            echo "::notice::$ENV deploy secrets not set — skipping edge-function deploy. See supabase/FUNCTIONS.md."
           fi
 
       - uses: supabase/setup-cli@v1
         if: steps.cfg.outputs.ready == 'true'
         with: { version: latest }
 
-      - name: Deploy all edge functions
+      - name: Deploy all edge functions to ${{ steps.cfg.outputs.env }}
         if: steps.cfg.outputs.ready == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
+          echo "Deploying functions to ${{ steps.cfg.outputs.env }} (${{ steps.cfg.outputs.ref }})"
           # Retry with backoff. `functions deploy` bundles each function, which
           # fetches remote imports (esm.sh, etc.) at deploy time — so a TRANSIENT
-          # CDN hiccup (e.g. esm.sh returning 522) fails the whole prod deploy and
+          # CDN hiccup (e.g. esm.sh returning 522) fails the whole deploy and
           # leaves a function NOT live until someone reruns. (Happened 2026-06-11.)
           # Retrying absorbs those transient failures; a real error still fails
           # after the last attempt (fail-closed → Discord alert below).
           n=0; max=3
-          until supabase functions deploy --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}"; do
+          until supabase functions deploy --project-ref "${{ steps.cfg.outputs.ref }}"; do
             n=$((n+1))
             if [ "$n" -ge "$max" ]; then
               echo "::error::functions deploy failed after $max attempts"; exit 1
@@ -80,5 +90,5 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           [ -n "$DISCORD_WEBHOOK" ] || exit 0
-          msg="❌ Edge-function deploy FAILED on merge to main (${{ github.repository }}). A function in the repo is NOT live in prod — check before relying on it. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          msg="❌ Edge-function deploy FAILED → ${{ steps.cfg.outputs.env }} (${{ github.repository }} @ ${{ github.ref_name }}). A function is NOT live on the target — check before relying on it. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -s -X POST -H "Content-Type: application/json" -d "$(jq -Rn --arg m "$msg" '{content:$m}')" "$DISCORD_WEBHOOK" || true

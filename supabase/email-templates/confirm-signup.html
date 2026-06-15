@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Confirm your email — bert &amp; erne</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #fafaf7; }
+    table { border-spacing: 0; }
+    td { padding: 0; }
+    img { border: 0; display: block; }
+    @media only screen and (max-width: 600px) {
+      .email-wrapper { width: 100% !important; }
+      .email-body { padding: 32px 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background-color:#fafaf7;font-family:system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#fafaf7;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table class="email-wrapper" width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;width:100%;">
+
+          <!-- Wordmark header -->
+          <tr>
+            <td align="center" style="padding:0 0 28px 0;">
+              <p style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.5px;color:#14181f;line-height:1;">
+                bert <span style="color:#f3d111;">&amp;</span> erne
+              </p>
+              <p style="margin:4px 0 0;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#6b7280;">
+                pickleball tournaments
+              </p>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td class="email-body" style="background-color:#ffffff;border:1px solid #e3dec8;border-radius:12px;padding:40px 40px 36px;">
+
+              <p style="margin:0 0 8px;font-size:13px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;">
+                Email confirmation
+              </p>
+              <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#14181f;line-height:1.2;">
+                Confirm your email to finish signing up
+              </h1>
+              <p style="margin:0 0 28px;font-size:15px;color:#4a5159;line-height:1.6;">
+                You're almost there. Tap the button below to confirm your email address
+                and activate your bert &amp; erne account.
+              </p>
+
+              <!-- CTA button -->
+              <table cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td style="border-radius:8px;background-color:#14181f;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;padding:14px 28px;font-size:14px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#fafaf7;text-decoration:none;border-radius:8px;">
+                      Confirm email
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
+                This link expires in 24 hours.
+                If you didn't create a bert &amp; erne account, you can safely ignore this email.
+              </p>
+
+              <!-- Fallback URL -->
+              <p style="margin:20px 0 0;font-size:12px;color:#6b7280;line-height:1.6;">
+                Button not working? Paste this URL into your browser:<br />
+                <span style="color:#1e6cd6;word-break:break-all;">{{ .ConfirmationURL }}</span>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 0 0;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.6;">
+                bert &amp; erne &mdash; pickleball tournaments<br />
+                You received this because an account was created with this email address.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

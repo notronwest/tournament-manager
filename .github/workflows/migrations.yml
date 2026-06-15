@@ -1,18 +1,20 @@
-name: Apply DB migrations (on merge)
+name: Apply DB migrations (test on main, prod on production)
 
-# Migrations are CODE: drafted in a PR, reviewed by Ron, and applied HERE on
-# merge to main — never by an interactive session or a hand-run `db push`
+# Migrations are CODE: drafted in a PR, reviewed by Ron, applied HERE.
+#   push to `main`        → TEST Supabase project
+#   push to `production`  → PROD Supabase project (the deliberate promotion)
+# Promote test→prod by merging `main` → `production`. Never hand-run `db push`
 # (that caused drift). See supabase/MIGRATIONS.md + the WMPC migration
 # convention (../wmpc-meta/conventions/migrations.md).
 #
-# FAIL-CLOSED / INERT: if the Supabase secrets aren't set, this exits green
-# doing nothing. Turning it on requires (1) a reconciled drift baseline and
-# (2) the secrets below — see supabase/MIGRATIONS.md. Never enable on a
-# drifted database.
+# FAIL-CLOSED / INERT: if the TARGET's secrets aren't set, this exits green
+# doing nothing — so `main`→test stays inert until TEST_SUPABASE_PROJECT_REF +
+# TEST_SUPABASE_DB_PASSWORD are added. The Supabase ACCESS_TOKEN is account-
+# level (one token covers both projects).
 
 on:
   push:
-    branches: [main]
+    branches: [main, production]
     paths: ["supabase/migrations/**"]
   workflow_dispatch: {}
 
@@ -26,30 +28,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Are migration secrets configured?
+      - name: Resolve target (PROD on production branch, TEST otherwise)
         id: cfg
         env:
           TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PWD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          PROD_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          PROD_PWD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          TEST_REF: ${{ secrets.TEST_SUPABASE_PROJECT_REF }}
+          TEST_PWD: ${{ secrets.TEST_SUPABASE_DB_PASSWORD }}
         run: |
-          if [ -n "$TOKEN" ] && [ -n "$PWD" ] && [ -n "$REF" ]; then
+          if [ "$GITHUB_REF" = "refs/heads/production" ]; then
+            ENV=PROD; REF="$PROD_REF"; PW="$PROD_PWD"
+          else
+            ENV=TEST; REF="$TEST_REF"; PW="$TEST_PWD"
+          fi
+          echo "env=$ENV" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          if [ -n "$TOKEN" ] && [ -n "$REF" ] && [ -n "$PW" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "::add-mask::$PW"
+            echo "TARGET_PWD=$PW" >> "$GITHUB_ENV"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Migration secrets not set — skipping apply (expected until the pipeline is turned on; see supabase/MIGRATIONS.md)."
+            echo "::notice::$ENV migration secrets not set — skipping apply (inert)."
           fi
 
       - uses: supabase/setup-cli@v1
         if: steps.cfg.outputs.ready == 'true'
         with: { version: latest }
 
-      - name: Apply pending migrations
+      - name: Apply pending migrations to ${{ steps.cfg.outputs.env }}
         if: steps.cfg.outputs.ready == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          supabase link --project-ref "${{ secrets.SUPABASE_PROJECT_REF }}" --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
+          echo "Applying migrations to ${{ steps.cfg.outputs.env }} (${{ steps.cfg.outputs.ref }})"
+          supabase link --project-ref "${{ steps.cfg.outputs.ref }}" --password "$TARGET_PWD"
           # Plain `db push` (NOT --include-all): apply only migrations the remote
           # history hasn't recorded, in order, respecting that history.
           #
@@ -65,7 +79,7 @@ jobs:
           # and write idempotent DDL (`if not exists`, `create or replace`,
           # `drop ... if exists`). A genuine out-of-order merge fails closed
           # (Discord alert) → renumber the file or `supabase migration repair`.
-          supabase db push --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
+          supabase db push --password "$TARGET_PWD"
 
       - name: Alert on failure (fail-closed)
         if: failure() && steps.cfg.outputs.ready == 'true'
@@ -73,5 +87,5 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           [ -n "$DISCORD_WEBHOOK" ] || exit 0
-          msg="❌ DB migration FAILED on merge to main (${{ github.repository }}). Schema may be partially applied — check before further merges. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          msg="❌ DB migration FAILED → ${{ steps.cfg.outputs.env }} (${{ github.repository }} @ ${{ github.ref_name }}). Schema may be partially applied — check before further merges. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           curl -s -X POST -H "Content-Type: application/json" -d "$(jq -Rn --arg m "$msg" '{content:$m}')" "$DISCORD_WEBHOOK" || true

@@ -17,6 +17,9 @@ import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
 import CreateOrganizationPage from "./pages/admin/CreateOrganizationPage";
 import PlatformSettingsPage from "./pages/admin/PlatformSettingsPage";
+import QuotesListPage from "./pages/admin/quotes/QuotesListPage";
+import QuoteEditorPage from "./pages/admin/quotes/QuoteEditorPage";
+import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
@@ -26,6 +29,8 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
+import EstimatePage from "./pages/public/EstimatePage";
+import GettingStartedPage from "./pages/public/GettingStartedPage";
 import HomePage from "./pages/public/HomePage";
 import PrivacyPage from "./pages/public/PrivacyPage";
 import TermsPage from "./pages/public/TermsPage";
@@ -35,6 +40,7 @@ import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import TournamentContactPage from "./pages/public/TournamentContactPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import RegisterPage from "./pages/public/RegisterPage";
+import ResetPasswordPage from "./pages/public/ResetPasswordPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
@@ -60,6 +66,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Public tournament pages — anonymous-readable. RLS already
           restricts to status in (published, closed, completed). */}
@@ -162,6 +169,41 @@ export default function App() {
         element={
           <RequireAuth>
             <PlatformSettingsPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only Quote Studio. Defined before the :orgSlug
+          catch-all so "quotes" isn't treated as a slug. */}
+      <Route
+        path="/admin/quotes"
+        element={
+          <RequireAuth>
+            <QuotesListPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/quotes/catalog"
+        element={
+          <RequireAuth>
+            <CatalogAdminPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/quotes/new"
+        element={
+          <RequireAuth>
+            <QuoteEditorPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/quotes/:quoteId"
+        element={
+          <RequireAuth>
+            <QuoteEditorPage />
           </RequireAuth>
         }
       />
@@ -292,6 +334,8 @@ export default function App() {
         />
       </Route>
 
+        <Route path="/estimate" element={<EstimatePage />} />
+        <Route path="/getting-started" element={<GettingStartedPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

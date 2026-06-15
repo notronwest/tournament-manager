@@ -955,6 +955,221 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_customers: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          name: string
+          notes: string | null
+          org_name: string | null
+          phone: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          notes?: string | null
+          org_name?: string | null
+          phone?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          org_name?: string | null
+          phone?: string | null
+        }
+        Relationships: []
+      }
+      quote_line_items: {
+        Row: {
+          id: string
+          label: string
+          line_total_cents: number
+          passthrough_cost_cents: number
+          qty: number
+          revision_id: string
+          service_key: string
+          unit_price_cents: number
+        }
+        Insert: {
+          id?: string
+          label: string
+          line_total_cents: number
+          passthrough_cost_cents?: number
+          qty: number
+          revision_id: string
+          service_key: string
+          unit_price_cents: number
+        }
+        Update: {
+          id?: string
+          label?: string
+          line_total_cents?: number
+          passthrough_cost_cents?: number
+          qty?: number
+          revision_id?: string
+          service_key?: string
+          unit_price_cents?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_line_items_revision_id_fkey"
+            columns: ["revision_id"]
+            isOneToOne: false
+            referencedRelation: "quote_revisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_revisions: {
+        Row: {
+          created_at: string
+          created_by: Database["public"]["Enums"]["quote_revision_creator"]
+          estimated_net_cents: number
+          estimated_revenue_cents: number
+          id: string
+          is_current: boolean
+          notes: string | null
+          quote_id: string
+          revision_number: number
+          subtotal_cents: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: Database["public"]["Enums"]["quote_revision_creator"]
+          estimated_net_cents?: number
+          estimated_revenue_cents?: number
+          id?: string
+          is_current?: boolean
+          notes?: string | null
+          quote_id: string
+          revision_number?: number
+          subtotal_cents?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: Database["public"]["Enums"]["quote_revision_creator"]
+          estimated_net_cents?: number
+          estimated_revenue_cents?: number
+          id?: string
+          is_current?: boolean
+          notes?: string | null
+          quote_id?: string
+          revision_number?: number
+          subtotal_cents?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_revisions_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_share_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          quote_id: string
+          revoked: boolean
+          token: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          quote_id: string
+          revoked?: boolean
+          token?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          quote_id?: string
+          revoked?: boolean
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_share_tokens_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quotes: {
+        Row: {
+          additional_event_fee_cents: number
+          created_at: string
+          customer_id: string | null
+          distance_miles: number
+          event_dates: string | null
+          event_name: string | null
+          first_event_fee_cents: number
+          id: string
+          multi_event_players: number
+          num_days: number
+          num_entries: number
+          num_events: number
+          platform: Database["public"]["Enums"]["quote_platform"]
+          source: Database["public"]["Enums"]["quote_source"]
+          status: Database["public"]["Enums"]["quote_status"]
+        }
+        Insert: {
+          additional_event_fee_cents?: number
+          created_at?: string
+          customer_id?: string | null
+          distance_miles?: number
+          event_dates?: string | null
+          event_name?: string | null
+          first_event_fee_cents?: number
+          id?: string
+          multi_event_players?: number
+          num_days: number
+          num_entries?: number
+          num_events?: number
+          platform?: Database["public"]["Enums"]["quote_platform"]
+          source?: Database["public"]["Enums"]["quote_source"]
+          status?: Database["public"]["Enums"]["quote_status"]
+        }
+        Update: {
+          additional_event_fee_cents?: number
+          created_at?: string
+          customer_id?: string | null
+          distance_miles?: number
+          event_dates?: string | null
+          event_name?: string | null
+          first_event_fee_cents?: number
+          id?: string
+          multi_event_players?: number
+          num_days?: number
+          num_entries?: number
+          num_events?: number
+          platform?: Database["public"]["Enums"]["quote_platform"]
+          source?: Database["public"]["Enums"]["quote_source"]
+          status?: Database["public"]["Enums"]["quote_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "quote_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       registrations: {
         Row: {
           created_at: string
@@ -1005,6 +1220,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      service_catalog: {
+        Row: {
+          active: boolean
+          category: Database["public"]["Enums"]["service_category"]
+          created_at: string
+          id: string
+          key: string
+          name: string
+          notes: string | null
+          plus_passthrough_cost: boolean
+          sort_order: number
+          unit: Database["public"]["Enums"]["service_unit"]
+          unit_price_cents: number
+        }
+        Insert: {
+          active?: boolean
+          category: Database["public"]["Enums"]["service_category"]
+          created_at?: string
+          id?: string
+          key: string
+          name: string
+          notes?: string | null
+          plus_passthrough_cost?: boolean
+          sort_order?: number
+          unit: Database["public"]["Enums"]["service_unit"]
+          unit_price_cents: number
+        }
+        Update: {
+          active?: boolean
+          category?: Database["public"]["Enums"]["service_category"]
+          created_at?: string
+          id?: string
+          key?: string
+          name?: string
+          notes?: string | null
+          plus_passthrough_cost?: boolean
+          sort_order?: number
+          unit?: Database["public"]["Enums"]["service_unit"]
+          unit_price_cents?: number
+        }
+        Relationships: []
       }
       tournament_change_requests: {
         Row: {
@@ -1394,6 +1651,21 @@ export type Database = {
         Args: { p_reg_id: string; p_reason?: string }
         Returns: boolean
       }
+      get_quote_by_token: {
+        Args: { p_token: string }
+        Returns: Database["public"]["CompositeTypes"]["quote_share_payload"] | null
+      }
+      submit_customer_revision: {
+        Args: {
+          p_token: string
+          p_line_items: Json
+          p_subtotal_cents: number
+          p_estimated_revenue_cents: number
+          p_estimated_net_cents: number
+          p_notes?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       bracket_type:
@@ -1445,6 +1717,15 @@ export type Database = {
         | "early_bird"
         | "early_bird_plus_late"
         | "custom"
+      quote_platform: "bertanderne" | "pickleballbrackets"
+      quote_revision_creator: "public" | "admin" | "customer"
+      quote_source: "public" | "admin"
+      quote_status:
+        | "submitted"
+        | "draft"
+        | "quoted"
+        | "accepted"
+        | "declined"
       rating_source: "dupr" | "pbvision" | "wmpc_rating_hub" | "self"
       registration_status:
         | "pending_payment"
@@ -1452,6 +1733,20 @@ export type Database = {
         | "refunded"
         | "cancelled"
         | "withdrawn"
+      service_category:
+        | "core"
+        | "setup"
+        | "branding"
+        | "awards"
+        | "equipment"
+        | "media"
+      service_unit:
+        | "per_day"
+        | "per_event"
+        | "per_player"
+        | "per_entrant"
+        | "flat"
+        | "each"
       surface_type:
         | "concrete"
         | "asphalt"
@@ -1469,7 +1764,26 @@ export type Database = {
       withdrawal_decision: "approved" | "denied"
     }
     CompositeTypes: {
-      [_ in never]: never
+      quote_share_payload: {
+        quote_id: string | null
+        event_name: string | null
+        event_dates: string | null
+        num_days: number | null
+        num_events: number | null
+        num_entries: number | null
+        multi_event_players: number | null
+        distance_miles: number | null
+        platform: string | null
+        first_event_fee_cents: number | null
+        additional_event_fee_cents: number | null
+        revision_id: string | null
+        revision_number: number | null
+        revision_notes: string | null
+        subtotal_cents: number | null
+        estimated_revenue_cents: number | null
+        estimated_net_cents: number | null
+        line_items: Json | null
+      }
     }
   }
 }
@@ -1652,6 +1966,10 @@ export const Constants = {
         "early_bird_plus_late",
         "custom",
       ],
+      quote_platform: ["bertanderne", "pickleballbrackets"],
+      quote_revision_creator: ["public", "admin", "customer"],
+      quote_source: ["public", "admin"],
+      quote_status: ["submitted", "draft", "quoted", "accepted", "declined"],
       rating_source: ["dupr", "pbvision", "wmpc_rating_hub", "self"],
       registration_status: [
         "pending_payment",
@@ -1659,6 +1977,22 @@ export const Constants = {
         "refunded",
         "cancelled",
         "withdrawn",
+      ],
+      service_category: [
+        "core",
+        "setup",
+        "branding",
+        "awards",
+        "equipment",
+        "media",
+      ],
+      service_unit: [
+        "per_day",
+        "per_event",
+        "per_player",
+        "per_entrant",
+        "flat",
+        "each",
       ],
       surface_type: [
         "concrete",
