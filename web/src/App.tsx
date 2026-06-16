@@ -22,6 +22,7 @@ import QuoteEditorPage from "./pages/admin/quotes/QuoteEditorPage";
 import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
 import ContractPage from "./pages/admin/quotes/ContractPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
+import OrgDangerZonePage from "./pages/admin/OrgDangerZonePage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
 import TournamentWizardPage from "./pages/admin/TournamentWizardPage";
@@ -255,6 +256,10 @@ export default function App() {
         <Route
           path="settings/stripe"
           element={<OrgStripeSettingsPage />}
+        />
+        <Route
+          path="settings/danger"
+          element={<OrgDangerZonePage />}
         />
         <Route
           path="tools/round-robin"
