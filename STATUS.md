@@ -17,6 +17,28 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-15 — Feature: delete (soft-delete) an organization
+
+- **What:** platform-admin-only org deletion. New edge function
+  `supabase/functions/delete-organization/index.ts` (mirrors
+  `create-organization`'s auth shape): verifies caller is in `platform_admins`
+  server-side, soft-deletes the org (`deleted_at`), cascades `deleted_at` to its
+  tournaments (public pages all filter `deleted_at is null`, so registration/
+  detail pages stop serving; children hide transitively), writes an `audit_log`
+  row. Soft delete is the only option — `tournaments`/`registrations` FK with
+  `on delete restrict`.
+- **UI:** new `OrgDangerZonePage` at `/admin/:orgSlug/settings/danger`
+  (platform-admin gated; type-the-org-name to enable + final `ConfirmModal`;
+  redirects to `/admin` on success). Route in `App.tsx`; "Danger zone" sidebar
+  link in `AdminLayout` shown only when `isPlatformAdmin === true`.
+- **Decisions (Ron):** platform-admins only · cascade-hide tournaments · danger-
+  zone placement. RLS left unchanged — `"orgs update by admins"` still lets an
+  org admin set `deleted_at` via raw client UPDATE (pre-existing); our flow is
+  platform-admin-only via the function. Tightening it is a separate call.
+- **Verified:** build ✓, typecheck ✓, lint ✓.
+- 🔜 **Manual per env (Ron):** `supabase functions deploy delete-organization`
+  — CI does NOT deploy functions.
+
 ## 2026-06-15 — UX: paired-roles reg shows why Save is disabled
 
 - **What:** on a paired-roles doubles event, picking a partner without choosing
