@@ -62,11 +62,13 @@ export default function AdminIndexPage() {
         .map((row) => row.organizations)
         .filter((o): o is OrgSummary => !!o);
 
-      setOrgs(list);
-
       // Platform admins also see every other org as an
       // override-access section (so they can walk into any org from
-      // the picker without typing the slug).
+      // the picker without typing the slug). Resolve this BEFORE
+      // setting `orgs` so the empty-state guard below sees both lists
+      // at once — otherwise a platform admin with no explicit
+      // memberships flashes (or sticks on) the "No organizations"
+      // screen even though there are override orgs to show.
       if (isPlatformAdmin) {
         const memberSlugs = new Set(list.map((o) => o.slug));
         const { data: allOrgs } = await supabase
@@ -80,6 +82,8 @@ export default function AdminIndexPage() {
         );
         setOverrideOrgs(others);
       }
+
+      setOrgs(list);
 
       if (list.length === 1 && !isPlatformAdmin) {
         navigate(`/admin/${list[0].slug}`, { replace: true });
@@ -114,7 +118,7 @@ export default function AdminIndexPage() {
     );
   }
 
-  if (orgs.length === 0) {
+  if (orgs.length === 0 && overrideOrgs.length === 0) {
     return (
       <main style={pageStyle}>
         <div style={colStyle}>

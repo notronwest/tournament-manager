@@ -414,6 +414,12 @@ export default function AdminLayout() {
           <SideLink to={`/admin/${org.slug}/settings/stripe`} onNavigate={closeDrawer}>
             Stripe Connect
           </SideLink>
+          {/* Org deletion is a platform-admin-only destructive action. */}
+          {isPlatformAdmin === true && (
+            <SideLink to={`/admin/${org.slug}/settings/danger`} onNavigate={closeDrawer}>
+              Danger zone
+            </SideLink>
+          )}
         </nav>
       </aside>
 

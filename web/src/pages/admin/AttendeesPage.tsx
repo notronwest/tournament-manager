@@ -123,7 +123,7 @@ function partnerBadge(ps: PartnerStatus) {
 
 function formatEventLabel(e: EventData) {
   const g =
-    { men: "Men's", women: "Women's", mixed: "Mixed" }[e.gender] ?? e.gender;
+    { men: "Men's", women: "Women's", mixed: "Mixed", open: "Open" }[e.gender] ?? e.gender;
   const f =
     { singles: "Singles", doubles: "Doubles" }[e.format] ?? e.format;
   return `${g} ${f}`;

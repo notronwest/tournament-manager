@@ -20,7 +20,9 @@ import PlatformSettingsPage from "./pages/admin/PlatformSettingsPage";
 import QuotesListPage from "./pages/admin/quotes/QuotesListPage";
 import QuoteEditorPage from "./pages/admin/quotes/QuoteEditorPage";
 import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
+import ContractPage from "./pages/admin/quotes/ContractPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
+import OrgDangerZonePage from "./pages/admin/OrgDangerZonePage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
 import TournamentWizardPage from "./pages/admin/TournamentWizardPage";
@@ -29,6 +31,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
+import CustomerQuotePage from "./pages/public/CustomerQuotePage";
 import EstimatePage from "./pages/public/EstimatePage";
 import GettingStartedPage from "./pages/public/GettingStartedPage";
 import HomePage from "./pages/public/HomePage";
@@ -207,6 +210,14 @@ export default function App() {
           </RequireAuth>
         }
       />
+      <Route
+        path="/admin/quotes/:quoteId/contract/:contractId"
+        element={
+          <RequireAuth>
+            <ContractPage />
+          </RequireAuth>
+        }
+      />
 
       {/* Stripe Connect OAuth callback. Fixed path (no org slug) so a
           single redirect_uri can be registered in Stripe Connect
@@ -245,6 +256,10 @@ export default function App() {
         <Route
           path="settings/stripe"
           element={<OrgStripeSettingsPage />}
+        />
+        <Route
+          path="settings/danger"
+          element={<OrgDangerZonePage />}
         />
         <Route
           path="tools/round-robin"
@@ -338,6 +353,8 @@ export default function App() {
         <Route path="/getting-started" element={<GettingStartedPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        {/* Customer quote view — public, token-gated, no auth required */}
+        <Route path="/q/:token" element={<CustomerQuotePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {/* Persistent pending-payments bar — sticky at the bottom of
