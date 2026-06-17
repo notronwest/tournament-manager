@@ -17,6 +17,15 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Fix: login signup tab mislabeled (PR #357)
+
+Follow-up to #355: the third `/login` tab read "New password" while that mode's
+heading + submit button both say "Create account" — confusing arriving from the
+new CTA. Relabeled the tab to "Create account" so all three agree
+([LoginPage.tsx](web/src/auth/LoginPage.tsx), branch `fix/login-signup-tab-label`).
+Verified in preview. 🔜 Ron: merge #357 (then promote — #355's CTA already shipped
+to prod, so this completes it).
+
 ## 2026-06-17 — Getting Started: top "create an account" CTA (PR #355)
 
 `/getting-started` now leads with a prominent **Create your free account** CTA
