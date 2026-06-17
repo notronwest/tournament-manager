@@ -22,15 +22,25 @@
       <td align="center">
         <table class="email-wrapper" width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;width:100%;">
 
-          <!-- Wordmark header -->
+          <!-- Wordmark header — dark band w/ the site brush logo. Email
+               clients don't render SVG, so this is a hosted PNG (rendered
+               from web/src/assets/bert-and-erne-brush-mark.svg via
+               scripts/render-email-logo.mjs). The cream logo needs the dark
+               band to read, matching the site navbar. -->
           <tr>
             <td align="center" style="padding:0 0 28px 0;">
-              <p style="margin:0;font-size:28px;font-weight:700;letter-spacing:-0.5px;color:#14181f;line-height:1;">
-                bert <span style="color:#f3d111;">&amp;</span> erne
-              </p>
-              <p style="margin:4px 0 0;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#6b7280;">
-                pickleball tournaments
-              </p>
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#14181f;border-radius:12px;">
+                <tr>
+                  <td align="center" style="padding:22px 20px;">
+                    <a href="https://bertanderne.com" style="text-decoration:none;">
+                      <img src="https://bertanderne.com/email/logo@2x.png"
+                           alt="bert &amp; erne — pickleball tournaments"
+                           width="240" height="37"
+                           style="display:block;width:240px;height:37px;border:0;" />
+                    </a>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
