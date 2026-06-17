@@ -370,7 +370,7 @@ export default function LoginPage() {
                     ? "Get started"
                     : m === "signin"
                       ? "Sign in"
-                      : "New password"}
+                      : "Create account"}
                 </button>
               );
             })}
