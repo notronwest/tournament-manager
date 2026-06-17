@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   contentColStyle,
+  ctaPrimaryStyle,
   ink,
   inkSoft,
   pageH1Style,
@@ -11,9 +12,11 @@ import {
   rule,
   sectionH2Style,
 } from "../../lib/publicTheme";
+import { useAuth } from "../../auth/AuthProvider";
 import SiteFooter from "../../components/SiteFooter";
 
 export default function GettingStartedPage() {
+  const { user } = useAuth();
   return (
     <div style={pageWrapStyle}>
       <div style={contentColStyle(760)}>
@@ -22,6 +25,49 @@ export default function GettingStartedPage() {
           bert &amp; erne is the pickleball tournament platform — find events,
           register, pay, and track your results, all in one place.
         </p>
+
+        {/* Top sign-up CTA. The fastest path to an account for a first-time
+            visitor; deep-links to /login's signup form (the single source of
+            auth truth — no duplicated auth UI here). Swaps to a "you're signed
+            in" note once authenticated. */}
+        {user ? (
+          <div style={ctaCardStyle}>
+            <p style={{ ...bodyStyle, margin: 0 }}>
+              You&rsquo;re signed in.{" "}
+              <Link to="/" style={inlineLinkStyle}>
+                Browse tournaments &rarr;
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <div style={ctaCardStyle}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <h2 style={{ ...sectionH2Style, margin: "0 0 6px" }}>
+                Create your free account
+              </h2>
+              <p style={{ ...bodyStyle, margin: 0 }}>
+                Sign up in seconds to register for tournaments, invite a
+                partner, and track your results.
+              </p>
+            </div>
+            <div style={ctaActionsStyle}>
+              <Link
+                to="/login"
+                state={{ mode: "signup" }}
+                style={ctaPrimaryStyle}
+              >
+                Create account
+              </Link>
+              <Link
+                to="/login"
+                state={{ mode: "signin" }}
+                style={ctaSignInStyle}
+              >
+                Already have an account? Sign in
+              </Link>
+            </div>
+          </div>
+        )}
 
         <Section title="For Players">
           <p style={bodyStyle}>
@@ -103,6 +149,29 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 function Divider() {
   return <hr style={dividerStyle} />;
 }
+
+const ctaCardStyle: CSSProperties = {
+  ...panelStyle,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 20,
+  flexWrap: "wrap",
+  marginBottom: 28,
+};
+
+const ctaActionsStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: 8,
+};
+
+const ctaSignInStyle: CSSProperties = {
+  fontSize: 13,
+  color: inkSoft,
+  textDecoration: "underline",
+};
 
 const sectionStyle: CSSProperties = {
   marginBottom: 8,
