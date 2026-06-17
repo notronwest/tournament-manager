@@ -53,7 +53,7 @@ export default function GettingStartedPage() {
             <div style={ctaActionsStyle}>
               <Link
                 to="/login"
-                state={{ mode: "signup" }}
+                state={{ mode: "magic" }}
                 style={ctaPrimaryStyle}
               >
                 Create account

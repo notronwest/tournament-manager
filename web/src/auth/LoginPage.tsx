@@ -318,20 +318,20 @@ export default function LoginPage() {
               lineHeight: 1.15,
             }}
           >
-            {mode === "magic"
-              ? "Get started"
-              : mode === "signin"
-                ? "Sign in"
-                : mode === "forgot"
-                  ? "Reset password"
-                  : "Create account"}
+            {mode === "signin"
+              ? "Sign in"
+              : mode === "forgot"
+                ? "Reset password"
+                : "Create account"}
           </h1>
           <p style={{ margin: "0 0 20px", color: inkSoft, fontSize: 13, lineHeight: 1.5 }}>
             {mode === "forgot"
               ? "Enter your email and we’ll send you a reset link."
               : isPublicFlow
                 ? "Sign in or get started — we just need to know who you are before you register."
-                : "Sign in to manage tournaments."}
+                : mode === "signin"
+                  ? "Sign in to manage tournaments."
+                  : "Create your free account — register for tournaments and track your results."}
           </p>
 
           {/* Segmented control — hidden in forgot mode */}
@@ -349,31 +349,37 @@ export default function LoginPage() {
               marginBottom: 18,
             }}
           >
-            {(["magic", "signin", "signup"] as const).map((m) => {
-              const active = mode === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => {
-                    setMode(m);
-                    setError(null);
-                    setMagicSent(false);
-                    setSignupPending(false);
-                    setResetSent(false);
-                  }}
-                  style={segTabStyle(active)}
-                >
-                  {m === "magic"
-                    ? "Get started"
-                    : m === "signin"
-                      ? "Sign in"
-                      : "Create account"}
-                </button>
-              );
-            })}
+            {/* Two tabs by intent, not method: "Create account" (new users —
+                magic-link first, password optional) and "Sign in" (returning).
+                The magic-vs-password choice lives inside the create-account
+                form, not as its own tab. */}
+            {(
+              [
+                {
+                  label: "Create account",
+                  target: "magic",
+                  active: mode === "magic" || mode === "signup",
+                },
+                { label: "Sign in", target: "signin", active: mode === "signin" },
+              ] as const
+            ).map((t) => (
+              <button
+                key={t.target}
+                type="button"
+                role="radio"
+                aria-checked={t.active}
+                onClick={() => {
+                  setMode(t.target);
+                  setError(null);
+                  setMagicSent(false);
+                  setSignupPending(false);
+                  setResetSent(false);
+                }}
+                style={segTabStyle(t.active)}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
           )}
 
@@ -489,6 +495,26 @@ export default function LoginPage() {
                         ? "Send reset link"
                         : "Create account"}
               </button>
+
+              {/* Magic-vs-password toggle within the create-account flow. */}
+              {mode === "magic" && (
+                <button
+                  type="button"
+                  onClick={() => { setMode("signup"); setError(null); }}
+                  style={toggleLinkStyle}
+                >
+                  Prefer to set a password?
+                </button>
+              )}
+              {mode === "signup" && (
+                <button
+                  type="button"
+                  onClick={() => { setMode("magic"); setError(null); }}
+                  style={toggleLinkStyle}
+                >
+                  ← Email me a link instead (no password)
+                </button>
+              )}
             </form>
           )}
 
@@ -612,6 +638,19 @@ function segTabStyle(active: boolean): CSSProperties {
     textAlign: "center",
   };
 }
+
+const toggleLinkStyle: CSSProperties = {
+  background: "none",
+  border: "none",
+  color: inkMuted,
+  fontSize: 12,
+  cursor: "pointer",
+  fontFamily: bodyFontStack,
+  textDecoration: "underline",
+  padding: 0,
+  textAlign: "center",
+  marginTop: -2,
+};
 
 const inputFieldStyle: CSSProperties = {
   padding: "10px 12px",
