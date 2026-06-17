@@ -17,14 +17,29 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Login: two tabs by intent, magic-first signup (PR #359)
+
+Even after #357 the labels confused — "Get started" (magic) and "Create account"
+(password) were **both** new-account paths shown as separate tabs. Reworked
+`/login` to **two tabs by intent**: "Create account" (new) and "Sign in"
+(returning). The Create account tab leads with the magic link (no password) +
+Google, and a "Prefer to set a password?" toggle swaps to the password sub-form
+(and back) without leaving the tab. Heading/subtitle now mode-aware; the
+`/getting-started` CTA deep-links to the magic-first create-account view
+(`{ mode: "magic" }`). Internal modes unchanged (`magic`/`signin`/`signup`/`forgot`)
+— only the tab grouping + a method toggle. Verified in preview (CTA → magic-first
+Create account; password toggle keeps the tab active; Sign in keeps password +
+Forgot); typecheck + lint clean. Branch `feat/login-two-tabs`. 🔜 Ron: merge #359
+(then promote — completes the /getting-started signup flow).
+
 ## 2026-06-17 — Fix: login signup tab mislabeled (PR #357)
 
 Follow-up to #355: the third `/login` tab read "New password" while that mode's
 heading + submit button both say "Create account" — confusing arriving from the
 new CTA. Relabeled the tab to "Create account" so all three agree
 ([LoginPage.tsx](web/src/auth/LoginPage.tsx), branch `fix/login-signup-tab-label`).
-Verified in preview. 🔜 Ron: merge #357 (then promote — #355's CTA already shipped
-to prod, so this completes it).
+Verified in preview. **Merged (#357) + promoted to production** (PR #358, `dee0dda`) —
+UI-only. Completes the /getting-started "Create account" flow end to end in prod.
 
 ## 2026-06-17 — Getting Started: top "create an account" CTA (PR #355)
 
