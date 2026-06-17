@@ -17,6 +17,39 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Getting Started: top "create an account" CTA (PR #355)
+
+`/getting-started` now leads with a prominent **Create your free account** CTA
+(branch `feat/getting-started-signup-cta`). Deep-links to `/login` with
+`state={ mode: "signup" }` so visitors land directly on the signup form (Google +
+email both there) — no duplicated auth UI. `LoginPage` now honors an explicit
+initial mode from navigation state (falls back to the public-flow/signin defaults).
+Swaps to a "you're signed in → browse tournaments" note when authed. Verified in
+preview (renders, deep-link hits signup form, no console errors); typecheck + lint
+clean. 🔜 Ron: merge #355.
+
+## 2026-06-17 — 🚀 Prod promotions + branded auth emails (recovered front-door note)
+
+Today's prod work (the STATUS entries were written to an un-pushed local checkout and
+didn't reach `origin/main`; durable record is the merged PRs — recapped here):
+
+- **Promoted to production (PR #352, `fd51939`):** paired-roles P1 (#337), Quote
+  Studio P4 (#315), org soft-delete (#351) + fixes. Applied 2 migrations to PROD
+  (`quote_studio_p4`, `paired_roles_events`) — verified green.
+- **Branded auth emails (#303) — chosen path: Resend as Supabase SMTP.** Templates
+  (`supabase/email-templates/`) get pasted into Supabase → Auth → Email Templates
+  (both projects); Resend is just the SMTP relay (`smtp.resend.com:465`). App emails
+  already send via the Resend **API** in 6 edge functions.
+- **Email logo now matches the site (PR #353 → prod via PR #354, `2a66e66`).** Dark-band
+  brush wordmark; PNG rendered from `bert-and-erne-brush-mark.svg` via
+  `scripts/render-email-logo.mjs` → `web/public/email/logo@2x.png`, live at
+  `https://bertanderne.com/email/logo@2x.png` (200 image/png).
+- 🔜 **Ron (dashboard):** configure Resend SMTP + paste templates in both Supabase
+  projects, then send a test. **Open caveat:** Supabase's preview pane shows the logo
+  broken (dashboard CSP blocks the remote image in-preview) — verify via a real send,
+  not the preview. If the real inbox also shows it broken, the `@` in `logo@2x.png` is
+  the cause → rename to `logo.png` + redeploy.
+
 ## 2026-06-15 — Feature: delete (soft-delete) an organization
 
 - **What:** platform-admin-only org deletion. New edge function
