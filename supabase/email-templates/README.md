@@ -43,7 +43,22 @@ needed; Supabase substitutes it at send time.
   `#6b7280` muted text, `#1e6cd6` link color.
 - Table-based layout for broad email-client compatibility.
 - System font stack (web fonts do not load reliably in email clients).
-- The wordmark is rendered as styled text rather than an SVG image;
-  email clients have inconsistent SVG support.
+- The header is the **site brush wordmark** on a dark `#14181f` band —
+  the same cream-on-dark lockup the site navbar uses. Email clients don't
+  render SVG, so it's a hosted **PNG**, not the SVG.
 - All critical styles are inline; the `<style>` block covers only the
   responsive media query (which degrades gracefully if stripped).
+
+## Logo asset
+
+- Source: `web/src/assets/bert-and-erne-brush-mark.svg` (cream + yellow,
+  built for dark surfaces — hence the dark band in the email).
+- Rendered to `web/public/email/logo@2x.png` (480×74, displayed at 240×37)
+  by `scripts/render-email-logo.mjs`. Re-run after any logo change:
+  `node scripts/render-email-logo.mjs` (needs `@resvg/resvg-js`, a
+  devDependency of `web/`).
+- Served as a static asset at **`https://bertanderne.com/email/logo@2x.png`**
+  once `web/public/` is deployed to prod. The templates reference that
+  absolute prod URL so both the test and prod projects load the same
+  always-available image. **The asset must be live in prod before pasting
+  the updated templates**, or the logo 404s in sent mail.
