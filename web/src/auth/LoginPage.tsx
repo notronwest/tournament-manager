@@ -58,7 +58,14 @@ export default function LoginPage() {
   // typed /login directly defaults to the password form because they
   // probably already have one.
   const isPublicFlow = from.startsWith("/t/");
-  const [mode, setMode] = useState<Mode>(isPublicFlow ? "magic" : "signin");
+  // An explicit initial mode can be passed via navigation state — e.g. the
+  // "Create your account" CTA on /getting-started sends { mode: "signup" } so
+  // the visitor lands directly on the account-creation form. Falls back to the
+  // public-flow magic-link default, otherwise the signin form.
+  const requestedMode = (location.state as { mode?: Mode } | null)?.mode;
+  const [mode, setMode] = useState<Mode>(
+    requestedMode ?? (isPublicFlow ? "magic" : "signin"),
+  );
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
