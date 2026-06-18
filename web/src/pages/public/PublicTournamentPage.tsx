@@ -658,25 +658,20 @@ export default function PublicTournamentPage() {
             }
           />
           {regFeeCents > 0 && (
-            <div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
               <div
                 style={{
-                  fontFamily: monoFontStack,
-                  fontSize: 11,
-                  color: inkMuted,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.18em",
+                  fontFamily: displayFontStack,
+                  fontSize: 30,
                   fontWeight: 700,
-                  marginBottom: 2,
+                  color: ink,
+                  lineHeight: 1.0,
                 }}
               >
-                Cost
+                ${(regFeeCents / 100).toFixed(0)}
               </div>
-              <div style={{ fontSize: 15, color: ink }}>
-                ${(regFeeCents / 100).toFixed(0)}{" "}
-                <span style={{ color: inkSoft, fontSize: 13 }}>
-                  · includes 1 event
-                </span>
+              <div style={{ fontSize: 13, color: inkSoft, marginTop: 3 }}>
+                to register · includes 1 event
               </div>
               {additionalFeeCents > 0 && (
                 <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
@@ -713,6 +708,8 @@ export default function PublicTournamentPage() {
                     textDecoration: "underline",
                     textUnderlineOffset: 2,
                     display: "block",
+                    width: "100%",
+                    textAlign: "right",
                   }}
                 >
                   {pricingExpanded
