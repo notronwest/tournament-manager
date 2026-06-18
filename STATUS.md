@@ -17,6 +17,20 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — All tournament details under Details tab; Edit → wizard (PR #381)
+
+Two asks. **(1) Public page:** removed the description + when/where/venue meta from
+the header (slim name + status + contact hero now) and moved them to the top of the
+**Details** tab. Pricing/window stays the persistent header. **(2) Admin:** the
+tournament "Edit" link (+ the "choose a venue" link) now opens the setup **wizard**
+(all steps) instead of the basic `TournamentFormPage` `/edit`. Safe for published
+tournaments — the wizard resume `payload` has no `status` (won't revert to draft)
+and pricing locks on active regs. `/edit` route/`TournamentFormPage` still exists
+but is now unlinked (candidate to retire later). Verified live (public: header
+slimmed, Details shows description/meta, Register unchanged, no console errors);
+typecheck clean. Branch `feat/tournament-details-to-tab-edit-wizard`. 🔜 Ron: merge
+#381 (test only, still holding prod per earlier).
+
 ## 2026-06-18 — Tournament page: price/window header persistent across tabs (PR #380)
 
 Follow-up to #379. Moved the pricing + registration-window panel out of the Details
@@ -24,8 +38,9 @@ tab to a **persistent header above the tab bar** — cost/opening time now shows
 both Details and Register. Details holds the info sections only now (+ a "No
 additional details have been posted yet" empty state). Verified live (price on both
 tabs, events under Register, no console errors); typecheck clean. Branch
-`feat/tournament-tabs-persistent-price`. 🔜 Ron: merge #380 (still holding prod
-promotion per earlier call — both #379 + #380 on test only).
+`feat/tournament-tabs-persistent-price`. **Merged to main (#380, `d5d16cf`) — NOT
+promoted** (both #379 + #380 on test only; prod 6 behind). 🔜 Ron: review tabs +
+persistent header on test, then promote when ready.
 
 ## 2026-06-18 — Public tournament page split into Details / Register tabs (PR #379)
 
