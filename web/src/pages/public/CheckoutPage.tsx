@@ -113,6 +113,10 @@ export default function CheckoutPage() {
   const [creatingIntent, setCreatingIntent] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // The structured error code behind paymentError (null for Stripe-element
+  // errors). Lets us make specific failures actionable — e.g. an
+  // org_stripe_not_active offers a prefilled "message the organizer" link.
+  const [paymentErrorCode, setPaymentErrorCode] = useState<string | null>(null);
   // Set when Stripe returns a card-error / decline. Shows a dedicated
   // "payment declined" panel instead of the inline error banner.
   const [paymentDeclined, setPaymentDeclined] = useState<string | null>(null);
@@ -414,6 +418,7 @@ export default function CheckoutPage() {
   const startPayment = async () => {
     if (!tournament || rows.length === 0) return;
     setPaymentError(null);
+    setPaymentErrorCode(null);
     setCreatingIntent(true);
     const { data, error: fnErr } = await supabase.functions.invoke(
       "create-payment-intent",
@@ -442,6 +447,7 @@ export default function CheckoutPage() {
       // to user-safe copy; never surface the raw SDK/Stripe string.
       const code = await readEdgeErrorCode(fnErr, data);
       setPaymentError(paymentErrorMessage(code));
+      setPaymentErrorCode(code);
       return;
     }
     setClientSecret(cs);
@@ -857,6 +863,25 @@ export default function CheckoutPage() {
               }}
             >
               {paymentError}
+              {/* org_stripe_not_active is the organizer's to fix — give the
+                  player a one-click way to flag it, prefilled with the
+                  tournament + the problem so they don't have to explain. */}
+              {paymentErrorCode === "org_stripe_not_active" && (
+                <div style={{ marginTop: 8 }}>
+                  <Link
+                    to={`/t/${orgSlug}/${tournamentSlug}/contact?message=${encodeURIComponent(
+                      `Hi — I tried to pay for my registration in "${tournament?.name ?? "your tournament"}" but online payments aren't set up yet, so checkout wouldn't go through. Could you help me get registered?`,
+                    )}`}
+                    style={{
+                      fontWeight: 600,
+                      color: ink,
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Message the organizer about this →
+                  </Link>
+                </div>
+              )}
             </div>
           )}
 
@@ -984,11 +1009,15 @@ export default function CheckoutPage() {
                   totalCents={payableCents}
                   finalizing={finalizing}
                   onConfirmed={() => void onConfirmed()}
-                  onPaymentError={setPaymentError}
+                  onPaymentError={(m) => {
+                    setPaymentError(m);
+                    setPaymentErrorCode(null);
+                  }}
                   onPaymentDeclined={setPaymentDeclined}
                   onCancel={() => {
                     setClientSecret(null);
                     setPaymentError(null);
+                    setPaymentErrorCode(null);
                     setPaymentDeclined(null);
                   }}
                 />
