@@ -17,6 +17,31 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Branded auth-email links (no more supabase.co) — PR #361
+
+Auth email links pointed at `wducsjqyoksmluwfgjxc.supabase.co/auth/v1/verify…`
+— a stranger's domain that reads as phishing/spam (Resend SMTP does NOT fix this;
+SMTP is delivery, the link is Supabase's). Chose the free branded-route fix
+(Option A) over the paid Supabase custom-domain add-on.
+
+- All 3 templates now link to `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=<t>&next={{ .RedirectTo }}`
+  (`<t>` = signup / magiclink / recovery).
+- New `web/src/pages/public/AuthConfirmPage.tsx` (`/auth/confirm`) runs
+  `supabase.auth.verifyOtp({ type, token_hash })` → forwards to `next`
+  (same-origin sanitized; recovery → `/reset-password?recovery=1`).
+  `ResetPasswordPage` honors that flag alongside the implicit-flow hash.
+- `{{ .SiteURL }}` resolves per project, so prod links use `bertanderne.com`,
+  test uses `test.bertanderne.com` — **each project's Site URL must be correct.**
+- Verified in preview: missing-params + invalid-token error states round-trip
+  against Supabase; route wired. Couldn't test a *valid* token locally (needs a
+  real email) — **the live test-send is the real check.** Typecheck + lint clean.
+  Branch `feat/branded-auth-links`.
+
+🔜 Ron: merge #361 → promote (so `/auth/confirm` is live in prod before the
+links reference it) → re-paste the 3 updated templates → send a real test of
+each (signup, magic, reset) and confirm the link shows bertanderne.com AND the
+click actually signs you in / resets.
+
 ## 2026-06-17 — Login: two tabs by intent, magic-first signup (PR #359)
 
 Even after #357 the labels confused — "Get started" (magic) and "Create account"
@@ -29,8 +54,9 @@ Google, and a "Prefer to set a password?" toggle swaps to the password sub-form
 (`{ mode: "magic" }`). Internal modes unchanged (`magic`/`signin`/`signup`/`forgot`)
 — only the tab grouping + a method toggle. Verified in preview (CTA → magic-first
 Create account; password toggle keeps the tab active; Sign in keeps password +
-Forgot); typecheck + lint clean. Branch `feat/login-two-tabs`. 🔜 Ron: merge #359
-(then promote — completes the /getting-started signup flow).
+Forgot); typecheck + lint clean. **Merged (#359) + promoted to production**
+(PR #360, `df07b5c`) — UI-only. The /getting-started → signup flow is now clean
+end to end in prod.
 
 ## 2026-06-17 — Fix: login signup tab mislabeled (PR #357)
 
