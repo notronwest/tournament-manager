@@ -638,81 +638,8 @@ export default function PublicTournamentPage() {
         >
           {tournament.name}
         </h1>
-        {tournament.description && (
-          <p
-            style={{
-              color: inkSoft,
-              margin: "0 0 16px",
-              fontSize: 15,
-              lineHeight: 1.55,
-              maxWidth: 580,
-            }}
-          >
-            {tournament.description}
-          </p>
-        )}
-        <div
-          style={{
-            display: "flex",
-            gap: 24,
-            flexWrap: "wrap",
-          }}
-        >
-          <Meta
-            label="When"
-            value={`${fmtDate(tournament.starts_at)} – ${fmtDate(tournament.ends_at)}`}
-          />
-          {(tournament.locations ?? tournament.location_name) && (
-            <Meta
-              label="Where"
-              value={(() => {
-                if (tournament.locations) {
-                  const addrStr = composeLocationAddress(tournament.locations);
-                  return addrStr
-                    ? `${tournament.locations.name} · ${addrStr}`
-                    : tournament.locations.name;
-                }
-                return tournament.location_address
-                  ? `${tournament.location_name} · ${tournament.location_address}`
-                  : tournament.location_name!;
-              })()}
-            />
-          )}
-          {tournament.locations?.court_count != null && (
-            <Meta label="Courts" value={String(tournament.locations.court_count)} />
-          )}
-          {tournament.locations?.net_type && (
-            <Meta label="Nets" value={tournament.locations.net_type === "permanent" ? "Permanent" : "Moveable"} />
-          )}
-          {tournament.locations?.surface_type && (
-            <Meta
-              label="Surface"
-              value={
-                tournament.locations.surface_type === "concrete" ? "Concrete"
-                : tournament.locations.surface_type === "asphalt" ? "Asphalt"
-                : tournament.locations.surface_type === "cushion_core" ? "Cushion Core"
-                : tournament.locations.surface_type === "hardwood" ? "Hardwood"
-                : tournament.locations.surface_type === "polycarbonate" ? "Polycarbonate"
-                : tournament.locations.surface_type === "polyurethane" ? "Polyurethane"
-                : tournament.locations.surface_notes
-                  ? `Other (${tournament.locations.surface_notes})`
-                  : "Other"
-              }
-            />
-          )}
-          {(tournament.locations?.ceiling_height_min_ft != null || tournament.locations?.ceiling_height_max_ft != null) && (
-            <Meta
-              label="Ceiling"
-              value={
-                tournament.locations!.ceiling_height_min_ft != null && tournament.locations!.ceiling_height_max_ft != null
-                  ? `${tournament.locations!.ceiling_height_min_ft}–${tournament.locations!.ceiling_height_max_ft} ft`
-                  : tournament.locations!.ceiling_height_max_ft != null
-                    ? `${tournament.locations!.ceiling_height_max_ft} ft`
-                    : `${tournament.locations!.ceiling_height_min_ft} ft min`
-              }
-            />
-          )}
-        </div>
+        {/* Description + when/where/venue meta now live under the Details
+            tab (the header is just the name + status). */}
         <span
           style={{
             position: "absolute",
@@ -1113,19 +1040,84 @@ export default function PublicTournamentPage() {
 
       {tab === "details" && (
       <>
-      {/* Empty state — pricing/window now live in the persistent header, so
-          the Details tab is just the info sections; show a note if none. */}
-      {!tournament.cancellation_policy_preset &&
-        !tournament.refund_policy_md &&
-        !tournament.weather_md &&
-        !tournament.facility_info_md &&
-        !tournament.additional_info_md &&
-        !tournament.sponsors_md &&
-        !tournament.faqs_md && (
-          <p style={{ color: inkMuted, fontSize: 14, margin: 0 }}>
-            No additional details have been posted yet.
-          </p>
+      {/* Description + when/where/venue — moved here from the header so all
+          of the tournament's details live under the Details tab. */}
+      {tournament.description && (
+        <p
+          style={{
+            color: inkSoft,
+            margin: "0 0 24px",
+            fontSize: 15,
+            lineHeight: 1.6,
+            maxWidth: 640,
+          }}
+        >
+          {tournament.description}
+        </p>
+      )}
+      <div
+        style={{
+          display: "flex",
+          gap: 24,
+          flexWrap: "wrap",
+          marginBottom: 28,
+        }}
+      >
+        <Meta
+          label="When"
+          value={`${fmtDate(tournament.starts_at)} – ${fmtDate(tournament.ends_at)}`}
+        />
+        {(tournament.locations ?? tournament.location_name) && (
+          <Meta
+            label="Where"
+            value={(() => {
+              if (tournament.locations) {
+                const addrStr = composeLocationAddress(tournament.locations);
+                return addrStr
+                  ? `${tournament.locations.name} · ${addrStr}`
+                  : tournament.locations.name;
+              }
+              return tournament.location_address
+                ? `${tournament.location_name} · ${tournament.location_address}`
+                : tournament.location_name!;
+            })()}
+          />
         )}
+        {tournament.locations?.court_count != null && (
+          <Meta label="Courts" value={String(tournament.locations.court_count)} />
+        )}
+        {tournament.locations?.net_type && (
+          <Meta label="Nets" value={tournament.locations.net_type === "permanent" ? "Permanent" : "Moveable"} />
+        )}
+        {tournament.locations?.surface_type && (
+          <Meta
+            label="Surface"
+            value={
+              tournament.locations.surface_type === "concrete" ? "Concrete"
+              : tournament.locations.surface_type === "asphalt" ? "Asphalt"
+              : tournament.locations.surface_type === "cushion_core" ? "Cushion Core"
+              : tournament.locations.surface_type === "hardwood" ? "Hardwood"
+              : tournament.locations.surface_type === "polycarbonate" ? "Polycarbonate"
+              : tournament.locations.surface_type === "polyurethane" ? "Polyurethane"
+              : tournament.locations.surface_notes
+                ? `Other (${tournament.locations.surface_notes})`
+                : "Other"
+            }
+          />
+        )}
+        {(tournament.locations?.ceiling_height_min_ft != null || tournament.locations?.ceiling_height_max_ft != null) && (
+          <Meta
+            label="Ceiling"
+            value={
+              tournament.locations!.ceiling_height_min_ft != null && tournament.locations!.ceiling_height_max_ft != null
+                ? `${tournament.locations!.ceiling_height_min_ft}–${tournament.locations!.ceiling_height_max_ft} ft`
+                : tournament.locations!.ceiling_height_max_ft != null
+                  ? `${tournament.locations!.ceiling_height_max_ft} ft`
+                  : `${tournament.locations!.ceiling_height_min_ft} ft min`
+            }
+          />
+        )}
+      </div>
       {/* Refund policy — combines cancellation preset (mechanism) with
           refund_policy_md (the organizer's copy). Show if either is set. */}
       {(tournament.cancellation_policy_preset || tournament.refund_policy_md) && (
