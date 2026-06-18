@@ -219,6 +219,11 @@ export default function PublicTournamentPage() {
   // users can dig in on demand.
   const [pricingExpanded, setPricingExpanded] = useState(false);
 
+  // Public page is split into tabs (Details first, then Register). Built to
+  // grow — Schedule / Results land here later. Details = pricing + the info
+  // sections; Register = the events list (+ inbound-invite banner).
+  const [tab, setTab] = useState<"details" | "register">("details");
+
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
   // inline register/cancel handlers after a write, so the UI stays
@@ -511,6 +516,14 @@ export default function PublicTournamentPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [reload]);
 
+  // Open every tournament on Details first. The component instance persists
+  // across /t/:slug navigations, so without this the tab would carry over
+  // from the previous tournament.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTab("details");
+  }, [orgSlug, tournamentSlug]);
+
   if (loading) {
     return (
       <Shell>
@@ -764,6 +777,55 @@ export default function PublicTournamentPage() {
         </div>
       )}
 
+      {/* Section tabs — Details first, Register one click away. Built to
+          grow: Schedule / Results can slot in here later. */}
+      <div
+        role="tablist"
+        aria-label="Tournament sections"
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: `1px solid ${rule}`,
+          marginBottom: 24,
+        }}
+      >
+        {(
+          [
+            ["details", "Details"],
+            ["register", "Register"],
+          ] as const
+        ).map(([key, label]) => {
+          const active = tab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(key)}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: headingFontStack,
+                fontSize: 14,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                padding: "10px 14px",
+                color: active ? ink : inkMuted,
+                borderBottom: active
+                  ? `3px solid ${courtRed}`
+                  : "3px solid transparent",
+                marginBottom: -1,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "details" && (
       <div
         style={{
           ...panelStyle,
@@ -928,7 +990,10 @@ export default function PublicTournamentPage() {
           </div>
         )}
       </div>
+      )}
 
+      {tab === "register" && (
+      <>
       {/* Pending-invite banner — the most actionable thing on the
           page for a player who just got picked, so it lives above
           the events list. One row per inbound invite; each row has
@@ -1043,7 +1108,11 @@ export default function PublicTournamentPage() {
           </div>
         )}
       </section>
+      </>
+      )}
 
+      {tab === "details" && (
+      <>
       {/* Refund policy — combines cancellation preset (mechanism) with
           refund_policy_md (the organizer's copy). Show if either is set. */}
       {(tournament.cancellation_policy_preset || tournament.refund_policy_md) && (
@@ -1086,6 +1155,8 @@ export default function PublicTournamentPage() {
         <TournamentContentSection title="FAQs">
           {renderSimpleMd(tournament.faqs_md)}
         </TournamentContentSection>
+      )}
+      </>
       )}
 
     </Shell>

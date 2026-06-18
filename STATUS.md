@@ -17,6 +17,61 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Public tournament page split into Details / Register tabs (PR #379)
+
+`PublicTournamentPage` was one long scroll. Added a tab bar below the header
+(Anton caps, red active underline): **Details** (default) = pricing panel + the
+info sections (refund/weather/facility/sponsors/FAQs); **Register** = the events
+list + inbound-invite banner. Conditional render (not CSS hide), so each tab
+mounts/unmounts its content — implemented as two `tab==="details"` blocks with the
+register block between, no reorder needed. Resets to Details per tournament via a
+`[orgSlug, tournamentSlug]` effect (the component persists across `/t/:slug`
+navigations). Extensible: Schedule / Results slot in later. Verified live against
+real tournaments (default Details shows pricing/hides events; Register mounts 2
+event cards on Linwood; resets on navigation; no console errors). Typecheck clean;
+lint error at 514 is the pre-existing `reload` effect. Branch
+`feat/tournament-page-tabs`. 🔜 Ron: merge #379 + promote.
+
+(This commit also lands the accumulated session front-door entries below — they
+were working-tree only until now.)
+
+## 2026-06-18 — Builder blocked #377 (money/Stripe hard rule)
+
+Builder ran against #377 (Charity donations P1). Blocked — three reasons hit the
+hard "money / Stripe / secrets" stop rule: (1) new Stripe PaymentIntent infra,
+(2) new secrets needed for the edge function that can't be carried in a PR, (3)
+webhook routing needs live Stripe coordination. Comment left on #377 with the
+three specific questions Ron needs to answer before Builder can draft the
+`[DB]`/`[FN]`/`[UX]` split. **Next:** Ron answers the three questions in
+[#377's comment](https://github.com/notronwest/tournament-manager/issues/377#issuecomment-4742035074)
+and moves the card back to Agent Ready.
+
+## 2026-06-18 — Charity donations epic designed + filed (#377, #378)
+
+Ron wants optional donations for charity tournaments: donate directly from the
+public tournament page (no registration) and add funds at checkout. Designed +
+decomposed; durable record is the two stories (Backlog, feature).
+
+**Locked decisions (with Ron):**
+- **Anonymous donors** — no account; collect name + email + optional message.
+- **100% to charity** — donations are a Stripe Connect destination charge to the
+  org's account with **NO platform application_fee** (registration fees keep theirs).
+- **Per-tournament toggle** (`tournaments.accepts_donations`), not a new type.
+- **Checkout = add-on only** — pay ≥ required fees; donation only increases the total.
+- Out of scope v1: tax-deductibility / charitable receipts (payment receipt only).
+
+**Stories:** #377 P1 (Next up) — standalone Donate on the tournament page: new
+`donations` table (server-only writes, org-member SELECT), `accepts_donations`
+toggle, `create-donation-intent` edge fn (destination charge, no app fee),
+public Donate flow, webhook marks paid, organizer "total raised" report. #378 P2
+(Soon, depends on #377) — add-a-donation at checkout via `create-payment-intent`
+(`donation_cents`, fee computed on registration subtotal only).
+
+**Decision:** #377 → **Agent Ready** (Builder drafts `[DB]`/`[FN]`/`[UX]`; Ron gates
+each, esp. the money PRs). #378 stays Backlog (depends on #377). 🔜 Builder drains
+#377; **Ron:** merge DB first → validate on TEST → then FN/UX. Note: donations need
+the org's Stripe Connect **active** — same onboarding gap behind the checkout error.
+
 ## 2026-06-17 — Profile: "do I even need a password?" explainer (PR #375)
 
 The "leave blank to keep your current sign-in method" copy confuses users who've
@@ -24,8 +79,8 @@ never gone passwordless. Added a **collapsed-by-default** disclosure under the
 Change-password label (`ProfilePage` Account section): explains magic-link / Google
 sign-in, why it's safe (one-time expiring links, nothing to steal), and that a
 password is optional. Pure UI. Typecheck + lint clean; couldn't preview the authed
-Account section without creds. Branch `feat/password-optional-explainer`. 🔜 Ron:
-merge #375 + promote.
+Account section without creds. Branch `feat/password-optional-explainer`.
+**Merged (#375) + promoted to production** (PR #376, `89100f7`).
 
 ## 2026-06-17 — Checkout: actionable "message the organizer" link (PR #373)
 
