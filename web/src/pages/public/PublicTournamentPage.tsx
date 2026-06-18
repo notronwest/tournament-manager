@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
@@ -1043,7 +1043,7 @@ export default function PublicTournamentPage() {
             maxWidth: 640,
           }}
         >
-          {tournament.description}
+          {nl2br(tournament.description)}
         </p>
       )}
       <div
@@ -3245,8 +3245,22 @@ function cancellationPresetSummary(p: CancellationPolicyPreset): string {
 // Minimal markdown renderer: paragraphs, unordered lists, bold, italic,
 // links. No external library — the content is organizer-authored and
 // limited to these constructs.
+// Turn carriage returns / line feeds (CR, LF, or CRLF) in plain organizer text
+// into <br/> line breaks, so what they typed across multiple lines renders that
+// way. React escapes each line, so this is XSS-safe (no dangerouslySetInnerHTML).
+function nl2br(text: string): ReactNode {
+  return text.split(/\r\n|\r|\n/).map((line, i) => (
+    <Fragment key={i}>
+      {i > 0 && <br />}
+      {line}
+    </Fragment>
+  ));
+}
+
 function renderSimpleMd(md: string): ReactNode {
-  const blocks = md.split(/\n\n+/);
+  // Normalize line endings so CRLF/CR behave like LF for the block + line splits.
+  const normalized = md.replace(/\r\n?/g, "\n");
+  const blocks = normalized.split(/\n\n+/);
   return blocks.map((block, bi) => {
     const lines = block.split("\n");
     if (lines.length > 0 && lines.every((l) => l.startsWith("- "))) {
@@ -3258,9 +3272,16 @@ function renderSimpleMd(md: string): ReactNode {
         </ul>
       );
     }
+    // A single newline inside a block is an intentional line break → <br/>
+    // (was previously collapsed to a space). Blank lines still split paragraphs.
     return (
       <p key={bi} style={{ margin: "0 0 10px", lineHeight: 1.6 }}>
-        {renderInline(block.replace(/\n/g, " "))}
+        {lines.map((line, li) => (
+          <Fragment key={li}>
+            {li > 0 && <br />}
+            {renderInline(line)}
+          </Fragment>
+        ))}
       </p>
     );
   });
