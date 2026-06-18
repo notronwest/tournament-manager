@@ -85,6 +85,17 @@ export default function AdminIndexPage() {
 
       setOrgs(list);
 
+      // A signed-in user with no org membership and no platform-admin
+      // access isn't an organizer — don't strand them on the "No
+      // organizations" admin screen. They can land here from the post-auth
+      // default redirect (e.g. after a password reset, magic-link sign-in,
+      // or signup, which default to /admin). Send them to the public home
+      // to browse and register.
+      if (list.length === 0 && !isPlatformAdmin) {
+        navigate("/", { replace: true });
+        return;
+      }
+
       if (list.length === 1 && !isPlatformAdmin) {
         navigate(`/admin/${list[0].slug}`, { replace: true });
       }
