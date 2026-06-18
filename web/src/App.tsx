@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import { ProfileOnboarding } from "./auth/ProfileOnboarding";
 import FeedbackWidget from "./components/FeedbackWidget";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
@@ -67,6 +68,8 @@ export default function App() {
           when the signed-in player has pending partner invites
           anywhere, regardless of the current route. */}
       <PartnerInvitesBanner />
+      {/* Post-login nudge to finish an incomplete profile (soft; skippable). */}
+      <ProfileOnboarding />
       <Routes>
         <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
