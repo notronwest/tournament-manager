@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import type { Database } from "../../types/supabase";
@@ -169,7 +169,13 @@ function ContactForm({
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
+  // Prefill the message from a ?message= param so callers can hand the user a
+  // ready-to-send note — e.g. checkout's "message the organizer" link when the
+  // org hasn't finished Stripe setup. Still fully editable.
+  const [searchParams] = useSearchParams();
+  const [message, setMessage] = useState(
+    () => searchParams.get("message") ?? "",
+  );
   // The sender's explicit recipient pick ("" until they choose one).
   const [targetContactId, setTargetContactId] = useState<string>("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
