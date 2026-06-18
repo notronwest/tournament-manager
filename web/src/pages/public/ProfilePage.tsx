@@ -18,6 +18,7 @@ import {
   ctaPrimaryDisabledStyle,
   ctaPrimaryStyle,
   ctaSecondaryStyle,
+  courtBlue,
   dangerFg,
   ghostButtonStyle,
   ink,
@@ -103,6 +104,9 @@ export default function ProfilePage() {
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwNewVisible, setPwNewVisible] = useState(false);
   const [pwConfirmVisible, setPwConfirmVisible] = useState(false);
+  // Collapsible "why don't I need a password?" explainer — passwordless can
+  // be confusing if you've never seen it, so it's hidden until asked for.
+  const [pwExplainerOpen, setPwExplainerOpen] = useState(false);
 
   // Avatar upload state
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -789,6 +793,65 @@ export default function ProfilePage() {
                   (leave blank to keep your current sign-in method)
                 </span>
               </div>
+
+              {/* Collapsible explainer — reassures users who've never signed
+                  in without a password. Hidden until they ask. */}
+              <button
+                type="button"
+                onClick={() => setPwExplainerOpen((o) => !o)}
+                aria-expanded={pwExplainerOpen}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  marginBottom: 10,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  color: courtBlue,
+                  textDecoration: "underline",
+                  textUnderlineOffset: 2,
+                  alignSelf: "flex-start",
+                }}
+              >
+                {pwExplainerOpen ? "▾" : "▸"} Do I even need a password?
+              </button>
+              {pwExplainerOpen && (
+                <div
+                  style={{
+                    border: `1px solid ${rule}`,
+                    borderRadius: 8,
+                    padding: "12px 14px",
+                    marginBottom: 12,
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    color: inkSoft,
+                    background: "#fff",
+                  }}
+                >
+                  <p style={{ margin: "0 0 8px" }}>
+                    <strong style={{ color: ink }}>No — a password is optional.</strong>{" "}
+                    You can sign in without one, and it&rsquo;s just as secure.
+                  </p>
+                  <p style={{ margin: "0 0 8px" }}>
+                    <strong style={{ color: ink }}>How it works:</strong> on the
+                    sign-in screen, choose <em>&ldquo;Email me a link&rdquo;</em>{" "}
+                    (or <em>Continue with Google</em>). We email you a one-time
+                    link &mdash; tap it and you&rsquo;re in. Nothing to remember.
+                  </p>
+                  <p style={{ margin: "0 0 8px" }}>
+                    <strong style={{ color: ink }}>Why it&rsquo;s nice:</strong>{" "}
+                    no password to forget or reuse, and nothing for anyone to
+                    steal &mdash; each link works once and then expires.
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    <strong style={{ color: ink }}>Prefer a password?</strong>{" "}
+                    Set one below and you can sign in with just your email and
+                    password &mdash; no need to check your inbox each time.
+                  </p>
+                </div>
+              )}
+
               <FieldRow>
                 <Field label="New password">
                   <div style={{ position: "relative" }}>
