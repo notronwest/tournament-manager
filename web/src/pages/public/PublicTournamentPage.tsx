@@ -252,7 +252,7 @@ export default function PublicTournamentPage() {
 
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("*, locations(id, name, address, address_line2, city, state, postal_code, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft)")
+      .select("*, locations(id, name, address, address_line2, city, state, postal_code, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft, pickleball_type)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .in("status", ["published", "closed", "completed", "cancelled"])
@@ -861,6 +861,73 @@ export default function PublicTournamentPage() {
         </div>
       )}
 
+      {/* Venue / format — kept under the header (not inside a tab) so it's
+          always visible. Sourced from the tournament's location. */}
+      {(tournament.locations ?? tournament.location_name) && (
+        <div
+          style={{
+            display: "flex",
+            gap: 24,
+            flexWrap: "wrap",
+            marginBottom: 24,
+          }}
+        >
+          <Meta
+            label="Where"
+            value={(() => {
+              if (tournament.locations) {
+                const addrStr = composeLocationAddress(tournament.locations);
+                return addrStr
+                  ? `${tournament.locations.name} · ${addrStr}`
+                  : tournament.locations.name;
+              }
+              return tournament.location_address
+                ? `${tournament.location_name} · ${tournament.location_address}`
+                : tournament.location_name!;
+            })()}
+          />
+          {tournament.locations?.court_count != null && (
+            <Meta label="Courts" value={String(tournament.locations.court_count)} />
+          )}
+          {tournament.locations?.net_type && (
+            <Meta label="Nets" value={tournament.locations.net_type === "permanent" ? "Permanent" : "Moveable"} />
+          )}
+          {tournament.locations?.surface_type && (
+            <Meta
+              label="Surface"
+              value={
+                tournament.locations.surface_type === "concrete" ? "Concrete"
+                : tournament.locations.surface_type === "asphalt" ? "Asphalt"
+                : tournament.locations.surface_type === "cushion_core" ? "Cushion Core"
+                : tournament.locations.surface_type === "hardwood" ? "Hardwood"
+                : tournament.locations.surface_type === "polycarbonate" ? "Polycarbonate"
+                : tournament.locations.surface_type === "polyurethane" ? "Polyurethane"
+                : tournament.locations.surface_notes
+                  ? `Other (${tournament.locations.surface_notes})`
+                  : "Other"
+              }
+            />
+          )}
+          {(tournament.locations?.ceiling_height_min_ft != null || tournament.locations?.ceiling_height_max_ft != null) && (
+            <Meta
+              label="Ceiling"
+              value={
+                tournament.locations!.ceiling_height_min_ft != null && tournament.locations!.ceiling_height_max_ft != null
+                  ? `${tournament.locations!.ceiling_height_min_ft}–${tournament.locations!.ceiling_height_max_ft} ft`
+                  : tournament.locations!.ceiling_height_max_ft != null
+                    ? `${tournament.locations!.ceiling_height_max_ft} ft`
+                    : `${tournament.locations!.ceiling_height_min_ft} ft min`
+              }
+            />
+          )}
+          {(tournament.pickleball_type ?? tournament.locations?.pickleball_type) && (
+            <Meta
+              label="Ball"
+              value={(tournament.pickleball_type ?? tournament.locations?.pickleball_type)!}
+            />
+          )}
+        </div>
+      )}
 
       {/* Section tabs — Details first, Register one click away. Built to
           grow: Schedule / Results can slot in here later. */}
@@ -1031,8 +1098,21 @@ export default function PublicTournamentPage() {
 
       {tab === "details" && (
       <>
-      {/* Description + when/where/venue — moved here from the header so all
-          of the tournament's details live under the Details tab. */}
+      {/* Empty state — venue meta now lives in the persistent strip, so the
+          Details tab is just the description + info sections; note if none. */}
+      {!tournament.description &&
+        !tournament.cancellation_policy_preset &&
+        !tournament.refund_policy_md &&
+        !tournament.weather_md &&
+        !tournament.facility_info_md &&
+        !tournament.additional_info_md &&
+        !tournament.sponsors_md &&
+        !tournament.faqs_md && (
+          <p style={{ color: inkMuted, fontSize: 14, margin: 0 }}>
+            No additional details have been posted yet.
+          </p>
+        )}
+      {/* Description */}
       {tournament.description && (
         <p
           style={{
@@ -1046,66 +1126,8 @@ export default function PublicTournamentPage() {
           {nl2br(tournament.description)}
         </p>
       )}
-      <div
-        style={{
-          display: "flex",
-          gap: 24,
-          flexWrap: "wrap",
-          marginBottom: 28,
-        }}
-      >
-        {/* "When" now lives in the header. */}
-        {(tournament.locations ?? tournament.location_name) && (
-          <Meta
-            label="Where"
-            value={(() => {
-              if (tournament.locations) {
-                const addrStr = composeLocationAddress(tournament.locations);
-                return addrStr
-                  ? `${tournament.locations.name} · ${addrStr}`
-                  : tournament.locations.name;
-              }
-              return tournament.location_address
-                ? `${tournament.location_name} · ${tournament.location_address}`
-                : tournament.location_name!;
-            })()}
-          />
-        )}
-        {tournament.locations?.court_count != null && (
-          <Meta label="Courts" value={String(tournament.locations.court_count)} />
-        )}
-        {tournament.locations?.net_type && (
-          <Meta label="Nets" value={tournament.locations.net_type === "permanent" ? "Permanent" : "Moveable"} />
-        )}
-        {tournament.locations?.surface_type && (
-          <Meta
-            label="Surface"
-            value={
-              tournament.locations.surface_type === "concrete" ? "Concrete"
-              : tournament.locations.surface_type === "asphalt" ? "Asphalt"
-              : tournament.locations.surface_type === "cushion_core" ? "Cushion Core"
-              : tournament.locations.surface_type === "hardwood" ? "Hardwood"
-              : tournament.locations.surface_type === "polycarbonate" ? "Polycarbonate"
-              : tournament.locations.surface_type === "polyurethane" ? "Polyurethane"
-              : tournament.locations.surface_notes
-                ? `Other (${tournament.locations.surface_notes})`
-                : "Other"
-            }
-          />
-        )}
-        {(tournament.locations?.ceiling_height_min_ft != null || tournament.locations?.ceiling_height_max_ft != null) && (
-          <Meta
-            label="Ceiling"
-            value={
-              tournament.locations!.ceiling_height_min_ft != null && tournament.locations!.ceiling_height_max_ft != null
-                ? `${tournament.locations!.ceiling_height_min_ft}–${tournament.locations!.ceiling_height_max_ft} ft`
-                : tournament.locations!.ceiling_height_max_ft != null
-                  ? `${tournament.locations!.ceiling_height_max_ft} ft`
-                  : `${tournament.locations!.ceiling_height_min_ft} ft min`
-            }
-          />
-        )}
-      </div>
+      {/* Where/Courts/Nets/Surface/Ceiling moved to the persistent venue
+          strip under the header. */}
       {/* Refund policy — combines cancellation preset (mechanism) with
           refund_policy_md (the organizer's copy). Show if either is set. */}
       {(tournament.cancellation_policy_preset || tournament.refund_policy_md) && (
