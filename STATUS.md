@@ -17,6 +17,16 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Profile: "do I even need a password?" explainer (PR #375)
+
+The "leave blank to keep your current sign-in method" copy confuses users who've
+never gone passwordless. Added a **collapsed-by-default** disclosure under the
+Change-password label (`ProfilePage` Account section): explains magic-link / Google
+sign-in, why it's safe (one-time expiring links, nothing to steal), and that a
+password is optional. Pure UI. Typecheck + lint clean; couldn't preview the authed
+Account section without creds. Branch `feat/password-optional-explainer`. 🔜 Ron:
+merge #375 + promote.
+
 ## 2026-06-17 — Checkout: actionable "message the organizer" link (PR #373)
 
 Follow-on to #371. When `create-payment-intent` returns `org_stripe_not_active`,
@@ -27,7 +37,10 @@ for signed-in users) → effectively one click to send. `CheckoutPage` tracks th
 error code in state to gate the link; clears it on Stripe-element errors/cancel.
 Verified live: contact form prefill works end-to-end (textarea matches the param);
 typecheck clean (lint error at 337 is the pre-existing `reload` effect). Branch
-`feat/checkout-error-contact-link`. 🔜 Ron: merge #373 + promote.
+`feat/checkout-error-contact-link`. **Merged (#373) + promoted to production**
+(PR #374, `76a1bf6`). Underlying payment failure (Stripe Connect not onboarded for
+the org / missing prod `STRIPE_SECRET_KEY`) still needs resolving at
+`/admin/:org/settings/stripe` — UX now handles it gracefully either way.
 
 ## 2026-06-17 — Checkout: friendly errors + error-handling plan (PR #371, story #370)
 
