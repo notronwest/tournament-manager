@@ -17,6 +17,18 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Checkout: actionable "message the organizer" link (PR #373)
+
+Follow-on to #371. When `create-payment-intent` returns `org_stripe_not_active`,
+the friendly error now shows a **"Message the organizer about this →"** link to the
+tournament contact form, **prefilled** with a message naming the tournament + the
+problem. `TournamentContactPage` reads `?message=` (and already auto-fills name/email
+for signed-in users) → effectively one click to send. `CheckoutPage` tracks the
+error code in state to gate the link; clears it on Stripe-element errors/cancel.
+Verified live: contact form prefill works end-to-end (textarea matches the param);
+typecheck clean (lint error at 337 is the pre-existing `reload` effect). Branch
+`feat/checkout-error-contact-link`. 🔜 Ron: merge #373 + promote.
+
 ## 2026-06-17 — Checkout: friendly errors + error-handling plan (PR #371, story #370)
 
 Checkout was showing the raw SDK string "Edge Function returned a non-2xx status
@@ -40,8 +52,9 @@ via the existing Discord webhook. Filed as **story #370** (Backlog · Later · i
 `error_events` table (server-only writes), platform-admin `/admin/errors` page,
 targeted Discord/Resend alerts.
 
-🔜 Ron: merge #371 + promote; then check the friendly message on checkout to confirm
-the real cause (almost certainly Stripe Connect onboarding for that org).
+**Merged (#371) + promoted to production** (PR #372, `bc59c98`). 🔜 Ron: retry that
+checkout — the friendly message now states the real cause (almost certainly Stripe
+Connect onboarding for that org); then resolve the actual payment failure.
 
 ## 2026-06-17 — Register: actionable hint when gender unset (PR #368)
 
