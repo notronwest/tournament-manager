@@ -17,6 +17,15 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Header cost: prominent + right-aligned (PR #383)
+
+Polish on #382. Header Cost restyled from a small left Meta to a big bold
+display-font price pushed right (`marginLeft: auto`, right-aligned) — `$X to
+register`, additional fee, tier label, right-aligned "See full pricing schedule" —
+matching the old price panel. When/Registration stay left. Verified live; typecheck
+clean. Branch `feat/header-cost-prominent`. 🔜 Ron: merge #383 (test only; #379–#383
+the tournament-page redesign batch awaiting one prod promotion).
+
 ## 2026-06-18 — Header: dates + registration window + cost consolidated (PR #382)
 
 Per Ron: brought event dates (When), the registration window, and cost into the
@@ -27,8 +36,10 @@ the always-visible header, so cost still shows on both tabs). Venue/format
 from Details (now in header). Removed the now-unused `panelStyle` import. Verified
 live (header shows When/Registration/Cost on both tabs; Where Details-only; multi-
 tier schedule expands; no console errors); typecheck clean. Branch
-`feat/header-dates-registration-cost`. 🔜 Ron: merge #382 (test only, still holding
-prod — #379–#382 pending one promotion).
+`feat/header-dates-registration-cost`. **Merged to main (#382, `73b4c5d`) — NOT
+promoted** (test only). 🔜 **Ron:** the tournament-page redesign batch #379–#382
+(tabs, details→Details, Edit→wizard, consolidated header) is all on test, prod 12
+behind — review on test, then promote the whole batch when ready.
 
 ## 2026-06-18 — All tournament details under Details tab; Edit → wizard (PR #381)
 
