@@ -17,6 +17,18 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Bulk-delete events from "Edit all events" (PR #392)
+
+Added a per-row **Delete** checkbox to the bulk events editor; on Save, marked
+events are soft-deleted (`deleted_at`) after a ConfirmModal and drop from the table.
+**Safeguard:** events with active (paid/pending) registrations are skipped with a
+per-row error (uses the `players_registered_for_events` SECURITY-DEFINER RPC so RLS
+can't hide a registration) — can't accidentally delete an event people paid into.
+Deletions + edits save in one pass (deletion wins for a row both marked + edited).
+Build + typecheck + lint clean; admin page so couldn't exercise interactively in
+preview. Branch `feat/bulk-delete-events`. Possible follow-up: server-side (trigger)
+enforcement of the reg guard. 🔜 Ron: merge #392 + promote if wanted (UI-only).
+
 ## 2026-06-18 — Render organizer line breaks (CR/LF → <br/>) — PR #385
 
 Organizer text rendered run-on. New `nl2br()` (splits CR/LF/CRLF, interleaves
