@@ -216,7 +216,7 @@ export default function CheckoutPage() {
       .eq("status", "pending_payment")
       .is("deleted_at", null);
     if (regsErr) {
-      setError(regsErr.message);
+      setError("We couldn't load your registrations. Please refresh and try again.");
       setLoading(false);
       return;
     }
@@ -436,12 +436,12 @@ export default function CheckoutPage() {
     } | null;
     const cs = res?.clientSecret;
     if (fnErr || !cs) {
-      const code = res?.error;
-      setPaymentError(
-        code
-          ? `Couldn't start payment (${code}). Please try again.`
-          : fnErr?.message ?? "Couldn't start payment. Please try again.",
-      );
+      // On a non-2xx the SDK puts its generic "Edge Function returned a
+      // non-2xx status code" in fnErr.message and leaves `data` null — the
+      // function's real { error: code } is in fnErr.context. Read it and map
+      // to user-safe copy; never surface the raw SDK/Stripe string.
+      const code = await readEdgeErrorCode(fnErr, data);
+      setPaymentError(paymentErrorMessage(code));
       return;
     }
     setClientSecret(cs);
@@ -1121,6 +1121,51 @@ function PaymentSection({
 // ─────────────────────────────────────────────────────────────────────
 // Bits
 // ─────────────────────────────────────────────────────────────────────
+
+// Pulls the structured { error: code } out of a supabase functions.invoke
+// result. On a non-2xx the SDK leaves `data` null and stashes the raw Response
+// in error.context — read it there. Returns the short code, or null.
+async function readEdgeErrorCode(
+  error: unknown,
+  data: unknown,
+): Promise<string | null> {
+  const fromData = (data as { error?: string } | null)?.error;
+  if (fromData) return fromData;
+  if (error && typeof error === "object" && "context" in error) {
+    const ctx = (error as { context?: unknown }).context;
+    if (ctx instanceof Response) {
+      try {
+        const body = await ctx.clone().json();
+        return (body as { error?: string })?.error ?? null;
+      } catch {
+        /* body wasn't JSON — fall through to the generic message */
+      }
+    }
+  }
+  return null;
+}
+
+// Maps a create-payment-intent error code to a friendly, user-safe message.
+// The default covers unknown codes and the function's catch-all 500 so a raw
+// Stripe/runtime string never reaches the user.
+function paymentErrorMessage(code: string | null): string {
+  switch (code) {
+    case "org_stripe_not_active":
+      return "This organizer hasn't finished setting up online payments yet. Please reach out to them.";
+    case "tournament_not_accepting_payment":
+      return "This tournament isn't accepting payments right now.";
+    case "nothing_to_charge":
+      return "There's nothing to pay for — your cart looks empty.";
+    case "regs_not_payable":
+      return "Some of your registrations are no longer payable. Refresh the page and try again.";
+    case "player_not_found":
+      return "We couldn't find your player profile. Finish your profile, then try again.";
+    case "unauthorized":
+      return "Your session expired. Please sign in again and retry.";
+    default:
+      return "We couldn't start payment. Please try again — if it keeps happening, contact the organizer.";
+  }
+}
 
 // Maps a validate_coupon error code to a friendly message.
 function couponErrorMessage(code?: string): string {
