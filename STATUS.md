@@ -17,17 +17,49 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
-## 2026-06-18 — Bulk-delete events from "Edit all events" (PR #392)
+## 2026-06-18 — Bulk-delete events merged (PR #392)
 
-Added a per-row **Delete** checkbox to the bulk events editor; on Save, marked
+Per-row **Delete** checkbox on the "Edit all events" bulk editor; on Save, marked
 events are soft-deleted (`deleted_at`) after a ConfirmModal and drop from the table.
 **Safeguard:** events with active (paid/pending) registrations are skipped with a
-per-row error (uses the `players_registered_for_events` SECURITY-DEFINER RPC so RLS
-can't hide a registration) — can't accidentally delete an event people paid into.
-Deletions + edits save in one pass (deletion wins for a row both marked + edited).
-Build + typecheck + lint clean; admin page so couldn't exercise interactively in
-preview. Branch `feat/bulk-delete-events`. Possible follow-up: server-side (trigger)
-enforcement of the reg guard. 🔜 Ron: merge #392 + promote if wanted (UI-only).
+per-row error (uses `players_registered_for_events` SECURITY-DEFINER RPC). Deletions
++ edits save in one pass. Merged to main (#392) — **not promoted** (UI-only, on test).
+🔜 Ron: quick manual check on test, then promote with the next batch.
+
+## 2026-06-18 — Copy an event (PR #395); #387 merged + promoted to prod
+
+**#387 merged + promoted** (`main`→`production` PR #394, `13c12a8`, prod 0 behind) —
+the venue strip under the header is live. **#388 (ball)** is with the Builder (DB
+PR #391 + UX PR #393, awaiting Ron's review/merge).
+
+**Copy an event (PR #395):** new "Copy" button on each event card in
+`TournamentDetailPage` (next to Edit/Open/Delete). `copyEvent` fetches the full
+event row, drops id/created_at/deleted_at, and inserts a fresh **draft** named
+"Copy of …" — cloning every other column (robust to new fields). Registrations,
+matches, and court allocations are NOT copied (just settings). Build + typecheck +
+lint clean (only the pre-existing reload-effect lint). Admin page → couldn't click
+through in preview. Branch `feat/copy-event`. 🔜 Ron: merge #395 + promote if wanted
+(UI-only).
+
+## 2026-06-18 — Venue strip under header (PR #387) + ball field story (#388)
+
+Three asks from Ron:
+1. **Description line breaks "not working"** — actually IS working: measured the
+   live build, the description renders `<br/>` (5 in the First Responder desc, vs 0
+   in a no-newline section). Cause is prod cache (hard-refresh) or a description
+   with no saved newlines. No code change.
+2. **Venue meta to a persistent strip (PR #387):** moved
+   Where/Courts/Nets/Surface/Ceiling out of the Details tab to an always-visible
+   strip under the header (shows on both tabs). Details = description + info
+   sections; re-added a "No additional details yet" empty state. Verified live.
+3. **"Pickleball type" = the ball** (Franklin X-40, Selkirk S1, Lifetime Pro 48,
+   Vulcan…), free text, venue default + tournament override → filed **story #388**
+   (Agent Ready, feature): `pickleball_type text` on `locations` + `tournaments`,
+   effective = `tournament ?? location`, editors + a "Ball" item in the venue strip.
+   Schema → Builder splits `[DB]`/`[UX]`.
+
+🔜 Ron: merge #387 (+ promote if wanted); Builder drains #388. Hard-refresh prod to
+confirm the description line breaks.
 
 ## 2026-06-18 — Render organizer line breaks (CR/LF → <br/>) — PR #385
 
@@ -37,7 +69,7 @@ Organizer text rendered run-on. New `nl2br()` (splits CR/LF/CRLF, interleaves
 blank lines still split paragraphs, CRLF/CR normalized. Verified live (First
 Responder description shows its paragraphs/breaks — 5 `<br/>` where it was one
 block; no console errors); typecheck clean. Branch `feat/render-line-breaks`.
-🔜 Ron: merge #385 + promote if wanted (UI-only).
+**Merged (#385) + promoted to production** (PR #386, `b3361ab`) — UI-only; prod == main.
 
 ## 2026-06-18 — 🚀 Production: tournament-page redesign batch (#379–#383)
 

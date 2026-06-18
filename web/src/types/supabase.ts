@@ -489,6 +489,7 @@ export type Database = {
           name: string
           net_type: Database["public"]["Enums"]["net_type"] | null
           organization_id: string
+          pickleball_type: string | null
           postal_code: string | null
           state: string | null
           surface_notes: string | null
@@ -509,6 +510,7 @@ export type Database = {
           name: string
           net_type?: Database["public"]["Enums"]["net_type"] | null
           organization_id: string
+          pickleball_type?: string | null
           postal_code?: string | null
           state?: string | null
           surface_notes?: string | null
@@ -529,6 +531,7 @@ export type Database = {
           name?: string
           net_type?: Database["public"]["Enums"]["net_type"] | null
           organization_id?: string
+          pickleball_type?: string | null
           postal_code?: string | null
           state?: string | null
           surface_notes?: string | null
@@ -1511,6 +1514,7 @@ export type Database = {
           location_name: string | null
           name: string
           organization_id: string
+          pickleball_type: string | null
           pricing_pattern: Database["public"]["Enums"]["pricing_pattern"]
           refund_policy_md: string | null
           registration_closes_at: string | null
@@ -1542,6 +1546,7 @@ export type Database = {
           location_name?: string | null
           name: string
           organization_id: string
+          pickleball_type?: string | null
           pricing_pattern?: Database["public"]["Enums"]["pricing_pattern"]
           refund_policy_md?: string | null
           registration_closes_at?: string | null
@@ -1573,6 +1578,7 @@ export type Database = {
           location_name?: string | null
           name?: string
           organization_id?: string
+          pickleball_type?: string | null
           pricing_pattern?: Database["public"]["Enums"]["pricing_pattern"]
           refund_policy_md?: string | null
           registration_closes_at?: string | null
