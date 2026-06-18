@@ -17,6 +17,26 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Render organizer line breaks (CR/LF → <br/>) — PR #385
+
+Organizer text rendered run-on. New `nl2br()` (splits CR/LF/CRLF, interleaves
+`<br/>`, React-escaped/XSS-safe) for the tournament description; `renderSimpleMd`
+(content sections) now treats a single in-block newline as a `<br/>` (was a space),
+blank lines still split paragraphs, CRLF/CR normalized. Verified live (First
+Responder description shows its paragraphs/breaks — 5 `<br/>` where it was one
+block; no console errors); typecheck clean. Branch `feat/render-line-breaks`.
+🔜 Ron: merge #385 + promote if wanted (UI-only).
+
+## 2026-06-18 — 🚀 Production: tournament-page redesign batch (#379–#383)
+
+Promoted `main` → `production` (PR #384, `649aedf`). **UI-only — no migrations, no
+edge-function changes**, so only the Cloudflare prod rebuild ran. Prod now == main
+(0 behind). Ships the whole tournament-page redesign live on `bertanderne.com`:
+Details/Register tabs (Details first), all details under the Details tab, Edit → the
+setup wizard (all steps), and the consolidated header (event dates + registration
+window + prominent right-aligned cost). 🔜 Ron: spot-check prod once Cloudflare
+finishes (~1–2 min).
+
 ## 2026-06-18 — Header cost: prominent + right-aligned (PR #383)
 
 Polish on #382. Header Cost restyled from a small left Meta to a big bold
