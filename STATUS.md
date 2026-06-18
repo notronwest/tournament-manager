@@ -17,6 +17,32 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Checkout: friendly errors + error-handling plan (PR #371, story #370)
+
+Checkout was showing the raw SDK string "Edge Function returned a non-2xx status
+code." Root cause: on a non-2xx, supabase `functions.invoke` leaves `data` null and
+stashes the function's real `{ error: code }` in `error.context` — the old code fell
+back to `fnErr.message`. Fix (`CheckoutPage`): `readEdgeErrorCode()` reads the code
+from the response, `paymentErrorMessage()` maps it to user-safe copy (default covers
+the catch-all 500); also stopped leaking the raw DB error on registration load.
+Branch `fix/checkout-friendly-errors`.
+
+**Likely real cause of THIS failure:** `create-payment-intent` returns
+`org_stripe_not_active` (409) when the org's Stripe Connect isn't onboarded
+(`stripe_account_status != 'active'`) — or a catch-all 500 if `STRIPE_SECRET_KEY`
+isn't set in prod. Once #371 ships, the screen will say which (the friendly copy is
+code-derived). Confirm via Supabase → Edge Functions → create-payment-intent → Logs,
+or the org's `/admin/:org/settings/stripe`.
+
+**Error-handling policy (decided).** Don't email-per-error (noise). Primary =
+in-app admin error log + Supabase function logs; alerts only for critical (payments)
+via the existing Discord webhook. Filed as **story #370** (Backlog · Later · infra):
+`error_events` table (server-only writes), platform-admin `/admin/errors` page,
+targeted Discord/Resend alerts.
+
+🔜 Ron: merge #371 + promote; then check the friendly message on checkout to confirm
+the real cause (almost certainly Stripe Connect onboarding for that org).
+
 ## 2026-06-17 — Register: actionable hint when gender unset (PR #368)
 
 Follow-on to the gender policy. A profiled player with **no gender set** saw a
@@ -28,8 +54,8 @@ block — that bracket genuinely isn't theirs. Eligibility rules + the DB trust
 boundary (`enforce_event_eligibility`) unchanged; this is messaging only.
 `PublicTournamentPage` renderAction. Typecheck + lint clean (live path needs an
 authed profiled-but-genderless player on a gendered event — not repro'able in
-preview). Branch `feat/gender-unset-register-hint`. 🔜 Ron: merge #368 + promote
-(bundled with #367, already merged to main).
+preview). Branch `feat/gender-unset-register-hint`. **Merged (#368) + promoted to
+production** (with #367, PR #369, `2178e33`) — UI-only.
 
 ## 2026-06-17 — Profile: post-login soft prompt + gender policy (PR #367)
 
@@ -51,7 +77,8 @@ change, no hard requirement.
 Typecheck + lint clean; app smoke-tested (loads with the listener mounted, no
 console errors). The login-prompt path itself needs a real sign-in transition to
 exercise (couldn't repro in preview without creds). Branch
-`feat/profile-onboarding-prompt`. 🔜 Ron: merge #367 + promote; sign in with a
+`feat/profile-onboarding-prompt`. **Merged (#367) + promoted to production**
+(PR #369, `2178e33`). 🔜 Ron: sign in with a
 fresh (profileless) account → should land on the Welcome profile screen with an
 "I'll do this later" option.
 
