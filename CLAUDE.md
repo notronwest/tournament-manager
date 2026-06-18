@@ -42,6 +42,8 @@ Mirrors `wmpc-rating-hub` (deliberately — see `~/.claude/CLAUDE.md` for the "w
 ### Smaller decisions baked in
 
 - **Email is soft-unique** on players (indexed for lookup, NOT a unique constraint — supports parent + child sharing one email).
+- **Gender is optional + inclusive.** `player_gender` enum is `M / F / X` ("Other / prefer not to say"); the profile field is never required. Eligibility (`lib/eligibility.ts`): men's brackets require `M`, women's require `F`, and **mixed/open events gate on gender for no one**. So a player only sets M/F if they want a single-gender bracket — everyone (incl. `X`/blank) can play mixed and open events. Don't add a hard gender requirement.
+- **Profile completion is a soft prompt + a hard gate.** "Complete" = first + last name + email (gender/ratings optional). After a genuine login, `ProfileOnboarding` nudges incomplete profiles to `/profile` once (skippable via "I'll do this later"). Registration is the hard gate — `RequireProfile` (and the inline Register button) bounce incomplete profiles to `/profile?return=…`.
 - **Doubles teams: one row per player** in `event_registrations`, paired via `partner_registration_id` self-FK. Each player pays their own event fee separately (PickleballBrackets model). Helps build per-player tournament history later.
 - **Soft delete** via `deleted_at` columns on long-lived entities (organizations, tournaments, events, players, registrations, event_registrations). Hard delete is reserved for ephemeral records (partner_invites).
 - **WMPC org seeded** in the init migration (slug `wmpc`); first user manually claims ownership via SQL (snippet at the bottom of the migration file).

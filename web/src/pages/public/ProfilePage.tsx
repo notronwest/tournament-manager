@@ -769,7 +769,7 @@ export default function ProfilePage() {
                 : ctaSecondaryStyle
             }
           >
-            Cancel
+            {isFirstFill ? "I'll do this later" : "Cancel"}
           </button>
         </div>
       </form>

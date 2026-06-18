@@ -17,6 +17,30 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Profile: post-login soft prompt + gender policy (PR #367)
+
+**Flow.** New `ProfileOnboarding` (mounted in `App`, inside Router) listens for a
+genuine sign-in and, if the profile is incomplete (missing first/last name or
+email), sends the user once to `/profile` — the first-fill "Welcome" screen, whose
+escape button is relabeled **"I'll do this later."** Soft prompt, fires once per
+signed-in session, never on reload restore, covers all login methods (password /
+magic / Google) via one auth listener. Registration stays the **hard gate**
+(RequireProfile + the inline Register button, #365). "Complete" = first + last +
+email; gender/ratings optional.
+
+**Gender policy (decided — "keep it simple").** Already inclusive in code, now
+documented in CLAUDE.md: `player_gender` = `M / F / X` ("Other / prefer not to
+say"), **optional**. Eligibility gates men's→M, women's→F, **mixed/open on nobody**
+— so X/blank players play everything except single-gender brackets. No schema
+change, no hard requirement.
+
+Typecheck + lint clean; app smoke-tested (loads with the listener mounted, no
+console errors). The login-prompt path itself needs a real sign-in transition to
+exercise (couldn't repro in preview without creds). Branch
+`feat/profile-onboarding-prompt`. 🔜 Ron: merge #367 + promote; sign in with a
+fresh (profileless) account → should land on the Welcome profile screen with an
+"I'll do this later" option.
+
 ## 2026-06-17 — Fix: Register no longer bounces signed-in users to /login (PR #365)
 
 A signed-in user with no player profile yet (`me === null`) clicked Register on a
