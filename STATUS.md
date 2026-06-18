@@ -17,6 +17,19 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Header: dates + registration window + cost consolidated (PR #382)
+
+Per Ron: brought event dates (When), the registration window, and cost into the
+header hero as an at-a-glance meta row (incl. the multi-tier "See full pricing
+schedule" toggle) and **removed the standalone price panel** (its info now lives in
+the always-visible header, so cost still shows on both tabs). Venue/format
+(Where/Courts/Nets/Surface/Ceiling) + description stay under Details; "When" dropped
+from Details (now in header). Removed the now-unused `panelStyle` import. Verified
+live (header shows When/Registration/Cost on both tabs; Where Details-only; multi-
+tier schedule expands; no console errors); typecheck clean. Branch
+`feat/header-dates-registration-cost`. 🔜 Ron: merge #382 (test only, still holding
+prod — #379–#382 pending one promotion).
+
 ## 2026-06-18 — All tournament details under Details tab; Edit → wizard (PR #381)
 
 Two asks. **(1) Public page:** removed the description + when/where/venue meta from
@@ -28,8 +41,9 @@ tournaments — the wizard resume `payload` has no `status` (won't revert to dra
 and pricing locks on active regs. `/edit` route/`TournamentFormPage` still exists
 but is now unlinked (candidate to retire later). Verified live (public: header
 slimmed, Details shows description/meta, Register unchanged, no console errors);
-typecheck clean. Branch `feat/tournament-details-to-tab-edit-wizard`. 🔜 Ron: merge
-#381 (test only, still holding prod per earlier).
+typecheck clean. Branch `feat/tournament-details-to-tab-edit-wizard`. **Merged to
+main (#381, `6a5afae`) — NOT promoted** (on test only; prod 9 behind — #379/#380/#381
+all pending one promotion). 🔜 Ron: review on test, then promote when ready.
 
 ## 2026-06-18 — Tournament page: price/window header persistent across tabs (PR #380)
 
