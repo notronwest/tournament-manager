@@ -57,6 +57,7 @@ export default function LocationsPage() {
   const [addSurfaceNotes, setAddSurfaceNotes] = useState("");
   const [addCeilingMin, setAddCeilingMin] = useState("");
   const [addCeilingMax, setAddCeilingMax] = useState("");
+  const [addPickleballType, setAddPickleballType] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -71,6 +72,7 @@ export default function LocationsPage() {
   const [editSurfaceNotes, setEditSurfaceNotes] = useState("");
   const [editCeilingMin, setEditCeilingMin] = useState("");
   const [editCeilingMax, setEditCeilingMax] = useState("");
+  const [editPickleballType, setEditPickleballType] = useState("");
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -112,6 +114,7 @@ export default function LocationsPage() {
     setEditSurfaceNotes(loc.surface_notes ?? "");
     setEditCeilingMin(loc.ceiling_height_min_ft != null ? String(loc.ceiling_height_min_ft) : "");
     setEditCeilingMax(loc.ceiling_height_max_ft != null ? String(loc.ceiling_height_max_ft) : "");
+    setEditPickleballType(loc.pickleball_type ?? "");
     setEditError(null);
   };
 
@@ -142,6 +145,7 @@ export default function LocationsPage() {
         surface_notes: editSurfaceType === "other" ? editSurfaceNotes.trim() || null : null,
         ceiling_height_min_ft: cMin,
         ceiling_height_max_ft: cMax,
+        pickleball_type: editPickleballType.trim() || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", editId)
@@ -222,6 +226,7 @@ export default function LocationsPage() {
         surface_notes: addSurfaceType === "other" ? addSurfaceNotes.trim() || null : null,
         ceiling_height_min_ft: cMin,
         ceiling_height_max_ft: cMax,
+        pickleball_type: addPickleballType.trim() || null,
       })
       .select()
       .single();
@@ -300,6 +305,7 @@ export default function LocationsPage() {
             surfaceNotes={addSurfaceNotes} onSurfaceNotes={setAddSurfaceNotes}
             ceilingMin={addCeilingMin} onCeilingMin={setAddCeilingMin}
             ceilingMax={addCeilingMax} onCeilingMax={setAddCeilingMax}
+            pickleballType={addPickleballType} onPickleballType={setAddPickleballType}
           />
           <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: inkSoft, cursor: "pointer", marginTop: 4 }}>
             <input
@@ -321,7 +327,7 @@ export default function LocationsPage() {
             </button>
             <button
               type="button"
-              onClick={() => { setShowAdd(false); setAddName(""); setAddAddress(""); setAddIsDefault(false); setAddCourtCount(""); setAddNetType(""); setAddSurfaceType(""); setAddSurfaceNotes(""); setAddCeilingMin(""); setAddCeilingMax(""); setAddError(null); }}
+              onClick={() => { setShowAdd(false); setAddName(""); setAddAddress(""); setAddIsDefault(false); setAddCourtCount(""); setAddNetType(""); setAddSurfaceType(""); setAddSurfaceNotes(""); setAddCeilingMin(""); setAddCeilingMax(""); setAddPickleballType(""); setAddError(null); }}
               style={ctaSecondaryStyle}
             >
               Cancel
@@ -372,6 +378,7 @@ export default function LocationsPage() {
               surfaceNotes={editSurfaceNotes} onSurfaceNotes={setEditSurfaceNotes}
               ceilingMin={editCeilingMin} onCeilingMin={setEditCeilingMin}
               ceilingMax={editCeilingMax} onCeilingMax={setEditCeilingMax}
+              pickleballType={editPickleballType} onPickleballType={setEditPickleballType}
             />
             <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: inkSoft, cursor: "pointer", marginTop: 4 }}>
               <input
@@ -474,6 +481,7 @@ type VenueDetailFieldsProps = {
   surfaceNotes: string; onSurfaceNotes: (v: string) => void;
   ceilingMin: string; onCeilingMin: (v: string) => void;
   ceilingMax: string; onCeilingMax: (v: string) => void;
+  pickleballType: string; onPickleballType: (v: string) => void;
 };
 
 function VenueDetailFields({
@@ -483,6 +491,7 @@ function VenueDetailFields({
   surfaceNotes, onSurfaceNotes,
   ceilingMin, onCeilingMin,
   ceilingMax, onCeilingMax,
+  pickleballType, onPickleballType,
 }: VenueDetailFieldsProps) {
   return (
     <div style={{ marginTop: 12, borderTop: `1px solid ${rule}`, paddingTop: 12 }}>
@@ -563,6 +572,15 @@ function VenueDetailFields({
           />
         </Field>
       </FieldRow>
+      <Field label="Ball (pickleball type)">
+        <input
+          type="text"
+          value={pickleballType}
+          onChange={(e) => onPickleballType(e.target.value)}
+          placeholder="e.g. Franklin X-40, Selkirk S1"
+          style={inputStyle}
+        />
+      </Field>
     </div>
   );
 }
@@ -582,6 +600,7 @@ function VenueDetailSummary({ loc }: { loc: Location }) {
     else if (max != null) parts.push(`${max} ft ceiling`);
     else if (min != null) parts.push(`${min} ft ceiling min`);
   }
+  if (loc.pickleball_type) parts.push(loc.pickleball_type);
   if (parts.length === 0) return null;
   return (
     <div style={{ fontSize: 12, color: inkMuted, marginTop: 3 }}>{parts.join(" · ")}</div>
