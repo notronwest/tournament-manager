@@ -17,6 +17,18 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Fix: non-admins no longer land on /admin (PR #363)
+
+After a password reset (and signup / magic-link — all default to `/admin`), a
+signed-in user with **no org membership and not a platform admin** was stranded
+on `AdminIndexPage`'s "No organizations" screen. Root fix at that chokepoint:
+zero orgs + not platform admin → `navigate("/")` (public home). Catches every
+post-auth path to `/admin`, not just reset. Organizers (members / platform
+admins) unaffected — they still get the picker / single-org auto-redirect.
+Typecheck + lint clean; full E2E needs a real signed-in non-admin (couldn't
+repro in preview without creds). Branch `fix/non-admin-landing`. 🔜 Ron: merge
+#363 + promote; re-test the reset link → should land on home, not /admin.
+
 ## 2026-06-17 — Branded auth-email links (no more supabase.co) — PR #361
 
 Auth email links pointed at `wducsjqyoksmluwfgjxc.supabase.co/auth/v1/verify…`
@@ -37,10 +49,12 @@ SMTP is delivery, the link is Supabase's). Chose the free branded-route fix
   real email) — **the live test-send is the real check.** Typecheck + lint clean.
   Branch `feat/branded-auth-links`.
 
-🔜 Ron: merge #361 → promote (so `/auth/confirm` is live in prod before the
-links reference it) → re-paste the 3 updated templates → send a real test of
-each (signup, magic, reset) and confirm the link shows bertanderne.com AND the
-click actually signs you in / resets.
+**Merged (#361) + promoted to production** (PR #362, `695541f`) — `/auth/confirm`
+now live in prod. 🔜 Ron (dashboard): re-paste the 3 updated templates into both
+Supabase projects → send a real test of each (signup, magic, reset) and confirm
+the link shows bertanderne.com AND the click actually signs you in / resets. If a
+click shows "Couldn't confirm this link," suspect a stale token or a wrong project
+**Site URL**.
 
 ## 2026-06-17 — Login: two tabs by intent, magic-first signup (PR #359)
 
