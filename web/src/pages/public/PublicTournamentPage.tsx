@@ -1025,11 +1025,18 @@ export default function PublicTournamentPage() {
                   await Promise.all([reload(), refreshPending()]);
                 }}
                 onNeedsAuth={() => {
-                  // Anon visitor or no profile yet → bounce through
-                  // login + profile, then come back here.
-                  navigate("/login", {
-                    state: { from: { pathname: `/t/${orgSlug}/${tournamentSlug}` } },
-                  });
+                  const back = `/t/${orgSlug}/${tournamentSlug}`;
+                  if (user && !me) {
+                    // Already signed in but no player profile yet — send them
+                    // to complete it and return, NOT to /login (mirrors
+                    // RequireProfile's ?return= convention). Bouncing an
+                    // authenticated user to /login is what made Register look
+                    // like it "logs you out."
+                    navigate(`/profile?return=${encodeURIComponent(back)}`);
+                  } else {
+                    // Anon visitor → sign in, then come back here.
+                    navigate("/login", { state: { from: { pathname: back } } });
+                  }
                 }}
               />
             ))}
