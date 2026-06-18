@@ -65,6 +65,7 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
     surface_notes: string | null;
     ceiling_height_min_ft: number | null;
     ceiling_height_max_ft: number | null;
+    pickleball_type: string | null;
   } | null;
 };
 function composeLocationAddress(loc: {
@@ -252,7 +253,7 @@ export default function PublicTournamentPage() {
 
     const { data: t, error: tErr } = await supabase
       .from("tournaments")
-      .select("*, locations(id, name, address, address_line2, city, state, postal_code, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft)")
+      .select("*, locations(id, name, address, address_line2, city, state, postal_code, court_count, net_type, surface_type, surface_notes, ceiling_height_min_ft, ceiling_height_max_ft, pickleball_type)")
       .eq("organization_id", org.id)
       .eq("slug", tournamentSlug)
       .in("status", ["published", "closed", "completed", "cancelled"])
@@ -918,6 +919,12 @@ export default function PublicTournamentPage() {
                     ? `${tournament.locations!.ceiling_height_max_ft} ft`
                     : `${tournament.locations!.ceiling_height_min_ft} ft min`
               }
+            />
+          )}
+          {(tournament.pickleball_type ?? tournament.locations?.pickleball_type) && (
+            <Meta
+              label="Ball"
+              value={(tournament.pickleball_type ?? tournament.locations?.pickleball_type)!}
             />
           )}
         </div>

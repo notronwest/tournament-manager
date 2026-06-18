@@ -134,6 +134,9 @@ export default function TournamentWizardPage() {
   const [endsAt, setEndsAt] = useState("");
   const [registrationOpensAt, setRegistrationOpensAt] = useState("");
   const [registrationClosesAt, setRegistrationClosesAt] = useState("");
+  const [pickleballType, setPickleballType] = useState("");
+  // Venue's default ball — used as placeholder for the override input.
+  const [venuePickleballType, setVenuePickleballType] = useState<string | null>(null);
 
   // Pricing state
   const [pricingPattern, setPricingPattern] =
@@ -165,6 +168,26 @@ export default function TournamentWizardPage() {
   const [loadingDraft, setLoadingDraft] = useState(isResume);
   // Soft-required publish warning modal (cancellation policy, Stripe).
   const [showPublishWarning, setShowPublishWarning] = useState(false);
+
+  // When a saved venue is selected, fetch its pickleball_type so we can
+  // show it as placeholder text in the tournament override input.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!locationId) {
+        if (!cancelled) setVenuePickleballType(null);
+        return;
+      }
+      const { data } = await supabase
+        .from("locations")
+        .select("pickleball_type")
+        .eq("id", locationId)
+        .maybeSingle();
+      if (cancelled) return;
+      setVenuePickleballType(data?.pickleball_type ?? null);
+    })();
+    return () => { cancelled = true; };
+  }, [locationId]);
 
   // Redirect legacy step-less URLs to the per-step URL so bookmarks
   // and refreshes land on the right step going forward.
@@ -206,6 +229,7 @@ export default function TournamentWizardPage() {
       setLocationId(t.location_id ?? null);
       setLocationName(t.location_name ?? "");
       setLocationAddress(t.location_address ?? "");
+      setPickleballType(t.pickleball_type ?? "");
       setStartsAt(isoToLocal(t.starts_at));
       setEndsAt(isoToLocal(t.ends_at));
       setRegistrationOpensAt(isoToLocal(t.registration_opens_at));
@@ -311,6 +335,7 @@ export default function TournamentWizardPage() {
       location_id: locationId ?? null,
       location_name: locationId ? null : (locationName.trim() || null),
       location_address: locationId ? null : (locationAddress.trim() || null),
+      pickleball_type: pickleballType.trim() || null,
       starts_at: startsAtIso,
       ends_at: endsAtIso,
       registration_opens_at: toIso(registrationOpensAt),
@@ -668,6 +693,9 @@ export default function TournamentWizardPage() {
             setRegistrationOpensAt={setRegistrationOpensAt}
             registrationClosesAt={registrationClosesAt}
             setRegistrationClosesAt={setRegistrationClosesAt}
+            pickleballType={pickleballType}
+            setPickleballType={setPickleballType}
+            venuePickleballType={venuePickleballType}
             mode={tournament ? "edit" : "create"}
           />
         )}
@@ -1036,6 +1064,9 @@ function BasicsStep(props: {
   setRegistrationOpensAt: (s: string) => void;
   registrationClosesAt: string;
   setRegistrationClosesAt: (s: string) => void;
+  pickleballType: string;
+  setPickleballType: (s: string) => void;
+  venuePickleballType: string | null;
   mode: "create" | "edit";
 }) {
   return (
@@ -1095,6 +1126,19 @@ function BasicsStep(props: {
           setLocationName={props.setLocationName}
           locationAddress={props.locationAddress}
           setLocationAddress={props.setLocationAddress}
+        />
+      </Field>
+
+      <Field
+        label="Ball (override)"
+        hint={props.venuePickleballType ? `Venue default: ${props.venuePickleballType}` : undefined}
+      >
+        <input
+          type="text"
+          value={props.pickleballType}
+          onChange={(e) => props.setPickleballType(e.target.value)}
+          placeholder={props.venuePickleballType ?? "e.g. Franklin X-40, Selkirk S1"}
+          style={inputStyle}
         />
       </Field>
 
