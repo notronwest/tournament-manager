@@ -30,8 +30,12 @@ export default function ResetPasswordPage() {
   // We also subscribe to PASSWORD_RECOVERY to catch the event if the SDK
   // processes the hash after this component mounts.
   const [recoveryReady, setRecoveryReady] = useState(() => {
+    // Implicit-flow links land here with the recovery type in the URL hash.
     const hash = new URLSearchParams(window.location.hash.slice(1));
-    return hash.get("type") === "recovery";
+    if (hash.get("type") === "recovery") return true;
+    // Branded-flow links go through /auth/confirm, which verifies the token
+    // (establishing the recovery session) then forwards here with ?recovery=1.
+    return new URLSearchParams(window.location.search).get("recovery") === "1";
   });
   // True once the password has been set successfully.
   const [done, setDone] = useState(false);

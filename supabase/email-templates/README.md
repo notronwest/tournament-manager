@@ -12,11 +12,29 @@ are not deployable via CI.
 | `reset-password.html` | **Reset Password** | Password-reset link sent by the "forgot password" flow |
 | `confirm-signup.html` | **Confirm Signup** | Email-address confirmation for new accounts |
 
-## Supabase template variables used
+## Branded confirmation links (do NOT revert to `{{ .ConfirmationURL }}`)
 
-All three templates use `{{ .ConfirmationURL }}` — the signed URL
-Supabase generates for each auth action. That is the only variable
-needed; Supabase substitutes it at send time.
+Supabase's default `{{ .ConfirmationURL }}` points the button at
+`https://<project-ref>.supabase.co/auth/v1/verify?…` — a stranger's
+domain that reads as phishing/spam. Instead each template links to our
+own domain and we verify the token client-side:
+
+```
+{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=<type>&next={{ .RedirectTo }}
+```
+
+- `<type>` is per template: `signup` (confirm-signup), `magiclink`
+  (magic-link), `recovery` (reset-password).
+- `{{ .SiteURL }}` resolves to **each project's** Auth → URL Configuration
+  **Site URL** — so prod links use `bertanderne.com`, test uses
+  `test.bertanderne.com`. **Keep each project's Site URL correct** or the
+  links break.
+- The app route `web/src/pages/public/AuthConfirmPage.tsx` (`/auth/confirm`)
+  calls `supabase.auth.verifyOtp({ type, token_hash })`, then forwards to
+  `next` (recovery → `/reset-password?recovery=1`).
+- `{{ .RedirectTo }}` is the original destination (from `emailRedirectTo`);
+  it's same-origin, so app redirect paths stay clean (no `&` to break the
+  query). If a redirect target ever needs query params, URL-encode here.
 
 ## How to apply (do this for both projects)
 
