@@ -17,6 +17,15 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Bulk-delete events merged (PR #392)
+
+Per-row **Delete** checkbox on the "Edit all events" bulk editor; on Save, marked
+events are soft-deleted (`deleted_at`) after a ConfirmModal and drop from the table.
+**Safeguard:** events with active (paid/pending) registrations are skipped with a
+per-row error (uses `players_registered_for_events` SECURITY-DEFINER RPC). Deletions
++ edits save in one pass. Merged to main (#392) — **not promoted** (UI-only, on test).
+🔜 Ron: quick manual check on test, then promote with the next batch.
+
 ## 2026-06-18 — Copy an event (PR #395); #387 merged + promoted to prod
 
 **#387 merged + promoted** (`main`→`production` PR #394, `13c12a8`, prod 0 behind) —
