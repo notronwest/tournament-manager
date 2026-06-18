@@ -17,6 +17,113 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Header cost: prominent + right-aligned (PR #383)
+
+Polish on #382. Header Cost restyled from a small left Meta to a big bold
+display-font price pushed right (`marginLeft: auto`, right-aligned) — `$X to
+register`, additional fee, tier label, right-aligned "See full pricing schedule" —
+matching the old price panel. When/Registration stay left. Verified live; typecheck
+clean. Branch `feat/header-cost-prominent`. 🔜 Ron: merge #383 (test only; #379–#383
+the tournament-page redesign batch awaiting one prod promotion).
+
+## 2026-06-18 — Header: dates + registration window + cost consolidated (PR #382)
+
+Per Ron: brought event dates (When), the registration window, and cost into the
+header hero as an at-a-glance meta row (incl. the multi-tier "See full pricing
+schedule" toggle) and **removed the standalone price panel** (its info now lives in
+the always-visible header, so cost still shows on both tabs). Venue/format
+(Where/Courts/Nets/Surface/Ceiling) + description stay under Details; "When" dropped
+from Details (now in header). Removed the now-unused `panelStyle` import. Verified
+live (header shows When/Registration/Cost on both tabs; Where Details-only; multi-
+tier schedule expands; no console errors); typecheck clean. Branch
+`feat/header-dates-registration-cost`. **Merged to main (#382, `73b4c5d`) — NOT
+promoted** (test only). 🔜 **Ron:** the tournament-page redesign batch #379–#382
+(tabs, details→Details, Edit→wizard, consolidated header) is all on test, prod 12
+behind — review on test, then promote the whole batch when ready.
+
+## 2026-06-18 — All tournament details under Details tab; Edit → wizard (PR #381)
+
+Two asks. **(1) Public page:** removed the description + when/where/venue meta from
+the header (slim name + status + contact hero now) and moved them to the top of the
+**Details** tab. Pricing/window stays the persistent header. **(2) Admin:** the
+tournament "Edit" link (+ the "choose a venue" link) now opens the setup **wizard**
+(all steps) instead of the basic `TournamentFormPage` `/edit`. Safe for published
+tournaments — the wizard resume `payload` has no `status` (won't revert to draft)
+and pricing locks on active regs. `/edit` route/`TournamentFormPage` still exists
+but is now unlinked (candidate to retire later). Verified live (public: header
+slimmed, Details shows description/meta, Register unchanged, no console errors);
+typecheck clean. Branch `feat/tournament-details-to-tab-edit-wizard`. **Merged to
+main (#381, `6a5afae`) — NOT promoted** (on test only; prod 9 behind — #379/#380/#381
+all pending one promotion). 🔜 Ron: review on test, then promote when ready.
+
+## 2026-06-18 — Tournament page: price/window header persistent across tabs (PR #380)
+
+Follow-up to #379. Moved the pricing + registration-window panel out of the Details
+tab to a **persistent header above the tab bar** — cost/opening time now shows on
+both Details and Register. Details holds the info sections only now (+ a "No
+additional details have been posted yet" empty state). Verified live (price on both
+tabs, events under Register, no console errors); typecheck clean. Branch
+`feat/tournament-tabs-persistent-price`. **Merged to main (#380, `d5d16cf`) — NOT
+promoted** (both #379 + #380 on test only; prod 6 behind). 🔜 Ron: review tabs +
+persistent header on test, then promote when ready.
+
+## 2026-06-18 — Public tournament page split into Details / Register tabs (PR #379)
+
+`PublicTournamentPage` was one long scroll. Added a tab bar below the header
+(Anton caps, red active underline): **Details** (default) = pricing panel + the
+info sections (refund/weather/facility/sponsors/FAQs); **Register** = the events
+list + inbound-invite banner. Conditional render (not CSS hide), so each tab
+mounts/unmounts its content — implemented as two `tab==="details"` blocks with the
+register block between, no reorder needed. Resets to Details per tournament via a
+`[orgSlug, tournamentSlug]` effect (the component persists across `/t/:slug`
+navigations). Extensible: Schedule / Results slot in later. Verified live against
+real tournaments (default Details shows pricing/hides events; Register mounts 2
+event cards on Linwood; resets on navigation; no console errors). Typecheck clean;
+lint error at 514 is the pre-existing `reload` effect. Branch
+`feat/tournament-page-tabs`. **Merged to main (#379, `d8c91aa`) — NOT promoted yet**
+(on test only; prod is 3 behind). 🔜 Ron: review tabs on test, decide pricing-on-
+Details vs Register, then promote when ready.
+
+(This commit also lands the accumulated session front-door entries below — they
+were working-tree only until now.)
+
+## 2026-06-18 — Builder blocked #377 (money/Stripe hard rule)
+
+Builder ran against #377 (Charity donations P1). Blocked — three reasons hit the
+hard "money / Stripe / secrets" stop rule: (1) new Stripe PaymentIntent infra,
+(2) new secrets needed for the edge function that can't be carried in a PR, (3)
+webhook routing needs live Stripe coordination. Comment left on #377 with the
+three specific questions Ron needs to answer before Builder can draft the
+`[DB]`/`[FN]`/`[UX]` split. **Next:** Ron answers the three questions in
+[#377's comment](https://github.com/notronwest/tournament-manager/issues/377#issuecomment-4742035074)
+and moves the card back to Agent Ready.
+
+## 2026-06-18 — Charity donations epic designed + filed (#377, #378)
+
+Ron wants optional donations for charity tournaments: donate directly from the
+public tournament page (no registration) and add funds at checkout. Designed +
+decomposed; durable record is the two stories (Backlog, feature).
+
+**Locked decisions (with Ron):**
+- **Anonymous donors** — no account; collect name + email + optional message.
+- **100% to charity** — donations are a Stripe Connect destination charge to the
+  org's account with **NO platform application_fee** (registration fees keep theirs).
+- **Per-tournament toggle** (`tournaments.accepts_donations`), not a new type.
+- **Checkout = add-on only** — pay ≥ required fees; donation only increases the total.
+- Out of scope v1: tax-deductibility / charitable receipts (payment receipt only).
+
+**Stories:** #377 P1 (Next up) — standalone Donate on the tournament page: new
+`donations` table (server-only writes, org-member SELECT), `accepts_donations`
+toggle, `create-donation-intent` edge fn (destination charge, no app fee),
+public Donate flow, webhook marks paid, organizer "total raised" report. #378 P2
+(Soon, depends on #377) — add-a-donation at checkout via `create-payment-intent`
+(`donation_cents`, fee computed on registration subtotal only).
+
+**Decision:** #377 → **Agent Ready** (Builder drafts `[DB]`/`[FN]`/`[UX]`; Ron gates
+each, esp. the money PRs). #378 stays Backlog (depends on #377). 🔜 Builder drains
+#377; **Ron:** merge DB first → validate on TEST → then FN/UX. Note: donations need
+the org's Stripe Connect **active** — same onboarding gap behind the checkout error.
+
 ## 2026-06-17 — Profile: "do I even need a password?" explainer (PR #375)
 
 The "leave blank to keep your current sign-in method" copy confuses users who've
@@ -24,8 +131,8 @@ never gone passwordless. Added a **collapsed-by-default** disclosure under the
 Change-password label (`ProfilePage` Account section): explains magic-link / Google
 sign-in, why it's safe (one-time expiring links, nothing to steal), and that a
 password is optional. Pure UI. Typecheck + lint clean; couldn't preview the authed
-Account section without creds. Branch `feat/password-optional-explainer`. 🔜 Ron:
-merge #375 + promote.
+Account section without creds. Branch `feat/password-optional-explainer`.
+**Merged (#375) + promoted to production** (PR #376, `89100f7`).
 
 ## 2026-06-17 — Checkout: actionable "message the organizer" link (PR #373)
 

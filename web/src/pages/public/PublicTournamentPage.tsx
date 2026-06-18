@@ -40,7 +40,6 @@ import {
   ctaPrimaryStyle,
   ctaPrimaryDisabledStyle,
   ctaSecondaryStyle,
-  panelStyle,
   panelMutedStyle,
   statusPanelStyle,
   warnBg,
@@ -218,6 +217,11 @@ export default function PublicTournamentPage() {
   // single-price tournaments see no extra chrome and staged-pricing
   // users can dig in on demand.
   const [pricingExpanded, setPricingExpanded] = useState(false);
+
+  // Public page is split into tabs (Details first, then Register). Built to
+  // grow — Schedule / Results land here later. Details = pricing + the info
+  // sections; Register = the events list (+ inbound-invite banner).
+  const [tab, setTab] = useState<"details" | "register">("details");
 
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
@@ -511,6 +515,14 @@ export default function PublicTournamentPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [reload]);
 
+  // Open every tournament on Details first. The component instance persists
+  // across /t/:slug navigations, so without this the tab would carry over
+  // from the previous tournament.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTab("details");
+  }, [orgSlug, tournamentSlug]);
+
   if (loading) {
     return (
       <Shell>
@@ -625,81 +637,166 @@ export default function PublicTournamentPage() {
         >
           {tournament.name}
         </h1>
-        {tournament.description && (
-          <p
-            style={{
-              color: inkSoft,
-              margin: "0 0 16px",
-              fontSize: 15,
-              lineHeight: 1.55,
-              maxWidth: 580,
-            }}
-          >
-            {tournament.description}
-          </p>
-        )}
-        <div
-          style={{
-            display: "flex",
-            gap: 24,
-            flexWrap: "wrap",
-          }}
-        >
+        {/* At-a-glance: event dates, registration window, and cost — kept in
+            the header so they're always visible. Venue/format details + the
+            full description live under the Details tab. */}
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 4 }}>
           <Meta
             label="When"
             value={`${fmtDate(tournament.starts_at)} – ${fmtDate(tournament.ends_at)}`}
           />
-          {(tournament.locations ?? tournament.location_name) && (
-            <Meta
-              label="Where"
-              value={(() => {
-                if (tournament.locations) {
-                  const addrStr = composeLocationAddress(tournament.locations);
-                  return addrStr
-                    ? `${tournament.locations.name} · ${addrStr}`
-                    : tournament.locations.name;
-                }
-                return tournament.location_address
-                  ? `${tournament.location_name} · ${tournament.location_address}`
-                  : tournament.location_name!;
-              })()}
-            />
-          )}
-          {tournament.locations?.court_count != null && (
-            <Meta label="Courts" value={String(tournament.locations.court_count)} />
-          )}
-          {tournament.locations?.net_type && (
-            <Meta label="Nets" value={tournament.locations.net_type === "permanent" ? "Permanent" : "Moveable"} />
-          )}
-          {tournament.locations?.surface_type && (
-            <Meta
-              label="Surface"
-              value={
-                tournament.locations.surface_type === "concrete" ? "Concrete"
-                : tournament.locations.surface_type === "asphalt" ? "Asphalt"
-                : tournament.locations.surface_type === "cushion_core" ? "Cushion Core"
-                : tournament.locations.surface_type === "hardwood" ? "Hardwood"
-                : tournament.locations.surface_type === "polycarbonate" ? "Polycarbonate"
-                : tournament.locations.surface_type === "polyurethane" ? "Polyurethane"
-                : tournament.locations.surface_notes
-                  ? `Other (${tournament.locations.surface_notes})`
-                  : "Other"
-              }
-            />
-          )}
-          {(tournament.locations?.ceiling_height_min_ft != null || tournament.locations?.ceiling_height_max_ft != null) && (
-            <Meta
-              label="Ceiling"
-              value={
-                tournament.locations!.ceiling_height_min_ft != null && tournament.locations!.ceiling_height_max_ft != null
-                  ? `${tournament.locations!.ceiling_height_min_ft}–${tournament.locations!.ceiling_height_max_ft} ft`
-                  : tournament.locations!.ceiling_height_max_ft != null
-                    ? `${tournament.locations!.ceiling_height_max_ft} ft`
-                    : `${tournament.locations!.ceiling_height_min_ft} ft min`
-              }
-            />
+          <Meta
+            label="Registration"
+            value={
+              regStatus.tone === "soon" && tournament.registration_opens_at
+                ? `Opens ${fmtDateTime(tournament.registration_opens_at)}`
+                : registrationOpen && tournament.registration_closes_at
+                  ? `Closes ${fmtDateTime(tournament.registration_closes_at)}`
+                  : regStatus.tone === "closed"
+                    ? "Closed"
+                    : "Open"
+            }
+          />
+          {regFeeCents > 0 && (
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div
+                style={{
+                  fontFamily: displayFontStack,
+                  fontSize: 30,
+                  fontWeight: 700,
+                  color: ink,
+                  lineHeight: 1.0,
+                }}
+              >
+                ${(regFeeCents / 100).toFixed(0)}
+              </div>
+              <div style={{ fontSize: 13, color: inkSoft, marginTop: 3 }}>
+                to register · includes 1 event
+              </div>
+              {additionalFeeCents > 0 && (
+                <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
+                  +${(additionalFeeCents / 100).toFixed(0)} each additional event
+                </div>
+              )}
+              {isMultiTier && activeTier && (
+                <div
+                  style={{
+                    fontFamily: monoFontStack,
+                    fontSize: 11,
+                    color: courtBlue,
+                    marginTop: 3,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                  }}
+                >
+                  {activeTier.label}
+                  {activeTier.ends_at
+                    ? ` · ends ${fmtShortDate(activeTier.ends_at)}`
+                    : " · ongoing"}
+                </div>
+              )}
+              {isMultiTier && (
+                <button
+                  onClick={() => setPricingExpanded((e) => !e)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: "3px 0 0",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    color: courtBlue,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 2,
+                    display: "block",
+                    width: "100%",
+                    textAlign: "right",
+                  }}
+                >
+                  {pricingExpanded
+                    ? "Hide pricing schedule"
+                    : "See full pricing schedule"}
+                </button>
+              )}
+            </div>
           )}
         </div>
+        {/* Full pricing schedule — expanded on demand, inside the header. */}
+        {isMultiTier && pricingExpanded && (
+          <div
+            style={{
+              marginTop: 14,
+              borderTop: `1px solid ${rule}`,
+              paddingTop: 12,
+              maxWidth: 520,
+            }}
+          >
+            {sortedTiers.map((tier) => {
+              const isActive = tier.id === activeTier?.id;
+              return (
+                <div
+                  key={tier.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    padding: "5px 0",
+                    borderBottom: `1px solid ${rule}`,
+                    opacity: isActive ? 1 : 0.7,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? ink : inkSoft,
+                      }}
+                    >
+                      {tier.label}
+                      {isActive && (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            fontFamily: monoFontStack,
+                            fontSize: 9,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.1em",
+                            color: courtBlue,
+                          }}
+                        >
+                          active
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                      {tier.starts_at
+                        ? fmtShortDate(tier.starts_at)
+                        : "start of registration"}
+                      {" – "}
+                      {tier.ends_at ? fmtShortDate(tier.ends_at) : "no end date"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? ink : inkSoft,
+                      }}
+                    >
+                      ${(tier.first_event_fee_cents / 100).toFixed(0)}
+                    </div>
+                    {tier.additional_event_fee_cents > 0 && (
+                      <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                        +${(tier.additional_event_fee_cents / 100).toFixed(0)} add'l
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <span
           style={{
             position: "absolute",
@@ -764,171 +861,57 @@ export default function PublicTournamentPage() {
         </div>
       )}
 
+
+      {/* Section tabs — Details first, Register one click away. Built to
+          grow: Schedule / Results can slot in here later. */}
       <div
+        role="tablist"
+        aria-label="Tournament sections"
         style={{
-          ...panelStyle,
+          display: "flex",
+          gap: 4,
+          borderBottom: `1px solid ${rule}`,
           marginBottom: 24,
         }}
       >
-        {/* Main row: window info + price headline */}
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <div style={{ flex: 1 }}>
-            {/* Window detail: when it opens (if not yet) or closes (if open). */}
-            {regStatus.tone === "soon" &&
-              tournament.registration_opens_at && (
-                <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
-                  Registration opens {fmtDateTime(tournament.registration_opens_at)}
-                </div>
-              )}
-            {tournament.registration_closes_at && registrationOpen && (
-              <div style={{ fontSize: 14, color: inkSoft }}>
-                Registration closes {fmtDateTime(tournament.registration_closes_at)}
-              </div>
-            )}
-            {regStatus.tone === "closed" && (
-              <div style={{ fontSize: 12, color: inkMuted }}>
-                Registration is closed
-              </div>
-            )}
-          </div>
-          {/* Price headline — registration fee to enter the first event. */}
-          {regFeeCents > 0 && (
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div
-                style={{
-                  fontFamily: displayFontStack,
-                  fontSize: 28,
-                  color: ink,
-                  lineHeight: 1.0,
-                }}
-              >
-                ${(regFeeCents / 100).toFixed(0)}
-              </div>
-              <div style={{ fontSize: 13, color: inkSoft, marginTop: 2 }}>
-                to register · includes 1 event
-              </div>
-              {additionalFeeCents > 0 && (
-                <div style={{ fontSize: 13, color: inkMuted, marginTop: 1 }}>
-                  +${(additionalFeeCents / 100).toFixed(0)} each additional event
-                </div>
-              )}
-              {/* Multi-tier: active stage label + when it ends */}
-              {isMultiTier && activeTier && (
-                <div
-                  style={{
-                    fontFamily: monoFontStack,
-                    fontSize: 11,
-                    color: courtBlue,
-                    marginTop: 4,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.12em",
-                  }}
-                >
-                  {activeTier.label}
-                  {activeTier.ends_at
-                    ? ` · ends ${fmtShortDate(activeTier.ends_at)}`
-                    : " · ongoing"}
-                </div>
-              )}
-              {/* Multi-tier: expand/collapse toggle for full schedule */}
-              {isMultiTier && (
-                <button
-                  onClick={() => setPricingExpanded((e) => !e)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: "4px 0 0",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    color: courtBlue,
-                    textDecoration: "underline",
-                    textUnderlineOffset: 2,
-                    display: "block",
-                    marginLeft: "auto",
-                  }}
-                >
-                  {pricingExpanded
-                    ? "Hide pricing schedule"
-                    : "See full pricing schedule"}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        {/* Full pricing schedule — expanded on demand */}
-        {isMultiTier && pricingExpanded && (
-          <div
-            style={{
-              marginTop: 12,
-              borderTop: `1px solid ${rule}`,
-              paddingTop: 12,
-            }}
-          >
-            {sortedTiers.map((tier) => {
-              const isActive = tier.id === activeTier?.id;
-              return (
-                <div
-                  key={tier.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    padding: "5px 0",
-                    borderBottom: `1px solid ${rule}`,
-                    opacity: isActive ? 1 : 0.7,
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: isActive ? 600 : 400,
-                        color: isActive ? ink : inkSoft,
-                      }}
-                    >
-                      {tier.label}
-                      {isActive && (
-                        <span
-                          style={{
-                            marginLeft: 6,
-                            fontFamily: monoFontStack,
-                            fontSize: 9,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.1em",
-                            color: courtBlue,
-                          }}
-                        >
-                          active
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
-                      {tier.starts_at
-                        ? fmtShortDate(tier.starts_at)
-                        : "start of registration"}
-                      {" – "}
-                      {tier.ends_at
-                        ? fmtShortDate(tier.ends_at)
-                        : "no end date"}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? ink : inkSoft }}>
-                      ${(tier.first_event_fee_cents / 100).toFixed(0)}
-                    </div>
-                    {tier.additional_event_fee_cents > 0 && (
-                      <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
-                        +${(tier.additional_event_fee_cents / 100).toFixed(0)} add'l
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {(
+          [
+            ["details", "Details"],
+            ["register", "Register"],
+          ] as const
+        ).map(([key, label]) => {
+          const active = tab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(key)}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: headingFontStack,
+                fontSize: 14,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                padding: "10px 14px",
+                color: active ? ink : inkMuted,
+                borderBottom: active
+                  ? `3px solid ${courtRed}`
+                  : "3px solid transparent",
+                marginBottom: -1,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
+      {tab === "register" && (
+      <>
       {/* Pending-invite banner — the most actionable thing on the
           page for a player who just got picked, so it lives above
           the events list. One row per inbound invite; each row has
@@ -1043,7 +1026,86 @@ export default function PublicTournamentPage() {
           </div>
         )}
       </section>
+      </>
+      )}
 
+      {tab === "details" && (
+      <>
+      {/* Description + when/where/venue — moved here from the header so all
+          of the tournament's details live under the Details tab. */}
+      {tournament.description && (
+        <p
+          style={{
+            color: inkSoft,
+            margin: "0 0 24px",
+            fontSize: 15,
+            lineHeight: 1.6,
+            maxWidth: 640,
+          }}
+        >
+          {tournament.description}
+        </p>
+      )}
+      <div
+        style={{
+          display: "flex",
+          gap: 24,
+          flexWrap: "wrap",
+          marginBottom: 28,
+        }}
+      >
+        {/* "When" now lives in the header. */}
+        {(tournament.locations ?? tournament.location_name) && (
+          <Meta
+            label="Where"
+            value={(() => {
+              if (tournament.locations) {
+                const addrStr = composeLocationAddress(tournament.locations);
+                return addrStr
+                  ? `${tournament.locations.name} · ${addrStr}`
+                  : tournament.locations.name;
+              }
+              return tournament.location_address
+                ? `${tournament.location_name} · ${tournament.location_address}`
+                : tournament.location_name!;
+            })()}
+          />
+        )}
+        {tournament.locations?.court_count != null && (
+          <Meta label="Courts" value={String(tournament.locations.court_count)} />
+        )}
+        {tournament.locations?.net_type && (
+          <Meta label="Nets" value={tournament.locations.net_type === "permanent" ? "Permanent" : "Moveable"} />
+        )}
+        {tournament.locations?.surface_type && (
+          <Meta
+            label="Surface"
+            value={
+              tournament.locations.surface_type === "concrete" ? "Concrete"
+              : tournament.locations.surface_type === "asphalt" ? "Asphalt"
+              : tournament.locations.surface_type === "cushion_core" ? "Cushion Core"
+              : tournament.locations.surface_type === "hardwood" ? "Hardwood"
+              : tournament.locations.surface_type === "polycarbonate" ? "Polycarbonate"
+              : tournament.locations.surface_type === "polyurethane" ? "Polyurethane"
+              : tournament.locations.surface_notes
+                ? `Other (${tournament.locations.surface_notes})`
+                : "Other"
+            }
+          />
+        )}
+        {(tournament.locations?.ceiling_height_min_ft != null || tournament.locations?.ceiling_height_max_ft != null) && (
+          <Meta
+            label="Ceiling"
+            value={
+              tournament.locations!.ceiling_height_min_ft != null && tournament.locations!.ceiling_height_max_ft != null
+                ? `${tournament.locations!.ceiling_height_min_ft}–${tournament.locations!.ceiling_height_max_ft} ft`
+                : tournament.locations!.ceiling_height_max_ft != null
+                  ? `${tournament.locations!.ceiling_height_max_ft} ft`
+                  : `${tournament.locations!.ceiling_height_min_ft} ft min`
+            }
+          />
+        )}
+      </div>
       {/* Refund policy — combines cancellation preset (mechanism) with
           refund_policy_md (the organizer's copy). Show if either is set. */}
       {(tournament.cancellation_policy_preset || tournament.refund_policy_md) && (
@@ -1086,6 +1148,8 @@ export default function PublicTournamentPage() {
         <TournamentContentSection title="FAQs">
           {renderSimpleMd(tournament.faqs_md)}
         </TournamentContentSection>
+      )}
+      </>
       )}
 
     </Shell>

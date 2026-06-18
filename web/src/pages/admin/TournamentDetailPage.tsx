@@ -557,7 +557,7 @@ export default function TournamentDetailPage() {
               to the left of this) because they have public-visibility
               side effects worth surfacing in context. */}
           <Link
-            to={`/admin/${org.slug}/tournaments/${t.slug}/edit`}
+            to={`/admin/${org.slug}/tournaments/${t.slug}/wizard`}
             style={secondaryLinkBtn}
           >
             Edit
@@ -755,7 +755,7 @@ export default function TournamentDetailPage() {
                 <>
                   No venue —{" "}
                   <Link
-                    to={`/admin/${org.slug}/tournaments/${t.slug}/edit`}
+                    to={`/admin/${org.slug}/tournaments/${t.slug}/wizard`}
                     style={{ color: courtBlue, textDecoration: "none" }}
                   >
                     choose one
