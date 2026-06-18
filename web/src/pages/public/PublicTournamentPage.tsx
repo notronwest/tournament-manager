@@ -777,55 +777,8 @@ export default function PublicTournamentPage() {
         </div>
       )}
 
-      {/* Section tabs — Details first, Register one click away. Built to
-          grow: Schedule / Results can slot in here later. */}
-      <div
-        role="tablist"
-        aria-label="Tournament sections"
-        style={{
-          display: "flex",
-          gap: 4,
-          borderBottom: `1px solid ${rule}`,
-          marginBottom: 24,
-        }}
-      >
-        {(
-          [
-            ["details", "Details"],
-            ["register", "Register"],
-          ] as const
-        ).map(([key, label]) => {
-          const active = tab === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(key)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontFamily: headingFontStack,
-                fontSize: 14,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                padding: "10px 14px",
-                color: active ? ink : inkMuted,
-                borderBottom: active
-                  ? `3px solid ${courtRed}`
-                  : "3px solid transparent",
-                marginBottom: -1,
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === "details" && (
+      {/* Registration window + price — a persistent header shown above the
+          tabs on EVERY section, so the cost/opening time is always in view. */}
       <div
         style={{
           ...panelStyle,
@@ -990,7 +943,54 @@ export default function PublicTournamentPage() {
           </div>
         )}
       </div>
-      )}
+
+      {/* Section tabs — Details first, Register one click away. Built to
+          grow: Schedule / Results can slot in here later. */}
+      <div
+        role="tablist"
+        aria-label="Tournament sections"
+        style={{
+          display: "flex",
+          gap: 4,
+          borderBottom: `1px solid ${rule}`,
+          marginBottom: 24,
+        }}
+      >
+        {(
+          [
+            ["details", "Details"],
+            ["register", "Register"],
+          ] as const
+        ).map(([key, label]) => {
+          const active = tab === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(key)}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: headingFontStack,
+                fontSize: 14,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                padding: "10px 14px",
+                color: active ? ink : inkMuted,
+                borderBottom: active
+                  ? `3px solid ${courtRed}`
+                  : "3px solid transparent",
+                marginBottom: -1,
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
       {tab === "register" && (
       <>
@@ -1113,6 +1113,19 @@ export default function PublicTournamentPage() {
 
       {tab === "details" && (
       <>
+      {/* Empty state — pricing/window now live in the persistent header, so
+          the Details tab is just the info sections; show a note if none. */}
+      {!tournament.cancellation_policy_preset &&
+        !tournament.refund_policy_md &&
+        !tournament.weather_md &&
+        !tournament.facility_info_md &&
+        !tournament.additional_info_md &&
+        !tournament.sponsors_md &&
+        !tournament.faqs_md && (
+          <p style={{ color: inkMuted, fontSize: 14, margin: 0 }}>
+            No additional details have been posted yet.
+          </p>
+        )}
       {/* Refund policy — combines cancellation preset (mechanism) with
           refund_policy_md (the organizer's copy). Show if either is set. */}
       {(tournament.cancellation_policy_preset || tournament.refund_policy_md) && (

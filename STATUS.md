@@ -17,6 +17,16 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Tournament page: price/window header persistent across tabs (PR #380)
+
+Follow-up to #379. Moved the pricing + registration-window panel out of the Details
+tab to a **persistent header above the tab bar** — cost/opening time now shows on
+both Details and Register. Details holds the info sections only now (+ a "No
+additional details have been posted yet" empty state). Verified live (price on both
+tabs, events under Register, no console errors); typecheck clean. Branch
+`feat/tournament-tabs-persistent-price`. 🔜 Ron: merge #380 (still holding prod
+promotion per earlier call — both #379 + #380 on test only).
+
 ## 2026-06-18 — Public tournament page split into Details / Register tabs (PR #379)
 
 `PublicTournamentPage` was one long scroll. Added a tab bar below the header
@@ -30,7 +40,9 @@ navigations). Extensible: Schedule / Results slot in later. Verified live agains
 real tournaments (default Details shows pricing/hides events; Register mounts 2
 event cards on Linwood; resets on navigation; no console errors). Typecheck clean;
 lint error at 514 is the pre-existing `reload` effect. Branch
-`feat/tournament-page-tabs`. 🔜 Ron: merge #379 + promote.
+`feat/tournament-page-tabs`. **Merged to main (#379, `d8c91aa`) — NOT promoted yet**
+(on test only; prod is 3 behind). 🔜 Ron: review tabs on test, decide pricing-on-
+Details vs Register, then promote when ready.
 
 (This commit also lands the accumulated session front-door entries below — they
 were working-tree only until now.)
