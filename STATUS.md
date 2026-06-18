@@ -7,7 +7,7 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-15**
+Last updated: **2026-06-18**
 
 > ⚠️ **Continuity gap fixed (2026-06-14):** entries between 06-09 and 06-14
 > (login/onboarding batch, Resend SMTP, Quote Studio epic) were written to a
@@ -16,6 +16,25 @@ Last updated: **2026-06-15**
 > 06-09. This entry resyncs the front door. Durable record of that work lives on
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
+
+## 2026-06-18 — Promoted to production: ball type + copy event + bulk-delete (PR #397)
+
+Promoted `main`→`production` (PR #397, prod `0a84153`). **Migration applied green
+to PROD** (`20260618000000_pickleball_type.sql` — additive nullable `pickleball_type`
+on `locations` + `tournaments`; run 27792379142 ✅). Now live on bertanderne.com:
+ball/pickleball type (venue default + tournament override, shown as **Ball** in the
+public venue strip), copy-an-event, and bulk-delete events.
+
+⚠️ **Stacked-PR recovery first:** #388's UX (#393, commit `44f6213`) had been merged
+into the already-merged **DB branch** (`db/issue-388-pickleball-type`) instead of
+`main`, so only the columns + types reached `main` — the **Ball UI was missing**.
+Recovered by cherry-picking `44f6213` onto `main` (PR #396); the one conflict was the
+venue strip (the strip had moved under the header in #387), resolved by placing the
+**Ball** item after Ceiling and adding `pickleball_type` to the `.select` + the
+hand-written `Tournament.locations` type. Typecheck/build clean.
+🪧 Lesson: when the Builder ships stacked [DB]→[UX] PRs, merge **UX into main**, not
+into the DB branch — and after promoting, grep `origin/main` for the UX, not just the
+PR's MERGED badge.
 
 ## 2026-06-18 — Bulk-delete events merged (PR #392)
 
