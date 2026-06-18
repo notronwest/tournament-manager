@@ -7,6 +7,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -74,6 +75,17 @@ export default function BulkEventsEditPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingAll, setSavingAll] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  // Ids marked for (soft) deletion + the confirm-before-delete gate.
+  const [toDelete, setToDelete] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const toggleDelete = (id: string) =>
+    setToDelete((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   // Initial load: tournament + every non-deleted event under it.
   useEffect(() => {
@@ -158,14 +170,84 @@ export default function BulkEventsEditPage() {
   // Saves every dirty row. Validates per-row first; if any row fails
   // validation we stop before touching the database. Network errors
   // are tolerated per-row so one bad save doesn't block the rest.
-  const onSaveAll = async () => {
+  // Soft-delete the marked events — but SKIP any with active (paid/pending)
+  // registrations: deleting an event people paid into would orphan their money,
+  // so we block it and surface a per-row error instead. Returns how many were
+  // deleted vs blocked.
+  const deleteMarked = async (): Promise<{ deletedIds: string[]; blocked: number }> => {
+    const ids = [...toDelete];
+    if (ids.length === 0) return { deletedIds: [], blocked: 0 };
+
+    // Which marked events have registrations? (RPC is SECURITY DEFINER, so
+    // RLS can't hide a registration we should be protecting.)
+    const { data: regRows } = await supabase.rpc(
+      "players_registered_for_events",
+      { p_event_ids: ids },
+    );
+    const hasRegs = new Set(
+      ((regRows ?? []) as { event_id: string }[]).map((r) => r.event_id),
+    );
+    const blocked = ids.filter((id) => hasRegs.has(id));
+    const deletable = ids.filter((id) => !hasRegs.has(id));
+
+    if (blocked.length > 0) {
+      setRowState((prev) => {
+        const next = new Map(prev);
+        for (const id of blocked) {
+          next.set(id, {
+            saving: false,
+            error: "Can't delete — players are registered. Cancel/refund them first.",
+          });
+        }
+        return next;
+      });
+    }
+
+    const results = await Promise.all(
+      deletable.map(async (id) => {
+        const { error: err } = await supabase
+          .from("events")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", id);
+        return { id, ok: !err, error: err?.message ?? null };
+      }),
+    );
+    const deletedIds = results.filter((r) => r.ok).map((r) => r.id);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      setRowState((prev) => {
+        const next = new Map(prev);
+        for (const r of failed) next.set(r.id, { saving: false, error: r.error });
+        return next;
+      });
+    }
+    if (deletedIds.length > 0) {
+      const del = new Set(deletedIds);
+      setDrafts((rows) => rows.filter((r) => !del.has(r.id)));
+      setOriginals((prev) => {
+        const next = new Map(prev);
+        for (const id of deletedIds) next.delete(id);
+        return next;
+      });
+      setToDelete((prev) => {
+        const next = new Set(prev);
+        for (const id of deletedIds) next.delete(id);
+        return next;
+      });
+    }
+    return { deletedIds, blocked: blocked.length };
+  };
+
+  const doSave = async () => {
     if (!org || !tournament) return;
     setError(null);
     setSavedAt(null);
+    setConfirmDelete(false);
 
-    // Validate up front so we don't half-save.
+    // Validate edits up front (skip rows marked for deletion).
     const validated: { draft: Draft; payload: EventUpdate }[] = [];
     for (const id of dirtyIds) {
+      if (toDelete.has(id)) continue;
       const d = drafts.find((r) => r.id === id);
       if (!d) continue;
       const v = validateAndBuildPayload(d);
@@ -175,23 +257,21 @@ export default function BulkEventsEditPage() {
       }
       validated.push({ draft: d, payload: v.payload });
     }
-    if (validated.length === 0) return;
 
     setSavingAll(true);
 
-    // Reset per-row error state for the rows we're about to save.
+    // 1) Deletions (registration-guarded).
+    const { deletedIds, blocked } = await deleteMarked();
+
+    // 2) Edits (excluding anything just deleted).
+    const edits = validated.filter((v) => !deletedIds.includes(v.draft.id));
     setRowState((prev) => {
       const next = new Map(prev);
-      for (const v of validated) {
-        next.set(v.draft.id, { saving: true, error: null });
-      }
+      for (const v of edits) next.set(v.draft.id, { saving: true, error: null });
       return next;
     });
-
-    // One UPDATE per row, in parallel. Each promise resolves with
-    // either { id, ok: true } or { id, ok: false, error }.
     const results = await Promise.all(
-      validated.map(async ({ draft, payload }) => {
+      edits.map(async ({ draft, payload }) => {
         const { error: err } = await supabase
           .from("events")
           .update(payload)
@@ -199,10 +279,6 @@ export default function BulkEventsEditPage() {
         return { id: draft.id, ok: !err, error: err?.message ?? null };
       }),
     );
-
-    // Apply per-row results: clear the originals for the rows that
-    // saved (so they're no longer dirty), and stash error messages
-    // for the ones that didn't.
     setRowState((prev) => {
       const next = new Map(prev);
       for (const r of results) {
@@ -221,13 +297,25 @@ export default function BulkEventsEditPage() {
     });
 
     setSavingAll(false);
-    if (results.every((r) => r.ok)) {
+    const editFails = results.filter((r) => !r.ok).length;
+    if (editFails === 0 && blocked === 0) {
       setSavedAt(new Date());
     } else {
-      setError(
-        `${results.filter((r) => !r.ok).length} row${results.filter((r) => !r.ok).length === 1 ? "" : "s"} failed to save. See per-row errors.`,
-      );
+      const parts: string[] = [];
+      if (editFails > 0)
+        parts.push(`${editFails} edit${editFails === 1 ? "" : "s"} failed`);
+      if (blocked > 0)
+        parts.push(
+          `${blocked} event${blocked === 1 ? "" : "s"} not deleted (players registered)`,
+        );
+      setError(`${parts.join("; ")}. See per-row errors.`);
     }
+  };
+
+  // Save button entry point — confirm first if anything is marked for deletion.
+  const onSaveAll = () => {
+    if (toDelete.size > 0) setConfirmDelete(true);
+    else void doSave();
   };
 
   if (!org) return null;
@@ -319,22 +407,26 @@ export default function BulkEventsEditPage() {
                   <Th style={{ width: 200 }}>Scheduled start</Th>
                   <Th style={{ width: 110 }}>Max teams</Th>
                   <Th style={{ width: 130 }}>Custom price ($)</Th>
+                  <Th style={{ width: 70 }}>Delete</Th>
                 </tr>
               </thead>
               <tbody>
                 {drafts.map((d) => {
                   const isDirty = dirtyIds.has(d.id);
+                  const marked = toDelete.has(d.id);
                   const state = rowState.get(d.id);
                   return (
                     <tr
                       key={d.id}
                       style={{
                         borderTop: `1px solid ${rule}`,
-                        background: state?.error
-                          ? dangerBg
-                          : isDirty
-                            ? warnBg
-                            : "#ffffff",
+                        background:
+                          marked || state?.error
+                            ? dangerBg
+                            : isDirty
+                              ? warnBg
+                              : "#ffffff",
+                        opacity: marked ? 0.6 : 1,
                       }}
                     >
                       <Td>
@@ -425,6 +517,16 @@ export default function BulkEventsEditPage() {
                           disabled={savingAll}
                         />
                       </Td>
+                      <Td>
+                        <input
+                          type="checkbox"
+                          checked={marked}
+                          onChange={() => toggleDelete(d.id)}
+                          disabled={savingAll}
+                          aria-label={`Mark ${d.name || "event"} for deletion`}
+                          style={{ width: 16, height: 16, cursor: "pointer" }}
+                        />
+                      </Td>
                     </tr>
                   );
                 })}
@@ -477,24 +579,54 @@ export default function BulkEventsEditPage() {
             <button
               type="button"
               onClick={onSaveAll}
-              disabled={savingAll || dirtyIds.size === 0}
-              style={primaryBtn(savingAll || dirtyIds.size === 0)}
+              disabled={savingAll || (dirtyIds.size === 0 && toDelete.size === 0)}
+              style={primaryBtn(
+                savingAll || (dirtyIds.size === 0 && toDelete.size === 0),
+              )}
             >
               {savingAll
                 ? "Saving…"
-                : dirtyIds.size === 0
+                : dirtyIds.size === 0 && toDelete.size === 0
                   ? "No changes"
-                  : `Save ${dirtyIds.size} change${dirtyIds.size === 1 ? "" : "s"}`}
+                  : [
+                      dirtyIds.size > 0
+                        ? `Save ${dirtyIds.size} change${dirtyIds.size === 1 ? "" : "s"}`
+                        : null,
+                      toDelete.size > 0
+                        ? `${dirtyIds.size > 0 ? "delete" : "Delete"} ${toDelete.size}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
             </button>
             <Link to={backUrl} style={secondaryLinkBtn}>
               Cancel
             </Link>
-            {savedAt && dirtyIds.size === 0 && (
+            {savedAt && dirtyIds.size === 0 && toDelete.size === 0 && (
               <span style={{ color: courtGreen, fontSize: 13 }}>
                 Saved {savedAt.toLocaleTimeString()}
               </span>
             )}
           </div>
+
+          {confirmDelete && (
+            <ConfirmModal
+              title={`Delete ${toDelete.size} event${toDelete.size === 1 ? "" : "s"}?`}
+              body={
+                <>
+                  This removes {toDelete.size === 1 ? "it" : "them"} from the
+                  tournament and registration. Any event with registered players
+                  is skipped — cancel or refund those first.
+                </>
+              }
+              confirmLabel="Delete"
+              cancelLabel="Keep"
+              onCancel={() => setConfirmDelete(false)}
+              onConfirm={async () => {
+                await doSave();
+              }}
+            />
+          )}
         </>
       )}
     </div>
