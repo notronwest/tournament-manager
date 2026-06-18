@@ -17,6 +17,19 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Fix: Register no longer bounces signed-in users to /login (PR #365)
+
+A signed-in user with no player profile yet (`me === null`) clicked Register on a
+public tournament and got sent to `/login` — looked like Register logs you out.
+`onNeedsAuth` in `PublicTournamentPage` always went to `/login`; now: authed but
+no profile → `/profile?return=<tournament>` (mirrors RequireProfile's
+`?return=` convention), anonymous → `/login` as before. Surfaced by the new
+signup flows landing users on home without forcing a profile first. Typecheck
+clean (lint hits are pre-existing, not mine); couldn't repro live in preview
+(needs an authed-no-profile session + a published tournament). Branch
+`fix/register-no-profile-bounce`. 🔜 Ron: merge #365 + promote; re-test Register
+while signed in without a profile → should land on /profile, then back.
+
 ## 2026-06-17 — Fix: non-admins no longer land on /admin (PR #363)
 
 After a password reset (and signup / magic-link — all default to `/admin`), a
@@ -26,8 +39,9 @@ zero orgs + not platform admin → `navigate("/")` (public home). Catches every
 post-auth path to `/admin`, not just reset. Organizers (members / platform
 admins) unaffected — they still get the picker / single-org auto-redirect.
 Typecheck + lint clean; full E2E needs a real signed-in non-admin (couldn't
-repro in preview without creds). Branch `fix/non-admin-landing`. 🔜 Ron: merge
-#363 + promote; re-test the reset link → should land on home, not /admin.
+repro in preview without creds). **Merged (#363) + promoted to production**
+(PR #364, `df1f2ec`). 🔜 Ron: re-test the reset link → should land on home, not
+/admin.
 
 ## 2026-06-17 — Branded auth-email links (no more supabase.co) — PR #361
 
