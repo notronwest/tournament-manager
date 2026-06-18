@@ -323,6 +323,40 @@ export default function TournamentDetailPage() {
     await reload();
   };
 
+  // Duplicate an event: clone the full row into a fresh DRAFT under the same
+  // tournament. Only the event's settings are copied — registrations, matches,
+  // and court allocations are NOT. The organizer renames/tweaks the copy from
+  // there. Cloning the whole row (minus id/timestamps) keeps this robust to new
+  // columns without enumerating each field.
+  const copyEvent = async (eventId: string) => {
+    setBusyAction(`copy:${eventId}`);
+    setError(null);
+    const { data: src, error: fErr } = await supabase
+      .from("events")
+      .select("*")
+      .eq("id", eventId)
+      .single();
+    if (fErr || !src) {
+      setBusyAction(null);
+      setError(fErr?.message ?? "Couldn't load the event to copy.");
+      return;
+    }
+    // Drop identity/timestamps; keep every other column as-is.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _id, created_at: _created, deleted_at: _deleted, ...rest } = src;
+    const { error: insErr } = await supabase.from("events").insert({
+      ...rest,
+      name: `Copy of ${src.name}`,
+      status: "draft",
+    });
+    setBusyAction(null);
+    if (insErr) {
+      setError(insErr.message);
+      return;
+    }
+    await reload();
+  };
+
   // Soft-delete an event by setting deleted_at. Same pattern the rest
   // of the app uses (events are filtered by `is("deleted_at", null)`
   // everywhere). Match history, registrations, and event_courts stay
@@ -925,6 +959,7 @@ export default function TournamentDetailPage() {
                 onSetStatus={setEventStatus}
                 onToggleCourt={toggleCourt}
                 onDelete={() => setPendingDeleteEvent(s)}
+                onCopy={() => copyEvent(s.event.id)}
               />
             ))}
           </div>
@@ -1027,6 +1062,7 @@ function EventCard({
   onSetStatus,
   onToggleCourt,
   onDelete,
+  onCopy,
 }: {
   summary: EventSummary;
   courts: number[];
@@ -1037,6 +1073,7 @@ function EventCard({
   onSetStatus: (eventId: string, status: EventStatus) => Promise<void>;
   onToggleCourt: (eventId: string, courtNumber: number) => Promise<void>;
   onDelete: () => void;
+  onCopy: () => void;
 }) {
   const { event, teamCount, courtNumbers } = summary;
   const claimed = new Set(courtNumbers);
@@ -1249,6 +1286,14 @@ function EventCard({
           >
             Open →
           </Link>
+          <button
+            onClick={onCopy}
+            disabled={busyAction === `copy:${event.id}`}
+            style={secondaryBtn}
+            title="Duplicate this event's settings as a new draft. Registrations and results are not copied."
+          >
+            {busyAction === `copy:${event.id}` ? "Copying…" : "Copy"}
+          </button>
           <button
             onClick={onDelete}
             style={dangerBtn(false)}
