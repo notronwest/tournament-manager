@@ -1921,6 +1921,30 @@ function EventCard({
     }
     if (expanded) return null;
     if (me && !playerEligible) {
+      // An UNSET gender on a single-gender event is fixable — point the
+      // player at their profile instead of a dead-end "Not eligible." A
+      // *set-but-wrong* gender (e.g. M on a women's event) stays a plain
+      // block: they've declared a gender, so this bracket isn't theirs.
+      const genderUnset = me.gender == null;
+      const isGenderedEvent =
+        event.gender === "men" || event.gender === "women";
+      if (genderUnset && isGenderedEvent) {
+        return (
+          <Link
+            to={`/profile?return=${encodeURIComponent(
+              `/t/${orgSlug}/${tournamentSlug}`,
+            )}`}
+            style={{
+              fontSize: 12,
+              color: courtBlue,
+              textDecoration: "underline",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Set your gender to register →
+          </Link>
+        );
+      }
       return (
         <span style={{ fontSize: 12, color: inkMuted }}>
           Not eligible: {eligibilityReasons.join("; ")}

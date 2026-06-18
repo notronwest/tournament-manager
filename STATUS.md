@@ -17,6 +17,20 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-17 — Register: actionable hint when gender unset (PR #368)
+
+Follow-on to the gender policy. A profiled player with **no gender set** saw a
+dead-end "Not eligible: women's event" on single-gender brackets. Now the
+Register slot shows a **"Set your gender to register →"** link to
+`/profile?return=<tournament>` when gender is unset on a men's/women's event. A
+*set-but-wrong* gender (e.g. M on a women's event) keeps the plain "Not eligible"
+block — that bracket genuinely isn't theirs. Eligibility rules + the DB trust
+boundary (`enforce_event_eligibility`) unchanged; this is messaging only.
+`PublicTournamentPage` renderAction. Typecheck + lint clean (live path needs an
+authed profiled-but-genderless player on a gendered event — not repro'able in
+preview). Branch `feat/gender-unset-register-hint`. 🔜 Ron: merge #368 + promote
+(bundled with #367, already merged to main).
+
 ## 2026-06-17 — Profile: post-login soft prompt + gender policy (PR #367)
 
 **Flow.** New `ProfileOnboarding` (mounted in `App`, inside Router) listens for a
