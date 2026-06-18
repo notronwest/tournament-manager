@@ -40,7 +40,6 @@ import {
   ctaPrimaryStyle,
   ctaPrimaryDisabledStyle,
   ctaSecondaryStyle,
-  panelStyle,
   panelMutedStyle,
   statusPanelStyle,
   warnBg,
@@ -638,8 +637,169 @@ export default function PublicTournamentPage() {
         >
           {tournament.name}
         </h1>
-        {/* Description + when/where/venue meta now live under the Details
-            tab (the header is just the name + status). */}
+        {/* At-a-glance: event dates, registration window, and cost — kept in
+            the header so they're always visible. Venue/format details + the
+            full description live under the Details tab. */}
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 4 }}>
+          <Meta
+            label="When"
+            value={`${fmtDate(tournament.starts_at)} – ${fmtDate(tournament.ends_at)}`}
+          />
+          <Meta
+            label="Registration"
+            value={
+              regStatus.tone === "soon" && tournament.registration_opens_at
+                ? `Opens ${fmtDateTime(tournament.registration_opens_at)}`
+                : registrationOpen && tournament.registration_closes_at
+                  ? `Closes ${fmtDateTime(tournament.registration_closes_at)}`
+                  : regStatus.tone === "closed"
+                    ? "Closed"
+                    : "Open"
+            }
+          />
+          {regFeeCents > 0 && (
+            <div>
+              <div
+                style={{
+                  fontFamily: monoFontStack,
+                  fontSize: 11,
+                  color: inkMuted,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.18em",
+                  fontWeight: 700,
+                  marginBottom: 2,
+                }}
+              >
+                Cost
+              </div>
+              <div style={{ fontSize: 15, color: ink }}>
+                ${(regFeeCents / 100).toFixed(0)}{" "}
+                <span style={{ color: inkSoft, fontSize: 13 }}>
+                  · includes 1 event
+                </span>
+              </div>
+              {additionalFeeCents > 0 && (
+                <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
+                  +${(additionalFeeCents / 100).toFixed(0)} each additional event
+                </div>
+              )}
+              {isMultiTier && activeTier && (
+                <div
+                  style={{
+                    fontFamily: monoFontStack,
+                    fontSize: 11,
+                    color: courtBlue,
+                    marginTop: 3,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                  }}
+                >
+                  {activeTier.label}
+                  {activeTier.ends_at
+                    ? ` · ends ${fmtShortDate(activeTier.ends_at)}`
+                    : " · ongoing"}
+                </div>
+              )}
+              {isMultiTier && (
+                <button
+                  onClick={() => setPricingExpanded((e) => !e)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: "3px 0 0",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    color: courtBlue,
+                    textDecoration: "underline",
+                    textUnderlineOffset: 2,
+                    display: "block",
+                  }}
+                >
+                  {pricingExpanded
+                    ? "Hide pricing schedule"
+                    : "See full pricing schedule"}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {/* Full pricing schedule — expanded on demand, inside the header. */}
+        {isMultiTier && pricingExpanded && (
+          <div
+            style={{
+              marginTop: 14,
+              borderTop: `1px solid ${rule}`,
+              paddingTop: 12,
+              maxWidth: 520,
+            }}
+          >
+            {sortedTiers.map((tier) => {
+              const isActive = tier.id === activeTier?.id;
+              return (
+                <div
+                  key={tier.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    padding: "5px 0",
+                    borderBottom: `1px solid ${rule}`,
+                    opacity: isActive ? 1 : 0.7,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? ink : inkSoft,
+                      }}
+                    >
+                      {tier.label}
+                      {isActive && (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            fontFamily: monoFontStack,
+                            fontSize: 9,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.1em",
+                            color: courtBlue,
+                          }}
+                        >
+                          active
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                      {tier.starts_at
+                        ? fmtShortDate(tier.starts_at)
+                        : "start of registration"}
+                      {" – "}
+                      {tier.ends_at ? fmtShortDate(tier.ends_at) : "no end date"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? 600 : 400,
+                        color: isActive ? ink : inkSoft,
+                      }}
+                    >
+                      ${(tier.first_event_fee_cents / 100).toFixed(0)}
+                    </div>
+                    {tier.additional_event_fee_cents > 0 && (
+                      <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                        +${(tier.additional_event_fee_cents / 100).toFixed(0)} add'l
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <span
           style={{
             position: "absolute",
@@ -704,172 +864,6 @@ export default function PublicTournamentPage() {
         </div>
       )}
 
-      {/* Registration window + price — a persistent header shown above the
-          tabs on EVERY section, so the cost/opening time is always in view. */}
-      <div
-        style={{
-          ...panelStyle,
-          marginBottom: 24,
-        }}
-      >
-        {/* Main row: window info + price headline */}
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <div style={{ flex: 1 }}>
-            {/* Window detail: when it opens (if not yet) or closes (if open). */}
-            {regStatus.tone === "soon" &&
-              tournament.registration_opens_at && (
-                <div style={{ fontSize: 14, color: warnFg, marginBottom: 4 }}>
-                  Registration opens {fmtDateTime(tournament.registration_opens_at)}
-                </div>
-              )}
-            {tournament.registration_closes_at && registrationOpen && (
-              <div style={{ fontSize: 14, color: inkSoft }}>
-                Registration closes {fmtDateTime(tournament.registration_closes_at)}
-              </div>
-            )}
-            {regStatus.tone === "closed" && (
-              <div style={{ fontSize: 12, color: inkMuted }}>
-                Registration is closed
-              </div>
-            )}
-          </div>
-          {/* Price headline — registration fee to enter the first event. */}
-          {regFeeCents > 0 && (
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div
-                style={{
-                  fontFamily: displayFontStack,
-                  fontSize: 28,
-                  color: ink,
-                  lineHeight: 1.0,
-                }}
-              >
-                ${(regFeeCents / 100).toFixed(0)}
-              </div>
-              <div style={{ fontSize: 13, color: inkSoft, marginTop: 2 }}>
-                to register · includes 1 event
-              </div>
-              {additionalFeeCents > 0 && (
-                <div style={{ fontSize: 13, color: inkMuted, marginTop: 1 }}>
-                  +${(additionalFeeCents / 100).toFixed(0)} each additional event
-                </div>
-              )}
-              {/* Multi-tier: active stage label + when it ends */}
-              {isMultiTier && activeTier && (
-                <div
-                  style={{
-                    fontFamily: monoFontStack,
-                    fontSize: 11,
-                    color: courtBlue,
-                    marginTop: 4,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.12em",
-                  }}
-                >
-                  {activeTier.label}
-                  {activeTier.ends_at
-                    ? ` · ends ${fmtShortDate(activeTier.ends_at)}`
-                    : " · ongoing"}
-                </div>
-              )}
-              {/* Multi-tier: expand/collapse toggle for full schedule */}
-              {isMultiTier && (
-                <button
-                  onClick={() => setPricingExpanded((e) => !e)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    padding: "4px 0 0",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    color: courtBlue,
-                    textDecoration: "underline",
-                    textUnderlineOffset: 2,
-                    display: "block",
-                    marginLeft: "auto",
-                  }}
-                >
-                  {pricingExpanded
-                    ? "Hide pricing schedule"
-                    : "See full pricing schedule"}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        {/* Full pricing schedule — expanded on demand */}
-        {isMultiTier && pricingExpanded && (
-          <div
-            style={{
-              marginTop: 12,
-              borderTop: `1px solid ${rule}`,
-              paddingTop: 12,
-            }}
-          >
-            {sortedTiers.map((tier) => {
-              const isActive = tier.id === activeTier?.id;
-              return (
-                <div
-                  key={tier.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    padding: "5px 0",
-                    borderBottom: `1px solid ${rule}`,
-                    opacity: isActive ? 1 : 0.7,
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: isActive ? 600 : 400,
-                        color: isActive ? ink : inkSoft,
-                      }}
-                    >
-                      {tier.label}
-                      {isActive && (
-                        <span
-                          style={{
-                            marginLeft: 6,
-                            fontFamily: monoFontStack,
-                            fontSize: 9,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.1em",
-                            color: courtBlue,
-                          }}
-                        >
-                          active
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
-                      {tier.starts_at
-                        ? fmtShortDate(tier.starts_at)
-                        : "start of registration"}
-                      {" – "}
-                      {tier.ends_at
-                        ? fmtShortDate(tier.ends_at)
-                        : "no end date"}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? ink : inkSoft }}>
-                      ${(tier.first_event_fee_cents / 100).toFixed(0)}
-                    </div>
-                    {tier.additional_event_fee_cents > 0 && (
-                      <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
-                        +${(tier.additional_event_fee_cents / 100).toFixed(0)} add'l
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
       {/* Section tabs — Details first, Register one click away. Built to
           grow: Schedule / Results can slot in here later. */}
@@ -1063,10 +1057,7 @@ export default function PublicTournamentPage() {
           marginBottom: 28,
         }}
       >
-        <Meta
-          label="When"
-          value={`${fmtDate(tournament.starts_at)} – ${fmtDate(tournament.ends_at)}`}
-        />
+        {/* "When" now lives in the header. */}
         {(tournament.locations ?? tournament.location_name) && (
           <Meta
             label="Where"
