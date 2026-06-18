@@ -17,6 +17,21 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Copy an event (PR #395); #387 merged + promoted to prod
+
+**#387 merged + promoted** (`main`→`production` PR #394, `13c12a8`, prod 0 behind) —
+the venue strip under the header is live. **#388 (ball)** is with the Builder (DB
+PR #391 + UX PR #393, awaiting Ron's review/merge).
+
+**Copy an event (PR #395):** new "Copy" button on each event card in
+`TournamentDetailPage` (next to Edit/Open/Delete). `copyEvent` fetches the full
+event row, drops id/created_at/deleted_at, and inserts a fresh **draft** named
+"Copy of …" — cloning every other column (robust to new fields). Registrations,
+matches, and court allocations are NOT copied (just settings). Build + typecheck +
+lint clean (only the pre-existing reload-effect lint). Admin page → couldn't click
+through in preview. Branch `feat/copy-event`. 🔜 Ron: merge #395 + promote if wanted
+(UI-only).
+
 ## 2026-06-18 — Venue strip under header (PR #387) + ball field story (#388)
 
 Three asks from Ron:
