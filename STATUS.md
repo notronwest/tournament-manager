@@ -17,6 +17,26 @@ Last updated: **2026-06-15**
 > the **board** (#306–#318) and in merged PRs; the stranded local entries remain
 > in that checkout's working tree if finer detail is needed.
 
+## 2026-06-18 — Venue strip under header (PR #387) + ball field story (#388)
+
+Three asks from Ron:
+1. **Description line breaks "not working"** — actually IS working: measured the
+   live build, the description renders `<br/>` (5 in the First Responder desc, vs 0
+   in a no-newline section). Cause is prod cache (hard-refresh) or a description
+   with no saved newlines. No code change.
+2. **Venue meta to a persistent strip (PR #387):** moved
+   Where/Courts/Nets/Surface/Ceiling out of the Details tab to an always-visible
+   strip under the header (shows on both tabs). Details = description + info
+   sections; re-added a "No additional details yet" empty state. Verified live.
+3. **"Pickleball type" = the ball** (Franklin X-40, Selkirk S1, Lifetime Pro 48,
+   Vulcan…), free text, venue default + tournament override → filed **story #388**
+   (Agent Ready, feature): `pickleball_type text` on `locations` + `tournaments`,
+   effective = `tournament ?? location`, editors + a "Ball" item in the venue strip.
+   Schema → Builder splits `[DB]`/`[UX]`.
+
+🔜 Ron: merge #387 (+ promote if wanted); Builder drains #388. Hard-refresh prod to
+confirm the description line breaks.
+
 ## 2026-06-18 — Render organizer line breaks (CR/LF → <br/>) — PR #385
 
 Organizer text rendered run-on. New `nl2br()` (splits CR/LF/CRLF, interleaves
@@ -25,7 +45,7 @@ Organizer text rendered run-on. New `nl2br()` (splits CR/LF/CRLF, interleaves
 blank lines still split paragraphs, CRLF/CR normalized. Verified live (First
 Responder description shows its paragraphs/breaks — 5 `<br/>` where it was one
 block; no console errors); typecheck clean. Branch `feat/render-line-breaks`.
-🔜 Ron: merge #385 + promote if wanted (UI-only).
+**Merged (#385) + promoted to production** (PR #386, `b3361ab`) — UI-only; prod == main.
 
 ## 2026-06-18 — 🚀 Production: tournament-page redesign batch (#379–#383)
 
