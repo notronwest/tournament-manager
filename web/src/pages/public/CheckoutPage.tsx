@@ -44,6 +44,7 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import { stripePromise, stripeConfigured } from "../../lib/stripe";
+import { trackEvent } from "../../lib/analytics";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -420,6 +421,10 @@ export default function CheckoutPage() {
     setPaymentError(null);
     setPaymentErrorCode(null);
     setCreatingIntent(true);
+    trackEvent("checkout_started", {
+      tournament_slug: tournamentSlug,
+      event_count: rows.length,
+    });
     const { data, error: fnErr } = await supabase.functions.invoke(
       "create-payment-intent",
       // baseUrl is stashed in the PaymentIntent metadata so the webhook
@@ -461,6 +466,7 @@ export default function CheckoutPage() {
   // just poll our regs until they read 'paid', then show the success view.
   const onConfirmed = async () => {
     setFinalizing(true);
+    trackEvent("payment_succeeded", { tournament_slug: tournamentSlug });
     const paidRows = rows; // capture before clearing
     const regIds = paidRows.map((r) => r.regId);
 
@@ -1012,8 +1018,18 @@ export default function CheckoutPage() {
                   onPaymentError={(m) => {
                     setPaymentError(m);
                     setPaymentErrorCode(null);
+                    trackEvent("payment_failed", {
+                      tournament_slug: tournamentSlug,
+                      reason: "error",
+                    });
                   }}
-                  onPaymentDeclined={setPaymentDeclined}
+                  onPaymentDeclined={(m) => {
+                    setPaymentDeclined(m);
+                    trackEvent("payment_failed", {
+                      tournament_slug: tournamentSlug,
+                      reason: "declined",
+                    });
+                  }}
                   onCancel={() => {
                     setClientSecret(null);
                     setPaymentError(null);

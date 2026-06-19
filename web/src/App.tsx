@@ -4,6 +4,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
 import { ProfileOnboarding } from "./auth/ProfileOnboarding";
 import FeedbackWidget from "./components/FeedbackWidget";
+import { RouteTracker, ConsentBanner } from "./components/AnalyticsConsent";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
 import PendingPaymentsBar from "./components/PendingPaymentsBar";
@@ -376,6 +377,10 @@ export default function App() {
           present on every page. Opens a form that files a GitHub
           issue with the user's context (page, identity, message). */}
       <FeedbackWidget />
+      {/* Analytics: GA4 page_view on every route change + the cookie
+          consent banner that gates it (#407). */}
+      <RouteTracker />
+      <ConsentBanner />
     </PendingPaymentsProvider>
     </PartnerInvitesProvider>
   );
