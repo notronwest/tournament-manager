@@ -761,6 +761,7 @@ export default function TournamentWizardPage() {
             stripeStatus={org.stripe_account_status}
             stripeAccountId={org.stripe_account_id}
             orgSlug={org.slug}
+            tournament={tournament}
           />
         )}
         {currentStep === "review" && (
@@ -2015,10 +2016,12 @@ function PaymentStep({
   stripeStatus,
   stripeAccountId,
   orgSlug,
+  tournament,
 }: {
   stripeStatus: StripeStatus;
   stripeAccountId: string | null;
   orgSlug: string;
+  tournament: Tournament | null;
 }) {
   const ctaLabel =
     stripeStatus === "not_connected"
@@ -2086,7 +2089,180 @@ function PaymentStep({
           is a separate follow-on.
         </div>
       )}
+
+      <DonationsToggle
+        tournament={tournament}
+        stripeActive={stripeStatus === "active"}
+        orgSlug={orgSlug}
+      />
     </div>
+  );
+}
+
+// Charity donations opt-in (#377), shown in the wizard's payment step —
+// donations are a Stripe destination charge to the org's connected account,
+// so they belong next to the Stripe-connection status and are gated on it.
+// Self-persisting: toggling (or editing the prompt) saves immediately to the
+// tournament row, matching the "edit just this section" model. Disabled
+// until the tournament exists (a brand-new draft is saved after Basics).
+function DonationsToggle({
+  tournament,
+  stripeActive,
+  orgSlug,
+}: {
+  tournament: Tournament | null;
+  stripeActive: boolean;
+  orgSlug: string;
+}) {
+  const [accepts, setAccepts] = useState(tournament?.accepts_donations ?? false);
+  const [prompt, setPrompt] = useState(tournament?.donation_prompt ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const persist = async (nextAccepts: boolean, nextPrompt: string) => {
+    if (!tournament) return;
+    setSaving(true);
+    setSaved(false);
+    setSaveError(null);
+    const { error } = await supabase
+      .from("tournaments")
+      .update({
+        // Force off when Stripe isn't active — the edge function rejects it
+        // anyway; this keeps the stored flag honest.
+        accepts_donations: stripeActive ? nextAccepts : false,
+        donation_prompt: nextPrompt.trim() || null,
+      })
+      .eq("id", tournament.id);
+    setSaving(false);
+    if (error) setSaveError(error.message);
+    else setSaved(true);
+  };
+
+  const canEdit = !!tournament && stripeActive;
+
+  return (
+    <section
+      style={{
+        marginTop: 24,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        padding: 16,
+        border: `1px solid ${rule}`,
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <h3
+          style={{
+            margin: 0,
+            fontSize: 13,
+            fontFamily: headingFontStack,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            color: ink,
+          }}
+        >
+          Donations
+        </h3>
+        {saving && (
+          <span style={{ fontSize: 11, color: inkMuted }}>Saving…</span>
+        )}
+        {saved && !saving && (
+          <span style={{ fontSize: 11, color: courtGreen }}>Saved ✓</span>
+        )}
+      </div>
+
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 8,
+          fontSize: 14,
+          color: canEdit ? ink : inkMuted,
+          fontFamily: bodyFontStack,
+          cursor: canEdit ? "pointer" : "not-allowed",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={accepts}
+          disabled={!canEdit}
+          onChange={(e) => {
+            setAccepts(e.target.checked);
+            void persist(e.target.checked, prompt);
+          }}
+          style={{ marginTop: 2 }}
+        />
+        <span>
+          Accept donations
+          <span
+            style={{
+              display: "block",
+              fontSize: 12,
+              color: inkMuted,
+              marginTop: 2,
+            }}
+          >
+            Adds a public “Donate” button to this tournament’s page. 100% of
+            each donation (minus card-processing fees) goes to your connected
+            account — no platform fee.
+          </span>
+        </span>
+      </label>
+
+      {!tournament && (
+        <p style={{ margin: 0, fontSize: 12, color: inkSoft, fontFamily: bodyFontStack }}>
+          Save the tournament first, then you can turn on donations here.
+        </p>
+      )}
+
+      {tournament && !stripeActive && (
+        <p style={{ margin: 0, fontSize: 12, color: inkSoft, fontFamily: bodyFontStack }}>
+          Connect Stripe to accept donations — finish setup in{" "}
+          <Link
+            to={`/admin/${orgSlug}/settings/stripe`}
+            style={{ color: courtRed, textDecoration: "underline" }}
+          >
+            Stripe settings
+          </Link>
+          .
+        </p>
+      )}
+
+      {canEdit && accepts && (
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 12, color: inkSoft, fontFamily: bodyFontStack }}>
+            Donation prompt (optional)
+          </span>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onBlur={() => void persist(accepts, prompt)}
+            rows={2}
+            maxLength={280}
+            placeholder="e.g. Proceeds benefit the First Responders Fund."
+            style={{
+              padding: "8px 12px",
+              border: `1px solid ${rule}`,
+              borderRadius: 6,
+              fontSize: 14,
+              fontFamily: bodyFontStack,
+              color: ink,
+              background: "#ffffff",
+              resize: "vertical",
+            }}
+          />
+        </label>
+      )}
+
+      {saveError && (
+        <p style={{ margin: 0, fontSize: 12, color: dangerFg, fontFamily: bodyFontStack }}>
+          Couldn’t save: {saveError}
+        </p>
+      )}
+    </section>
   );
 }
 
