@@ -55,6 +55,7 @@ import TournamentCouponsPage from "./pages/admin/TournamentCouponsPage";
 import LocationsPage from "./pages/admin/LocationsPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
+import PairingBoardPage from "./pages/admin/PairingBoardPage";
 
 export default function App() {
   return (
@@ -351,6 +352,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/events/:eventId/scorecards"
           element={<ScorecardsPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId/pair-teams"
+          element={<PairingBoardPage />}
         />
       </Route>
 
