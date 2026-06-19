@@ -75,9 +75,17 @@ function couponToEditDraft(c: Coupon): DraftCoupon {
   };
 }
 
-export default function TournamentCouponsPage() {
+// `embedded` is set when rendered inside the tournament edit wizard as a
+// step pane — drops the breadcrumb + page padding so it sits cleanly in the
+// wizard's content area instead of as a standalone page.
+export default function TournamentCouponsPage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { org, role } = useCurrentOrg();
   const { tournamentSlug } = useParams<{ tournamentSlug: string }>();
+  const outerStyle: CSSProperties = embedded ? {} : pageStyle;
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
@@ -185,21 +193,23 @@ export default function TournamentCouponsPage() {
     void load();
   };
 
-  if (!org || loading) return <div style={pageStyle}>Loading…</div>;
-  if (error) return <div style={pageStyle}><div style={errorStyle}>{error}</div></div>;
+  if (!org || loading) return <div style={outerStyle}>Loading…</div>;
+  if (error) return <div style={outerStyle}><div style={errorStyle}>{error}</div></div>;
   if (!tournament) return null;
 
   return (
-    <div style={pageStyle}>
-      <nav style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
-        <Link
-          to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-          style={{ color: "#2563eb", textDecoration: "none" }}
-        >
-          {tournament.name}
-        </Link>
-        {" / Coupons"}
-      </nav>
+    <div style={outerStyle}>
+      {!embedded && (
+        <nav style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
+          <Link
+            to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
+            style={{ color: "#2563eb", textDecoration: "none" }}
+          >
+            {tournament.name}
+          </Link>
+          {" / Coupons"}
+        </nav>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Coupons</h1>
