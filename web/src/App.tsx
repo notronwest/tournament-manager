@@ -33,6 +33,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
+import DonatePage from "./pages/public/DonatePage";
 import CustomerQuotePage from "./pages/public/CustomerQuotePage";
 import EstimatePage from "./pages/public/EstimatePage";
 import GettingStartedPage from "./pages/public/GettingStartedPage";
@@ -53,6 +54,7 @@ import SeedEventPage from "./pages/admin/tools/SeedEventPage";
 import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
 import TournamentContactsPage from "./pages/admin/TournamentContactsPage";
 import TournamentCouponsPage from "./pages/admin/TournamentCouponsPage";
+import TournamentDonationsPage from "./pages/admin/TournamentDonationsPage";
 import LocationsPage from "./pages/admin/LocationsPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
@@ -139,6 +141,11 @@ export default function App() {
       <Route
         path="/t/:orgSlug/:tournamentSlug/contact"
         element={<TournamentContactPage />}
+      />
+      {/* Public charity donation — anonymous, no auth (#377). */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/donate"
+        element={<DonatePage />}
       />
       {/* Partner invite accept page. NOT wrapped in RequireAuth /
           RequireProfile — the page handles those states internally so
@@ -321,6 +328,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/coupons"
           element={<TournamentCouponsPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/donations"
+          element={<TournamentDonationsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/change-requests"
