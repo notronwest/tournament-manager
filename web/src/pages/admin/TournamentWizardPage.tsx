@@ -127,6 +127,9 @@ export default function TournamentWizardPage() {
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const eventCount = events.length;
+  // Counts for the edit-mode rail summaries (Coupons / Tournament contacts).
+  const [couponCount, setCouponCount] = useState(0);
+  const [contactCount, setContactCount] = useState(0);
 
   // Basics form state
   const [name, setName] = useState("");
@@ -284,6 +287,24 @@ export default function TournamentWizardPage() {
         if (cancelled) return;
         setActiveRegCount(count ?? 0);
       }
+
+      // Counts for the edit-mode rail (Coupons / Tournament contacts).
+      const { count: cpnCount } = await supabase
+        .from("coupons")
+        .select("id", { count: "exact", head: true })
+        .eq("tournament_id", t.id)
+        .is("deleted_at", null);
+      if (cancelled) return;
+      setCouponCount(cpnCount ?? 0);
+
+      const { count: ctcCount } = await supabase
+        .from("tournament_contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("tournament_id", t.id)
+        .is("deleted_at", null);
+      if (cancelled) return;
+      setContactCount(ctcCount ?? 0);
+
       setLoadingDraft(false);
     })();
     return () => {
@@ -658,6 +679,83 @@ export default function TournamentWizardPage() {
   // cancellation / sponsors / faqs / payment / review: optional or
   // terminal — no blocker.
 
+  // ── Edit-mode section index ─────────────────────────────────────
+  // A saved tournament is edited, not built: the rail reflects each
+  // section's *content* (not your position) and shows its current value,
+  // so it reads like a settings index you can jump around — see
+  // sectionMeta below + the editMode branch in <Rail>.
+  const editMode = !!tournament;
+  const fmtDay = (local: string): string => {
+    if (!local) return "";
+    const d = new Date(local);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+  const venueLabel =
+    tournament?.location_name?.trim() ||
+    locationName.trim() ||
+    (locationId ? "Venue set" : "");
+  const contentFilled = [
+    additionalInfoMd,
+    refundPolicyMd,
+    weatherMd,
+    facilityInfoMd,
+  ].some((m) => m.trim() !== "");
+  const presetLabel = cancellationPreset
+    ? cancellationPreset.charAt(0).toUpperCase() + cancellationPreset.slice(1)
+    : "";
+  const stripeActive = org.stripe_account_status === "active";
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+  const sectionMeta: Record<
+    StepId,
+    { state: "done" | "attention" | "empty"; summary: string }
+  > = {
+    basics: {
+      state: "done",
+      summary:
+        [fmtDay(startsAt), venueLabel].filter(Boolean).join(" · ") ||
+        "Name · dates · venue",
+    },
+    events: {
+      state: eventCount > 0 ? "done" : "attention",
+      summary: eventCount > 0 ? plural(eventCount, "event") : "No events yet",
+    },
+    pricing: { state: "done", summary: plural(pricingTiers.length, "tier") },
+    coupons: {
+      state: couponCount > 0 ? "done" : "empty",
+      summary: couponCount > 0 ? plural(couponCount, "coupon") : "None yet",
+    },
+    cancellation: {
+      state: cancellationPreset ? "done" : "empty",
+      summary: presetLabel || "Not set",
+    },
+    sponsors: {
+      state: sponsorsMd.trim() ? "done" : "empty",
+      summary: sponsorsMd.trim() ? "Added" : "Not added",
+    },
+    content: {
+      state: contentFilled ? "done" : "empty",
+      summary: contentFilled ? "Added" : "Not added",
+    },
+    faqs: {
+      state: faqsMd.trim() ? "done" : "empty",
+      summary: faqsMd.trim() ? "Added" : "Not added",
+    },
+    contacts: {
+      state: contactCount > 0 ? "done" : "empty",
+      summary: contactCount > 0 ? plural(contactCount, "contact") : "None yet",
+    },
+    payment: {
+      state: stripeActive ? "done" : "empty",
+      summary: stripeActive ? "Stripe connected" : "Not connected",
+    },
+    review: {
+      state: publishBlockers.length === 0 ? "done" : "attention",
+      summary: publishBlockers.length === 0 ? "Ready to publish" : "Needs more info",
+    },
+  };
+
   // ── Render ──────────────────────────────────────────────────────
 
   return (
@@ -671,6 +769,9 @@ export default function TournamentWizardPage() {
         onPublish={() => goStep("review")}
         onSaveExit={() => void saveAndExit()}
         publishable={publishBlockers.length === 0}
+        editMode={editMode}
+        statusLabel={tournament?.status ?? "draft"}
+        sectionMeta={sectionMeta}
       />
 
       <main style={paneStyle}>
@@ -817,15 +918,28 @@ export default function TournamentWizardPage() {
         {/* Bottom action bar — Back / Skip-when-optional / Save&continue
             or Publish (on review). */}
         <div style={actionBarStyle}>
-          <button
-            type="button"
-            style={btnGhost}
-            onClick={() => prev && goStep(prev.id)}
-            disabled={!prev || busy}
-          >
-            ← Back
-          </button>
-          {STEPS[stepIndex] && !STEPS[stepIndex].required && next && (
+          {editMode ? (
+            // Editing a saved tournament: no linear Back/Skip — the section
+            // index handles navigation. The left action just exits.
+            <button
+              type="button"
+              style={btnGhost}
+              onClick={() => void saveAndExit()}
+              disabled={busy}
+            >
+              Done
+            </button>
+          ) : (
+            <button
+              type="button"
+              style={btnGhost}
+              onClick={() => prev && goStep(prev.id)}
+              disabled={!prev || busy}
+            >
+              ← Back
+            </button>
+          )}
+          {!editMode && STEPS[stepIndex] && !STEPS[stepIndex].required && next && (
             <button
               type="button"
               style={btnSecondary}
@@ -850,6 +964,18 @@ export default function TournamentWizardPage() {
               disabled={busy || publishBlockers.length > 0}
             >
               {busy ? "Publishing…" : "Publish tournament"}
+            </button>
+          ) : editMode ? (
+            // Self-contained section save — stays on the section (the
+            // embedded Coupons/Contacts/Payment steps save themselves, so
+            // this is a no-op there).
+            <button
+              type="button"
+              style={btnPrimary(busy)}
+              onClick={() => void saveCurrentStep()}
+              disabled={busy}
+            >
+              {busy ? "Saving…" : "Save"}
             </button>
           ) : (
             <button
@@ -921,19 +1047,32 @@ function Rail({
   onPublish,
   onSaveExit,
   publishable,
+  editMode,
+  statusLabel,
+  sectionMeta,
 }: {
   steps: StepMeta[];
   current: StepId;
   // Non-null = the current step has unmet required fields; forward
   // step buttons in the rail are disabled and show this as a tooltip
   // so the organizer can't jump past an incomplete required step.
-  // Back navigation is unaffected.
+  // Back navigation is unaffected. (Create mode only — edit mode never
+  // locks; every section is freely clickable.)
   forwardBlocker: string | null;
   tournamentName: string;
   onPick: (id: StepId) => void;
   onPublish: () => void;
   onSaveExit: () => void;
   publishable: boolean;
+  // Edit mode: the tournament is saved, so the rail is a section index
+  // (content-based state + current value per row, all clickable) rather
+  // than a linear numbered stepper.
+  editMode: boolean;
+  statusLabel: string;
+  sectionMeta: Record<
+    StepId,
+    { state: "done" | "attention" | "empty"; summary: string }
+  >;
 }) {
   const currentIdx = steps.findIndex((s) => s.id === current);
   return (
@@ -950,8 +1089,8 @@ function Rail({
             display: "inline-block",
             marginTop: 6,
             padding: "2px 8px",
-            background: ruleSoft,
-            color: inkMuted,
+            background: editMode && statusLabel === "published" ? successBg : ruleSoft,
+            color: editMode && statusLabel === "published" ? successFg : inkMuted,
             borderRadius: 3,
             fontSize: 10,
             fontWeight: 600,
@@ -960,12 +1099,48 @@ function Rail({
             fontFamily: bodyFontStack,
           }}
         >
-          Draft
+          {editMode ? statusLabel : "Draft"}
         </div>
       </div>
 
       <ol style={stepListStyle}>
         {steps.map((s, i) => {
+          // ── Edit mode: section index — content state + current value,
+          // every row clickable (never locked). ──────────────────────
+          if (editMode) {
+            const meta = sectionMeta[s.id];
+            const isCurrent = i === currentIdx;
+            return (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  onClick={() => onPick(s.id)}
+                  style={sectionRowStyle(isCurrent)}
+                >
+                  <span style={sectionIndicatorStyle(meta.state)}>
+                    {meta.state === "done" ? "✓" : meta.state === "attention" ? "!" : "+"}
+                  </span>
+                  <span style={{ flex: 1, textAlign: "left" }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isCurrent ? 600 : 500,
+                        color: ink,
+                      }}
+                    >
+                      {s.title}
+                    </div>
+                    <div style={{ fontSize: 11, color: inkMuted, marginTop: 1 }}>
+                      {meta.summary}
+                    </div>
+                  </span>
+                  <span style={{ color: inkMuted, fontSize: 15 }}>›</span>
+                </button>
+              </li>
+            );
+          }
+
+          // ── Create mode: linear numbered stepper (forward-locked). ──
           const state =
             i < currentIdx ? "done" : i === currentIdx ? "active" : "todo";
           const isForward = i > currentIdx;
@@ -1007,7 +1182,7 @@ function Rail({
         })}
       </ol>
 
-      {forwardBlocker && (
+      {!editMode && forwardBlocker && (
         <div
           style={{
             padding: "8px 10px",
@@ -2620,6 +2795,49 @@ function indicatorStyle(state: "done" | "active" | "todo"): CSSProperties {
     alignItems: "center",
     justifyContent: "center",
     fontSize: 11,
+    fontWeight: 600,
+    flexShrink: 0,
+  };
+}
+
+// Edit-mode rail row — a settings-style section row (current value + chevron).
+function sectionRowStyle(isCurrent: boolean): CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    width: "100%",
+    padding: "8px 10px",
+    background: isCurrent ? "#ffffff" : "transparent",
+    border: "1px solid transparent",
+    borderLeft: isCurrent ? `2px solid ${courtBlue}` : "2px solid transparent",
+    borderRadius: isCurrent ? 6 : 0,
+    cursor: "pointer",
+    textAlign: "left",
+    fontFamily: bodyFontStack,
+  };
+}
+
+function sectionIndicatorStyle(
+  state: "done" | "attention" | "empty",
+): CSSProperties {
+  const filled = state === "done";
+  const attention = state === "attention";
+  return {
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    background: filled ? successBg : attention ? warnBg : "transparent",
+    color: filled ? successFg : attention ? warnFg : inkMuted,
+    border: filled
+      ? `1px solid ${courtGreen}`
+      : attention
+        ? `1px solid ${courtYellow}`
+        : `1px dashed ${rule}`,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 12,
     fontWeight: 600,
     flexShrink: 0,
   };
