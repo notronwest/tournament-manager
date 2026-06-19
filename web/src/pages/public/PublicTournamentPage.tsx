@@ -835,7 +835,15 @@ export default function PublicTournamentPage() {
           )}
           {regStatus.label}
         </span>
-        <div style={{ marginTop: 20 }}>
+        <div
+          style={{
+            marginTop: 20,
+            display: "flex",
+            gap: 20,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <Link
             to={`/t/${orgSlug}/${tournamentSlug}/contact`}
             style={{
@@ -847,6 +855,22 @@ export default function PublicTournamentPage() {
           >
             Contact organizers →
           </Link>
+          {/* Charity donations (#377): only shown when the organizer has
+              opted this tournament in. */}
+          {tournament.accepts_donations && (
+            <Link
+              to={`/t/${orgSlug}/${tournamentSlug}/donate`}
+              style={{
+                fontSize: 13,
+                color: courtRed,
+                textDecoration: "none",
+                fontFamily: headingFontStack,
+                fontWeight: 600,
+              }}
+            >
+              Donate ♥
+            </Link>
+          )}
         </div>
       </header>
 

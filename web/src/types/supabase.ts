@@ -232,6 +232,85 @@ export type Database = {
           },
         ]
       }
+      donations: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          donor_email: string
+          donor_name: string
+          failure_message: string | null
+          id: string
+          message: string | null
+          organization_id: string
+          payment_id: string | null
+          raw: Json | null
+          status: Database["public"]["Enums"]["payment_status"]
+          stripe_charge_id: string | null
+          stripe_connected_account_id: string | null
+          stripe_payment_intent_id: string | null
+          tournament_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          donor_email: string
+          donor_name: string
+          failure_message?: string | null
+          id?: string
+          message?: string | null
+          organization_id: string
+          payment_id?: string | null
+          raw?: Json | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          stripe_charge_id?: string | null
+          stripe_connected_account_id?: string | null
+          stripe_payment_intent_id?: string | null
+          tournament_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          donor_email?: string
+          donor_name?: string
+          failure_message?: string | null
+          id?: string
+          message?: string | null
+          organization_id?: string
+          payment_id?: string | null
+          raw?: Json | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          stripe_charge_id?: string | null
+          stripe_connected_account_id?: string | null
+          stripe_payment_intent_id?: string | null
+          tournament_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "donations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "donations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "donations_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_courts: {
         Row: {
           court_number: number
@@ -1495,6 +1574,7 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          accepts_donations: boolean
           additional_info_md: string | null
           archived_at: string | null
           cancellation_policy_preset:
@@ -1504,6 +1584,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           description: string | null
+          donation_prompt: string | null
           ends_at: string
           facility_info_md: string | null
           faqs_md: string | null
@@ -1527,6 +1608,7 @@ export type Database = {
           weather_md: string | null
         }
         Insert: {
+          accepts_donations?: boolean
           additional_info_md?: string | null
           archived_at?: string | null
           cancellation_policy_preset?:
@@ -1536,6 +1618,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           description?: string | null
+          donation_prompt?: string | null
           ends_at: string
           facility_info_md?: string | null
           faqs_md?: string | null
@@ -1559,6 +1642,7 @@ export type Database = {
           weather_md?: string | null
         }
         Update: {
+          accepts_donations?: boolean
           additional_info_md?: string | null
           archived_at?: string | null
           cancellation_policy_preset?:
@@ -1568,6 +1652,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           description?: string | null
+          donation_prompt?: string | null
           ends_at?: string
           facility_info_md?: string | null
           faqs_md?: string | null

@@ -643,6 +643,14 @@ export default function TournamentDetailPage() {
               Coupons
             </Link>
           )}
+          {t.accepts_donations && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/donations`}
+              style={secondaryLinkBtn}
+            >
+              Donations
+            </Link>
+          )}
           {/* Court manager is always reachable from the tournament home —
               users want it to peek at the queue / setup courts even
               before an event is active. The page itself handles the

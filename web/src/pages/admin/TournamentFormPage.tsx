@@ -68,6 +68,11 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
   const [endsAt, setEndsAt] = useState("");
   const [registrationOpensAt, setRegistrationOpensAt] = useState("");
   const [registrationClosesAt, setRegistrationClosesAt] = useState("");
+  // Charity donations (#377). Opt-in toggle + optional public prompt.
+  // Gated on the org having an active Stripe Connect account (same gate
+  // as paid registration) — the donation edge function refuses otherwise.
+  const [acceptsDonations, setAcceptsDonations] = useState(false);
+  const [donationPrompt, setDonationPrompt] = useState("");
   // Pricing: a pattern + an ordered list of tier drafts. Create mode
   // starts as a single "Standard" tier (the simple default). Edit
   // mode loads the tournament's real tiers + pattern below.
@@ -125,6 +130,8 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       setEndsAt(isoToLocal(data.ends_at));
       setRegistrationOpensAt(isoToLocal(data.registration_opens_at));
       setRegistrationClosesAt(isoToLocal(data.registration_closes_at));
+      setAcceptsDonations(data.accepts_donations);
+      setDonationPrompt(data.donation_prompt ?? "");
       setPricingPattern(data.pricing_pattern);
 
       // Load the tournament's pricing tiers and convert to drafts.
@@ -224,6 +231,12 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       registration_opens_at: toIso(registrationOpensAt),
       registration_closes_at: toIso(registrationClosesAt),
       pricing_pattern: pricingPattern,
+      // Donations can only be on if the org's Stripe Connect is active —
+      // force off otherwise so a stale toggle can't enable a flow the edge
+      // function would reject anyway.
+      accepts_donations:
+        org.stripe_account_status === "active" ? acceptsDonations : false,
+      donation_prompt: donationPrompt.trim() || null,
     };
 
     setBusy(true);
@@ -441,6 +454,15 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
           }}
         />
 
+        <DonationsSection
+          stripeActive={org.stripe_account_status === "active"}
+          orgSlug={org.slug}
+          accepts={acceptsDonations}
+          setAccepts={setAcceptsDonations}
+          prompt={donationPrompt}
+          setPrompt={setDonationPrompt}
+        />
+
         {error && (
           <div
             style={{
@@ -536,6 +558,126 @@ function FieldRow({ children }: { children: ReactNode }) {
     >
       {children}
     </div>
+  );
+}
+
+// Charity donations opt-in (#377). The toggle is disabled unless the org's
+// Stripe Connect is active — donations are a destination charge to the
+// org's connected account, so without it there's nowhere for the money to
+// land. Mirrors the gate the donation edge function enforces server-side.
+function DonationsSection({
+  stripeActive,
+  orgSlug,
+  accepts,
+  setAccepts,
+  prompt,
+  setPrompt,
+}: {
+  stripeActive: boolean;
+  orgSlug: string;
+  accepts: boolean;
+  setAccepts: (v: boolean) => void;
+  prompt: string;
+  setPrompt: (v: string) => void;
+}) {
+  return (
+    <section
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        padding: 16,
+        border: `1px solid ${rule}`,
+        borderRadius: 8,
+      }}
+    >
+      <h2
+        style={{
+          margin: 0,
+          fontSize: 13,
+          fontFamily: headingFontStack,
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          color: ink,
+        }}
+      >
+        Donations
+      </h2>
+
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 8,
+          fontSize: 14,
+          color: stripeActive ? ink : inkMuted,
+          fontFamily: bodyFontStack,
+          cursor: stripeActive ? "pointer" : "not-allowed",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={accepts}
+          disabled={!stripeActive}
+          onChange={(e) => setAccepts(e.target.checked)}
+          style={{ marginTop: 2 }}
+        />
+        <span>
+          Accept donations
+          <span
+            style={{
+              display: "block",
+              fontSize: 12,
+              color: inkMuted,
+              marginTop: 2,
+            }}
+          >
+            Adds a public “Donate” button to this tournament’s page. 100% of
+            each donation (minus card-processing fees) goes to your connected
+            account — no platform fee.
+          </span>
+        </span>
+      </label>
+
+      {!stripeActive && (
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12,
+            color: inkSoft,
+            fontFamily: bodyFontStack,
+          }}
+        >
+          Connect Stripe to accept donations. Finish setup in{" "}
+          <a
+            href={`/admin/${orgSlug}/settings/stripe`}
+            style={{ color: courtRed, textDecoration: "underline" }}
+          >
+            Stripe settings
+          </a>
+          .
+        </p>
+      )}
+
+      {stripeActive && accepts && (
+        <Field
+          label="Donation prompt (optional)"
+          hint="Shown by the Donate button, e.g. “Proceeds benefit the First Responders Fund.”"
+        >
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            rows={2}
+            maxLength={280}
+            style={{
+              ...inputStyle,
+              fontFamily: bodyFontStack,
+              resize: "vertical",
+            }}
+          />
+        </Field>
+      )}
+    </section>
   );
 }
 
