@@ -59,13 +59,20 @@ Deno.serve(async (req: Request) => {
     switch (event.type) {
       case "payment_intent.succeeded": {
         const pi = event.data.object;
-        await handleSucceeded(pi);
+        // Donations (#377) ride the same Stripe account + webhook as
+        // registration payments; metadata.type tells them apart.
+        if (pi.metadata?.type === "donation") {
+          await handleDonationSucceeded(pi);
+        } else {
+          await handleSucceeded(pi);
+        }
         break;
       }
       case "payment_intent.payment_failed": {
         const pi = event.data.object;
+        const table = pi.metadata?.type === "donation" ? "donations" : "payments";
         await admin
-          .from("payments")
+          .from(table)
           .update({
             status: "failed",
             failure_message: pi.last_payment_error?.message ?? "payment failed",
@@ -73,6 +80,20 @@ Deno.serve(async (req: Request) => {
           })
           .eq("stripe_payment_intent_id", pi.id)
           .neq("status", "succeeded"); // never downgrade a succeeded payment
+        break;
+      }
+      case "charge.refunded": {
+        // Refunds surface as charge.* events. We only act on DONATIONS here
+        // (keyed by our own table, so registration charges are untouched):
+        // mark the donation refunded so the organizer report reflects it.
+        const charge = event.data.object;
+        if (charge.payment_intent) {
+          await admin
+            .from("donations")
+            .update({ status: "refunded", raw: charge })
+            .eq("stripe_payment_intent_id", charge.payment_intent)
+            .neq("status", "refunded");
+        }
         break;
       }
       default:
@@ -85,6 +106,28 @@ Deno.serve(async (req: Request) => {
     return new Response(`handler error: ${String(e?.message ?? e)}`, { status: 500 });
   }
 });
+
+// Donations (#377): mark the pending donation paid. Simpler than the
+// registration path — no registrations to flip, no coupons, no invites.
+// Idempotent: re-delivered events are no-ops.
+async function handleDonationSucceeded(pi: any) {
+  const { data: donation } = await admin
+    .from("donations")
+    .select("id, status")
+    .eq("stripe_payment_intent_id", pi.id)
+    .single();
+  if (!donation) return; // intent we didn't create — ignore.
+  if (donation.status === "succeeded") return; // already processed.
+
+  await admin
+    .from("donations")
+    .update({
+      status: "succeeded",
+      stripe_charge_id: pi.latest_charge ?? null,
+      raw: pi,
+    })
+    .eq("id", donation.id);
+}
 
 async function handleSucceeded(pi: any) {
   // ── Idempotency guard: only act if not already succeeded ──────────

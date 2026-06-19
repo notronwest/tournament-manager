@@ -198,3 +198,9 @@ verify_jwt = false
 # from the Authorization header when present (optional sign-in context).
 [functions.submit-feedback]
 verify_jwt = false
+
+# Public charity donations (#377) are anonymous — no Supabase JWT. The
+# amount is bounds-checked server-side and the donation row is written via
+# service_role; there is no client write path.
+[functions.create-donation-intent]
+verify_jwt = false
