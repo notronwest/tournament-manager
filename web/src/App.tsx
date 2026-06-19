@@ -4,6 +4,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
 import { ProfileOnboarding } from "./auth/ProfileOnboarding";
 import FeedbackWidget from "./components/FeedbackWidget";
+import { RouteTracker, ConsentBanner } from "./components/AnalyticsConsent";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
 import PendingPaymentsBar from "./components/PendingPaymentsBar";
@@ -32,6 +33,7 @@ import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
+import DonatePage from "./pages/public/DonatePage";
 import CustomerQuotePage from "./pages/public/CustomerQuotePage";
 import EstimatePage from "./pages/public/EstimatePage";
 import GettingStartedPage from "./pages/public/GettingStartedPage";
@@ -52,9 +54,11 @@ import SeedEventPage from "./pages/admin/tools/SeedEventPage";
 import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
 import TournamentContactsPage from "./pages/admin/TournamentContactsPage";
 import TournamentCouponsPage from "./pages/admin/TournamentCouponsPage";
+import TournamentDonationsPage from "./pages/admin/TournamentDonationsPage";
 import LocationsPage from "./pages/admin/LocationsPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
+import PairingBoardPage from "./pages/admin/PairingBoardPage";
 
 export default function App() {
   return (
@@ -137,6 +141,11 @@ export default function App() {
       <Route
         path="/t/:orgSlug/:tournamentSlug/contact"
         element={<TournamentContactPage />}
+      />
+      {/* Public charity donation — anonymous, no auth (#377). */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/donate"
+        element={<DonatePage />}
       />
       {/* Partner invite accept page. NOT wrapped in RequireAuth /
           RequireProfile — the page handles those states internally so
@@ -321,6 +330,10 @@ export default function App() {
           element={<TournamentCouponsPage />}
         />
         <Route
+          path="tournaments/:tournamentSlug/donations"
+          element={<TournamentDonationsPage />}
+        />
+        <Route
           path="tournaments/:tournamentSlug/change-requests"
           element={<ChangeRequestsPage />}
         />
@@ -352,6 +365,10 @@ export default function App() {
           path="tournaments/:tournamentSlug/events/:eventId/scorecards"
           element={<ScorecardsPage />}
         />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId/pair-teams"
+          element={<PairingBoardPage />}
+        />
       </Route>
 
         <Route path="/estimate" element={<EstimatePage />} />
@@ -371,6 +388,10 @@ export default function App() {
           present on every page. Opens a form that files a GitHub
           issue with the user's context (page, identity, message). */}
       <FeedbackWidget />
+      {/* Analytics: GA4 page_view on every route change + the cookie
+          consent banner that gates it (#407). */}
+      <RouteTracker />
+      <ConsentBanner />
     </PendingPaymentsProvider>
     </PartnerInvitesProvider>
   );

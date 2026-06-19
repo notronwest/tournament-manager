@@ -42,9 +42,19 @@ const emptyDraft = (): DraftContact => ({
   receives_form_messages: false,
 });
 
-export default function TournamentContactsPage() {
+// `embedded` is set when this page is rendered inside the tournament edit
+// wizard as a step pane — it drops the breadcrumb + page padding so it sits
+// cleanly in the wizard's content area instead of as a standalone page.
+export default function TournamentContactsPage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { org } = useCurrentOrg();
   const { tournamentSlug } = useParams<{ tournamentSlug: string }>();
+  const outerStyle = embedded
+    ? { fontFamily: bodyFontStack }
+    : { padding: "24px 32px", maxWidth: 720, fontFamily: bodyFontStack };
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,21 +199,23 @@ export default function TournamentContactsPage() {
     void load();
   };
 
-  if (!org || loading) return <div style={{ padding: "24px 32px", maxWidth: 720, color: inkSoft, fontFamily: bodyFontStack }}>Loading…</div>;
-  if (error) return <div style={{ padding: "24px 32px", maxWidth: 720, fontFamily: bodyFontStack }}><div style={{ color: courtRed, fontSize: 13 }}>{error}</div></div>;
+  if (!org || loading) return <div style={{ ...outerStyle, color: inkSoft }}>Loading…</div>;
+  if (error) return <div style={outerStyle}><div style={{ color: courtRed, fontSize: 13 }}>{error}</div></div>;
   if (!tournament) return null;
 
   return (
-    <div style={{ padding: "24px 32px", maxWidth: 720, fontFamily: bodyFontStack }}>
-      <nav style={{ fontSize: 13, color: inkMuted, marginBottom: 16 }}>
-        <Link
-          to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
-          style={breadcrumbLinkStyle}
-        >
-          {tournament.name}
-        </Link>
-        {" / Tournament Contacts"}
-      </nav>
+    <div style={outerStyle}>
+      {!embedded && (
+        <nav style={{ fontSize: 13, color: inkMuted, marginBottom: 16 }}>
+          <Link
+            to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
+            style={breadcrumbLinkStyle}
+          >
+            {tournament.name}
+          </Link>
+          {" / Tournament Contacts"}
+        </nav>
+      )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ ...pageH1Style, margin: 0 }}>Tournament Contacts</h1>

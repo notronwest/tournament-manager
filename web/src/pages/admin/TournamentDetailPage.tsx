@@ -625,14 +625,14 @@ export default function TournamentDetailPage() {
             Schedule
           </Link>
           <Link
-            to={`/admin/${org.slug}/tournaments/${t.slug}/contacts`}
+            to={`/admin/${org.slug}/tournaments/${t.slug}/wizard/contacts`}
             style={secondaryLinkBtn}
           >
             Tournament Contacts
           </Link>
           {(role === "owner" || role === "admin") && (
             <Link
-              to={`/admin/${org.slug}/tournaments/${t.slug}/coupons`}
+              to={`/admin/${org.slug}/tournaments/${t.slug}/wizard/coupons`}
               style={{
                 ...primaryLinkBtn,
                 background: "#fff",
@@ -641,6 +641,14 @@ export default function TournamentDetailPage() {
               }}
             >
               Coupons
+            </Link>
+          )}
+          {t.accepts_donations && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${t.slug}/donations`}
+              style={secondaryLinkBtn}
+            >
+              Donations
             </Link>
           )}
           {/* Court manager is always reachable from the tournament home —
