@@ -11,6 +11,8 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { LocationPicker } from "../../components/LocationPicker";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { PricingTiersEditor } from "../../components/PricingTiersEditor";
+import TournamentCouponsPage from "./TournamentCouponsPage";
+import TournamentContactsPage from "./TournamentContactsPage";
 import {
   makeEmptyTierDraft,
   tierDraftsToInserts,
@@ -56,10 +58,12 @@ type StepId =
   | "basics"
   | "events"
   | "pricing"
+  | "coupons"
   | "cancellation"
   | "sponsors"
   | "content"
   | "faqs"
+  | "contacts"
   | "payment"
   | "review";
 
@@ -78,10 +82,12 @@ const STEPS: StepMeta[] = [
   { id: "basics", title: "Basics", required: true, stub: false },
   { id: "events", title: "Events", required: true, stub: true },
   { id: "pricing", title: "Pricing", required: true, stub: false },
+  { id: "coupons", title: "Coupons", required: false, stub: false },
   { id: "cancellation", title: "Cancellation policy", required: false, stub: true },
   { id: "sponsors", title: "Sponsors & branding", required: false, stub: true },
   { id: "content", title: "Content sections", required: false, stub: false },
   { id: "faqs", title: "FAQs", required: false, stub: true },
+  { id: "contacts", title: "Tournament contacts", required: false, stub: false },
   { id: "payment", title: "Accept payment", required: false, stub: true },
   { id: "review", title: "Review & publish", required: true, stub: false },
 ];
@@ -720,6 +726,20 @@ export default function TournamentWizardPage() {
             }}
           />
         )}
+        {currentStep === "coupons" && (
+          tournament ? (
+            <TournamentCouponsPage embedded />
+          ) : (
+            <SaveFirstNotice label="coupons" />
+          )
+        )}
+        {currentStep === "contacts" && (
+          tournament ? (
+            <TournamentContactsPage embedded />
+          ) : (
+            <SaveFirstNotice label="contacts" />
+          )
+        )}
         {currentStep === "cancellation" && (
           <CancellationPolicyStep
             preset={cancellationPreset}
@@ -870,6 +890,20 @@ export default function TournamentWizardPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// Shown for the embedded Coupons / Contacts steps before the tournament
+// has been saved (a brand-new draft has no id to attach rows to). Once
+// Basics is saved the tournament exists and the real page renders.
+function SaveFirstNotice({ label }: { label: string }) {
+  return (
+    <div>
+      <StepHeader
+        title={label === "coupons" ? "Coupons" : "Tournament contacts"}
+        lede={`Save the tournament first (finish Basics), then you can manage ${label} here.`}
+      />
     </div>
   );
 }
