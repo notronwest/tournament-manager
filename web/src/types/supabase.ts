@@ -232,6 +232,32 @@ export type Database = {
           },
         ]
       }
+      custom_domains: {
+        Row: {
+          created_at: string
+          host: string
+          tournament_id: string
+        }
+        Insert: {
+          created_at?: string
+          host: string
+          tournament_id: string
+        }
+        Update: {
+          created_at?: string
+          host?: string
+          tournament_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_domains_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       donations: {
         Row: {
           amount_cents: number
