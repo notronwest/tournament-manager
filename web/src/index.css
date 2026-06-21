@@ -176,6 +176,18 @@ canvas {
   animation: partner-sheet-slidein 0.28s ease-out;
 }
 
+/* Checkout payment-processing overlay spinner. The overlay itself is a
+   position:fixed scrim built with inline styles in CheckoutPage.tsx; only
+   the rotation keyframe needs to live in CSS. Applied via .checkout-spin. */
+@keyframes checkout-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.checkout-spin {
+  animation: checkout-spin 0.8s linear infinite;
+}
+
 /* Print rules: hide app chrome (sidebar + page padding) so a route can
    render to-paper exactly. Pages that print add their own per-card
    styles inside a <style> tag scoped via a wrapper class. */

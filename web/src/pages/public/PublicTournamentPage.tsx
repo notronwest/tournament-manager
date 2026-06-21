@@ -2305,9 +2305,10 @@ function EventCard({
                 border: `2px solid ${warnFg}`,
                 borderRadius: 5,
                 fontSize: 11,
+                lineHeight: 1.4,
                 color: ink,
                 maxWidth: 180,
-                textAlign: "right",
+                textAlign: "left",
               }}
             >
               Your partner won't be notified until you check out.

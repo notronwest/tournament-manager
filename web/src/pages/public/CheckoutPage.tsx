@@ -31,6 +31,7 @@ import {
   headingFontStack,
   ink,
   inkSoft,
+  inkMuted,
   pageH1Style,
   pageWrapStyle,
   rule,
@@ -1014,6 +1015,9 @@ export default function CheckoutPage() {
                 <PaymentSection
                   totalCents={payableCents}
                   finalizing={finalizing}
+                  partnerNames={rows
+                    .filter((r) => r.partnerLabel)
+                    .map((r) => r.partnerLabel as string)}
                   onConfirmed={() => void onConfirmed()}
                   onPaymentError={(m) => {
                     setPaymentError(m);
@@ -1055,6 +1059,7 @@ export default function CheckoutPage() {
 function PaymentSection({
   totalCents,
   finalizing,
+  partnerNames,
   onConfirmed,
   onPaymentError,
   onPaymentDeclined,
@@ -1062,6 +1067,7 @@ function PaymentSection({
 }: {
   totalCents: number;
   finalizing: boolean;
+  partnerNames: string[];
   onConfirmed: () => void;
   onPaymentError: (msg: string) => void;
   onPaymentDeclined: (msg: string) => void;
@@ -1159,6 +1165,163 @@ function PaymentSection({
       >
         Back
       </button>
+      {/* Full-page blocking overlay. Mounts the instant the player submits
+          (confirmPayment in flight) and stays up through the parent's
+          webhook poll, so the page can't be clicked, refreshed via the
+          back button's stale state, or double-submitted while the charge
+          settles. authorizing → confirming mirrors submitting → finalizing. */}
+      {busy && (
+        <PaymentProcessingOverlay
+          phase={finalizing ? "confirming" : "authorizing"}
+          partnerNames={partnerNames}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Payment-processing overlay. A fixed, full-viewport scrim shown while a
+// charge is in flight (see PaymentSection). It deliberately offers no
+// dismiss affordance — the whole point is to block interaction until the
+// webhook confirms (or an error tears it down). The step checklist mirrors
+// the real flow: authorize the card → confirm the spot → notify partners
+// (the webhook fires invites alongside the reg flip).
+// ─────────────────────────────────────────────────────────────────────
+
+function PaymentProcessingOverlay({
+  phase,
+  partnerNames,
+}: {
+  phase: "authorizing" | "confirming";
+  partnerNames: string[];
+}) {
+  // Lock background scroll while the overlay is up so the page behind the
+  // scrim can't move. Restored on unmount.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const authorized = phase === "confirming";
+  return (
+    <div role="status" aria-live="polite" aria-busy="true" style={overlayScrim}>
+      <div style={overlayCard}>
+        <div className="checkout-spin" style={overlaySpinner} aria-hidden />
+        <div
+          style={{
+            fontFamily: displayFontStack,
+            fontSize: 22,
+            letterSpacing: "-0.3px",
+          }}
+        >
+          {authorized ? "Confirming your spot" : "Processing your payment"}
+        </div>
+        <div
+          style={{
+            fontSize: 14,
+            color: inkSoft,
+            lineHeight: 1.55,
+            marginTop: 8,
+          }}
+        >
+          This takes a few seconds. Please don't close or refresh this window.
+        </div>
+        <div
+          style={{
+            textAlign: "left",
+            marginTop: 22,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <OverlayStep
+            state={authorized ? "done" : "active"}
+            label={authorized ? "Payment authorized" : "Authorizing payment"}
+          />
+          <OverlayStep
+            state={authorized ? "active" : "pending"}
+            label="Confirming your spot"
+          />
+          {partnerNames.length > 0 && (
+            <OverlayStep
+              state="pending"
+              label={`Notifying ${fmtList(partnerNames)}`}
+            />
+          )}
+        </div>
+        <div
+          style={{
+            marginTop: 22,
+            fontSize: 12,
+            color: inkMuted,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          Secured by Stripe
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverlayStep({
+  state,
+  label,
+}: {
+  state: "done" | "active" | "pending";
+  label: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        fontSize: 14,
+        color: state === "pending" ? inkMuted : ink,
+      }}
+    >
+      <span
+        style={{
+          width: 18,
+          height: 18,
+          flexShrink: 0,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {state === "done" ? (
+          <span style={{ color: courtGreen, fontSize: 16, lineHeight: 1 }}>✓</span>
+        ) : state === "active" ? (
+          <span className="checkout-spin" style={overlayMiniSpinner} />
+        ) : (
+          <span style={overlayPendingDot} />
+        )}
+      </span>
+      <span>{label}</span>
     </div>
   );
 }
@@ -1229,6 +1392,52 @@ function couponErrorMessage(code?: string): string {
       return "Couldn't apply that code. Please try again.";
   }
 }
+
+const overlayScrim: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1000,
+  background: "rgba(20, 24, 16, 0.55)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 16,
+};
+
+const overlayCard: CSSProperties = {
+  background: "#ffffff",
+  borderRadius: 16,
+  border: `1px solid ${rule}`,
+  padding: "32px 36px",
+  width: 380,
+  maxWidth: "100%",
+  textAlign: "center",
+};
+
+const overlaySpinner: CSSProperties = {
+  width: 46,
+  height: 46,
+  margin: "0 auto 20px",
+  border: `4px solid ${ruleSoft}`,
+  borderTopColor: ink,
+  borderRadius: "50%",
+};
+
+const overlayMiniSpinner: CSSProperties = {
+  display: "inline-block",
+  width: 16,
+  height: 16,
+  border: `2px solid ${rule}`,
+  borderTopColor: ink,
+  borderRadius: "50%",
+};
+
+const overlayPendingDot: CSSProperties = {
+  width: 16,
+  height: 16,
+  borderRadius: "50%",
+  border: `2px solid ${rule}`,
+};
 
 const couponInputStyle: CSSProperties = {
   flex: 1,
