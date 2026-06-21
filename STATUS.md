@@ -7,7 +7,30 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-18**
+Last updated: **2026-06-21**
+
+## 2026-06-21 — Checkout payment-processing overlay (PR #414) → promoted to prod (PR #415)
+
+Shipped a full-viewport **blocking overlay** on the checkout page (`CheckoutPage.tsx`).
+It mounts the instant the player submits payment and stays up through the webhook
+poll (`busy = submitting || finalizing`), with no dismiss affordance — kills the
+double-submit / stray-click / refresh-mid-charge window. Two phases (`authorizing` →
+`confirming`) and a step checklist (authorize card → confirm spot → notify partners)
+mirror the real flow; background scroll locked while up. Spin keyframe added to
+`index.css` per the `partner-sheet-slidein` convention. Also merged a small fix
+(PR #413): left-aligned the partner check-out notice in `PublicTournamentPage.tsx`.
+
+✅ **Promoted main→production (PR #415, prod `ff1d85c`)** — no migrations in the gap.
+Typecheck + lint (no new errors vs. base) + build all green.
+
+⚠️ **CLAUDE.md is stale on the deploy model:** it still says "Cloudflare Pages
+auto-deploys on every push to `main`." Since the 06-18 prod-deploy split, **`main`
+is staging and `production` is prod** (promote via a `main`→`production` PR, à la
+#397/#415). Worth fixing the CLAUDE.md "Deployment" section next session.
+
+🔜 **Next (optional):** idempotency key on the payment intent in
+`create-payment-intent` so a hard refresh mid-charge can't create a second charge —
+the overlay is client-only and won't survive a forced reload. Not yet filed as a story.
 
 > ⚠️ **Continuity gap fixed (2026-06-14):** entries between 06-09 and 06-14
 > (login/onboarding batch, Resend SMTP, Quote Studio epic) were written to a
