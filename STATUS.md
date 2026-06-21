@@ -9,6 +9,24 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Fix: terminal PaymentIntent reused by Elements (PR #416, deployed)
+
+Checkout threw **"This PaymentIntent is in a terminal state and cannot be used to
+initialize Elements"** on re-entry after a prior attempt. Root cause: the stable
+idempotency key in `create-payment-intent` (`pi:player:tournament:regIds`) made
+Stripe replay the original response for 24h, so a `succeeded`/`canceled` intent got
+handed back forever. Reproduces in local dev where a succeeded test payment doesn't
+flip regs (no webhook) → checkout reload re-requests the same reg set.
+
+Fix = retrieve-or-create: reuse the player's newest pending intent only if collectable
+(`requires_payment_method`/`confirmation`/`action`), resyncing amount+fee; else mint a
+fresh one. Double-submit guarded client-side. **Deployed via `supabase functions deploy
+create-payment-intent`** to prod project `wducsjqyoksmluwfgjxc` — shared backend, so
+live for staging + prod immediately. No frontend change, so no Cloudflare rebuild and
+no main→production promotion required (production branch source is 1 commit behind on
+this function only; fold into next promotion). Stuck sessions recover via Back →
+Continue to payment.
+
 ## 2026-06-21 — Checkout payment-processing overlay (PR #414) → promoted to prod (PR #415)
 
 Shipped a full-viewport **blocking overlay** on the checkout page (`CheckoutPage.tsx`).
