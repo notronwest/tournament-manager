@@ -175,33 +175,83 @@ Deno.serve(async (req: Request) => {
     const feeFixed = settings?.platform_fee_fixed_cents ?? 0;
     const platformFeeCents = Math.round((totalCents * feeBps) / 10000) + feeFixed;
 
-    // Idempotency over the exact pending set so a double-click reuses
-    // the same intent.
-    const regIds = lineItems
-      .map((li) => li.event_registration_id)
-      .filter(Boolean)
-      .sort()
-      .join(",");
-    const idempotencyKey = `pi:${player.id}:${tournament.id}:${regIds}`;
+    // ── 5. Create or reuse the PaymentIntent ────────────────────────
+    // A player can return to checkout with the same pending regs after a
+    // prior attempt: a declined card, an abandoned tab, or — in local dev
+    // with no webhook — a payment that already SUCCEEDED before the regs
+    // flipped to 'paid'. We reuse the existing intent only while Stripe can
+    // still collect on it. A terminal intent (succeeded/canceled) or one
+    // mid-processing must never be handed back to the browser's Elements,
+    // which throws "This PaymentIntent is in a terminal state and cannot be
+    // used to initialize Elements".
+    //
+    // This replaces an earlier *stable* idempotency key: Stripe replays the
+    // original response for that key for 24h, so once the first intent went
+    // terminal every retry got the same dead intent. Double-click creation
+    // is instead guarded client-side (the Pay button disables on submit).
+    const metadata = {
+      player_id: player.id,
+      tournament_id: tournament.id,
+      coupon_id: couponId ?? "",
+      // Sanitised origin for the webhook's partner-invite links (#191).
+      base_url: (baseUrl ?? "").replace(/\/+$/, "").slice(0, 200),
+    };
+    const REUSABLE_INTENT_STATUSES = new Set([
+      "requires_payment_method",
+      "requires_confirmation",
+      "requires_action",
+    ]);
 
-    // ── 5. Create the PaymentIntent ─────────────────────────────────
-    const intent = await stripe.paymentIntents.create(
-      {
+    let intent: { id: string; client_secret: string | null } | null = null;
+
+    // Newest still-pending payment row for this player+tournament points at
+    // the intent from their last attempt (if any). In prod the webhook flips
+    // it off 'pending' on success, so this only finds genuinely-resumable
+    // attempts; in dev it may surface a succeeded intent we then discard.
+    const { data: priorPayment } = await admin
+      .from("payments")
+      .select("stripe_payment_intent_id")
+      .eq("player_id", player.id)
+      .eq("organization_id", tournament.organization_id)
+      .eq("status", "pending")
+      .not("stripe_payment_intent_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (priorPayment?.stripe_payment_intent_id) {
+      try {
+        const existing = await stripe.paymentIntents.retrieve(
+          priorPayment.stripe_payment_intent_id,
+        );
+        if (REUSABLE_INTENT_STATUSES.has(existing.status)) {
+          // Resync amount/fee in case the basket or coupon changed since the
+          // intent was first created, then reuse its client_secret.
+          intent =
+            existing.amount !== totalCents ||
+            existing.application_fee_amount !== platformFeeCents
+              ? await stripe.paymentIntents.update(existing.id, {
+                  amount: totalCents,
+                  application_fee_amount: platformFeeCents,
+                  metadata,
+                })
+              : existing;
+        }
+      } catch (_err) {
+        // Intent missing or unreadable — fall through and create a fresh one.
+      }
+    }
+
+    if (!intent) {
+      intent = await stripe.paymentIntents.create({
         amount: totalCents,
         currency: "usd",
         automatic_payment_methods: { enabled: true },
         application_fee_amount: platformFeeCents,
         transfer_data: { destination: org.stripe_account_id },
-        metadata: {
-          player_id: player.id,
-          tournament_id: tournament.id,
-          coupon_id: couponId ?? "",
-          // Sanitised origin for the webhook's partner-invite links (#191).
-          base_url: (baseUrl ?? "").replace(/\/+$/, "").slice(0, 200),
-        },
-      },
-      { idempotencyKey },
-    );
+        metadata,
+      });
+    }
 
     // ── 6. Record the pending payment + line items ──────────────────
     // Upsert on the unique stripe_payment_intent_id so a retried call
