@@ -133,7 +133,7 @@ Deno.serve(async (req: Request) => {
         .from("event_registrations")
         .select("id, events!inner(tournament_id)")
         .in("id", regIdsToCharge)
-        .eq("status", "pending_payment")
+        .in("status", ["pending_payment", "waitlisted_pending_payment"])
         .is("deleted_at", null)
         .eq("events.tournament_id", tournament.id);
       if (verifyErr) return json({ error: "reg_verify_failed" }, 500);
