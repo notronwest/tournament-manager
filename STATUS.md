@@ -9,6 +9,21 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Waitlists frontend: Join-waitlist CTA + free join (PR #475, TEST)
+
+Built the visible public flow on the validated backend: `PublicTournamentPage` event card →
+when full (active teams ≥ `max_teams`) the CTA reads "Join waitlist" (blue); submit branches
+to `join_waitlist` (free `waitlisted` reg, no checkout) vs normal register; card now shows
+"✓ On the waitlist" and (when promoted) "A spot opened — pay to claim →" → checkout. State
+mapping added for `waitlisted`/`waitlisted_pending_payment`. Singles + doubles-seeking fully
+correct. Typecheck/build/lint clean. Frontend deploys to TEST via Cloudflare on this merge.
+
+🔜 **Waitlist follow-ups:** (1) doubles-team-on-waitlist — `accept_partner_invite` must put an
+invited partner on the waitlist too (shared team slot) — small DB tweak, flagged on #42.
+(2) show the player's waitlist position (`waitlist_effective_position`). (3) promotion-notify
+email when `promote_from_waitlist` runs (use the shared email layout #457). (4) verify the
+full join→promote→pay loop end-to-end on test.
+
 ## 2026-06-22 — Waitlists: pay-on-promotion model locked (PR #473) + frontend plan
 
 Ron confirmed the model: **free to join the waitlist** (with a partner OR seeking), **pay
