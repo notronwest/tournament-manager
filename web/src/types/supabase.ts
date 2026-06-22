@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       audit_log: {
@@ -153,13 +128,6 @@ export type Database = {
           terms_version?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "contracts_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "contracts_quote_id_fkey"
             columns: ["quote_id"]
@@ -354,8 +322,11 @@ export type Database = {
           seed: number | null
           status: Database["public"]["Enums"]["registration_status"]
           updated_at: string
+          waitlist_position: number | null
           withdrawal_decided_at: string | null
-          withdrawal_decision: Database["public"]["Enums"]["withdrawal_decision"] | null
+          withdrawal_decision:
+            | Database["public"]["Enums"]["withdrawal_decision"]
+            | null
           withdrawal_reason: string | null
           withdrawal_requested_at: string | null
         }
@@ -375,8 +346,11 @@ export type Database = {
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
+          waitlist_position?: number | null
           withdrawal_decided_at?: string | null
-          withdrawal_decision?: Database["public"]["Enums"]["withdrawal_decision"] | null
+          withdrawal_decision?:
+            | Database["public"]["Enums"]["withdrawal_decision"]
+            | null
           withdrawal_reason?: string | null
           withdrawal_requested_at?: string | null
         }
@@ -396,8 +370,11 @@ export type Database = {
           seed?: number | null
           status?: Database["public"]["Enums"]["registration_status"]
           updated_at?: string
+          waitlist_position?: number | null
           withdrawal_decided_at?: string | null
-          withdrawal_decision?: Database["public"]["Enums"]["withdrawal_decision"] | null
+          withdrawal_decision?:
+            | Database["public"]["Enums"]["withdrawal_decision"]
+            | null
           withdrawal_reason?: string | null
           withdrawal_requested_at?: string | null
         }
@@ -552,6 +529,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      feedback_submissions: {
+        Row: {
+          auth_user_id: string | null
+          category: string
+          created_at: string
+          id: string
+          ip_hash: string
+          message: string
+          page_url: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          ip_hash: string
+          message: string
+          page_url?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          ip_hash?: string
+          message?: string
+          page_url?: string | null
+        }
+        Relationships: []
       }
       locations: {
         Row: {
@@ -1739,19 +1746,23 @@ export type Database = {
           event_id: string
           first_name: string
           gender: Database["public"]["Enums"]["player_gender"]
-          invited_partner_first_name: string | null
-          invited_partner_last_name: string | null
+          invited_partner_first_name: string
+          invited_partner_last_name: string
           last_name: string
           partner_registration_id: string
           partner_status: Database["public"]["Enums"]["partner_status"]
-          pending_invite_id: string | null
-          pending_partner_reg_id: string | null
+          pending_invite_id: string
+          pending_partner_reg_id: string
           registration_id: string
           self_rating_doubles: number
           self_rating_mixed: number
           self_rating_singles: number
           state: string
         }[]
+      }
+      file_refund_request: {
+        Args: { p_reason?: string; p_reg_id: string }
+        Returns: boolean
       }
       find_user_by_email: { Args: { p_email: string }; Returns: string }
       format_rating: { Args: { n: number }; Returns: string }
@@ -1775,6 +1786,16 @@ export type Database = {
           tournament_slug: string
         }[]
       }
+      get_quote_by_token: {
+        Args: { p_token: string }
+        Returns: Database["public"]["CompositeTypes"]["quote_share_payload"]
+        SetofOptions: {
+          from: "*"
+          to: "quote_share_payload"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_org_role: {
         Args: { min_role: Database["public"]["Enums"]["org_role"]; org: string }
         Returns: boolean
@@ -1789,9 +1810,36 @@ export type Database = {
         }[]
       }
       redeem_coupon: { Args: { p_coupon_id: string }; Returns: boolean }
+      refund_compute: {
+        Args: { p_event_registration_id: string }
+        Returns: {
+          charge_id: string
+          connected_acct: string
+          decision: string
+          paid_cents: number
+          partner_reg_id: string
+          payment_id: string
+          payment_intent: string
+          preset: Database["public"]["Enums"]["cancellation_policy_preset"]
+          refund_cents: number
+          reg_status: Database["public"]["Enums"]["registration_status"]
+        }[]
+      }
       replace_pricing_tiers: {
         Args: { p_tiers: Json; p_tournament_id: string }
         Returns: undefined
+      }
+      resolve_share_token: { Args: { p_token: string }; Returns: string }
+      submit_customer_revision: {
+        Args: {
+          p_estimated_net_cents: number
+          p_estimated_revenue_cents: number
+          p_line_items: Json
+          p_notes?: string
+          p_subtotal_cents: number
+          p_token: string
+        }
+        Returns: string
       }
       validate_coupon: {
         Args: {
@@ -1804,28 +1852,33 @@ export type Database = {
       withdraw_self: {
         Args: { p_reg_id: string }
         Returns: {
+          entitled_cents: number
           new_status: Database["public"]["Enums"]["registration_status"]
-          entitled_cents: number | null
+          promoted_player_id: string | null
+          promoted_reg_id: string | null
         }[]
       }
-      file_refund_request: {
-        Args: { p_reg_id: string; p_reason?: string }
+      is_event_full: {
+        Args: { p_event_id: string }
         Returns: boolean
       }
-      get_quote_by_token: {
-        Args: { p_token: string }
-        Returns: Database["public"]["CompositeTypes"]["quote_share_payload"] | null
+      join_waitlist: {
+        Args: { p_event_id: string }
+        Returns: {
+          position: number
+          reg_id: string
+        }[]
       }
-      submit_customer_revision: {
-        Args: {
-          p_token: string
-          p_line_items: Json
-          p_subtotal_cents: number
-          p_estimated_revenue_cents: number
-          p_estimated_net_cents: number
-          p_notes?: string
-        }
-        Returns: string
+      waitlist_effective_position: {
+        Args: { p_reg_id: string }
+        Returns: number
+      }
+      promote_from_waitlist: {
+        Args: { p_event_id: string }
+        Returns: {
+          promoted_player_id: string
+          promoted_reg_id: string
+        }[]
       }
     }
     Enums: {
@@ -1882,12 +1935,7 @@ export type Database = {
       quote_platform: "bertanderne" | "pickleballbrackets"
       quote_revision_creator: "public" | "admin" | "customer"
       quote_source: "public" | "admin"
-      quote_status:
-        | "submitted"
-        | "draft"
-        | "quoted"
-        | "accepted"
-        | "declined"
+      quote_status: "submitted" | "draft" | "quoted" | "accepted" | "declined"
       rating_source: "dupr" | "pbvision" | "wmpc_rating_hub" | "self"
       registration_status:
         | "pending_payment"
@@ -1895,6 +1943,8 @@ export type Database = {
         | "refunded"
         | "cancelled"
         | "withdrawn"
+        | "waitlisted_pending_payment"
+        | "waitlisted"
       service_category:
         | "core"
         | "setup"
@@ -2068,9 +2118,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       bracket_type: [
@@ -2087,6 +2134,7 @@ export const Constants = {
         "other",
       ],
       change_request_status: ["open", "approved", "denied", "cancelled"],
+      contract_status: ["draft", "sent", "signed_offline"],
       coupon_discount_type: ["percent", "fixed_amount"],
       event_format: ["singles", "doubles"],
       event_gender: ["men", "women", "mixed", "open"],
@@ -2139,6 +2187,8 @@ export const Constants = {
         "refunded",
         "cancelled",
         "withdrawn",
+        "waitlisted_pending_payment",
+        "waitlisted",
       ],
       service_category: [
         "core",
