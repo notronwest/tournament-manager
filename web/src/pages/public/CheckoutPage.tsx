@@ -219,7 +219,7 @@ export default function CheckoutPage() {
          event:events!event_id (id, name, format, event_fee_cents)`,
       )
       .eq("player_id", me.id)
-      .eq("status", "pending_payment")
+      .in("status", ["pending_payment", "waitlisted_pending_payment"])
       .is("deleted_at", null);
     if (regsErr) {
       setError("We couldn't load your registrations. Please refresh and try again.");

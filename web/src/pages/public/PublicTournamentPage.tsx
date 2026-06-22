@@ -109,6 +109,8 @@ type MyRegStatus = {
   state:
     | "paid"
     | "pending_payment"
+    | "waitlisted_pending_payment"
+    | "waitlisted"
     | "awaiting_partner"
     | "invited";
   // The id of my event_registrations row — null only for 'invited'.
@@ -201,6 +203,9 @@ export default function PublicTournamentPage() {
   const [registeredByEvent, setRegisteredByEvent] = useState<
     Map<string, Set<string>>
   >(new Map());
+  // Set of event IDs where capacity is full (drives "Join Waitlist" CTA).
+  const [fullEvents, setFullEvents] = useState<Set<string>>(new Set());
+
   // Roster rows per event for the toggle bar and collapsible panel.
   // Loaded via the event_roster SECURITY DEFINER RPC alongside
   // players_registered_for_events so both round trips happen in
@@ -306,10 +311,14 @@ export default function PublicTournamentPage() {
     // Run in parallel since neither depends on the other.
     if (evs && evs.length > 0) {
       const evIds = evs.map((e) => e.id);
-      const [regsByEventRes, rosterRes] = await Promise.all([
+      const [regsByEventRes, rosterRes, ...fullnessResults] = await Promise.all([
         supabase.rpc("players_registered_for_events", { p_event_ids: evIds }),
         supabase.rpc("event_roster", { p_event_ids: evIds }),
+        ...evIds.map((id) => supabase.rpc("is_event_full", { p_event_id: id })),
       ]);
+      setFullEvents(
+        new Set(evIds.filter((_, i) => fullnessResults[i]?.data === true)),
+      );
 
       const grouped = new Map<string, Set<string>>();
       for (const row of regsByEventRes.data ?? []) {
@@ -335,6 +344,7 @@ export default function PublicTournamentPage() {
     } else {
       setRegisteredByEvent(new Map());
       setRosterByEvent(new Map());
+      setFullEvents(new Set());
     }
 
     if (!user || !evs || evs.length === 0) {
@@ -439,6 +449,10 @@ export default function PublicTournamentPage() {
       let state: MyRegStatus["state"];
       if (r.status === "pending_payment") {
         state = "pending_payment";
+      } else if (r.status === "waitlisted_pending_payment") {
+        state = "waitlisted_pending_payment";
+      } else if (r.status === "waitlisted") {
+        state = "waitlisted";
       } else if (r.partner_status === "pending") {
         state = "awaiting_partner";
       } else {
@@ -569,6 +583,8 @@ export default function PublicTournamentPage() {
   const activeRegStates = new Set<MyRegStatus["state"]>([
     "paid",
     "pending_payment",
+    "waitlisted_pending_payment",
+    "waitlisted",
     "awaiting_partner",
   ]);
   const hasActiveRegInTournament = Array.from(myStatus.values()).some((s) =>
@@ -1085,6 +1101,7 @@ export default function PublicTournamentPage() {
                 regFeeCents={regFeeCents}
                 additionalFeeCents={additionalFeeCents}
                 isAdditionalEvent={hasActiveRegInTournament}
+                isFull={fullEvents.has(ev.id)}
                 alreadyRegisteredPlayerIds={
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
@@ -1321,6 +1338,7 @@ function EventCard({
   regFeeCents,
   additionalFeeCents,
   isAdditionalEvent,
+  isFull,
   alreadyRegisteredPlayerIds,
   rosterRows,
   isFocused,
@@ -1343,11 +1361,12 @@ function EventCard({
   regFeeCents: number;
   additionalFeeCents: number;
   isAdditionalEvent: boolean;
+  // True when the event has hit its max_teams capacity.
+  isFull: boolean;
   // F3: ids of players already registered for THIS event. Folded
   // into the PartnerSearch excludePlayerIds so the search can't
   // surface someone who's already in.
   alreadyRegisteredPlayerIds: Set<string>;
-  // Roster rows for the collapsible roster panel.
   rosterRows: RosterRow[];
   // #98: focus overlay. isFocused = this card is lifted above the
   // scrim. isDimmed = another card is focused; this card goes
@@ -1359,6 +1378,7 @@ function EventCard({
   onChanged: () => Promise<void> | void;
   onNeedsAuth: () => void;
 }) {
+  const navigate = useNavigate();
   const chips = eligibilityChips(event);
   const isDoubles = event.format === "doubles";
 
@@ -1393,6 +1413,7 @@ function EventCard({
   // partner is picked (discards the in-progress pick).
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
   // Roster panel collapsed by default; toggled by the toggle bar.
   const [rosterOpen, setRosterOpen] = useState(false);
 
@@ -1411,17 +1432,38 @@ function EventCard({
     ? checkEligibility(me, event)
     : { eligible: true, reasons: [] as string[] };
 
+  // ─── Waitlist join handler ────────────────────────────────────────
+  const onSubmitJoinWaitlist = async () => {
+    if (!me) { onNeedsAuth(); return; }
+    setJoiningWaitlist(true);
+    const { error: wlErr } = await supabase.rpc("join_waitlist", {
+      p_event_id: event.id,
+    });
+    setJoiningWaitlist(false);
+    if (wlErr) {
+      // Surface the error inline — most likely "event not full" race or
+      // "already registered". On race: the full-events set will refresh
+      // on reload(), so the button would disappear anyway.
+      setFormError(wlErr.message ?? "Failed to join waitlist.");
+      return;
+    }
+    await onChanged();
+    navigate(`/t/${orgSlug}/${tournamentSlug}/checkout`);
+  };
+
   // ─── Derived state for visual treatment ──────────────────────────
   const isPaid =
     myStatus?.state === "paid" || myStatus?.state === "awaiting_partner";
-  const isPending = myStatus?.state === "pending_payment";
-  // #194 a11y: all three "action needed" states get the amber wash
-  // (pending_payment, awaiting_partner, invited) — amber bg + amber border
-  // color, with dark-ink text/pills (handled below) for contrast.
+  const isPending =
+    myStatus?.state === "pending_payment" ||
+    myStatus?.state === "waitlisted_pending_payment";
+  // All "action needed" states get the amber wash; waitlisted (paid,
+  // on the list) also uses amber so it reads as a non-standard state.
   const isAmberCard =
     isPending ||
     myStatus?.state === "awaiting_partner" ||
-    myStatus?.state === "invited";
+    myStatus?.state === "invited" ||
+    myStatus?.state === "waitlisted";
   // Left border encodes the EVENT TYPE (#152), independent of status.
   const cardBorderLeft = `6px solid ${eventTypeColor(event.format, event.gender)}`;
   const cardBorderColor = isAmberCard ? courtYellow : isPaid ? courtGreen : rule;
@@ -1965,6 +2007,51 @@ function EventCard({
   // ─── Right-side action button — depends on current state ─────────
   const renderAction = () => {
     if (!registrationOpen) return null;
+    // Waitlisted and paid — offer a link to manage their waitlist spot.
+    if (myStatus?.state === "waitlisted") {
+      return (
+        <Link
+          to={`/t/${orgSlug}/${tournamentSlug}/my-registrations`}
+          style={{
+            ...ctaSecondaryStyle,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Manage waitlist spot →
+        </Link>
+      );
+    }
+    // Event is full and player has no registration → offer waitlist.
+    if (isFull && !myStatus) {
+      if (me && !playerEligible) {
+        return (
+          <span style={{ fontSize: 12, color: inkMuted }}>
+            Not eligible: {eligibilityReasons.join("; ")}
+          </span>
+        );
+      }
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            if (!user || !me) { onNeedsAuth(); return; }
+            void onSubmitJoinWaitlist();
+          }}
+          disabled={joiningWaitlist}
+          style={{
+            ...ctaPrimaryStyle,
+            background: warnFg,
+            color: ink,
+            cursor: joiningWaitlist ? "not-allowed" : "pointer",
+            opacity: joiningWaitlist ? 0.7 : 1,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {joiningWaitlist ? "Joining…" : "Join Waitlist"}
+        </button>
+      );
+    }
     if (myStatus?.state === "invited" && myStatus.inviteToken) {
       return (
         <Link
@@ -2207,6 +2294,12 @@ function EventCard({
             )}
             {myStatus?.state === "pending_payment" && (
               <Pill bg={ink} fg={courtYellow}>Pending payment</Pill>
+            )}
+            {myStatus?.state === "waitlisted_pending_payment" && (
+              <Pill bg={ink} fg={courtYellow}>Waitlist — unpaid</Pill>
+            )}
+            {myStatus?.state === "waitlisted" && (
+              <Pill bg={warnBg} fg={warnFg}>On Waitlist</Pill>
             )}
             {myStatus?.state === "awaiting_partner" && (
               <Pill bg={ink} fg={courtYellow}>Awaiting partner</Pill>

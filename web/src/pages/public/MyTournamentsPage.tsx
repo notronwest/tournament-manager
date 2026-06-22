@@ -80,6 +80,8 @@ function statusLabel(reg: EventReg): string {
   }
   if (reg.status === "refunded") return "Refunded";
   if (reg.status === "pending_payment") return "Pending payment";
+  if (reg.status === "waitlisted_pending_payment") return "Waitlist — unpaid";
+  if (reg.status === "waitlisted") return "On Waitlist";
   if (reg.partner_status === "seeking") return "Paid · Seeking partner";
   if (reg.partner_status === "pending") return "Paid · Awaiting partner";
   return "Paid";
@@ -94,7 +96,9 @@ function statusTone(reg: EventReg): StatusTone {
     reg.status === "refunded"
   )
     return { color: inkMuted, background: `${inkMuted}18` };
-  if (reg.status === "pending_payment")
+  if (reg.status === "pending_payment" || reg.status === "waitlisted_pending_payment")
+    return { color: warnFg, background: warnBg };
+  if (reg.status === "waitlisted")
     return { color: warnFg, background: warnBg };
   if (reg.partner_status === "seeking" || reg.partner_status === "pending")
     return { color: courtBlue, background: `${courtBlue}18` };
@@ -102,7 +106,12 @@ function statusTone(reg: EventReg): StatusTone {
 }
 
 function isWithdrawable(status: RegistrationStatus): boolean {
-  return status === "paid" || status === "pending_payment";
+  return (
+    status === "paid" ||
+    status === "pending_payment" ||
+    status === "waitlisted" ||
+    status === "waitlisted_pending_payment"
+  );
 }
 
 function formatMoney(cents: number): string {
