@@ -9,6 +9,23 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Fix: checkout blocked after accepting a partner invite (PR #420, on TEST)
+
+After accepting an invite, the invitee hit checkout and saw "⚠ No partner picked" with
+pay disabled. Cause: `accept_partner_invite` pairs both regs via `partner_registration_id`
+(`partner_status='confirmed'`), but checkout derived the partner label ONLY from the
+player's own OUTBOUND *pending* invites — the invitee has none → `partnerLabel` null → the
+doubles blocking check fired. Fix (`CheckoutPage.tsx`): resolve the confirmed partner's
+name from `partner_registration_id` and use it as the label fallback (covers invitee AND
+post-accept inviter, whose invite is no longer pending); confirmed pairings now read
+"✓ Partner: X — accepted". Pure frontend, no migration/RLS. Typecheck + build clean, no new
+lint. Affects PROD too (same code) — accepting an invite there blocks payment until shipped.
+
+🔜 **Next:** verify on TEST (accept an invite → checkout should allow pay, show the partner).
+Two unpromoted changes now sit on `main` awaiting a single `main`→`production` promotion:
+this checkout fix **and** the post-login invites feature (#419). Promote together once both
+are verified on test.
+
 ## 2026-06-21 — Feature: surface pending partner invites after login (PR #419, on TEST)
 
 A pending partner invite now supersedes the tournament landing. On a genuine sign-in,
