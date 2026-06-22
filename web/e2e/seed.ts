@@ -58,7 +58,10 @@ async function ensurePlayer(email: string, firstName: string, lastName: string):
   const player = await db
     .from("players")
     .upsert(
-      { auth_user_id: authUserId, first_name: firstName, last_name: lastName },
+      // email is required for a "complete" profile — without it RequireProfile
+      // bounces the user to /profile and gated pages (the tournament page that
+      // the specs drive) never render.
+      { auth_user_id: authUserId, first_name: firstName, last_name: lastName, email },
       { onConflict: "auth_user_id" },
     )
     .select("id")
