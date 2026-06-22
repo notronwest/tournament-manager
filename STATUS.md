@@ -9,6 +9,29 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Waitlists redo: DB layer rebuilt + validated on test (PR #470/#471)
+
+Rebuilt the reverted #42 waitlists migration **correctly** and proved it. All 5 bugs fixed:
+out-of-order timestamp (now `20260622050000`), enum-add-in-same-transaction (values in the
+separate `20260622035000`, committed first), reserved-word `position`→`waitlist_position`,
+re-ambiguated `payment_id`→`pli.payment_id`, and `withdraw_self` 42P13 (drop-before-recreate
++ re-grant). **Validated against the real TEST DB without touching main** via
+`gh workflow run migrations.yml --ref <branch>` — a dispatch on a feature branch resolves to
+TEST, so I iterated there (run 27963472774 ✅) instead of blind CI-on-main. (No container
+runtime on this machine, so `supabase db reset` local validation wasn't an option — the
+dispatch trick is the substitute; worth documenting in MIGRATIONS.md.) Merged #470 (migration,
+CI no-op since already applied) + #471 (regenerated types — `join_waitlist` now returns
+`waitlist_position`, `is_event_full`, etc.). Functions live on test: `is_event_full`,
+`join_waitlist`, `waitlist_effective_position`, `promote_from_waitlist`.
+
+🔜 **Frontend remaining:** the public "Join waitlist" flow. (1) `PublicTournamentPage` event
+card: when full → CTA reads "Join waitlist" not "Register". (2) `RegisterPage`: a full-event
+registration calls `join_waitlist` (creates `waitlisted_pending_payment`) and goes to checkout
+(pay-on-join per #42 spec; `compute_checkout_total` already includes waitlisted). **Open Q:**
+`join_waitlist` sets `partner_status='seeking'` only — to honor "pick a partner" on the
+waitlist, the frontend must attach the partner after the join (or join_waitlist needs a
+partner param = another migration). Confirm before the RegisterPage surgery.
+
 ## 2026-06-22 — Fix: invite banner went stale after accept/decline (PR #458)
 
 `PartnerAcceptPage` refreshed the pending-payments context but not the
