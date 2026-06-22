@@ -846,6 +846,7 @@ export type Database = {
       partner_invites: {
         Row: {
           created_at: string
+          decline_message: string | null
           event_id: string
           expires_at: string | null
           id: string
@@ -858,6 +859,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          decline_message?: string | null
           event_id: string
           expires_at?: string | null
           id?: string
@@ -870,6 +872,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          decline_message?: string | null
           event_id?: string
           expires_at?: string | null
           id?: string
@@ -1791,7 +1794,7 @@ export type Database = {
         }
       }
       decline_partner_invite: {
-        Args: { p_invite_id: string }
+        Args: { p_invite_id: string; p_decline_message?: string | null }
         Returns: undefined
       }
       event_roster: {
