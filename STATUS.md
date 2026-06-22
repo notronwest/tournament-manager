@@ -7,7 +7,31 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-21**
+Last updated: **2026-06-22**
+
+## 2026-06-22 — Fix: free ($0) registrations skip payment (PR #449) + unwedged migrations CI
+
+**Free registration (the ask):** a no-fee tournament couldn't complete — checkout routed
+through Stripe and `create-payment-intent` rejected $0 with `nothing_to_charge`. Now when the
+authoritative server-side total is $0 with pending regs, the function confirms directly (flips
+regs→paid, redeems coupon, fires partner invites via new `sendFreeInvites`, mirroring the
+webhook) and returns `{ confirmed }`. `CheckoutPage` skips the Payment Element on `confirmed`
+(reuses `onConfirmed`), CTA reads "Confirm registration" for $0, isn't gated on Stripe, intro
+copy adapts. Edge fn deployed to TEST (run 27958686791). Empty cart still `nothing_to_charge`.
+
+**Migrations pipeline was WEDGED** by the Builder's #42 waitlists migration (it drained the
+story I made actionable, but the 661-line migration was never applied/tested). Four+ distinct
+failures: out-of-order timestamp (#450 renumber 20260621000000→20260622040000), enum-used-in-
+same-transaction 55P04 (#451 split enum adds into 20260622035000), reserved-word `position`
+column 42601 + re-ambiguated `payment_id` that would overwrite my 20260622020000 fix (#452),
+then change-return-type 42P13 on `withdraw_self`. After 4 passes it still failed, so **#453
+reverted the waitlists migration** (preserved in git history). Migrations CI green again
+(27959524887). The enum-values migration `20260622035000` stayed (already applied; harmless).
+
+🔜 **Waitlists (#42) needs redo:** re-submit the migration only after running it against a
+LOCAL db (`supabase db reset`) so ALL errors surface at once — don't merge DB migrations
+unvalidated. The Builder also landed #422 (printable receipt — CheckoutPage) and #428
+(send-partner-withdrawal fn) in the same merge window; those applied fine.
 
 ## 2026-06-21 — Fix: paid-withdrawal crash (ambiguous payment_id) + de-red withdraw state (PR #435, TEST)
 
