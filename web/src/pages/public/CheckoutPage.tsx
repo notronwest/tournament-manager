@@ -154,6 +154,11 @@ export default function CheckoutPage() {
   const [receiptItems, setReceiptItems] = useState<
     { description: string; amount_cents: number }[]
   >([]);
+  // Captured at pay-time for the printable receipt.
+  const [orgName, setOrgName] = useState<string | null>(null);
+  const [confirmedPaymentId, setConfirmedPaymentId] = useState<string | null>(null);
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
+  const [stripeIntentId, setStripeIntentId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (!orgSlug || !tournamentSlug || !user) return;
@@ -164,7 +169,7 @@ export default function CheckoutPage() {
     // and have a tournament object for the pricing helper.
     const { data: org } = await supabase
       .from("organizations")
-      .select("id")
+      .select("id, name")
       .eq("slug", orgSlug)
       .is("deleted_at", null)
       .maybeSingle();
@@ -173,6 +178,7 @@ export default function CheckoutPage() {
       setLoading(false);
       return;
     }
+    setOrgName(org.name);
     const { data: t } = await supabase
       .from("tournaments")
       .select("*")
@@ -516,6 +522,9 @@ export default function CheckoutPage() {
     }
 
     if (allPaid) {
+      // Capture receipt metadata before clearing transient state.
+      setConfirmedPaymentId(paymentId);
+      setConfirmedAt(new Date().toISOString());
       // Load the server-side receipt line items from payment_line_items.
       // These were written by create-payment-intent and are readable
       // by the player via SELECT RLS. If the query fails we show the
@@ -529,6 +538,14 @@ export default function CheckoutPage() {
         setReceiptItems(
           (liData ?? []) as { description: string; amount_cents: number }[],
         );
+        const { data: pmtRow } = await supabase
+          .from("payments")
+          .select("stripe_payment_intent_id")
+          .eq("id", paymentId)
+          .maybeSingle();
+        if (pmtRow?.stripe_payment_intent_id) {
+          setStripeIntentId(pmtRow.stripe_payment_intent_id);
+        }
       }
       setDoneEventNames(paidRows.map((r) => r.eventName));
     } else {
@@ -669,10 +686,50 @@ export default function CheckoutPage() {
               <span>Total charged</span>
               <span>{formatUsd(receiptTotal)}</span>
             </div>
+            <div style={receiptMeta}>
+              <div style={receiptMetaRow}>
+                <span style={receiptMetaLabel}>Tournament</span>
+                <span style={receiptMetaValue}>{tournament.name}</span>
+              </div>
+              {orgName && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Organizer</span>
+                  <span style={receiptMetaValue}>{orgName}</span>
+                </div>
+              )}
+              {confirmedAt && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Date</span>
+                  <span style={receiptMetaValue}>{fmtReceiptDate(confirmedAt)}</span>
+                </div>
+              )}
+              {confirmedPaymentId && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Confirmation</span>
+                  <span style={receiptMetaValue}>
+                    {confirmedPaymentId.slice(0, 8).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              {stripeIntentId && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Payment ref</span>
+                  <span style={receiptMetaValue}>{stripeIntentId}</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        <button
+          className="no-print"
+          style={printReceiptBtn}
+          onClick={() => window.print()}
+        >
+          Print receipt
+        </button>
+
+        <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
           <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={secondaryLinkBtn}>
             ← Back to tournament
           </Link>
@@ -1606,3 +1663,54 @@ const secondaryLinkBtn: CSSProperties = {
   padding: "12px 20px",
   marginTop: 12,
 };
+
+const receiptMeta: CSSProperties = {
+  marginTop: 16,
+  paddingTop: 16,
+  borderTop: `1px solid ${ruleSoft}`,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const receiptMetaRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  fontSize: 12,
+  color: inkSoft,
+};
+
+const receiptMetaLabel: CSSProperties = {
+  flexShrink: 0,
+  color: inkMuted,
+};
+
+const receiptMetaValue: CSSProperties = {
+  textAlign: "right",
+  wordBreak: "break-all",
+};
+
+const printReceiptBtn: CSSProperties = {
+  display: "block",
+  marginBottom: 16,
+  padding: "10px 18px",
+  background: "none",
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  fontSize: 13,
+  fontWeight: 600,
+  color: ink,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+function fmtReceiptDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
