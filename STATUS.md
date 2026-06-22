@@ -7,7 +7,163 @@ Current state: **V5 brand wired — brush wordmark in navbar, homepage
 rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 (schema + auth + organizer-side tournament create/list/view) still
 in place underneath.**
-Last updated: **2026-06-18**
+Last updated: **2026-06-21**
+
+## 2026-06-21 — ✅ CONFIRMED end-to-end: a real test registration flipped to paid
+
+Closes the webhook thread below. After the signing-secret fix, Ron hit **Resend** on the
+failed `payment_intent.succeeded` in the Stripe sandbox → delivery returned 200, the
+registration flipped `pending_payment → paid`, and the partner invite fired. Full path
+(card → webhook → reg flip → invite) verified working on TEST. New test payments confirm
+automatically. Two follow-ups still open (see next entry): **prod** needs its own
+live-mode `whsec_` before go-live, and the CLAUDE.md "Stripe webhook setup" doc section
+is still unwritten.
+
+## 2026-06-21 — ✅ RESOLVED: test payments now confirm (webhook signing-secret fix)
+
+Resolves the prior OPEN entry. **Root cause:** the Stripe **sandbox** webhook
+destination (`tournament-manager-checkout`, `we_1ThLGn…`) delivers to the **TEST**
+Supabase project `mvkhdsauaqqjehxdnbuf` (the project `test.bertanderne.com` uses) — but
+that project's `STRIPE_WEBHOOK_SIGNING_SECRET` had been fat-fingered to the **API
+secret-key value** (its digest matched `STRIPE_SECRET_KEY`, not the `whsec_…`). So every
+delivery failed signature verification → Stripe showed **Failed 9/12** → regs never
+flipped `pending_payment → paid`. The function, endpoint URL, and event subscriptions
+were all fine the whole time.
+
+**Fix:** `supabase secrets set --project-ref mvkhdsauaqqjehxdnbuf
+STRIPE_WEBHOOK_SIGNING_SECRET=whsec_Q6Syv…` (the destination's real secret; digest now
+`6d6a50e2…`). Verified: a signed probe to the test webhook URL now returns **200 ok**
+(was 400). Secrets apply at runtime — no redeploy.
+
+**Why my earlier fixes this session "didn't take":** the CLI is linked to **PROD**
+(`wducsjqyoksmluwfgjxc`), so my create-payment-intent deploy, the signing-secret set, and
+the manual event re-drive all hit PROD — never the TEST env the app actually uses.
+Functions ARE auto-synced by CI (`.github/workflows/edge-functions.yml`: push `main`→TEST,
+push `production`→PROD; **never hand-run `supabase functions deploy`**). SECRETS are NOT
+in CI — set per project by hand — which is the whole reason only the secret was wrong.
+
+**Next:** Stripe sandbox → tournament-manager-checkout → **Event deliveries → Resend** the
+failed `payment_intent.succeeded` events to flip the stuck test regs (idempotent). New
+test payments confirm automatically now.
+
+⚠️ **Two follow-ups:**
+- **Process slip:** I hand-deployed `create-payment-intent` to PROD this session (against
+  the no-hand-deploy rule). Harmless (same code) and self-corrects on the next
+  `main`→`production` promotion (CI redeploys, idempotent); PROD's function is just
+  temporarily ahead of the `production` branch.
+- **PROD go-live latent bug:** the PROD project's `STRIPE_WEBHOOK_SIGNING_SECRET` also
+  currently holds the SANDBOX secret `whsec_Q6Syv…`. Before taking LIVE payments, create a
+  **live-mode** webhook destination pointing at the PROD URL and set PROD's secret to THAT
+  destination's `whsec_…`, or live payments hit the same signature failure.
+
+Doc gaps from the prior entry still stand: add a "Stripe webhook setup" section to
+CLAUDE.md (endpoint URL **per project**, required events, and the per-project-secret
+gotcha that bit us here); fix the stale CLAUDE.md deploy-model note.
+
+## 2026-06-21 — ⏳ OPEN: webhook not confirming registrations (handoff mid-debug)
+
+**Symptom:** a real (test-mode) checkout charges fine but the registration never
+flips `pending_payment → paid`; the player lands on the "Payment received / We're
+finalizing…" fallback (`processingEventNames` in `CheckoutPage.tsx`, shown when the
+client polls regs for ~30s and never sees the flip). The flip is owned solely by the
+`stripe-webhook` edge function on `payment_intent.succeeded`.
+
+**What's RULED OUT (verified this session):**
+- `stripe-webhook` is deployed + ACTIVE; `verify_jwt = false` (Stripe can reach it).
+  Probed the live URL: unsigned POST → 400 "no stripe-signature" (handler runs);
+  a **correctly-signed** forged event → **200 ok** (function + secret healthy E2E).
+- `STRIPE_WEBHOOK_SIGNING_SECRET` in Supabase **already matched** the endpoint's
+  secret (confirmed by SHA-256 digest === the value Ron pasted). Signature mismatch
+  is NOT the cause. (Secret left as-is; it was correct.)
+- Stripe endpoint config is **correct**: destination `we_1ThLGnDnuWnzNVOOz7KIuvRC`
+  ("tournament-manager-checkout"), URL = `…/functions/v1/stripe-webhook`, subscribed
+  to `payment_intent.succeeded` + `payment_intent.payment_failed`. Events DID fire
+  (e.g. `pi_3TkpOKDnuWnzNVOO30Z2Ogbl` succeeded 1:43:44, charged $25, transferred).
+
+**Leading hypothesis (UNCONFIRMED):** the live delivery isn't being *processed*. The
+endpoint is a new-style **Event Destination** (`we_` id, API `2024-11-20.acacia`),
+while the function pins `stripe@14.21.0` / `apiVersion 2024-06-20`. Signature is over
+raw bytes so it still verifies, but if this destination emits the **thin/v2 payload
+shape**, the classic-SDK handler reads `event.data.object` as the wrong shape → no
+`payments` row match → silent **200 no-op** (no flip). Alternative: delivery is just
+failing/timing-out (cold start) and Stripe's retry already self-healed it.
+
+**TWO DATA POINTS STILL NEEDED (Ron was checking when we broke):**
+1. Does **My Tournaments** now show Recreational/Social as **confirmed**? (I re-drove
+   the real succeeded event into the webhook by hand — signed, 200 ok — which *should*
+   have flipped it IF the `payments` row keyed on `pi_3TkpOK…` exists. 200 alone
+   doesn't prove the flip — handler 200s even when it finds no matching payment row.)
+2. On that `payment_intent.succeeded` event in Stripe → **webhook/delivery attempts**
+   section → was it **delivered**, and what **HTTP response** (200 / 4xx / 5xx /
+   timeout / none)? That pins root cause for *future* payments.
+
+**Decision tree for next session:**
+- My Tournaments **confirmed** + original delivery **failed/none** → function & data
+  are fine; fix the *delivery* (payload-format / Event-Destination type). Future
+  payments are still broken until then.
+- My Tournaments **confirmed** + original delivery **200** → transient/cold-start
+  miss; likely fine, consider widening the client poll window.
+- My Tournaments **still NOT confirmed** (despite my 200 re-drive) → no `payments`
+  row matches `pi_3TkpOK…` → data-linkage bug, suspect the `create-payment-intent`
+  reuse change (PR #416) re-keying / not upserting the row. Inspect `payments` +
+  `payment_line_items` for that intent.
+
+**Useful facts:** test env is `https://test.bertanderne.com`; Supabase project
+`wducsjqyoksmluwfgjxc`; player `4bb854bc-7a6b-44eb-b3a4-6c8f96fa8f7e`; tournament
+`073037e2-3013-4ee2-ad45-d54f2f232055`; connected acct `acct_1TdCzTBfxtiBn6ne`;
+platform fee currently **0** (`application_fee_amount: 0`). Re-drive technique: forge
+a signed `payment_intent.succeeded` (HMAC-SHA256 over `"{t}.{rawbody}"` keyed by the
+whsec) and POST to the function URL — idempotent, so safe to repeat.
+
+**Doc gaps to fix once resolved:** (a) CLAUDE.md has NO "Stripe webhook setup"
+section (endpoint URL, required events, signing-secret step) — add it; (b) CLAUDE.md
+"Deployment" still claims auto-deploy on push to `main` — stale since the 06-18
+prod-deploy split (`main` = staging, `production` = prod).
+
+_Side note (Ron's other Q): to disable Klarna/Link/Cash App/Amazon Pay etc., it's
+Stripe Dashboard → Settings → Payment methods (platform account, per mode); or hard-
+lock in code via `payment_method_types: ["card"]` in `create-payment-intent`._
+
+## 2026-06-21 — Fix: terminal PaymentIntent reused by Elements (PR #416, deployed)
+
+Checkout threw **"This PaymentIntent is in a terminal state and cannot be used to
+initialize Elements"** on re-entry after a prior attempt. Root cause: the stable
+idempotency key in `create-payment-intent` (`pi:player:tournament:regIds`) made
+Stripe replay the original response for 24h, so a `succeeded`/`canceled` intent got
+handed back forever. Reproduces in local dev where a succeeded test payment doesn't
+flip regs (no webhook) → checkout reload re-requests the same reg set.
+
+Fix = retrieve-or-create: reuse the player's newest pending intent only if collectable
+(`requires_payment_method`/`confirmation`/`action`), resyncing amount+fee; else mint a
+fresh one. Double-submit guarded client-side. **Deployed via `supabase functions deploy
+create-payment-intent`** to prod project `wducsjqyoksmluwfgjxc` — shared backend, so
+live for staging + prod immediately. No frontend change, so no Cloudflare rebuild and
+no main→production promotion required (production branch source is 1 commit behind on
+this function only; fold into next promotion). Stuck sessions recover via Back →
+Continue to payment.
+
+## 2026-06-21 — Checkout payment-processing overlay (PR #414) → promoted to prod (PR #415)
+
+Shipped a full-viewport **blocking overlay** on the checkout page (`CheckoutPage.tsx`).
+It mounts the instant the player submits payment and stays up through the webhook
+poll (`busy = submitting || finalizing`), with no dismiss affordance — kills the
+double-submit / stray-click / refresh-mid-charge window. Two phases (`authorizing` →
+`confirming`) and a step checklist (authorize card → confirm spot → notify partners)
+mirror the real flow; background scroll locked while up. Spin keyframe added to
+`index.css` per the `partner-sheet-slidein` convention. Also merged a small fix
+(PR #413): left-aligned the partner check-out notice in `PublicTournamentPage.tsx`.
+
+✅ **Promoted main→production (PR #415, prod `ff1d85c`)** — no migrations in the gap.
+Typecheck + lint (no new errors vs. base) + build all green.
+
+⚠️ **CLAUDE.md is stale on the deploy model:** it still says "Cloudflare Pages
+auto-deploys on every push to `main`." Since the 06-18 prod-deploy split, **`main`
+is staging and `production` is prod** (promote via a `main`→`production` PR, à la
+#397/#415). Worth fixing the CLAUDE.md "Deployment" section next session.
+
+🔜 **Next (optional):** idempotency key on the payment intent in
+`create-payment-intent` so a hard refresh mid-charge can't create a second charge —
+the overlay is client-only and won't survive a forced reload. Not yet filed as a story.
 
 > ⚠️ **Continuity gap fixed (2026-06-14):** entries between 06-09 and 06-14
 > (login/onboarding batch, Resend SMTP, Quote Studio epic) were written to a
