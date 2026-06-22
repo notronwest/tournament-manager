@@ -9,6 +9,32 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Waitlists: pay-on-promotion model locked (PR #473) + frontend plan
+
+Ron confirmed the model: **free to join the waitlist** (with a partner OR seeking), **pay
+only on promotion**. Migration `20260622060000` (validated on test, run 27964333267):
+`join_waitlist` → free `waitlisted`; `promote_from_waitlist` → `waitlisted_pending_payment`
+(pay-to-claim), not straight to `paid`. (`compute_checkout_total` already charges
+`waitlisted_pending_payment`, so the existing checkout handles the pay-to-claim step.)
+Consistent with dropping AC5 (no un-promoted refund — you never pay until promoted).
+
+So the whole waitlist DB layer is now correct + live on test. **Remaining is purely
+frontend** (no more DB needed except the doubles edge):
+1. `PublicTournamentPage`: full event (`is_event_full` / roster `totalTeams >= maxTeams`) →
+   CTA reads "Join waitlist" not "Register".
+2. `RegisterPage`: full-event registration → pick partner / seeking → call `join_waitlist`
+   (free, **skip checkout**) → "you're on the waitlist". This branches the existing
+   addedEvents path (insert+checkout) on fullness.
+3. Promotion → `waitlisted_pending_payment` surfaces in the player's pending-payments /
+   checkout to pay → `paid`.
+4. ⚠️ **Doubles-team edge:** one team = one waitlist slot. When a waitlisted player invites a
+   partner, `accept_partner_invite` must land the partner on the waitlist too (`waitlisted`,
+   shared team position) — it currently creates a normal reg. Needs explicit handling (likely
+   a small DB tweak to accept_partner_invite when the inviter's reg is waitlisted).
+
+Validation trick used throughout: `gh workflow run migrations.yml --ref <branch>` → applies
+to TEST without touching main (no local Docker on this machine). Worth adding to MIGRATIONS.md.
+
 ## 2026-06-22 — Waitlists redo: DB layer rebuilt + validated on test (PR #470/#471)
 
 Rebuilt the reverted #42 waitlists migration **correctly** and proved it. All 5 bugs fixed:
