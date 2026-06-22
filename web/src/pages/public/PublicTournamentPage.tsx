@@ -1413,6 +1413,9 @@ function EventCard({
   const [cancelling, setCancelling] = useState(false);
   // #9: gate the partner-dropping Cancel behind a confirm step.
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Leaving the waitlist costs the player their place in line, so gate
+  // it behind a confirm step too.
+  const [confirmLeaveWaitlist, setConfirmLeaveWaitlist] = useState(false);
   // #9: same guard for backing out of the register FORM after a
   // partner is picked (discards the in-progress pick).
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
@@ -1959,6 +1962,10 @@ function EventCard({
     // Soft-delete the pending reg + cancel any outbound invite for
     // this event. (If the user paid already and then changes their
     // mind, that's the manage-page withdraw flow — different path.)
+    // Also serves "leave waitlist": a waitlisted reg is free, so there's
+    // no refund to compute — soft-deleting it removes it from the queue
+    // (promote_from_waitlist filters deleted_at is null; the position gap
+    // it leaves is harmless since promotion orders by position ASC).
     await supabase
       .from("event_registrations")
       .update({ deleted_at: new Date().toISOString() })
@@ -2021,19 +2028,37 @@ function EventCard({
   // ─── Right-side action button — depends on current state ─────────
   const renderAction = () => {
     if (!registrationOpen) return null;
-    // On the waitlist (free) — show status, not a register CTA.
+    // On the waitlist (free) — show status + a way to leave, not a
+    // register CTA.
     if (myStatus?.state === "waitlisted") {
       return (
-        <span
-          style={{
-            fontSize: 13,
-            color: courtBlue,
-            fontWeight: 600,
-            whiteSpace: "nowrap",
-          }}
-        >
-          ✓ On the waitlist
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              fontSize: 13,
+              color: courtBlue,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            ✓ On the waitlist
+          </span>
+          <button
+            type="button"
+            onClick={() => setConfirmLeaveWaitlist(true)}
+            disabled={cancelling}
+            style={{
+              ...ctaSecondaryStyle,
+              color: dangerFg,
+              boxShadow: `inset 0 0 0 2px ${dangerBg}`,
+              cursor: cancelling ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+              opacity: cancelling ? 0.6 : 1,
+            }}
+          >
+            {cancelling ? "Leaving…" : "Leave waitlist"}
+          </button>
+        </div>
       );
     }
     // Promoted off the waitlist — a spot is reserved; pay to claim it.
@@ -2248,6 +2273,31 @@ function EventCard({
           }}
         />
       )}
+      {confirmLeaveWaitlist && (
+        <ConfirmModal
+          title="Leave the waitlist?"
+          body={
+            <>
+              You'll lose your place in line for <strong>{event.name}</strong>.
+              {myStatus?.partnerLabel ? (
+                <>
+                  {" "}
+                  Your partner invite to{" "}
+                  <strong>{myStatus.partnerLabel}</strong> will be cancelled.
+                </>
+              ) : null}{" "}
+              You can re-join later, but you'll go to the back of the queue.
+            </>
+          }
+          confirmLabel="Leave waitlist"
+          cancelLabel="Stay on waitlist"
+          onCancel={() => setConfirmLeaveWaitlist(false)}
+          onConfirm={async () => {
+            await onCancelPending();
+            setConfirmLeaveWaitlist(false);
+          }}
+        />
+      )}
       {confirmDiscardForm && (
         <ConfirmModal
           title="Discard your partner pick?"
@@ -2301,8 +2351,14 @@ function EventCard({
             {myStatus?.state === "invited" && (
               <Pill bg={ink} fg={courtYellow}>You're invited</Pill>
             )}
-            {myStatus?.isSeekingPartner && (
-              <Pill bg={cream} fg={courtBlue}>Looking for partner</Pill>
+            {/* "Seeking" is the viewer's OWN status — so word it in the
+                first person ("You're …") to avoid reading as if someone
+                else is looking. And suppress it once a partner is invited
+                or picked (partnerLabel set): a waitlist reg that invited a
+                partner BY EMAIL stays partner_status='seeking', which would
+                otherwise contradict the "Invited X" label right below. */}
+            {myStatus?.isSeekingPartner && !myStatus?.partnerLabel && (
+              <Pill bg={cream} fg={courtBlue}>You're looking for a partner</Pill>
             )}
           </div>
           {/* Partner label */}
