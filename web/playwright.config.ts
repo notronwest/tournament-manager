@@ -9,6 +9,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // Serialize in CI: the suite drives ONE shared deployed app (tm-test) and
+  // mutates registration state, so concurrent workers race the deploy (cold
+  // hits time out) and each other. One worker is deterministic; the suite is
+  // small (~1 min). Local runs still parallelize.
+  workers: process.env.CI ? 1 : undefined,
   // CI: github annotations + console list + an HTML report (downloadable as a
   // run artifact, with traces/screenshots on failure) + a machine-readable JSON
   // report that e2e/record-history.ts ingests into the per-test history table.
