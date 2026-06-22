@@ -215,7 +215,7 @@ export default function CheckoutPage() {
     const { data: regs, error: regsErr } = await supabase
       .from("event_registrations")
       .select(
-        `id, event_id, partner_status,
+        `id, event_id, partner_status, partner_registration_id,
          event:events!event_id (id, name, format, event_fee_cents)`,
       )
       .eq("player_id", me.id)
@@ -234,6 +234,7 @@ export default function CheckoutPage() {
       id: string;
       event_id: string;
       partner_status: Database["public"]["Enums"]["partner_status"];
+      partner_registration_id: string | null;
       event: {
         id: string;
         name: string;
@@ -297,11 +298,47 @@ export default function CheckoutPage() {
       inviteByEvent.set(inv.event_id, inv);
     }
 
+    // Resolve the CONFIRMED partner for paired regs. accept_partner_invite
+    // links both sides via partner_registration_id (partner_status =
+    // 'confirmed'), so once an invite is accepted neither side has a *pending*
+    // outbound invite anymore — the partner name must come from the linked
+    // registration instead. Without this, an invitee (or a post-accept
+    // inviter) shows no partner and gets blocked from paying. (#— partner
+    // accepted but checkout said "No partner picked".)
+    const partnerRegIds = mine
+      .map((r) => r.partner_registration_id)
+      .filter((id): id is string => !!id);
+    const partnerNameByRegId = new Map<string, string>();
+    if (partnerRegIds.length > 0) {
+      const { data: partnerRegs } = await supabase
+        .from("event_registrations")
+        .select(`id, player:players!player_id (first_name, last_name)`)
+        .in("id", partnerRegIds);
+      type PartnerReg = {
+        id: string;
+        player: { first_name: string; last_name: string } | null;
+      };
+      for (const pr of (partnerRegs ?? []) as unknown as PartnerReg[]) {
+        if (pr.player) {
+          partnerNameByRegId.set(
+            pr.id,
+            `${pr.player.first_name} ${pr.player.last_name}`,
+          );
+        }
+      }
+    }
+
     const built: PendingRow[] = mine.map((r) => {
       const inv = inviteByEvent.get(r.event_id);
+      // Prefer the pending-invite label (pre-accept, inviter side); fall back
+      // to the confirmed partner linked via partner_registration_id (either
+      // side, post-accept).
+      const confirmedPartner = r.partner_registration_id
+        ? partnerNameByRegId.get(r.partner_registration_id) ?? null
+        : null;
       const partnerLabel = inv?.invitee
         ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
-        : inv?.invitee_email ?? null;
+        : inv?.invitee_email ?? confirmedPartner;
       const partnerEmail = inv?.invitee?.email ?? inv?.invitee_email ?? null;
       return {
         regId: r.id,
@@ -719,8 +756,10 @@ export default function CheckoutPage() {
                     marginTop: 10,
                   }}
                 >
-                  ✓ Partner: <strong>{r.partnerLabel}</strong> — will be
-                  invited when you pay
+                  ✓ Partner: <strong>{r.partnerLabel}</strong>
+                  {r.partner_status === "confirmed"
+                    ? " — accepted"
+                    : " — will be invited when you pay"}
                 </div>
               )}
               {r.format === "doubles" && !r.partnerLabel && r.partner_status === "seeking" && (
