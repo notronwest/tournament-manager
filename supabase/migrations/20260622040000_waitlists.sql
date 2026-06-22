@@ -97,8 +97,8 @@ grant execute on function public.is_event_full(uuid) to authenticated, anon;
 
 create or replace function public.join_waitlist(p_event_id uuid)
 returns table (
-  reg_id   uuid,
-  position integer
+  reg_id            uuid,
+  waitlist_position integer
 )
 language plpgsql
 security definer
@@ -159,8 +159,8 @@ begin
   )
   returning id into v_reg;
 
-  reg_id   := v_reg;
-  position := v_pos;
+  reg_id            := v_reg;
+  waitlist_position := v_pos;
   return next;
 end;
 $$;
@@ -504,8 +504,8 @@ begin
   end if;
 
   select exists(
-           select 1 from payment_line_items
-            where payment_id = v_pay_id and amount_cents < 0
+           select 1 from payment_line_items pli
+            where pli.payment_id = v_pay_id and pli.amount_cents < 0
          )
     into v_has_coupon;
   if v_has_coupon then
