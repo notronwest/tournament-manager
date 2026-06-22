@@ -9,7 +9,17 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["github"], ["list"]] : "list",
+  // CI: github annotations + console list + an HTML report (downloadable as a
+  // run artifact, with traces/screenshots on failure) + a machine-readable JSON
+  // report that e2e/record-history.ts ingests into the per-test history table.
+  reporter: process.env.CI
+    ? [
+        ["github"],
+        ["list"],
+        ["html", { open: "never" }],
+        ["json", { outputFile: "playwright-report/results.json" }],
+      ]
+    : "list",
   use: {
     baseURL: process.env.E2E_BASE_URL || "https://tournament-manager.pages.dev",
     trace: "on-first-retry",

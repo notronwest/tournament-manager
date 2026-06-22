@@ -21,7 +21,24 @@ resolves) and the occasional maintenance fix.
    `fixtures.ts` provides a `loginAs(test-organizer / test-player)` helper
    (email/password — the app supports `signInWithPassword`).
 3. **Report** (`regression.yml`) — nightly GitHub Action: seed → `playwright
-   test` → post a one-line pass/fail summary to the Backlog Discord channel.
+   test` → record per-test history → post a one-line pass/fail summary to the
+   Backlog Discord channel.
+
+## Where to see results
+
+- **This run, per test** — every run uploads a Playwright **HTML report**
+  (`playwright-report` artifact, 14-day retention) on the GitHub Actions run
+  page. It lists each test pass/fail with traces + screenshots on failures.
+  Open `gh run download <run-id> -n playwright-report` then `playwright-report/index.html`.
+- **Each test's history over time** — `record-history.ts` writes one row per
+  test per run into the **`e2e_test_results`** table in the **TEST** Supabase
+  project. View it in the Supabase dashboard:
+  - **Table editor → `e2e_test_results`** — raw per-run rows.
+  - **`e2e_test_history` view** — one row per test: `runs`, `passed`, `failed`,
+    `pass_rate_pct`, `last_status`, `last_seen`. This is the at-a-glance
+    "is this test flaky / when did it start failing" view.
+  The table/view ship as migration `…_e2e_test_history.sql`; merging to `main`
+  auto-applies it to the test project (main→TEST), so no manual setup.
 
 ## The convention
 
