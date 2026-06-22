@@ -1,8 +1,4 @@
--- 20260622040000_waitlists.sql
--- (Renumbered from 20260621000000: it sorted before an already-applied prod
---  migration, so prod `db push` refused it as out-of-order. Bumped above the
---  high-water mark, kept BEFORE refund_compute_fix so that fix still lands
---  last. DDL is idempotent, so re-applying to TEST is a no-op.)
+-- 20260621000000_waitlists.sql
 --
 -- Waitlist feature (#42 [DB] sub-issue #437).
 -- Additive-only: new enum values, one new column, new/modified functions.
