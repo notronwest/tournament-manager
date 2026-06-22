@@ -279,6 +279,48 @@ export type Database = {
           },
         ]
       }
+      e2e_test_results: {
+        Row: {
+          duration_ms: number | null
+          expected: string | null
+          file: string
+          id: number
+          recorded_at: string
+          retries: number
+          run_id: string
+          sha: string | null
+          status: string
+          test_id: string
+          title: string
+        }
+        Insert: {
+          duration_ms?: number | null
+          expected?: string | null
+          file: string
+          id?: never
+          recorded_at?: string
+          retries?: number
+          run_id: string
+          sha?: string | null
+          status: string
+          test_id: string
+          title: string
+        }
+        Update: {
+          duration_ms?: number | null
+          expected?: string | null
+          file?: string
+          id?: never
+          recorded_at?: string
+          retries?: number
+          run_id?: string
+          sha?: string | null
+          status?: string
+          test_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
       event_courts: {
         Row: {
           court_number: number
@@ -1701,7 +1743,21 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      e2e_test_history: {
+        Row: {
+          failed: number | null
+          file: string | null
+          last_seen: string | null
+          last_status: string | null
+          pass_rate_pct: number | null
+          passed: number | null
+          runs: number | null
+          skipped: number | null
+          test_id: string | null
+          title: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       accept_partner_invite: {
@@ -1800,13 +1856,28 @@ export type Database = {
         Args: { min_role: Database["public"]["Enums"]["org_role"]; org: string }
         Returns: boolean
       }
+      is_event_full: { Args: { p_event_id: string }; Returns: boolean }
       is_org_member: { Args: { org: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
+      join_waitlist: {
+        Args: { p_event_id: string }
+        Returns: {
+          reg_id: string
+          waitlist_position: number
+        }[]
+      }
       players_registered_for_events: {
         Args: { p_event_ids: string[] }
         Returns: {
           event_id: string
           player_id: string
+        }[]
+      }
+      promote_from_waitlist: {
+        Args: { p_event_id: string }
+        Returns: {
+          promoted_player_id: string
+          promoted_reg_id: string
         }[]
       }
       redeem_coupon: { Args: { p_coupon_id: string }; Returns: boolean }
@@ -1849,33 +1920,15 @@ export type Database = {
         }
         Returns: Json
       }
+      waitlist_effective_position: {
+        Args: { p_reg_id: string }
+        Returns: number
+      }
       withdraw_self: {
         Args: { p_reg_id: string }
         Returns: {
           entitled_cents: number
           new_status: Database["public"]["Enums"]["registration_status"]
-          promoted_player_id: string | null
-          promoted_reg_id: string | null
-        }[]
-      }
-      is_event_full: {
-        Args: { p_event_id: string }
-        Returns: boolean
-      }
-      join_waitlist: {
-        Args: { p_event_id: string }
-        Returns: {
-          position: number
-          reg_id: string
-        }[]
-      }
-      waitlist_effective_position: {
-        Args: { p_reg_id: string }
-        Returns: number
-      }
-      promote_from_waitlist: {
-        Args: { p_event_id: string }
-        Returns: {
           promoted_player_id: string
           promoted_reg_id: string
         }[]
