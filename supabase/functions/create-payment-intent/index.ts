@@ -119,7 +119,10 @@ Deno.serve(async (req: Request) => {
     let totalCents: number = totalRes.total_cents;
     const lineItems: Array<{ event_registration_id: string | null; description: string; amount_cents: number }> =
       totalRes.line_items ?? [];
-    if (totalCents <= 0) return json({ error: "nothing_to_charge" }, 400);
+    // NB: a $0 total is NOT an error here — a tournament with no fees (or a
+    // coupon that brings the basket to $0) is a valid FREE registration,
+    // handled after the coupon step below. We only reject when there's
+    // genuinely nothing in the cart (no regs), checked there.
 
     // Guard: verify the regs we're about to charge are still pending_payment,
     // not soft-deleted, and belong to this tournament's events. Prevents
@@ -161,6 +164,29 @@ Deno.serve(async (req: Request) => {
       }
       // Invalid coupon: ignore silently here; the UI validates + shows
       // the error before the user reaches Pay.
+    }
+
+    // ── Free registration (no payment) ──────────────────────────────
+    // $0 to pay — either the tournament has no fees or a coupon zeroed the
+    // basket. There's no Stripe charge and therefore no webhook to flip the
+    // regs, so we confirm right here: mark the player's pending regs paid,
+    // redeem any coupon, and fire the deferred partner invites — mirroring
+    // stripe-webhook's handleSucceeded for the paid path. The total is
+    // computed server-side (compute_checkout_total) above, so a client can't
+    // forge a free checkout for a paid event.
+    if (totalCents <= 0) {
+      if (regIdsToCharge.length === 0) {
+        return json({ error: "nothing_to_charge" }, 400);
+      }
+      const { error: flipErr } = await admin
+        .from("event_registrations")
+        .update({ status: "paid" })
+        .in("id", regIdsToCharge)
+        .eq("status", "pending_payment");
+      if (flipErr) return json({ error: "free_confirm_failed" }, 500);
+      if (couponId) await admin.rpc("redeem_coupon", { p_coupon_id: couponId });
+      await sendFreeInvites(admin, player.id, regIdsToCharge, baseUrl);
+      return json({ confirmed: true, free: true }, 200);
     }
 
     // ── 4. Platform fee (Connect destination charge) ────────────────
@@ -298,4 +324,58 @@ function json(body: unknown, status: number) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+// Fire the player's pending OUTBOUND partner invites for the events they just
+// registered for free. Mirrors stripe-webhook's sendDeferredInvites (which
+// handles the paid path) — kept in sync by hand until extracted to a shared
+// module. Best-effort: a failed email must not fail the confirmation.
+// deno-lint-ignore no-explicit-any
+async function sendFreeInvites(
+  admin: any,
+  inviterPlayerId: string,
+  regIds: string[],
+  baseUrl?: string,
+) {
+  if (regIds.length === 0) return;
+  const { data: regs } = await admin
+    .from("event_registrations")
+    .select("event_id")
+    .in("id", regIds);
+  const eventIds = Array.from(
+    new Set((regs ?? []).map((r: { event_id: string }) => r.event_id).filter(Boolean)),
+  );
+  if (eventIds.length === 0) return;
+
+  const { data: invites } = await admin
+    .from("partner_invites")
+    .select("id, invitee_email")
+    .eq("inviter_player_id", inviterPlayerId)
+    .eq("status", "pending")
+    .in("event_id", eventIds);
+
+  const base =
+    (baseUrl ?? "").replace(/\/+$/, "") || "https://tournament-manager.pages.dev";
+
+  for (const inv of (invites ?? []) as { id: string; invitee_email: string | null }[]) {
+    if (isObviouslyFakeEmail(inv.invitee_email)) continue;
+    try {
+      await admin.functions.invoke("send-partner-invite", {
+        body: { inviteId: inv.id, baseUrl: base },
+      });
+    } catch (_e) {
+      // best-effort — confirmation already succeeded
+    }
+  }
+}
+
+function isObviouslyFakeEmail(email: string | null): boolean {
+  if (!email) return false;
+  const e = email.trim().toLowerCase();
+  return (
+    e.endsWith(".test") ||
+    e.endsWith("@example.com") ||
+    e.endsWith("@example.net") ||
+    e.endsWith("@example.org")
+  );
 }
