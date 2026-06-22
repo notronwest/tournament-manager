@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
@@ -12,11 +12,9 @@ import {
   courtBlue,
   successBg,
   successFg,
-bodyFontStack,
+  bodyFontStack,
   breadcrumbLinkStyle,
   pageH1Style,
-  ctaPrimaryStyle,
-  ctaSecondaryStyle,
   inputStyle,
   statusPanelStyle,
 } from "../../lib/publicTheme";
@@ -40,7 +38,6 @@ export default function SiteAttendeesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -130,7 +127,6 @@ export default function SiteAttendeesPage() {
           onChange={(e) => {
             setSearch(e.target.value);
             setPage(0);
-            setEditingId(null);
           }}
           style={{ ...inputStyle, width: 300 }}
         />
@@ -177,58 +173,37 @@ export default function SiteAttendeesPage() {
                 </tr>
               ) : (
                 players.map((p) => (
-                  <Fragment key={p.id}>
-                    <tr
-                      style={{
-                        borderBottom:
-                          editingId === p.id ? "none" : `1px solid ${ruleSoft}`,
-                      }}
-                    >
-                      <td style={tdStyle}>
+                  <tr
+                    key={p.id}
+                    style={{ borderBottom: `1px solid ${ruleSoft}` }}
+                  >
+                    <td style={tdStyle}>
+                      <Link
+                        to={`/admin/players/${p.id}`}
+                        style={{ color: courtBlue, textDecoration: "none", fontWeight: 500 }}
+                      >
                         {p.first_name} {p.last_name}
-                      </td>
-                      <td style={tdStyle}>
-                        {p.email ?? (
-                          <span style={{ color: inkMuted }}>—</span>
-                        )}
-                      </td>
-                      <td style={tdStyle}>
-                        {p.auth_user_id ? (
-                          <span style={linkedBadgeStyle}>linked</span>
-                        ) : (
-                          <span style={noAccountBadgeStyle}>no account</span>
-                        )}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        <button
-                          onClick={() =>
-                            setEditingId(editingId === p.id ? null : p.id)
-                          }
-                          style={editBtnStyle}
-                        >
-                          {editingId === p.id ? "Cancel" : "Edit"}
-                        </button>
-                      </td>
-                    </tr>
-                    {editingId === p.id && (
-                      <tr style={{ borderBottom: `1px solid ${rule}` }}>
-                        <td colSpan={4} style={{ padding: 0 }}>
-                          <EditEmailPanel
-                            player={p}
-                            onSaved={(updates) => {
-                              setPlayers((prev) =>
-                                prev.map((r) =>
-                                  r.id === p.id ? { ...r, ...updates } : r,
-                                ),
-                              );
-                              setEditingId(null);
-                            }}
-                            onCancel={() => setEditingId(null)}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                      </Link>
+                    </td>
+                    <td style={tdStyle}>
+                      {p.email ?? <span style={{ color: inkMuted }}>—</span>}
+                    </td>
+                    <td style={tdStyle}>
+                      {p.auth_user_id ? (
+                        <span style={linkedBadgeStyle}>linked</span>
+                      ) : (
+                        <span style={noAccountBadgeStyle}>no account</span>
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                      <Link
+                        to={`/admin/players/${p.id}`}
+                        style={manageLinkStyle}
+                      >
+                        Manage →
+                      </Link>
+                    </td>
+                  </tr>
                 ))
               )}
             </tbody>
@@ -266,142 +241,6 @@ export default function SiteAttendeesPage() {
         </div>
       )}
     </main>
-  );
-}
-
-function EditEmailPanel({
-  player,
-  onSaved,
-  onCancel,
-}: {
-  player: Player;
-  onSaved: (updates: Partial<Player>) => void;
-  onCancel: () => void;
-}) {
-  const [contactEmail, setContactEmail] = useState(player.email ?? "");
-  const [loginEmail, setLoginEmail] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const contactChanged = contactEmail.trim() !== (player.email ?? "");
-  const loginChanged = !!player.auth_user_id && loginEmail.trim() !== "";
-  const hasChange = contactChanged || loginChanged;
-
-  const onSave = async () => {
-    if (!hasChange) {
-      onCancel();
-      return;
-    }
-    setSaving(true);
-    setError(null);
-
-    const body: { playerId: string; contactEmail?: string; loginEmail?: string } =
-      { playerId: player.id };
-    if (contactChanged) body.contactEmail = contactEmail.trim();
-    if (loginChanged) body.loginEmail = loginEmail.trim();
-
-    const { data, error: fnErr } = await supabase.functions.invoke(
-      "admin-update-player-email",
-      { body },
-    );
-
-    setSaving(false);
-
-    if (fnErr) {
-      let message = fnErr.message;
-      try {
-        const ctx = (fnErr as unknown as { context?: Response }).context;
-        if (ctx) {
-          const b = (await ctx.json()) as { error?: string };
-          if (b.error) message = b.error;
-        }
-      } catch {
-        // fall through
-      }
-      setError(message);
-      return;
-    }
-    if (data && !(data as { ok?: boolean }).ok) {
-      setError((data as { error?: string }).error ?? "Failed.");
-      return;
-    }
-
-    onSaved({
-      email: contactChanged ? contactEmail.trim() || null : player.email,
-    });
-  };
-
-  return (
-    <div
-      style={{
-        padding: "12px 16px",
-        background: bg,
-        borderTop: `1px solid ${rule}`,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          gap: 16,
-          flexWrap: "wrap",
-          alignItems: "flex-end",
-        }}
-      >
-        <label
-          style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft }}
-        >
-          Contact email
-          <input
-            type="email"
-            value={contactEmail}
-            onChange={(e) => {
-              setContactEmail(e.target.value);
-              setError(null);
-            }}
-            style={{ ...inputStyle, width: 240 }}
-          />
-        </label>
-
-        {player.auth_user_id && (
-          <label
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              fontSize: 12,
-              color: inkSoft,
-            }}
-          >
-            Login email (auth)
-            <input
-              type="email"
-              value={loginEmail}
-              placeholder="Leave blank to keep unchanged"
-              onChange={(e) => {
-                setLoginEmail(e.target.value);
-                setError(null);
-              }}
-              style={{ ...inputStyle, width: 240 }}
-            />
-          </label>
-        )}
-
-        <div style={{ display: "flex", gap: 8, paddingBottom: 1 }}>
-          <button
-            onClick={onSave}
-            disabled={saving}
-            style={saving ? { ...ctaPrimaryStyle, opacity: 0.6, cursor: "not-allowed" } : ctaPrimaryStyle}
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button onClick={onCancel} disabled={saving} style={ctaSecondaryStyle}>
-            Cancel
-          </button>
-        </div>
-      </div>
-
-      {error && <div style={{ ...statusPanelStyle("danger"), marginTop: 10 }}>{error}</div>}
-    </div>
   );
 }
 
@@ -444,14 +283,11 @@ const noAccountBadgeStyle = {
   border: `1px solid ${rule}`,
 };
 
-const editBtnStyle = {
-  padding: "4px 10px",
-  background: "#fff",
-  border: `1px solid ${rule}`,
-  borderRadius: 5,
+const manageLinkStyle = {
   fontSize: 12,
-  color: inkSoft,
-  cursor: "pointer",
+  color: courtBlue,
+  textDecoration: "none",
+  whiteSpace: "nowrap" as const,
   fontFamily: bodyFontStack,
 };
 
