@@ -210,6 +210,16 @@ export default function EventConsolePage() {
   }, [reload]);
 
   const teams = useMemo(() => buildTeams(regs, players), [regs, players]);
+  const waitlistRegs = useMemo(
+    () =>
+      [...regs]
+        .filter((r) => r.status === "waitlisted")
+        .sort(
+          (a, b) =>
+            (a.waitlist_position ?? Infinity) - (b.waitlist_position ?? Infinity),
+        ),
+    [regs],
+  );
   const teamByCaptainId = useMemo(
     () => new Map(teams.map((t) => [t.captainRegId, t])),
     [teams],
@@ -508,12 +518,17 @@ export default function EventConsolePage() {
       )}
 
       {activeTab === "teams" && (
-        <TeamsSection
-          event={event}
-          teams={teams}
-          hasMatches={matches.length > 0}
-          onChange={reload}
-        />
+        <>
+          <TeamsSection
+            event={event}
+            teams={teams}
+            hasMatches={matches.length > 0}
+            onChange={reload}
+          />
+          {waitlistRegs.length > 0 && (
+            <WaitlistPanel regs={waitlistRegs} players={players} />
+          )}
+        </>
       )}
 
       {activeTab === "games" && (
@@ -2162,6 +2177,54 @@ function playoffRoundLabel(
   if (matchesInRound === 2) return "Semifinals";
   if (matchesInRound === 4) return "Quarterfinals";
   return `Round ${round}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Waitlist Panel
+// ─────────────────────────────────────────────────────────────────────
+
+function WaitlistPanel({
+  regs,
+  players,
+}: {
+  regs: EventRegistration[];
+  players: Player[];
+}) {
+  const playerById = new Map(players.map((p) => [p.id, p]));
+  return (
+    <section style={{ marginTop: 24 }}>
+      <SectionHeader title={`Waitlist (${regs.length})`} />
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: "left", padding: "6px 8px", color: inkMuted, fontWeight: 500, borderBottom: "1px solid #e5e7eb" }}>#</th>
+            <th style={{ textAlign: "left", padding: "6px 8px", color: inkMuted, fontWeight: 500, borderBottom: "1px solid #e5e7eb" }}>Player</th>
+          </tr>
+        </thead>
+        <tbody>
+          {regs.map((reg) => {
+            const p = playerById.get(reg.player_id);
+            return (
+              <tr key={reg.id}>
+                <td style={{ padding: "6px 8px", color: inkMuted, verticalAlign: "top" }}>
+                  {reg.waitlist_position ?? "—"}
+                </td>
+                <td style={{ padding: "6px 8px", color: ink, verticalAlign: "top" }}>
+                  {p ? `${p.first_name} ${p.last_name}` : reg.player_id}
+                  {p?.email && (
+                    <div style={{ fontSize: 11, color: inkMuted }}>{p.email}</div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div style={{ fontSize: 12, color: inkMuted, marginTop: 8, background: warnBg, border: `1px solid ${warnFg}`, borderRadius: 5, padding: "6px 10px" }}>
+        Players are promoted automatically when a confirmed spot opens.
+      </div>
+    </section>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────
