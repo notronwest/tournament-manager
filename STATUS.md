@@ -9,6 +9,24 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Fix: profile save failed for orphan player records (PR #417 → prod #418)
+
+Saving a profile threw **"Cannot coerce the result to a single JSON object"** when the
+player row was an organizer-pre-created **orphan** (`auth_user_id IS NULL`). ProfilePage's
+claim path (`update players set auth_user_id = me … returning *`) hit the `players` UPDATE
+RLS policy, whose `USING` checked `auth_user_id = auth.uid()` against the **old** value
+(NULL) → 0 rows → PostgREST `.single()` coerce error. No auto-link trigger/claim function
+exists — the inline UPDATE *is* the claim path, and RLS silently blocked it.
+
+Fix (migration `20260621220000_players_claim_orphan_update.sql`): added a claim branch to
+the policy `USING` — an authenticated user may update an unlinked player row when its email
+matches their own JWT email (`lower(email) = lower(auth.jwt() ->> 'email')`). Implicit
+WITH CHECK still blocks reassigning a record to a different uid; self/org-staff edits
+unchanged. **Applied green on TEST (run 27925007421) and PROD (run 27925041505)** via the
+normal main→test, production→prod CI. Verify: as an orphan-record user, Save profile → links
+the record. (Also folded the already-deployed create-payment-intent fix into the
+`production` branch via promotion #418, reconciling the earlier hand-deploy.)
+
 ## 2026-06-21 — ✅ CONFIRMED end-to-end: a real test registration flipped to paid
 
 Closes the webhook thread below. After the signing-secret fix, Ron hit **Resend** on the
