@@ -110,7 +110,11 @@ type MyRegStatus = {
     | "paid"
     | "pending_payment"
     | "awaiting_partner"
-    | "invited";
+    | "invited"
+    // On the waitlist (free, not yet promoted)
+    | "waitlisted"
+    // Promoted off the waitlist — a spot is reserved, pay to claim it
+    | "waitlisted_pending_payment";
   // The id of my event_registrations row — null only for 'invited'.
   // Used by Cancel-pending to know which row to soft-delete.
   regId: string | null;
@@ -157,11 +161,22 @@ const prefersReducedMotion =
 // This page is intentionally read-only — the Register CTA links to
 // /t/:orgSlug/:tournamentSlug/register which is auth-gated (built
 // in the next commit on this branch).
-export default function PublicTournamentPage() {
-  const { orgSlug, tournamentSlug } = useParams<{
+export default function PublicTournamentPage({
+  orgSlugOverride,
+  tournamentSlugOverride,
+}: {
+  // Set when rendered at the root of a custom domain (#408) instead of the
+  // /t/:orgSlug/:tournamentSlug route — the slugs come from the host
+  // mapping rather than the URL path.
+  orgSlugOverride?: string;
+  tournamentSlugOverride?: string;
+} = {}) {
+  const params = useParams<{
     orgSlug: string;
     tournamentSlug: string;
   }>();
+  const orgSlug = orgSlugOverride ?? params.orgSlug;
+  const tournamentSlug = tournamentSlugOverride ?? params.tournamentSlug;
   const { user } = useAuth();
   const navigate = useNavigate();
   // Used to refresh the global PendingPaymentsBar after we mutate
@@ -439,6 +454,10 @@ export default function PublicTournamentPage() {
       let state: MyRegStatus["state"];
       if (r.status === "pending_payment") {
         state = "pending_payment";
+      } else if (r.status === "waitlisted") {
+        state = "waitlisted";
+      } else if (r.status === "waitlisted_pending_payment") {
+        state = "waitlisted_pending_payment";
       } else if (r.partner_status === "pending") {
         state = "awaiting_partner";
       } else {
@@ -1362,6 +1381,22 @@ function EventCard({
   const chips = eligibilityChips(event);
   const isDoubles = event.format === "doubles";
 
+  // Capacity: the event is "full" when active teams reach max_teams. Mirrors
+  // the roster count label below so the CTA flips to "Join waitlist" exactly
+  // when the card reads "N of N teams". join_waitlist re-checks server-side, so
+  // a stale client count can't actually waitlist into a non-full event.
+  const activeTeamCount = isDoubles
+    ? Math.floor(
+        rosterRows.filter((r) => r.partner_status === "confirmed").length / 2,
+      ) +
+      rosterRows.filter((r) => r.partner_status === "pending").length +
+      rosterRows.filter(
+        (r) =>
+          r.partner_status === "seeking" && r.pending_partner_reg_id === null,
+      ).length
+    : rosterRows.length;
+  const isFull = event.max_teams != null && activeTeamCount >= event.max_teams;
+
   // ─── Local state for the inline-expand register form ─────────────
   // Each card carries its own form state. We don't enforce
   // "one card open at a time" — keep it permissive; users can
@@ -1389,6 +1424,9 @@ function EventCard({
   const [cancelling, setCancelling] = useState(false);
   // #9: gate the partner-dropping Cancel behind a confirm step.
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Leaving the waitlist costs the player their place in line, so gate
+  // it behind a confirm step too.
+  const [confirmLeaveWaitlist, setConfirmLeaveWaitlist] = useState(false);
   // #9: same guard for backing out of the register FORM after a
   // partner is picked (discards the in-progress pick).
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
@@ -1673,24 +1711,56 @@ function EventCard({
           : inboundInviteId
             ? "solo"
             : "pending";
-    const { error: regErr } = await supabase
-      .from("event_registrations")
-      .insert({
-        event_id: event.id,
-        player_id: me.id,
-        event_fee_cents: 0,
-        status: "pending_payment",
-        partner_status: partnerStatusOnInsert,
-        ...(event.is_paired_roles && registrationSide
-          ? { registration_side: registrationSide }
-          : {}),
-      })
-      .select()
-      .single();
-    if (regErr) {
-      setFormError(regErr.message ?? "Failed to register.");
-      setSubmitting(false);
-      return;
+    if (isFull) {
+      // FULL event → join the WAITLIST (free). join_waitlist creates a
+      // 'waitlisted' reg (partner_status seeking for doubles / solo for
+      // singles) and re-checks fullness server-side. No checkout — payment
+      // only happens after promotion (status → waitlisted_pending_payment).
+      // If a partner was picked, the outbound-invite block below still runs.
+      const { data: wlData, error: wlErr } = await supabase.rpc(
+        "join_waitlist",
+        { p_event_id: event.id },
+      );
+      if (wlErr) {
+        setFormError(
+          wlErr.message?.includes("event_not_full")
+            ? "A spot just opened up — close this and register normally."
+            : (wlErr.message ?? "Couldn't join the waitlist. Please try again."),
+        );
+        setSubmitting(false);
+        return;
+      }
+      // join_waitlist always sets partner_status='seeking'. If the player
+      // actually picked a partner, flip the new reg to 'pending' so the card
+      // shows "Invited X" (the outbound-invite block below) instead of
+      // "Looking for partner".
+      const wlRegId = wlData?.[0]?.reg_id;
+      if (isDoubles && !seekingPartner && resolvedPartnerId && wlRegId) {
+        await supabase
+          .from("event_registrations")
+          .update({ partner_status: "pending" })
+          .eq("id", wlRegId);
+      }
+    } else {
+      const { error: regErr } = await supabase
+        .from("event_registrations")
+        .insert({
+          event_id: event.id,
+          player_id: me.id,
+          event_fee_cents: 0,
+          status: "pending_payment",
+          partner_status: partnerStatusOnInsert,
+          ...(event.is_paired_roles && registrationSide
+            ? { registration_side: registrationSide }
+            : {}),
+        })
+        .select()
+        .single();
+      if (regErr) {
+        setFormError(regErr.message ?? "Failed to register.");
+        setSubmitting(false);
+        return;
+      }
     }
 
     if (isDoubles && !seekingPartner && resolvedPartnerId) {
@@ -1903,6 +1973,10 @@ function EventCard({
     // Soft-delete the pending reg + cancel any outbound invite for
     // this event. (If the user paid already and then changes their
     // mind, that's the manage-page withdraw flow — different path.)
+    // Also serves "leave waitlist": a waitlisted reg is free, so there's
+    // no refund to compute — soft-deleting it removes it from the queue
+    // (promote_from_waitlist filters deleted_at is null; the position gap
+    // it leaves is harmless since promotion orders by position ASC).
     await supabase
       .from("event_registrations")
       .update({ deleted_at: new Date().toISOString() })
@@ -1965,6 +2039,55 @@ function EventCard({
   // ─── Right-side action button — depends on current state ─────────
   const renderAction = () => {
     if (!registrationOpen) return null;
+    // On the waitlist (free) — show status + a way to leave, not a
+    // register CTA.
+    if (myStatus?.state === "waitlisted") {
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              fontSize: 13,
+              color: courtBlue,
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            ✓ On the waitlist
+          </span>
+          <button
+            type="button"
+            onClick={() => setConfirmLeaveWaitlist(true)}
+            disabled={cancelling}
+            style={{
+              ...ctaSecondaryStyle,
+              color: dangerFg,
+              boxShadow: `inset 0 0 0 2px ${dangerBg}`,
+              cursor: cancelling ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+              opacity: cancelling ? 0.6 : 1,
+            }}
+          >
+            {cancelling ? "Leaving…" : "Leave waitlist"}
+          </button>
+        </div>
+      );
+    }
+    // Promoted off the waitlist — a spot is reserved; pay to claim it.
+    if (myStatus?.state === "waitlisted_pending_payment") {
+      return (
+        <Link
+          to={`/t/${orgSlug}/${tournamentSlug}/checkout`}
+          style={{
+            ...ctaPrimaryStyle,
+            background: courtGreen,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          A spot opened — pay to claim →
+        </Link>
+      );
+    }
     if (myStatus?.state === "invited" && myStatus.inviteToken) {
       return (
         <Link
@@ -2069,12 +2192,12 @@ function EventCard({
         onClick={startRegister}
         style={{
           ...ctaPrimaryStyle,
-          background: courtRed,
+          background: isFull ? courtBlue : courtRed,
           cursor: "pointer",
           whiteSpace: "nowrap",
         }}
       >
-        Register
+        {isFull ? "Join waitlist" : "Register"}
       </button>
     );
   };
@@ -2161,6 +2284,31 @@ function EventCard({
           }}
         />
       )}
+      {confirmLeaveWaitlist && (
+        <ConfirmModal
+          title="Leave the waitlist?"
+          body={
+            <>
+              You'll lose your place in line for <strong>{event.name}</strong>.
+              {myStatus?.partnerLabel ? (
+                <>
+                  {" "}
+                  Your partner invite to{" "}
+                  <strong>{myStatus.partnerLabel}</strong> will be cancelled.
+                </>
+              ) : null}{" "}
+              You can re-join later, but you'll go to the back of the queue.
+            </>
+          }
+          confirmLabel="Leave waitlist"
+          cancelLabel="Stay on waitlist"
+          onCancel={() => setConfirmLeaveWaitlist(false)}
+          onConfirm={async () => {
+            await onCancelPending();
+            setConfirmLeaveWaitlist(false);
+          }}
+        />
+      )}
       {confirmDiscardForm && (
         <ConfirmModal
           title="Discard your partner pick?"
@@ -2214,8 +2362,14 @@ function EventCard({
             {myStatus?.state === "invited" && (
               <Pill bg={ink} fg={courtYellow}>You're invited</Pill>
             )}
-            {myStatus?.isSeekingPartner && (
-              <Pill bg={cream} fg={courtBlue}>Looking for partner</Pill>
+            {/* "Seeking" is the viewer's OWN status — so word it in the
+                first person ("You're …") to avoid reading as if someone
+                else is looking. And suppress it once a partner is invited
+                or picked (partnerLabel set): a waitlist reg that invited a
+                partner BY EMAIL stays partner_status='seeking', which would
+                otherwise contradict the "Invited X" label right below. */}
+            {myStatus?.isSeekingPartner && !myStatus?.partnerLabel && (
+              <Pill bg={cream} fg={courtBlue}>You're looking for a partner</Pill>
             )}
           </div>
           {/* Partner label */}
@@ -2357,7 +2511,32 @@ function EventCard({
               We don't re-explain the whole first/additional model —
               just tell the player what THIS event costs them given
               what they've already signed up for. */}
-          {editMode === "register" && regFeeCents > 0 && (
+          {/* Full event → joining means the WAITLIST. Explain what to expect
+              (free now, pay only if promoted) and hide the normal cost line. */}
+          {editMode === "register" && isFull && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "10px 12px",
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "#1e3a8a",
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>This event is full — you'll join the waitlist.</strong>{" "}
+              It's free and you won't be charged now.
+              {regFeeCents > 0
+                ? ` If a spot opens, we'll email you and you can pay the $${(
+                    regFeeCents / 100
+                  ).toFixed(0)} entry to claim it.`
+                : " If a spot opens, we'll email you to claim your place."}
+              {isDoubles ? " Your partner pick carries over." : ""}
+            </div>
+          )}
+          {editMode === "register" && regFeeCents > 0 && !isFull && (
             <div
               style={{
                 marginBottom: 12,

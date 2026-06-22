@@ -140,14 +140,11 @@ export default function AdminIndexPage() {
           </p>
           {isPlatformAdmin && (
             <div style={{ display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
-              <Link to="/admin/new-org" style={ctaPrimaryStyle}>
+              <Link to="/admin/site" style={ctaPrimaryStyle}>
+                Go to Site Admin →
+              </Link>
+              <Link to="/admin/new-org" style={ctaSecondaryStyle}>
                 + Create organization
-              </Link>
-              <Link to="/admin/platform" style={ctaSecondaryStyle}>
-                Platform settings
-              </Link>
-              <Link to="/admin/quotes" style={ctaSecondaryStyle}>
-                Quotes
               </Link>
             </div>
           )}
@@ -159,31 +156,26 @@ export default function AdminIndexPage() {
   return (
     <main style={pageStyle}>
       <div style={colStyle}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 24,
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
-          <h1 style={h1Style}>Choose an organization</h1>
-          {isPlatformAdmin && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link to="/admin/new-org" style={ctaPrimaryStyle}>
-                + Create organization
-              </Link>
-              <Link to="/admin/platform" style={ctaSecondaryStyle}>
-                Platform settings
-              </Link>
-              <Link to="/admin/quotes" style={ctaSecondaryStyle}>
-                Quotes
-              </Link>
+        <h1 style={{ ...h1Style, marginBottom: 24 }}>
+          {isPlatformAdmin ? "Admin" : "Choose an organization"}
+        </h1>
+
+        {/* Platform admins get a single clear entry into the site-level
+            tools, instead of the org and platform concerns being mixed
+            together on this picker. */}
+        {isPlatformAdmin && (
+          <Link to="/admin/site" style={siteAdminCardStyle}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: ink }}>
+                Site Admin
+              </div>
+              <div style={{ fontSize: 12.5, color: inkSoft, marginTop: 2 }}>
+                All players · organizations · platform settings · quotes
+              </div>
             </div>
-          )}
-        </div>
+            <span aria-hidden style={{ fontSize: 18, color: warnFg }}>→</span>
+          </Link>
+        )}
 
         {orgs.length > 0 && (
           <>
@@ -299,5 +291,21 @@ const orgLinkStyle: CSSProperties = {
   color: ink,
   fontSize: 14,
   fontWeight: 500,
+  fontFamily: bodyFontStack,
+};
+
+// Distinct (warm/cream) treatment so the one site-level entry reads as a
+// different KIND of destination than the org rows below it.
+const siteAdminCardStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "14px 16px",
+  background: warnBg,
+  border: `1px solid ${creamDeep}`,
+  borderRadius: 8,
+  textDecoration: "none",
+  marginBottom: 28,
   fontFamily: bodyFontStack,
 };

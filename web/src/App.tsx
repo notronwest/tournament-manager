@@ -15,6 +15,8 @@ import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
 import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
+import SiteAdminPage from "./pages/admin/SiteAdminPage";
+import PlayerDetailPage from "./pages/admin/PlayerDetailPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
@@ -39,6 +41,10 @@ import CustomerQuotePage from "./pages/public/CustomerQuotePage";
 import EstimatePage from "./pages/public/EstimatePage";
 import GettingStartedPage from "./pages/public/GettingStartedPage";
 import HomePage from "./pages/public/HomePage";
+import {
+  CustomDomainProvider,
+  useCustomDomain,
+} from "./lib/customDomain";
 import PrivacyPage from "./pages/public/PrivacyPage";
 import TermsPage from "./pages/public/TermsPage";
 import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
@@ -62,8 +68,33 @@ import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
 import PairingBoardPage from "./pages/admin/PairingBoardPage";
 
+// The site root. On a canonical host this is the marketing HomePage. On a
+// mapped custom domain (#408) it renders that domain's tournament at the
+// clean root (pickleballangels.com → the Seacoast tournament).
+function RootRoute() {
+  const cd = useCustomDomain();
+  if (cd.status === "loading") {
+    return (
+      <div style={{ padding: "64px 20px", textAlign: "center", color: "#6b7280" }}>
+        Loading…
+      </div>
+    );
+  }
+  if (cd.status === "resolved") {
+    return (
+      <PublicTournamentPage
+        orgSlugOverride={cd.orgSlug}
+        tournamentSlugOverride={cd.tournamentSlug}
+      />
+    );
+  }
+  // canonical host, or a custom host with no mapping → normal home.
+  return <HomePage />;
+}
+
 export default function App() {
   return (
+    <CustomDomainProvider>
     <PartnerInvitesProvider>
     <PendingPaymentsProvider>
       {/* Global top banner — rendered once for the whole app.
@@ -80,7 +111,7 @@ export default function App() {
           (after the profile nudge, which takes precedence). */}
       <PartnerInviteOnboarding />
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<RootRoute />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/confirm" element={<AuthConfirmPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -261,6 +292,18 @@ export default function App() {
         }
       />
 
+      {/* Platform-admin-only Site Admin home (dashboard of platform tools).
+          Defined before the :orgSlug catch-all so "site" isn't treated as a
+          slug. The page double-gates on usePlatformAdmin. */}
+      <Route
+        path="/admin/site"
+        element={
+          <RequireAuth>
+            <SiteAdminPage />
+          </RequireAuth>
+        }
+      />
+
       {/* Platform-admin-only site-wide attendees list. Defined before
           the :orgSlug catch-all so "attendees" isn't treated as a slug. */}
       <Route
@@ -268,6 +311,18 @@ export default function App() {
         element={
           <RequireAuth>
             <SiteAttendeesPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only single-player detail / management page.
+          Defined before the :orgSlug catch-all so "players" isn't
+          treated as a slug. The page double-gates on usePlatformAdmin. */}
+      <Route
+        path="/admin/players/:playerId"
+        element={
+          <RequireAuth>
+            <PlayerDetailPage />
           </RequireAuth>
         }
       />
@@ -409,5 +464,6 @@ export default function App() {
       <ConsentBanner />
     </PendingPaymentsProvider>
     </PartnerInvitesProvider>
+    </CustomDomainProvider>
   );
 }

@@ -17,6 +17,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -105,19 +106,18 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Send notification to admin ───────────────────────────────────
-  const html = `<!doctype html>
-<html><body style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #222; max-width: 560px; margin: 0 auto; padding: 24px;">
-  <h2 style="margin: 0 0 8px; font-size: 20px;">Email change request</h2>
-  <p style="font-size: 13px; color: #666; margin: 0 0 16px;">A signed-in user has requested a change to their login email address.</p>
-  <table style="font-size: 14px; line-height: 1.8; margin-bottom: 16px;">
-    <tr><td style="color:#666; padding-right: 12px; white-space: nowrap;">User ID</td><td style="font-family: monospace; font-size: 13px;">${escapeHtml(user.id)}</td></tr>
-    <tr><td style="color:#666; padding-right: 12px; white-space: nowrap;">Current email</td><td>${escapeHtml(user.email ?? "(none)")}</td></tr>
-    <tr><td style="color:#666; padding-right: 12px; white-space: nowrap;">Requested email</td><td><strong>${escapeHtml(requestedEmail)}</strong></td></tr>
-  </table>
-  <p style="font-size: 13px; color: #888; border-top: 1px solid #e5e7eb; padding-top: 16px; margin-top: 0;">
-    To process: Supabase dashboard → Authentication → Users → find by User ID → update email.
-  </p>
-</body></html>`;
+  const html = renderEmailHtml({
+    heading: "Email change request",
+    bodyHtml: `<p style="margin:0 0 16px;font-size:13px;color:#6b7280;line-height:1.6;">A signed-in user has requested a change to their login email address.</p>
+    <table style="font-size:14px;line-height:1.8;margin-bottom:16px;">
+      <tr><td style="color:#6b7280;padding-right:12px;white-space:nowrap;">User ID</td><td style="font-family:monospace;font-size:13px;">${escapeHtml(user.id)}</td></tr>
+      <tr><td style="color:#6b7280;padding-right:12px;white-space:nowrap;">Current email</td><td>${escapeHtml(user.email ?? "(none)")}</td></tr>
+      <tr><td style="color:#6b7280;padding-right:12px;white-space:nowrap;">Requested email</td><td><strong>${escapeHtml(requestedEmail)}</strong></td></tr>
+    </table>
+    <p style="margin:0;font-size:13px;color:#6b7280;border-top:1px solid #e3dec8;padding-top:16px;line-height:1.6;">
+      To process: Supabase dashboard → Authentication → Users → find by User ID → update email.
+    </p>`,
+  });
 
   const text = `Email change request
 
@@ -161,11 +161,3 @@ function jsonResp(body: unknown, status = 200): Response {
   });
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}

@@ -9,6 +9,280 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Site Admin section split out from org picker (uncommitted, frontend-only)
+
+`/admin` mixed org-picking with platform tools (Create org / Platform settings / Quotes jammed
+in the header; "All players" wasn't even linked). Split into two clear areas:
+- **New `SiteAdminPage` at `/admin/site`** (platform-admin gated, RequireAuth) — a dashboard of
+  cards to the platform tools: All players, Organizations (create), Platform settings, Quotes.
+  Shows live player/org counts.
+- **`/admin` reworked into a crossroads** — for platform admins, heading "Admin" + one cream
+  "Site Admin →" card, then "Your organizations" + "Other organizations (admin override)". The
+  scattered platform buttons are gone (empty-state too). Non-admins unchanged (auto-redirect to
+  their single org).
+- Header keeps one "Admin" link → the crossroads (chosen over a separate Site Admin link).
+
+Frontend-only — no migration, no edge function, so only Cloudflare deploys on merge (CI
+migration/function workflows won't trigger). Typecheck + lint + build clean. Not browser-verified
+(gated; needs an authed platform-admin session — eyeball on test after merge). Closes #489.
+
+## 2026-06-22 — Admin player page self-ratings + hide-avatar: SHIPPED to TEST (PR #487)
+
+Follow-up — no longer uncommitted. [PR #487](https://github.com/notronwest/tournament-manager/pull/487)
+(closes #488) merged to main (`bf79168`). CI on merge: migration
+`20260622110000_player_avatar_hidden` **applied to TEST** + both edge functions
+(`admin-get-player`, `admin-update-player`) **redeployed to TEST** — all green. Frontend →
+test.bertanderne.com via Cloudflare. **Next:** smoke-test on test (edit a rating; hide/show an
+avatar → pill flips + preview dims; confirm a non-admin can't flip `avatar_hidden`). PROD gets
+the same migration + function deploys automatically on `main`→`production` promotion. Reminder:
+hiding has no visible effect for other users until a public avatar surface lands and filters
+`where not avatar_hidden`.
+
+## 2026-06-22 — #488 board card recovered → In Review (PR #487)
+
+Builder orphan-recovery: card for #488 was stuck in "In Progress" even though PR #487 was already open and correctly closes #488. Moved to **In Review**. Flagged in a PR comment that the PR bundles migration + 2 edge functions + UI (violates the never-bundle rule) — Ron's call to accept as-is or request a split.
+
+**Next:** Ron reviews PR #487; if accepted, merges → CI auto-applies migration + redeploys both edge functions to TEST → smoke-test on test.bertanderne.com.
+
+## 2026-06-22 — Admin player page: self-ratings + hide-avatar moderation (uncommitted)
+
+Two adds to the `/admin/players/:playerId` page:
+1. **Self-reported ratings** now editable on the admin page (Doubles same-gender / Mixed /
+   Singles, the existing `self_rating_*` numeric(4,2) cols, clamp 0–9.99). Wired through
+   `admin-get-player` (returns them) + `admin-update-player` (profile patch).
+2. **Hide profile image** (moderation, reversible). New migration
+   `20260622110000_player_avatar_hidden.sql`: `players.avatar_hidden boolean default false`
+   **+ a guard trigger** so only `service_role` (the edge function) can flip it — a player
+   can't un-hide themselves via RLS. `admin-get-player` returns `avatar_path/avatar_hidden`
+   + a public `avatarUrl` so the admin can review the image; `admin-update-player` takes
+   `avatarHidden`. The page shows the avatar (dimmed when hidden) with a Hide/Show toggle.
+
+**Enforcement caveat:** NOTHING displays other players' avatars publicly today — PartnerSearch
+renders initials only; the image only shows on the player's own profile. So the flag is
+forward-looking: **when a public avatar surface lands (roster/partner cards showing photos),
+it must filter `where not avatar_hidden`.** Noted in the migration comment.
+
+Deploy model learned this session (saved to memory): **CI applies migrations + redeploys edge
+functions on merge** (main→TEST via `migrations.yml`/`edge-functions.yml`; production→PROD).
+**Do NOT hand-run `db push`/`functions deploy`.** So merging this PR auto-applies the migration
++ redeploys both functions to TEST. (CI does NOT delete removed functions — that's still manual.)
+
+Typecheck + lint + build clean. **Not browser-verified** (gated page + freshly-applied
+migration/functions). **Next:** after merge, smoke-test on test.bertanderne.com — edit a
+rating, hide/show an avatar; confirm a non-admin can't flip `avatar_hidden`.
+
+## 2026-06-22 — Platform-admin player management: SHIPPED to TEST (PR #486)
+
+Follow-up to the entry below — it's no longer uncommitted. Both edge functions
+(`admin-get-player`, `admin-update-player`) **deployed to TEST** (`mvkhdsauaqqjehxdnbuf`);
+`admin-update-player-email` **deleted on TEST**. Frontend **merged to main** (PR #486,
+merge `4afd18f`) → Cloudflare auto-deploys to test.bertanderne.com.
+**Next:** (1) smoke-test on test (open a player → set temp password → confirm history loads;
+first real E2E since the page is gated). (2) On PROD promotion, the prod project still needs
+`supabase functions deploy admin-get-player && supabase functions deploy admin-update-player
+&& supabase functions delete admin-update-player-email` (CLI is linked to prod, so no
+--project-ref there). (3) Ron's original reset-email problem is now self-serve — add/manage
+the missing test user from this page.
+
+## 2026-06-22 — Platform-admin player management: detail page + reset password (uncommitted)
+
+Built a platform-admin **player detail / management page** at `/admin/players/:playerId`.
+Reached by clicking a player on `/admin/attendees` (the all-players list — rows are now
+links; the old inline `EditEmailPanel` was removed). The page shows **profile** (editable:
+first/last name, contact email, phone, gender, city, state), **account & password** (login
+email + confirmed/last-sign-in, change login email, and **reset password** two ways), and
+**cross-org tournament history** (tournament/event/partner/status/date).
+
+Why edge functions (not client reads): `event_registrations` SELECT RLS is player-self-or-
+org-member, and `auth.users.email` isn't client-readable — so a platform admin can't read
+another player's history/login email from the browser. Two new service-role, platform-admin-
+gated functions:
+- **`admin-get-player`** — profile + linked auth account + history in one call.
+- **`admin-update-player`** — profile patch, login-email change (carried over verbatim), and
+  `passwordAction`: `send_reset_email` (triggers the branded recovery email via
+  `resetPasswordForEmail`) **or** `set_temp_password` (generates a strong temp password via
+  `updateUserById`, returned once to show the admin). Supersedes **`admin-update-player-email`**,
+  which was **deleted** from the repo.
+
+Password reset offers BOTH paths by default (chosen given this session's email-delivery
+debugging — temp-password works even when SMTP is flaky). Typecheck + lint + build all clean
+(my files add zero lint errors). **NOT browser-verified** — gated page whose data comes from
+the new functions; needs them deployed + an authed platform-admin session.
+
+**Next (Ron):**
+1. Deploy the functions to TEST (and PROD when promoting):
+   `supabase functions deploy admin-get-player && supabase functions deploy admin-update-player`
+2. Undeploy the dead one: `supabase functions delete admin-update-player-email`
+3. Commit/PR the frontend (`PlayerDetailPage`, `SiteAttendeesPage`, `App.tsx` route).
+4. Confirm Auth → URL Configuration allows `…/reset-password` redirect (already used by the
+   normal forgot-password flow, so should be fine).
+
+## 2026-06-22 — PR cleanup, custom-domain #411 on TEST, TEST pipeline UNWEDGED; PROD promotion pending
+
+Session cleared stale PRs and got the custom-domain feature onto TEST; one PROD
+decision left.
+
+- **Closed 6 stale/superseded PRs** (#271, #149, #162, #101, #99 — their tickets
+  already closed/shipped; #177 stale doc), each with a note.
+- **#411 custom domains (pickleballangels.com) merged to main** (TEST). App +
+  `custom_domains` table + `docs/CUSTOM_DOMAINS.md`. `Closes #412`.
+- **UNWEDGED the TEST migration pipeline.** #467 ([DB] partner_decline) merged at
+  17:50 with timestamp `20260622000001` — BEFORE the waitlist batch
+  (`...010000`–`080000`) already on TEST — so `db push` failed closed and **every
+  TEST migration since 17:50 was failing** (incl. #411). Fix: renumbered
+  `partner_decline` → `20260622100000` (#485) and `custom_domains` →
+  `20260622090000` (#484). TEST run now **green**; both applied in order.
+- **Reconciled + merged #249** — `RELEASE_PROCESS.md` rewritten to the shipped
+  model (main=TEST / production=PROD; promote via main→production PR; pre-flight
+  checklist; the timestamp-order wedge + fix).
+
+**PENDING — Ron's call:** promote **main→production** to make
+`pickleballangels.com` live. Pre-flighted: **40 commits, 6 migrations** (waitlist
+batch + custom_domains + partner_decline — all additive; partner_decline RPC is
+backward-compatible, `p_decline_message text default null`), **7 edge functions**.
+PROD secrets confirmed set. A promotion carries the WHOLE batch, not just the
+domain. After promote: Ron's Cloudflare custom-domain + DNS (he reports the domain
+is already pointed at Cloudflare) makes it serve.
+
+**Also still open:** PR #171 (checkout error surfacing, no ticket) — triage/close.
+Recurring shared-checkout STATUS drift on this repo (uncommitted + stashed STATUS
+notes again) — worth addressing how sessions write STATUS here.
+
+## 2026-06-22 — Shipped: Leave-waitlist + partner-badge fix (PR #483, MERGED)
+
+Both changes below landed together in PR #483 (one commit, 8a7e740) and merged to main —
+Cloudflare auto-deploys. Supersedes the "(uncommitted)" notes in the two entries that follow.
+**Not yet browser-verified:** once deployed, click through the Leave-waitlist button + confirm
+modal on a TEST tournament (needs a logged-in user on a full event's waitlist).
+
+## 2026-06-22 — Waitlist: "Leave waitlist" action (uncommitted)
+
+Waitlisted cards previously showed only "✓ On the waitlist" with no way out. Added a
+**Leave waitlist** button (danger-outline, next to the status) gated behind a ConfirmModal
+("Leave the waitlist? — you'll lose your place in line"; copy also warns that an invited
+partner's invite gets cancelled). Reuses the existing `onCancelPending` handler — a waitlisted
+reg is free, so no refund path is needed: it soft-deletes the reg (removing it from the queue;
+`promote_from_waitlist` filters `deleted_at is null`, and the position gap is harmless since
+promotion orders by position ASC) and cancels any outbound partner invite. Frontend only, no
+migration. Typechecks clean; lint unchanged (pre-existing errors only). Not browser-verified —
+the waitlisted card state needs a logged-in user on a full event's waitlist (seeded-data only).
+**Next:** commit both this and the badge fix below; consider browser-verifying on TEST data.
+
+## 2026-06-22 — Waitlist badge: render-layer guard for "looking for partner" (uncommitted)
+
+The PR #481 fix only flipped partner_status seeking→pending when a *registered* partner was
+picked (`resolvedPartnerId` set). A partner invited BY EMAIL creates no linked player row, so
+the reg stays 'seeking' and still showed the contradictory "Looking for partner" badge next to
+"Invited X" (e.g. John Jones / dilemo+john@gmail.com). Fixed at the render layer in
+`web/src/pages/public/PublicTournamentPage.tsx` (~L2304): badge now (a) reads "You're looking
+for a partner" — first-person, since it's the viewer's own status, not someone else's — and
+(b) is suppressed once `partnerLabel` is set, so it can't contradict the "Invited X" line.
+Typechecks clean; no data backfill needed (the `!partnerLabel` guard covers old seeking regs).
+**Next:** optionally extend the data-layer flip in the join_waitlist handler (~L1716) to also
+cover the email-invite case for stored-status consistency; commit + PR.
+
+## 2026-06-22 — Waitlist UX: partner-status fix + 'what to expect' explainer (PR #481)
+
+(1) join_waitlist always sets partner_status='seeking', so a waitlist join WITH a picked
+partner showed a contradictory "Looking for partner" badge next to "Invited X". Frontend now
+flips the new waitlist reg to 'pending' when a partner was picked (captures join_waitlist's
+returned reg_id). (2) On a full event, the register form shows a waitlist explainer (free,
+not charged now, pay only if promoted) instead of the misleading "$N entry" line. Frontend
+only; on TEST. Pre-existing waitlist regs keep the old badge until re-joined.
+
+## 2026-06-22 — Fix: join_waitlist ambiguous waitlist_position (PR #479)
+
+Joining the waitlist errored `column reference "waitlist_position" is ambiguous`. The
+function's OUT column `waitlist_position` collided with the table column in `max(waitlist_
+position)`. Qualified as `er.waitlist_position`. Migration `20260622080000`, validated on
+test (run 27970270494). NOTE: this is a RUNTIME error (only fires when the function is
+CALLED), so the `gh workflow run --ref` apply-validation doesn't catch it — need an RPC
+smoke test. Likely similar latent ambiguities in `promote_from_waitlist` /
+`waitlist_effective_position` (same waitlist_position OUT-vs-column pattern) — audit next.
+
+## 2026-06-22 — Fix: join-waitlist 'event_not_full' (is_event_full counted paid only) (PR #477)
+
+Joining the waitlist errored "A spot just opened up — close this and register normally."
+`is_event_full` counted only `status='paid'`, so an event with all-forming (pending_payment)
+teams read as not-full server-side while the roster label + CTA counted them → mismatch →
+`join_waitlist` rejected. Fixed `is_event_full` to count ACTIVE teams (pending_payment + paid;
+doubles counted like the roster label). Migration `20260622070000`, validated on test
+(run 27969378234). Backend fix — live on test immediately (no frontend deploy needed).
+
+## 2026-06-22 — Waitlists frontend: Join-waitlist CTA + free join (PR #475, TEST)
+
+Built the visible public flow on the validated backend: `PublicTournamentPage` event card →
+when full (active teams ≥ `max_teams`) the CTA reads "Join waitlist" (blue); submit branches
+to `join_waitlist` (free `waitlisted` reg, no checkout) vs normal register; card now shows
+"✓ On the waitlist" and (when promoted) "A spot opened — pay to claim →" → checkout. State
+mapping added for `waitlisted`/`waitlisted_pending_payment`. Singles + doubles-seeking fully
+correct. Typecheck/build/lint clean. Frontend deploys to TEST via Cloudflare on this merge.
+
+🔜 **Waitlist follow-ups:** (1) doubles-team-on-waitlist — `accept_partner_invite` must put an
+invited partner on the waitlist too (shared team slot) — small DB tweak, flagged on #42.
+(2) show the player's waitlist position (`waitlist_effective_position`). (3) promotion-notify
+email when `promote_from_waitlist` runs (use the shared email layout #457). (4) verify the
+full join→promote→pay loop end-to-end on test.
+
+## 2026-06-22 — Waitlists: pay-on-promotion model locked (PR #473) + frontend plan
+
+Ron confirmed the model: **free to join the waitlist** (with a partner OR seeking), **pay
+only on promotion**. Migration `20260622060000` (validated on test, run 27964333267):
+`join_waitlist` → free `waitlisted`; `promote_from_waitlist` → `waitlisted_pending_payment`
+(pay-to-claim), not straight to `paid`. (`compute_checkout_total` already charges
+`waitlisted_pending_payment`, so the existing checkout handles the pay-to-claim step.)
+Consistent with dropping AC5 (no un-promoted refund — you never pay until promoted).
+
+So the whole waitlist DB layer is now correct + live on test. **Remaining is purely
+frontend** (no more DB needed except the doubles edge):
+1. `PublicTournamentPage`: full event (`is_event_full` / roster `totalTeams >= maxTeams`) →
+   CTA reads "Join waitlist" not "Register".
+2. `RegisterPage`: full-event registration → pick partner / seeking → call `join_waitlist`
+   (free, **skip checkout**) → "you're on the waitlist". This branches the existing
+   addedEvents path (insert+checkout) on fullness.
+3. Promotion → `waitlisted_pending_payment` surfaces in the player's pending-payments /
+   checkout to pay → `paid`.
+4. ⚠️ **Doubles-team edge:** one team = one waitlist slot. When a waitlisted player invites a
+   partner, `accept_partner_invite` must land the partner on the waitlist too (`waitlisted`,
+   shared team position) — it currently creates a normal reg. Needs explicit handling (likely
+   a small DB tweak to accept_partner_invite when the inviter's reg is waitlisted).
+
+Validation trick used throughout: `gh workflow run migrations.yml --ref <branch>` → applies
+to TEST without touching main (no local Docker on this machine). Worth adding to MIGRATIONS.md.
+
+## 2026-06-22 — Waitlists redo: DB layer rebuilt + validated on test (PR #470/#471)
+
+Rebuilt the reverted #42 waitlists migration **correctly** and proved it. All 5 bugs fixed:
+out-of-order timestamp (now `20260622050000`), enum-add-in-same-transaction (values in the
+separate `20260622035000`, committed first), reserved-word `position`→`waitlist_position`,
+re-ambiguated `payment_id`→`pli.payment_id`, and `withdraw_self` 42P13 (drop-before-recreate
++ re-grant). **Validated against the real TEST DB without touching main** via
+`gh workflow run migrations.yml --ref <branch>` — a dispatch on a feature branch resolves to
+TEST, so I iterated there (run 27963472774 ✅) instead of blind CI-on-main. (No container
+runtime on this machine, so `supabase db reset` local validation wasn't an option — the
+dispatch trick is the substitute; worth documenting in MIGRATIONS.md.) Merged #470 (migration,
+CI no-op since already applied) + #471 (regenerated types — `join_waitlist` now returns
+`waitlist_position`, `is_event_full`, etc.). Functions live on test: `is_event_full`,
+`join_waitlist`, `waitlist_effective_position`, `promote_from_waitlist`.
+
+🔜 **Frontend remaining:** the public "Join waitlist" flow. (1) `PublicTournamentPage` event
+card: when full → CTA reads "Join waitlist" not "Register". (2) `RegisterPage`: a full-event
+registration calls `join_waitlist` (creates `waitlisted_pending_payment`) and goes to checkout
+(pay-on-join per #42 spec; `compute_checkout_total` already includes waitlisted). **Open Q:**
+`join_waitlist` sets `partner_status='seeking'` only — to honor "pick a partner" on the
+waitlist, the frontend must attach the partner after the join (or join_waitlist needs a
+partner param = another migration). Confirm before the RegisterPage surgery.
+
+## 2026-06-22 — Fix: invite banner went stale after accept/decline (PR #458)
+
+`PartnerAcceptPage` refreshed the pending-payments context but not the
+partner-invites context, so after accepting/declining a partner invite the
+global "You have a pending partner invite" banner lingered until a hard reload.
+Now calls `usePartnerInvites().refresh()` after both actions. Typecheck + build
+clean, no new lint (baseline is 27/4 now after the Builder's merges). Also filed
+two stories: #457 (unify all transactional emails on the login-email layout) and
+#459 (let a player add a message when declining an invite).
+
 ## 2026-06-22 — Fix: free ($0) registrations skip payment (PR #449) + unwedged migrations CI
 
 _Follow-up (PR #455): the `org_stripe_not_active` guard ran before the free branch, so a $0 tournament whose organizer hadn't connected Stripe still errored on "Confirm registration". Moved the Stripe-active check into the paid path only — free registrations no longer require a connected Stripe account. Edge fn redeployed to TEST (run 27960213140)._
