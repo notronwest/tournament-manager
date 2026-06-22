@@ -9,6 +9,25 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Feature: register "manage" view affordances + accepted partner (PR #423, TEST)
+
+Reworked the registration manage view (`RegisterPage.tsx`) per Ron's 4 points (mockup
+reviewed first; chose staged model + build all four):
+1. **Partner name blank after accepting an invite** — same RLS/invite-direction bug as
+   checkout: the linked-reg embed is RLS-blocked and only OUTBOUND invites were walked.
+   Added symmetric **inbound** accepted-invite resolution → "Partner: X — accepted".
+2. **Search shown when already partnered** → hidden; revealed only via "Change partner"
+   (with a Cancel that reverts the selection).
+3. **Unregister** is now an explicit button (stages withdrawal), not a buried checkbox.
+4. **Register** a new event is an explicit "+ Register" button, not a checkbox.
+Checkbox-in-a-label row → managed card; staged review-then-confirm engine untouched (buttons
+just call `onChange({selected})` / toggle a local editor). Pure frontend; typecheck+build
+clean, no new lint.
+
+🔜 Verify on TEST. Pile of unpromoted work now on `main` for one `main`→`production`
+promotion: post-login invites (#419), checkout accepted-partner fixes (#420/#421), and this
+register redesign (#423). Promote together once verified.
+
 ## 2026-06-21 — Fix #2: checkout partner resolved via invites, not the reg (PR #421, TEST)
 
 PR #420 didn't actually fix it ("still the same"). It read the partner name from the
