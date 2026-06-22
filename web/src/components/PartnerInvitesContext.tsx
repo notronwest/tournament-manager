@@ -10,9 +10,11 @@ import { supabase } from "../supabase";
 import { useAuth } from "../auth/AuthProvider";
 
 export type PendingPartnerInvite = {
+  inviteId: string;
   eventId: string;
   eventName: string;
   tournamentSlug: string;
+  tournamentName: string;
   orgSlug: string;
   inviterName: string;
   token: string;
@@ -53,12 +55,14 @@ export function PartnerInvitesProvider({
     }
 
     type Row = {
+      id: string;
       event_id: string;
       token: string;
       event: {
         name: string;
         tournament: {
           slug: string;
+          name: string;
           organization: { slug: string } | null;
         } | null;
       } | null;
@@ -68,11 +72,12 @@ export function PartnerInvitesProvider({
     const { data, error } = await supabase
       .from("partner_invites")
       .select(
-        `event_id, token,
+        `id, event_id, token,
          event:events!event_id (
            name,
            tournament:tournaments!tournament_id (
              slug,
+             name,
              organization:organizations!organization_id (slug)
            )
          ),
@@ -94,9 +99,11 @@ export function PartnerInvitesProvider({
       const org = tournament?.organization;
       if (!ev || !tournament || !org) continue;
       out.push({
+        inviteId: r.id,
         eventId: r.event_id,
         eventName: ev.name,
         tournamentSlug: tournament.slug,
+        tournamentName: tournament.name,
         orgSlug: org.slug,
         inviterName: r.inviter
           ? `${r.inviter.first_name} ${r.inviter.last_name}`
