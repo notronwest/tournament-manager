@@ -113,23 +113,89 @@ async function main() {
   const playerId = await ensurePlayer("e2e-player@wmpc.test", "Pam", "Player");
   const partnerId = await ensurePlayer("e2e-partner@wmpc.test", "Pat", "Partner");
 
-  // 5. A pending_payment registration for the player (partial unique +
-  //    event_fee_cents NOT NULL → select-or-insert with the fee).
-  await selectOrInsert(
-    "event_registrations",
-    { event_id: eventId, player_id: playerId },
-    {
-      event_id: eventId,
-      player_id: playerId,
-      status: "pending_payment",
-      partner_status: "pending",
-      event_fee_cents: 0,
-    },
-    "event_registrations",
+  // 5. Cancel-flow fixture (#9): a pending reg for Pam WITH a picked partner
+  //    (Pat) — cancelling then pops the "drop your partner" confirm step.
+  //    Reset first (the cancel test removes the reg) so every run starts clean;
+  //    hard delete sidesteps the partial-unique / soft-delete ambiguity.
+  await db.from("partner_invites").delete().eq("event_id", eventId).eq("inviter_player_id", playerId);
+  await db.from("event_registrations").delete().eq("event_id", eventId).eq("player_id", playerId);
+
+  const pamReg = ok(
+    await db
+      .from("event_registrations")
+      .insert({
+        event_id: eventId,
+        player_id: playerId,
+        status: "pending_payment",
+        partner_status: "pending",
+        event_fee_cents: 0,
+      })
+      .select("id")
+      .single(),
+    "pam pending reg insert",
+  ) as { id: string };
+  void pamReg;
+
+  // The picked partner is surfaced via a pending invite (inviter=Pam,
+  // invitee=Pat) → myStatus.partnerLabel = "Pat Partner", which is what gates
+  // the #9 cancel-confirm modal. token has a DB default.
+  ok(
+    await db
+      .from("partner_invites")
+      .insert({
+        event_id: eventId,
+        inviter_player_id: playerId,
+        invitee_player_id: partnerId,
+        // invitee_email is the fallback label when the invitee player join is
+        // RLS-blocked — without it partnerLabel can be null → no #9 modal.
+        invitee_email: "e2e-partner@wmpc.test",
+      })
+      .select("id")
+      .single(),
+    "partner invite insert",
   );
-  // (Partner link via partner_registration_id wired in a later pass so Path 2
-  //  of #9 sees "Pat Partner" on the pending reg.)
-  void partnerId;
+
+  // 6. Registration-flow fixtures (#253). Each flow gets its OWN single-event
+  //    tournament, so the Register tab shows exactly one card — the spec needs
+  //    no card-scoping. Regs/invites on these events are wiped each run so the
+  //    registering user always starts unregistered (the tests create the regs).
+  await ensurePlayer("e2e-rex@wmpc.test", "Rex", "Register");
+  await ensurePlayer("e2e-sam@wmpc.test", "Sam", "Seeker");
+  // (Olive + Pat already exist above: Olive registers in the existing-partner
+  //  flow; Pat is the existing partner she searches for and picks.)
+
+  for (const flow of [
+    { slug: "e2e-existing-partner", tname: "E2E Existing-Partner Cup", ename: "E2E Existing Doubles" },
+    { slug: "e2e-new-partner", tname: "E2E New-Partner Cup", ename: "E2E New Doubles" },
+    { slug: "e2e-seeker", tname: "E2E Seeker Cup", ename: "E2E Seeker Doubles" },
+  ]) {
+    const ft = ok(
+      await db
+        .from("tournaments")
+        .upsert(
+          {
+            organization_id: org.id,
+            slug: flow.slug,
+            name: flow.tname,
+            status: "published",
+            starts_at: "2099-01-01",
+            ends_at: "2099-01-02",
+          },
+          { onConflict: "organization_id,slug" },
+        )
+        .select("id")
+        .single(),
+      `tournament ${flow.slug}`,
+    ) as { id: string };
+    const fe = await selectOrInsert(
+      "events",
+      { tournament_id: ft.id, name: flow.ename },
+      { tournament_id: ft.id, name: flow.ename, format: "doubles", gender: "mixed" },
+      `event ${flow.ename}`,
+    );
+    await db.from("partner_invites").delete().eq("event_id", fe);
+    await db.from("event_registrations").delete().eq("event_id", fe);
+  }
 
   console.log("seed: e2e-test fixture ready");
 }
