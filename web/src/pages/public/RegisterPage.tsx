@@ -738,6 +738,13 @@ export default function RegisterPage() {
         setPhase("form");
         return;
       }
+      if (existing.partnerStatus === "confirmed" && existing.partner) {
+        supabase.functions
+          .invoke("send-partner-withdrawal", {
+            body: { regId: existing.regId },
+          })
+          .catch(console.error);
+      }
       await supabase
         .from("partner_invites")
         .update({ status: "cancelled" })

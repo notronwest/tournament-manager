@@ -289,13 +289,19 @@ export default function MyTournamentsPage() {
 
   const executeWithdraw = async () => {
     if (!withdrawConfirm) return;
-    const { regId, tournamentId } = withdrawConfirm;
+    const { regId, tournamentId, hasPartner } = withdrawConfirm;
 
     const { data, error: rpcErr } = await supabase.rpc("withdraw_self", {
       p_reg_id: regId,
     });
 
     if (rpcErr) throw new Error(rpcErr.message);
+
+    if (hasPartner) {
+      supabase.functions
+        .invoke("send-partner-withdrawal", { body: { regId } })
+        .catch(console.error);
+    }
 
     const row = Array.isArray(data) ? data[0] : data;
     const newStatus = row?.new_status ?? "withdrawn";
