@@ -142,7 +142,14 @@ async function main() {
   ok(
     await db
       .from("partner_invites")
-      .insert({ event_id: eventId, inviter_player_id: playerId, invitee_player_id: partnerId })
+      .insert({
+        event_id: eventId,
+        inviter_player_id: playerId,
+        invitee_player_id: partnerId,
+        // invitee_email is the fallback label when the invitee player join is
+        // RLS-blocked — without it partnerLabel can be null → no #9 modal.
+        invitee_email: "e2e-partner@wmpc.test",
+      })
       .select("id")
       .single(),
     "partner invite insert",
