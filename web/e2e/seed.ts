@@ -155,6 +155,48 @@ async function main() {
     "partner invite insert",
   );
 
+  // 6. Registration-flow fixtures (#253). Each flow gets its OWN single-event
+  //    tournament, so the Register tab shows exactly one card — the spec needs
+  //    no card-scoping. Regs/invites on these events are wiped each run so the
+  //    registering user always starts unregistered (the tests create the regs).
+  await ensurePlayer("e2e-rex@wmpc.test", "Rex", "Register");
+  await ensurePlayer("e2e-sam@wmpc.test", "Sam", "Seeker");
+  // (Olive + Pat already exist above: Olive registers in the existing-partner
+  //  flow; Pat is the existing partner she searches for and picks.)
+
+  for (const flow of [
+    { slug: "e2e-existing-partner", tname: "E2E Existing-Partner Cup", ename: "E2E Existing Doubles" },
+    { slug: "e2e-new-partner", tname: "E2E New-Partner Cup", ename: "E2E New Doubles" },
+    { slug: "e2e-seeker", tname: "E2E Seeker Cup", ename: "E2E Seeker Doubles" },
+  ]) {
+    const ft = ok(
+      await db
+        .from("tournaments")
+        .upsert(
+          {
+            organization_id: org.id,
+            slug: flow.slug,
+            name: flow.tname,
+            status: "published",
+            starts_at: "2099-01-01",
+            ends_at: "2099-01-02",
+          },
+          { onConflict: "organization_id,slug" },
+        )
+        .select("id")
+        .single(),
+      `tournament ${flow.slug}`,
+    ) as { id: string };
+    const fe = await selectOrInsert(
+      "events",
+      { tournament_id: ft.id, name: flow.ename },
+      { tournament_id: ft.id, name: flow.ename, format: "doubles", gender: "mixed" },
+      `event ${flow.ename}`,
+    );
+    await db.from("partner_invites").delete().eq("event_id", fe);
+    await db.from("event_registrations").delete().eq("event_id", fe);
+  }
+
   console.log("seed: e2e-test fixture ready");
 }
 
