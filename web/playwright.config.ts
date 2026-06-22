@@ -9,6 +9,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // The first app-driven query can wake the idle (free-tier) test Supabase
+  // project — a ~30s cold start that blows the default 30s budget on whichever
+  // test runs first. Give CI headroom; warm runs finish in seconds.
+  timeout: process.env.CI ? 60_000 : 30_000,
   // Serialize in CI: the suite drives ONE shared deployed app (tm-test) and
   // mutates registration state, so concurrent workers race the deploy (cold
   // hits time out) and each other. One worker is deterministic; the suite is
