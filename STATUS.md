@@ -9,6 +9,24 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Fix: register Unregister now refundable (PR #427, TEST + migration)
+
+Triggered by "how do I request a refund after withdrawing?". Found a money-path bug: the
+register page's **Unregister** soft-deleted the reg (`deleted_at`), so a PAID withdrawal
+vanished from My Tournaments with **no refund path** — while My Tournaments' **Withdraw**
+uses `withdraw_self` (status `withdrawn` + entitled refund → "Request refund" → organizer
+approves). Converged them (Ron's pick): register Unregister now calls `withdraw_self`
+(paid→withdrawn, pending→cancelled; partner unpaired by RPC; outbound invite still
+cancelled). Companions: existing-reg load filters to active statuses (paid/pending_payment)
+so a withdrawn row doesn't reload as "Registered"; **migration**
+`20260622010000_event_regs_active_unique.sql` narrows the (event_id, player_id) partial
+unique index to active statuses so a withdrawn/cancelled row no longer blocks
+re-registration (duplicate-key) — both were latent for the My Tournaments path too. Applied
+green on TEST (run 27926642661). Refund flow reminder: **My Tournaments → Withdraw →
+Request refund → organizer approves → Refunded** (two-step; organizer is the gate).
+
+_Also: the Builder opened `feature/issue-422-printable-receipt` draining the receipt story._
+
 ## 2026-06-21 — Feature: register "manage" view affordances + accepted partner (PR #423, TEST)
 
 Reworked the registration manage view (`RegisterPage.tsx`) per Ron's 4 points (mockup
