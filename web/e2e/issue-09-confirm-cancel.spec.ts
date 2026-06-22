@@ -1,4 +1,4 @@
-import { test, expect, loginAs, SEED } from "./fixtures";
+import { test, expect, loginAs, gotoRegister, SEED } from "./fixtures";
 
 // Regression for issue #9 — "Cancelling a registration with a picked partner
 // needs a confirm step." Translated from the issue's ## Acceptance criteria.
@@ -22,12 +22,7 @@ test.describe("#9 confirm before dropping a partner", () => {
     "Path 2 — cancelling a pending registration pops a confirm step",
     async ({ page }) => {
       await loginAs(page, SEED.playerEmail);
-      await page.goto(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}`);
-
-      // DIAGNOSTIC: confirm the event card renders + capture state before the
-      // (currently failing) cancel-button lookup, so the failure screenshot
-      // shows whether the card is in pending vs register state.
-      await expect(page.getByText(SEED.doublesEventName)).toBeVisible();
+      await gotoRegister(page);
 
       // The pending card shows "Cancel Registration" (not "Register").
       await page.getByRole("button", { name: /cancel registration/i }).click();

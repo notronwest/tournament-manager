@@ -25,5 +25,17 @@ export async function loginAs(page: Page, email: string) {
   await expect(page).not.toHaveURL(/\/login/);
 }
 
+// Open a tournament's public page and switch to the Register tab, where the
+// event cards (register / partner-pick / cancel) live. The page defaults to the
+// Details tab, so every event-card interaction must do this first.
+export async function gotoRegister(
+  page: Page,
+  orgSlug = SEED.orgSlug,
+  tournamentSlug = SEED.tournamentSlug,
+) {
+  await page.goto(`/t/${orgSlug}/${tournamentSlug}`);
+  await page.getByRole("tab", { name: /register/i }).click();
+}
+
 export const test = base;
 export { expect };
