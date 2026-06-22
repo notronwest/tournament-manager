@@ -9,6 +9,22 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Fix: paid-withdrawal crash (ambiguous payment_id) + de-red withdraw state (PR #435, TEST)
+
+**Money-path bug:** withdrawing a PAID reg failed with `column reference "payment_id" is
+ambiguous`. `refund_compute()` has an OUT column `payment_id` and its coupon-check subquery
+referenced an unqualified `payment_id` on `payment_line_items`. This broke `withdraw_self()`
+→ **all paid withdrawals** on BOTH paths (My Tournaments + register page); latent until #427
+routed register Unregister through `withdraw_self`. Fix = migration
+`20260622020000_refund_compute_fix_ambiguous.sql` (qualify `pli.payment_id`; body otherwise
+identical). Applied green on TEST (run 27927675615).
+
+**UX:** the staged "Will withdraw" state was red (read as an error). Red now reserved for
+actual error messages; withdraw state (card tint, pill, message) + Unregister/Remove buttons
+are amber (caution), matching Pending-changes / partner-change styling.
+
+Typecheck + build clean, no new lint.
+
 ## 2026-06-21 — Fix: register Unregister now refundable (PR #427, TEST + migration)
 
 Triggered by "how do I request a refund after withdrawing?". Found a money-path bug: the
