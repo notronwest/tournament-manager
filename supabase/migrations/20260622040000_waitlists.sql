@@ -17,9 +17,10 @@
 set search_path = public;
 
 -- ── 1. New registration_status values ─────────────────────────────────────────
-
-alter type registration_status add value if not exists 'waitlisted_pending_payment';
-alter type registration_status add value if not exists 'waitlisted';
+-- The 'waitlisted_pending_payment' and 'waitlisted' enum values are added in a
+-- SEPARATE, earlier migration (20260622035000_waitlist_enum_values.sql) so they
+-- are committed before this migration uses them. Postgres rejects using a new
+-- enum value in the same transaction that adds it (SQLSTATE 55P04).
 
 -- ── 2. waitlist_position column ────────────────────────────────────────────────
 
