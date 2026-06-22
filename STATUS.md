@@ -9,6 +9,15 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Waitlist UX: partner-status fix + 'what to expect' explainer (PR #481)
+
+(1) join_waitlist always sets partner_status='seeking', so a waitlist join WITH a picked
+partner showed a contradictory "Looking for partner" badge next to "Invited X". Frontend now
+flips the new waitlist reg to 'pending' when a partner was picked (captures join_waitlist's
+returned reg_id). (2) On a full event, the register form shows a waitlist explainer (free,
+not charged now, pay only if promoted) instead of the misleading "$N entry" line. Frontend
+only; on TEST. Pre-existing waitlist regs keep the old badge until re-joined.
+
 ## 2026-06-22 — Fix: join_waitlist ambiguous waitlist_position (PR #479)
 
 Joining the waitlist errored `column reference "waitlist_position" is ambiguous`. The
