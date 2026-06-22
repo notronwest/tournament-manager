@@ -108,6 +108,7 @@ export default function PartnerAcceptPage() {
     "ready" | "accepting" | "declining" | "accepted" | "declined"
   >("ready");
   const [showDeclineModal, setShowDeclineModal] = useState(false);
+  const [declineMessage, setDeclineMessage] = useState("");
 
   // ─── Load invite context (anon-callable RPC) ──────────────────────
   useEffect(() => {
@@ -314,16 +315,22 @@ export default function PartnerAcceptPage() {
   const onDecline = async () => {
     setError(null);
     setPhase("declining");
-    const { error: rpcErr } = await supabase.rpc(
-      "decline_partner_invite",
-      { p_invite_id: context.invite_id },
-    );
+    const message = declineMessage.trim();
+    const { error: rpcErr } = await supabase.rpc("decline_partner_invite", {
+      p_invite_id: context.invite_id,
+      p_decline_message: message || null,
+    });
     if (rpcErr) {
       setError(rpcErr.message);
       setPhase("ready");
       setShowDeclineModal(false);
       return;
     }
+    // Fire-and-forget: notify the inviter. Decline already succeeded;
+    // we don't block on the email or surface its failure to the player.
+    void supabase.functions.invoke("send-partner-decline", {
+      body: { inviteId: context.invite_id },
+    });
     setPhase("declined");
     // Drop the now-declined invite from the global banner so it doesn't
     // linger when the user navigates back without a hard reload.
@@ -516,13 +523,63 @@ export default function PartnerAcceptPage() {
           title="Decline this partner invite?"
           body={
             <>
-              You are about to decline this partner invite.{" "}
-              <strong>{inviterFull}</strong> will be notified.
+              <p style={{ margin: "0 0 14px" }}>
+                You are about to decline this partner invite.{" "}
+                <strong>{inviterFull}</strong> will be notified.
+              </p>
+              <label
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#555",
+                }}
+              >
+                Message{" "}
+                <span style={{ fontWeight: 400, color: "#888" }}>
+                  (optional)
+                </span>
+              </label>
+              <textarea
+                value={declineMessage}
+                onChange={(e) =>
+                  setDeclineMessage(e.target.value.slice(0, 280))
+                }
+                placeholder='e.g. "Already partnered up — good luck!"'
+                rows={3}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontFamily: "inherit",
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                  color: "#222",
+                }}
+              />
+              {declineMessage.length > 0 && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#888",
+                    marginTop: 4,
+                    textAlign: "right",
+                  }}
+                >
+                  {declineMessage.length}/280
+                </div>
+              )}
             </>
           }
           confirmLabel="Confirm decline"
           cancelLabel="Cancel"
-          onCancel={() => setShowDeclineModal(false)}
+          onCancel={() => {
+            setShowDeclineModal(false);
+            setDeclineMessage("");
+          }}
           onConfirm={onDecline}
         />
       )}
