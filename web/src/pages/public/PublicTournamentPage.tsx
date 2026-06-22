@@ -161,11 +161,22 @@ const prefersReducedMotion =
 // This page is intentionally read-only — the Register CTA links to
 // /t/:orgSlug/:tournamentSlug/register which is auth-gated (built
 // in the next commit on this branch).
-export default function PublicTournamentPage() {
-  const { orgSlug, tournamentSlug } = useParams<{
+export default function PublicTournamentPage({
+  orgSlugOverride,
+  tournamentSlugOverride,
+}: {
+  // Set when rendered at the root of a custom domain (#408) instead of the
+  // /t/:orgSlug/:tournamentSlug route — the slugs come from the host
+  // mapping rather than the URL path.
+  orgSlugOverride?: string;
+  tournamentSlugOverride?: string;
+} = {}) {
+  const params = useParams<{
     orgSlug: string;
     tournamentSlug: string;
   }>();
+  const orgSlug = orgSlugOverride ?? params.orgSlug;
+  const tournamentSlug = tournamentSlugOverride ?? params.tournamentSlug;
   const { user } = useAuth();
   const navigate = useNavigate();
   // Used to refresh the global PendingPaymentsBar after we mutate
