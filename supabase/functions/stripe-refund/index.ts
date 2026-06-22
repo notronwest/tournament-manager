@@ -52,6 +52,7 @@ type Body = {
   decision?: "approve" | "deny"; // resolve only
   amountCents?: number; // resolve + approve only
   reason?: string; // self + manual_required (player's stated reason)
+  baseUrl?: string; // origin for waitlist-promotion email links
 };
 
 type RefundComputeRow = {
@@ -99,6 +100,7 @@ Deno.serve(async (req: Request) => {
       decision,
       amountCents,
       reason,
+      baseUrl,
     } = (await req.json()) as Body;
     if (!eventRegistrationId) return json({ error: "missing_event_registration_id" }, 400);
 
@@ -279,7 +281,27 @@ Deno.serve(async (req: Request) => {
         .in("status", ["paid", "withdrawn"])
         .is("withdrawal_decided_at", null)
         .select("id");
-      if (upd && upd.length > 0) await unpairPartner();
+      if (upd && upd.length > 0) {
+        await unpairPartner();
+        // Freeing a confirmed spot: promote the next waitlisted player.
+        const { data: promoted } = await admin.rpc("promote_from_waitlist", {
+          p_event_id: reg.event_id,
+        });
+        if (promoted && promoted.length > 0) {
+          const effectiveBaseUrl =
+            (baseUrl ?? "").replace(/\/+$/, "") ||
+            // @ts-expect-error Deno env
+            Deno.env.get("PUBLIC_APP_URL") ||
+            "https://tournament-manager.pages.dev";
+          try {
+            await admin.functions.invoke("send-waitlist-promotion", {
+              body: { regId: promoted[0].promoted_reg_id, baseUrl: effectiveBaseUrl },
+            });
+          } catch (e) {
+            console.warn("send-waitlist-promotion failed:", e);
+          }
+        }
+      }
       return json({ ...resolvePreview, applied: true, newStatus });
     }
 
@@ -304,6 +326,36 @@ Deno.serve(async (req: Request) => {
 
     // Dry run → preview only.
     if (dryRun) return json(preview);
+
+    // Waitlist leave: waitlisted → full Stripe refund → refunded.
+    // refund_compute returns decision='full' for waitlisted rows, so
+    // r.refund_cents is correct already. No cancellation policy applies.
+    if (reg.status === "waitlisted") {
+      if (!r.payment_intent) return json({ error: "no_payment_intent" }, 409);
+      try {
+        await stripe.refunds.create(
+          {
+            payment_intent: r.payment_intent,
+            amount: r.refund_cents,
+            reverse_transfer: true,
+            refund_application_fee: false,
+            metadata: {
+              event_registration_id: eventRegistrationId,
+              reason: "waitlist_leave",
+            },
+          },
+          { idempotencyKey: `waitlist_leave_${eventRegistrationId}` },
+        );
+      } catch (e: any) {
+        return json({ error: "refund_failed", detail: String(e?.message ?? e) }, 502);
+      }
+      await admin
+        .from("event_registrations")
+        .update({ status: "refunded", waitlist_position: null })
+        .eq("id", eventRegistrationId)
+        .eq("status", "waitlisted");
+      return json({ ...preview, applied: true, newStatus: "refunded" });
+    }
 
     // manual_required: the policy can't auto-decide → FILE a withdrawal
     // request for the organizer queue (#200) instead of refunding.

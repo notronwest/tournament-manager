@@ -161,11 +161,19 @@ async function handleSucceeded(pi: any) {
     .filter(Boolean);
 
   if (regIds.length > 0) {
+    // Confirmed registrations: pending_payment → paid.
     await admin
       .from("event_registrations")
-      .update({ status: "paid" }) // TODO(Ron): confirm target registration_status value
+      .update({ status: "paid" })
       .in("id", regIds)
       .eq("status", "pending_payment");
+
+    // Waitlist registrations: waitlisted_pending_payment → waitlisted.
+    await admin
+      .from("event_registrations")
+      .update({ status: "waitlisted" })
+      .in("id", regIds)
+      .eq("status", "waitlisted_pending_payment");
   }
 
   // ── Redeem coupon (atomic; service_role) ──────────────────────────
