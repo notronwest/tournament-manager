@@ -1799,7 +1799,8 @@ function EventRow({
 
   // Visual treatment derived from existing-reg + diff state.
   // "added"           → blue border, "Will register" pill
-  // "withdrawn"       → red border + tint, "Will withdraw" pill + warning
+  // "withdrawn"       → amber border + tint, "Will withdraw" pill (caution, not
+  //                     an error — red is reserved for actual error messages)
   // "partner_changed" → amber border + tint, "Partner change" pill
   // "unchanged" + existing → green tint, "Registered" pill
   // "unchanged" + new      → plain (default)
@@ -1809,7 +1810,7 @@ function EventRow({
   const isPartnerChanged = change === "partner_changed";
 
   const borderColor = isWillWithdraw
-    ? "#fca5a5"
+    ? "#fbbf24"
     : isWillAdd
       ? "#2563eb"
       : isPartnerChanged
@@ -1820,7 +1821,7 @@ function EventRow({
             ? "#2563eb"
             : "#e5e7eb";
   const bg = isWillWithdraw
-    ? "#fef2f2"
+    ? "#fffbeb"
     : isPartnerChanged
       ? "#fffbeb"
       : isExistingChecked
@@ -1878,10 +1879,14 @@ function EventRow({
     fontFamily: "inherit",
     whiteSpace: "nowrap",
   };
-  const dangerBtn: CSSProperties = {
+  // Caution (not error). Red is reserved for actual error messages; a staged
+  // withdraw/remove is amber, matching the "Pending changes" / partner-change
+  // styling.
+  const cautionBtn: CSSProperties = {
     ...btnBase,
-    color: "#b91c1c",
-    borderColor: "#fca5a5",
+    color: "#92400e",
+    borderColor: "#e7c9a3",
+    background: "#fffbeb",
   };
   const filledBtn: CSSProperties = {
     ...btnBase,
@@ -1915,7 +1920,7 @@ function EventRow({
             {isExistingChecked && <Pill bg="#dcfce7" fg="#166534">Registered</Pill>}
             {isWillAdd && <Pill bg="#dbeafe" fg="#1e40af">Will register</Pill>}
             {isWillWithdraw && (
-              <Pill bg="#fee2e2" fg="#991b1b">Will withdraw</Pill>
+              <Pill bg="#fef3c7" fg="#7a5d00">Will withdraw</Pill>
             )}
             {isPartnerChanged && (
               <Pill bg="#fef3c7" fg="#7a5d00">Partner change</Pill>
@@ -1992,7 +1997,7 @@ function EventRow({
             <div
               style={{
                 fontSize: 12,
-                color: "#991b1b",
+                color: "#7a5d00",
                 marginTop: 8,
                 lineHeight: 1.5,
               }}
@@ -2055,7 +2060,7 @@ function EventRow({
               type="button"
               disabled={disabled}
               onClick={() => onChange({ selected: false })}
-              style={dangerBtn}
+              style={cautionBtn}
             >
               Remove
             </button>
@@ -2092,7 +2097,7 @@ function EventRow({
             type="button"
             disabled={disabled}
             onClick={() => onChange({ selected: false })}
-            style={dangerBtn}
+            style={cautionBtn}
           >
             Unregister
           </button>
