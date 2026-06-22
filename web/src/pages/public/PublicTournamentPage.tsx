@@ -1703,9 +1703,10 @@ function EventCard({
       // singles) and re-checks fullness server-side. No checkout — payment
       // only happens after promotion (status → waitlisted_pending_payment).
       // If a partner was picked, the outbound-invite block below still runs.
-      const { error: wlErr } = await supabase.rpc("join_waitlist", {
-        p_event_id: event.id,
-      });
+      const { data: wlData, error: wlErr } = await supabase.rpc(
+        "join_waitlist",
+        { p_event_id: event.id },
+      );
       if (wlErr) {
         setFormError(
           wlErr.message?.includes("event_not_full")
@@ -1714,6 +1715,17 @@ function EventCard({
         );
         setSubmitting(false);
         return;
+      }
+      // join_waitlist always sets partner_status='seeking'. If the player
+      // actually picked a partner, flip the new reg to 'pending' so the card
+      // shows "Invited X" (the outbound-invite block below) instead of
+      // "Looking for partner".
+      const wlRegId = wlData?.[0]?.reg_id;
+      if (isDoubles && !seekingPartner && resolvedPartnerId && wlRegId) {
+        await supabase
+          .from("event_registrations")
+          .update({ partner_status: "pending" })
+          .eq("id", wlRegId);
       }
     } else {
       const { error: regErr } = await supabase
@@ -2432,7 +2444,32 @@ function EventCard({
               We don't re-explain the whole first/additional model —
               just tell the player what THIS event costs them given
               what they've already signed up for. */}
-          {editMode === "register" && regFeeCents > 0 && (
+          {/* Full event → joining means the WAITLIST. Explain what to expect
+              (free now, pay only if promoted) and hide the normal cost line. */}
+          {editMode === "register" && isFull && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "10px 12px",
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "#1e3a8a",
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>This event is full — you'll join the waitlist.</strong>{" "}
+              It's free and you won't be charged now.
+              {regFeeCents > 0
+                ? ` If a spot opens, we'll email you and you can pay the $${(
+                    regFeeCents / 100
+                  ).toFixed(0)} entry to claim it.`
+                : " If a spot opens, we'll email you to claim your place."}
+              {isDoubles ? " Your partner pick carries over." : ""}
+            </div>
+          )}
+          {editMode === "register" && regFeeCents > 0 && !isFull && (
             <div
               style={{
                 marginBottom: 12,
