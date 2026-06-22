@@ -477,7 +477,16 @@ export default function CheckoutPage() {
       clientSecret?: string;
       paymentId?: string;
       error?: string;
+      // Free registration ($0) — the function confirmed the regs server-side
+      // (flipped to paid + fired partner invites). No Stripe step.
+      confirmed?: boolean;
     } | null;
+    // Free path: skip the Payment Element entirely and reuse the success flow.
+    // onConfirmed polls the regs (already flipped) → renders "You're registered!"
+    if (res?.confirmed) {
+      void onConfirmed();
+      return;
+    }
     const cs = res?.clientSecret;
     if (fnErr || !cs) {
       // On a non-2xx the SDK puts its generic "Edge Function returned a
@@ -765,8 +774,9 @@ export default function CheckoutPage() {
       </Link>
       <h1 style={{ ...pageH1Style, margin: "12px 0 8px" }}>Checkout</h1>
       <p style={{ color: inkSoft, margin: "0 0 24px", fontSize: 14, lineHeight: 1.55 }}>
-        Pay to finalize your registrations. Partners will be notified
-        and your spots will be confirmed once payment goes through.
+        {payableCents === 0
+          ? "This tournament is free. Confirm to finalize your registrations — partners will be notified and your spots confirmed right away."
+          : "Pay to finalize your registrations. Partners will be notified and your spots will be confirmed once payment goes through."}
       </p>
 
       <div style={checkoutGrid}>
@@ -1054,9 +1064,17 @@ export default function CheckoutPage() {
               <button
                 type="button"
                 onClick={() => void startPayment()}
-                disabled={creatingIntent || !!blockingError || !stripeConfigured}
+                disabled={
+                  creatingIntent ||
+                  !!blockingError ||
+                  // Free registrations don't touch Stripe, so don't gate them
+                  // on it being configured.
+                  (!stripeConfigured && payableCents > 0)
+                }
                 style={{
-                  ...(creatingIntent || blockingError || !stripeConfigured
+                  ...(creatingIntent ||
+                  blockingError ||
+                  (!stripeConfigured && payableCents > 0)
                     ? ctaPrimaryDisabledStyle
                     : ctaPrimaryStyle),
                   padding: "14px 22px",
@@ -1066,12 +1084,16 @@ export default function CheckoutPage() {
                 }}
               >
                 {creatingIntent
-                  ? "Starting…"
+                  ? payableCents === 0
+                    ? "Confirming…"
+                    : "Starting…"
                   : blockingError
                     ? "Fix the partner issue above"
-                    : `Continue to payment · ${formatUsd(payableCents)} →`}
+                    : payableCents === 0
+                      ? "Confirm registration →"
+                      : `Continue to payment · ${formatUsd(payableCents)} →`}
               </button>
-              {!stripeConfigured && (
+              {!stripeConfigured && payableCents > 0 && (
                 <div
                   style={{
                     fontSize: 11,
