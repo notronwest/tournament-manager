@@ -9,6 +9,47 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — ✅ RESOLVED: test payments now confirm (webhook signing-secret fix)
+
+Resolves the prior OPEN entry. **Root cause:** the Stripe **sandbox** webhook
+destination (`tournament-manager-checkout`, `we_1ThLGn…`) delivers to the **TEST**
+Supabase project `mvkhdsauaqqjehxdnbuf` (the project `test.bertanderne.com` uses) — but
+that project's `STRIPE_WEBHOOK_SIGNING_SECRET` had been fat-fingered to the **API
+secret-key value** (its digest matched `STRIPE_SECRET_KEY`, not the `whsec_…`). So every
+delivery failed signature verification → Stripe showed **Failed 9/12** → regs never
+flipped `pending_payment → paid`. The function, endpoint URL, and event subscriptions
+were all fine the whole time.
+
+**Fix:** `supabase secrets set --project-ref mvkhdsauaqqjehxdnbuf
+STRIPE_WEBHOOK_SIGNING_SECRET=whsec_Q6Syv…` (the destination's real secret; digest now
+`6d6a50e2…`). Verified: a signed probe to the test webhook URL now returns **200 ok**
+(was 400). Secrets apply at runtime — no redeploy.
+
+**Why my earlier fixes this session "didn't take":** the CLI is linked to **PROD**
+(`wducsjqyoksmluwfgjxc`), so my create-payment-intent deploy, the signing-secret set, and
+the manual event re-drive all hit PROD — never the TEST env the app actually uses.
+Functions ARE auto-synced by CI (`.github/workflows/edge-functions.yml`: push `main`→TEST,
+push `production`→PROD; **never hand-run `supabase functions deploy`**). SECRETS are NOT
+in CI — set per project by hand — which is the whole reason only the secret was wrong.
+
+**Next:** Stripe sandbox → tournament-manager-checkout → **Event deliveries → Resend** the
+failed `payment_intent.succeeded` events to flip the stuck test regs (idempotent). New
+test payments confirm automatically now.
+
+⚠️ **Two follow-ups:**
+- **Process slip:** I hand-deployed `create-payment-intent` to PROD this session (against
+  the no-hand-deploy rule). Harmless (same code) and self-corrects on the next
+  `main`→`production` promotion (CI redeploys, idempotent); PROD's function is just
+  temporarily ahead of the `production` branch.
+- **PROD go-live latent bug:** the PROD project's `STRIPE_WEBHOOK_SIGNING_SECRET` also
+  currently holds the SANDBOX secret `whsec_Q6Syv…`. Before taking LIVE payments, create a
+  **live-mode** webhook destination pointing at the PROD URL and set PROD's secret to THAT
+  destination's `whsec_…`, or live payments hit the same signature failure.
+
+Doc gaps from the prior entry still stand: add a "Stripe webhook setup" section to
+CLAUDE.md (endpoint URL **per project**, required events, and the per-project-secret
+gotcha that bit us here); fix the stale CLAUDE.md deploy-model note.
+
 ## 2026-06-21 — ⏳ OPEN: webhook not confirming registrations (handoff mid-debug)
 
 **Symptom:** a real (test-mode) checkout charges fine but the registration never
