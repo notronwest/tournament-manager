@@ -9,6 +9,39 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Platform-admin player management: detail page + reset password (uncommitted)
+
+Built a platform-admin **player detail / management page** at `/admin/players/:playerId`.
+Reached by clicking a player on `/admin/attendees` (the all-players list — rows are now
+links; the old inline `EditEmailPanel` was removed). The page shows **profile** (editable:
+first/last name, contact email, phone, gender, city, state), **account & password** (login
+email + confirmed/last-sign-in, change login email, and **reset password** two ways), and
+**cross-org tournament history** (tournament/event/partner/status/date).
+
+Why edge functions (not client reads): `event_registrations` SELECT RLS is player-self-or-
+org-member, and `auth.users.email` isn't client-readable — so a platform admin can't read
+another player's history/login email from the browser. Two new service-role, platform-admin-
+gated functions:
+- **`admin-get-player`** — profile + linked auth account + history in one call.
+- **`admin-update-player`** — profile patch, login-email change (carried over verbatim), and
+  `passwordAction`: `send_reset_email` (triggers the branded recovery email via
+  `resetPasswordForEmail`) **or** `set_temp_password` (generates a strong temp password via
+  `updateUserById`, returned once to show the admin). Supersedes **`admin-update-player-email`**,
+  which was **deleted** from the repo.
+
+Password reset offers BOTH paths by default (chosen given this session's email-delivery
+debugging — temp-password works even when SMTP is flaky). Typecheck + lint + build all clean
+(my files add zero lint errors). **NOT browser-verified** — gated page whose data comes from
+the new functions; needs them deployed + an authed platform-admin session.
+
+**Next (Ron):**
+1. Deploy the functions to TEST (and PROD when promoting):
+   `supabase functions deploy admin-get-player && supabase functions deploy admin-update-player`
+2. Undeploy the dead one: `supabase functions delete admin-update-player-email`
+3. Commit/PR the frontend (`PlayerDetailPage`, `SiteAttendeesPage`, `App.tsx` route).
+4. Confirm Auth → URL Configuration allows `…/reset-password` redirect (already used by the
+   normal forgot-password flow, so should be fine).
+
 ## 2026-06-22 — PR cleanup, custom-domain #411 on TEST, TEST pipeline UNWEDGED; PROD promotion pending
 
 Session cleared stale PRs and got the custom-domain feature onto TEST; one PROD

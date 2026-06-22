@@ -15,6 +15,7 @@ import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
 import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
+import PlayerDetailPage from "./pages/admin/PlayerDetailPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
@@ -297,6 +298,18 @@ export default function App() {
         element={
           <RequireAuth>
             <SiteAttendeesPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only single-player detail / management page.
+          Defined before the :orgSlug catch-all so "players" isn't
+          treated as a slug. The page double-gates on usePlatformAdmin. */}
+      <Route
+        path="/admin/players/:playerId"
+        element={
+          <RequireAuth>
+            <PlayerDetailPage />
           </RequireAuth>
         }
       />
