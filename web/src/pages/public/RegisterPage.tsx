@@ -360,6 +360,10 @@ export default function RegisterPage() {
             )
             .eq("player_id", myPlayer.id)
             .in("event_id", eventIds)
+            // Only ACTIVE regs count as "existing" here. withdraw_self leaves
+            // the row in place (status withdrawn/cancelled, deleted_at null),
+            // so without this a withdrawn event would reload as "Registered".
+            .in("status", ["paid", "pending_payment"])
             .is("deleted_at", null),
           supabase
             .from("partner_invites")
@@ -714,22 +718,22 @@ export default function RegisterPage() {
     }[] = [];
     const autoPairs: { eventName: string; partnerName: string }[] = [];
 
-    // ─── Process withdrawals first. Soft-delete the user's reg and
-    //     cancel any pending outbound partner_invites for that event
-    //     so the would-be partner doesn't keep seeing an invite from
-    //     someone who's no longer registered. (Confirmed partners
-    //     get notified in commit C; for now they silently become
-    //     solo and can pick a new partner from the tournament page.)
+    // ─── Process withdrawals first via withdraw_self — the SAME path as
+    //     My Tournaments' Withdraw, so a PAID reg becomes 'withdrawn' with
+    //     its policy refund snapshotted (the player can then "Request refund"
+    //     on My Tournaments) and a pending reg becomes 'cancelled'. We used
+    //     to soft-delete here, which silently dropped the reg with no refund
+    //     path. withdraw_self also unpairs the doubles partner; we still
+    //     cancel any pending OUTBOUND invite below (the RPC doesn't).
     for (const ev of withdrawnEvents) {
       const existing = existingRegs.get(ev.id);
       if (!existing) continue; // defensive
-      const { error: delErr } = await supabase
-        .from("event_registrations")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", existing.regId);
-      if (delErr) {
+      const { error: wErr } = await supabase.rpc("withdraw_self", {
+        p_reg_id: existing.regId,
+      });
+      if (wErr) {
         setError(
-          `Failed to withdraw from "${ev.name}": ${delErr.message}`,
+          `Failed to withdraw from "${ev.name}": ${wErr.message}`,
         );
         setPhase("form");
         return;
