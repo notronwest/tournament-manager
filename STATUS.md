@@ -3,11 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **V5 brand wired — brush wordmark in navbar, homepage
-rebuilt to mockup 01 on shared publicTheme tokens. Foundation
-(schema + auth + organizer-side tournament create/list/view) still
-in place underneath.**
+Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-22**
+
+## 2026-06-22 — Promoted main→production (PR #491): big session batch incl. waitlists
+
+Promoted 50 commits / 7 migrations to PROD. Migrations CI green (run 27988485780), edge
+functions deployed (run 27988485788), frontend via Cloudflare (production branch). Histories
+aligned; money-path functions (withdraw_self→promote_from_waitlist, refund_compute) audited —
+no ambiguity crashes (the join_waitlist ambiguity was unique + fixed). Includes: free ($0)
+checkout, terminal-PI fix, processing overlay, withdraw_self refundable + refund_compute/42P13
+fixes, register/manage affordances, orphan-claim RLS, post-login invites, banner refresh, and
+the rebuilt WAITLISTS (pay-on-promotion). Builder also: receipt, custom domains, avatar-hidden,
+partner-decline message, withdrawal-notify.
+
+⚠️ **In prod with known open edges (#42):** doubles-team-on-waitlist (invited partner accept
+→ should land on waitlist, currently normal reg); RPC smoke tests for promote_from_waitlist /
+waitlist_effective_position (audited clean for ambiguity, but never runtime-tested). These are
+refinements/latent — money paths don't crash.
 
 ## 2026-06-22 — Site Admin section split out from org picker (uncommitted, frontend-only)
 
