@@ -9,6 +9,16 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Fix: invite banner went stale after accept/decline (PR #458)
+
+`PartnerAcceptPage` refreshed the pending-payments context but not the
+partner-invites context, so after accepting/declining a partner invite the
+global "You have a pending partner invite" banner lingered until a hard reload.
+Now calls `usePartnerInvites().refresh()` after both actions. Typecheck + build
+clean, no new lint (baseline is 27/4 now after the Builder's merges). Also filed
+two stories: #457 (unify all transactional emails on the login-email layout) and
+#459 (let a player add a message when declining an invite).
+
 ## 2026-06-22 — Fix: free ($0) registrations skip payment (PR #449) + unwedged migrations CI
 
 _Follow-up (PR #455): the `org_stripe_not_active` guard ran before the free branch, so a $0 tournament whose organizer hadn't connected Stripe still errored on "Confirm registration". Moved the Stripe-active check into the paid path only — free registrations no longer require a connected Stripe account. Edge fn redeployed to TEST (run 27960213140)._
