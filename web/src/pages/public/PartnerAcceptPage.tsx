@@ -9,6 +9,7 @@ import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
+import { usePartnerInvites } from "../../components/PartnerInvitesContext";
 import {
   contentColStyle,
   courtBlue,
@@ -93,6 +94,7 @@ type InviteContext = {
 export default function PartnerAcceptPage() {
   const { user, loading: authLoading } = useAuth();
   const { refresh: refreshPending } = usePendingPayments();
+  const { refresh: refreshInvites } = usePartnerInvites();
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -302,9 +304,11 @@ export default function PartnerAcceptPage() {
     }
 
     setPhase("accepted");
-    // Refresh the global bar so it's populated when the user navigates
-    // back to the tournament page without a hard reload.
+    // Refresh the global bars so they're up to date when the user navigates
+    // back to the tournament page without a hard reload: the pending-payments
+    // bar AND the partner-invites banner (this invite is no longer pending).
     void refreshPending();
+    void refreshInvites();
   };
 
   const onDecline = async () => {
@@ -321,6 +325,9 @@ export default function PartnerAcceptPage() {
       return;
     }
     setPhase("declined");
+    // Drop the now-declined invite from the global banner so it doesn't
+    // linger when the user navigates back without a hard reload.
+    void refreshInvites();
   };
 
   if (phase === "accepted") {
