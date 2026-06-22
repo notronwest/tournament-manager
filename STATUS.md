@@ -9,6 +9,44 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — PR cleanup, custom-domain #411 on TEST, TEST pipeline UNWEDGED; PROD promotion pending
+
+Session cleared stale PRs and got the custom-domain feature onto TEST; one PROD
+decision left.
+
+- **Closed 6 stale/superseded PRs** (#271, #149, #162, #101, #99 — their tickets
+  already closed/shipped; #177 stale doc), each with a note.
+- **#411 custom domains (pickleballangels.com) merged to main** (TEST). App +
+  `custom_domains` table + `docs/CUSTOM_DOMAINS.md`. `Closes #412`.
+- **UNWEDGED the TEST migration pipeline.** #467 ([DB] partner_decline) merged at
+  17:50 with timestamp `20260622000001` — BEFORE the waitlist batch
+  (`...010000`–`080000`) already on TEST — so `db push` failed closed and **every
+  TEST migration since 17:50 was failing** (incl. #411). Fix: renumbered
+  `partner_decline` → `20260622100000` (#485) and `custom_domains` →
+  `20260622090000` (#484). TEST run now **green**; both applied in order.
+- **Reconciled + merged #249** — `RELEASE_PROCESS.md` rewritten to the shipped
+  model (main=TEST / production=PROD; promote via main→production PR; pre-flight
+  checklist; the timestamp-order wedge + fix).
+
+**PENDING — Ron's call:** promote **main→production** to make
+`pickleballangels.com` live. Pre-flighted: **40 commits, 6 migrations** (waitlist
+batch + custom_domains + partner_decline — all additive; partner_decline RPC is
+backward-compatible, `p_decline_message text default null`), **7 edge functions**.
+PROD secrets confirmed set. A promotion carries the WHOLE batch, not just the
+domain. After promote: Ron's Cloudflare custom-domain + DNS (he reports the domain
+is already pointed at Cloudflare) makes it serve.
+
+**Also still open:** PR #171 (checkout error surfacing, no ticket) — triage/close.
+Recurring shared-checkout STATUS drift on this repo (uncommitted + stashed STATUS
+notes again) — worth addressing how sessions write STATUS here.
+
+## 2026-06-22 — Shipped: Leave-waitlist + partner-badge fix (PR #483, MERGED)
+
+Both changes below landed together in PR #483 (one commit, 8a7e740) and merged to main —
+Cloudflare auto-deploys. Supersedes the "(uncommitted)" notes in the two entries that follow.
+**Not yet browser-verified:** once deployed, click through the Leave-waitlist button + confirm
+modal on a TEST tournament (needs a logged-in user on a full event's waitlist).
+
 ## 2026-06-22 — Waitlist: "Leave waitlist" action (uncommitted)
 
 Waitlisted cards previously showed only "✓ On the waitlist" with no way out. Added a
