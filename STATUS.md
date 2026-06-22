@@ -11,6 +11,8 @@ Last updated: **2026-06-22**
 
 ## 2026-06-22 — Fix: free ($0) registrations skip payment (PR #449) + unwedged migrations CI
 
+_Follow-up (PR #455): the `org_stripe_not_active` guard ran before the free branch, so a $0 tournament whose organizer hadn't connected Stripe still errored on "Confirm registration". Moved the Stripe-active check into the paid path only — free registrations no longer require a connected Stripe account. Edge fn redeployed to TEST (run 27960213140)._
+
 **Free registration (the ask):** a no-fee tournament couldn't complete — checkout routed
 through Stripe and `create-payment-intent` rejected $0 with `nothing_to_charge`. Now when the
 authoritative server-side total is $0 with pending regs, the function confirms directly (flips
