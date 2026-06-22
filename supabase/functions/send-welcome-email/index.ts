@@ -22,6 +22,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { renderEmailHtml } from "../_shared/email-layout.ts";
 
 // @ts-expect-error Deno global in edge runtime
 Deno.serve(async (req: Request) => {
@@ -85,6 +86,8 @@ Deno.serve(async (req: Request) => {
     return ok({ skipped: "no email address" });
   }
 
+  const getStartedUrl = "https://bertanderne.com/getting-started";
+
   // Send the welcome email via Resend.
   try {
     const resendResp = await fetch("https://api.resend.com/emails", {
@@ -97,7 +100,21 @@ Deno.serve(async (req: Request) => {
         from: fromAddress,
         to: email,
         subject: "Welcome to bert & erne — you're in!",
-        html: renderHtml(),
+        html: renderEmailHtml({
+          heading: "You're in. Welcome!",
+          bodyHtml: `<p style="margin:0 0 16px;font-size:15px;color:#4a5159;line-height:1.6;">
+            Your account is confirmed and ready to go. You can now register for
+            pickleball tournaments, track your events, and manage your player
+            profile &mdash; all in one place.
+          </p>
+          <p style="margin:0;font-size:15px;color:#4a5159;line-height:1.6;">
+            Not sure where to start? We've put together a quick guide.
+          </p>`,
+          ctaLabel: "Get started",
+          ctaUrl: getStartedUrl,
+          footer: `You received this because you created an account at bertanderne.com.
+            If that wasn't you, you can safely ignore this email.`,
+        }),
         text: renderText(),
       }),
     });
@@ -133,65 +150,6 @@ function ok(body: unknown): Response {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
-}
-
-function renderHtml(): string {
-  const getStartedUrl = "https://bertanderne.com/getting-started";
-  return `<!doctype html>
-<html>
-<body style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #fdf6ec; margin: 0; padding: 0;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background: #fdf6ec; padding: 40px 0;">
-    <tr>
-      <td align="center">
-        <table width="560" cellpadding="0" cellspacing="0" style="background: #1a1a1a; border-radius: 8px; overflow: hidden; max-width: 560px; width: 100%;">
-          <!-- Header wordmark -->
-          <tr>
-            <td style="padding: 28px 32px 20px; border-bottom: 1px solid #333;">
-              <span style="font-family: Georgia, 'Times New Roman', serif; font-size: 22px; font-weight: 700; color: #fdf6ec; letter-spacing: 0.02em;">bert &amp; erne</span>
-              <span style="font-size: 18px; color: #f5c842; margin-left: 6px;">&amp;</span>
-            </td>
-          </tr>
-          <!-- Body -->
-          <tr>
-            <td style="padding: 32px 32px 24px;">
-              <h1 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #fdf6ec; line-height: 1.3;">
-                You're in. Welcome!
-              </h1>
-              <p style="margin: 0 0 16px; font-size: 15px; line-height: 1.6; color: #c8c8c8;">
-                Your account is confirmed and ready to go. You can now register for
-                pickleball tournaments, track your events, and manage your player
-                profile — all in one place.
-              </p>
-              <p style="margin: 0 0 28px; font-size: 15px; line-height: 1.6; color: #c8c8c8;">
-                Not sure where to start? We've put together a quick guide:
-              </p>
-              <table cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="border-radius: 4px; background: #f5c842;">
-                    <a href="${getStartedUrl}"
-                       style="display: inline-block; padding: 13px 28px; font-family: system-ui, sans-serif; font-size: 15px; font-weight: 700; color: #1a1a1a; text-decoration: none; letter-spacing: 0.03em; text-transform: uppercase;">
-                      Get started &rarr;
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 20px 32px 28px; border-top: 1px solid #333;">
-              <p style="margin: 0; font-size: 12px; color: #777; line-height: 1.5;">
-                You received this because you created an account at bertanderne.com.
-                If that wasn't you, you can safely ignore this email.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
 }
 
 function renderText(): string {

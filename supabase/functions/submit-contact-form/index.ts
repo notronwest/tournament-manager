@@ -21,6 +21,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -211,12 +212,16 @@ Deno.serve(async (req: Request) => {
   // ── Fan out the email ────────────────────────────────────────────
   const orgName = t.organization?.name ?? "the organizers";
   const subject = `Contact form: ${t.name}`;
-  const html = renderHtml({
-    tournamentName: t.name,
-    orgName,
-    senderName,
-    senderEmail,
-    message,
+  const html = renderEmailHtml({
+    headingLabel: "Contact form",
+    heading: `New message about ${t.name}`,
+    bodyHtml: `<p style="margin:0 0 16px;font-size:13px;color:#6b7280;line-height:1.6;">Sent via the public contact form.</p>
+    <table style="font-size:14px;line-height:1.6;margin-bottom:20px;">
+      <tr><td style="color:#6b7280;padding-right:12px;white-space:nowrap;">From</td><td><strong>${escapeHtml(senderName)}</strong></td></tr>
+      <tr><td style="color:#6b7280;padding-right:12px;white-space:nowrap;">Email</td><td><a href="mailto:${escapeHtml(senderEmail)}" style="color:#1e6cd6;">${escapeHtml(senderEmail)}</a></td></tr>
+    </table>
+    <div style="font-size:15px;line-height:1.6;color:#14181f;white-space:pre-wrap;border-left:3px solid #e3dec8;padding-left:14px;">${escapeHtml(message)}</div>`,
+    footer: `Reply directly to this email to respond to ${escapeHtml(senderName)} &mdash; it's addressed to them. Sent on behalf of ${escapeHtml(orgName)}.`,
   });
   const text = renderText({
     tournamentName: t.name,
@@ -271,27 +276,6 @@ function jsonResp(body: unknown, status = 200): Response {
   });
 }
 
-function renderHtml(v: {
-  tournamentName: string;
-  orgName: string;
-  senderName: string;
-  senderEmail: string;
-  message: string;
-}): string {
-  return `<!doctype html>
-<html><body style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #222; max-width: 560px; margin: 0 auto; padding: 24px;">
-  <h2 style="margin: 0 0 8px; font-size: 20px;">New message about ${escapeHtml(v.tournamentName)}</h2>
-  <p style="font-size: 13px; color: #666; margin: 0 0 16px;">Sent via the public contact form.</p>
-  <table style="font-size: 14px; line-height: 1.5; margin-bottom: 16px;">
-    <tr><td style="color:#666; padding-right: 10px;">From</td><td><strong>${escapeHtml(v.senderName)}</strong></td></tr>
-    <tr><td style="color:#666; padding-right: 10px;">Email</td><td><a href="mailto:${escapeHtml(v.senderEmail)}" style="color:#2563eb;">${escapeHtml(v.senderEmail)}</a></td></tr>
-  </table>
-  <div style="font-size: 15px; line-height: 1.6; white-space: pre-wrap; border-left: 3px solid #e5e7eb; padding-left: 14px;">${escapeHtml(v.message)}</div>
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 28px 0;">
-  <p style="font-size: 12px; color: #888;">Reply directly to this email to respond to ${escapeHtml(v.senderName)} — it's addressed to them. Sent on behalf of ${escapeHtml(v.orgName)}.</p>
-</body></html>`;
-}
-
 function renderText(v: {
   tournamentName: string;
   senderName: string;
@@ -309,11 +293,3 @@ ${v.message}
 `;
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}

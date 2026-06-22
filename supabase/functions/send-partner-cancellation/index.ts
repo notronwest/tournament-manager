@@ -19,6 +19,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -136,12 +137,21 @@ Deno.serve(async (req: Request) => {
   const orgName = inv.event.tournament.organization.name;
 
   const subject = `${inviterName} changed partners for ${eventName}`;
-  const html = renderHtml({
-    inviteeFirst,
-    inviterName,
-    eventName,
-    tournamentName,
-    orgName,
+  const html = renderEmailHtml({
+    heading: `Hi ${inviteeFirst} —`,
+    bodyHtml: `<p style="margin:0 0 16px;font-size:15px;color:#4a5159;line-height:1.6;">
+      A heads-up: <strong>${escapeHtml(inviterName)}</strong> changed
+      partners for <strong>${escapeHtml(eventName)}</strong> at
+      <strong>${escapeHtml(tournamentName)}</strong>, so your spot in
+      that event has been released.
+    </p>
+    <p style="margin:0;font-size:15px;color:#4a5159;line-height:1.6;">
+      No action needed from you. If you think this was a mistake or
+      you'd like to play that event, reach out to
+      ${escapeHtml(inviterName)} directly or sign up for the event
+      with a different partner.
+    </p>`,
+    footer: `Sent by ${escapeHtml(orgName)} via bert &amp; erne tournaments.`,
   });
   const text = renderText({
     inviteeFirst,
@@ -184,35 +194,6 @@ function jsonResp(body: unknown, status = 200): Response {
   });
 }
 
-function renderHtml(v: {
-  inviteeFirst: string;
-  inviterName: string;
-  eventName: string;
-  tournamentName: string;
-  orgName: string;
-}): string {
-  return `<!doctype html>
-<html><body style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #222; max-width: 560px; margin: 0 auto; padding: 24px;">
-  <h2 style="margin: 0 0 16px; font-size: 20px;">Hi ${escapeHtml(v.inviteeFirst)} —</h2>
-  <p style="font-size: 15px; line-height: 1.55;">
-    A heads-up: <strong>${escapeHtml(v.inviterName)}</strong> changed
-    partners for <strong>${escapeHtml(v.eventName)}</strong> at
-    <strong>${escapeHtml(v.tournamentName)}</strong>, so your spot in
-    that event has been released.
-  </p>
-  <p style="font-size: 15px; line-height: 1.55;">
-    No action needed from you. If you think this was a mistake or
-    you'd like to play that event, reach out to
-    ${escapeHtml(v.inviterName)} directly or sign up for the event
-    with a different partner.
-  </p>
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
-  <p style="font-size: 12px; color: #888;">
-    Sent by ${escapeHtml(v.orgName)} via Tournament Manager.
-  </p>
-</body></html>`;
-}
-
 function renderText(v: {
   inviteeFirst: string;
   inviterName: string;
@@ -226,15 +207,6 @@ A heads-up: ${v.inviterName} changed partners for ${v.eventName} at ${v.tourname
 
 No action needed from you. If you think this was a mistake or you'd like to play that event, reach out to ${v.inviterName} directly or sign up for the event with a different partner.
 
-Sent by ${v.orgName} via Tournament Manager.
+Sent by ${v.orgName} via bert & erne tournaments.
 `;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
