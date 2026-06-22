@@ -154,6 +154,11 @@ export default function CheckoutPage() {
   const [receiptItems, setReceiptItems] = useState<
     { description: string; amount_cents: number }[]
   >([]);
+  // Captured at pay-time for the printable receipt.
+  const [orgName, setOrgName] = useState<string | null>(null);
+  const [confirmedPaymentId, setConfirmedPaymentId] = useState<string | null>(null);
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
+  const [stripeIntentId, setStripeIntentId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     if (!orgSlug || !tournamentSlug || !user) return;
@@ -164,7 +169,7 @@ export default function CheckoutPage() {
     // and have a tournament object for the pricing helper.
     const { data: org } = await supabase
       .from("organizations")
-      .select("id")
+      .select("id, name")
       .eq("slug", orgSlug)
       .is("deleted_at", null)
       .maybeSingle();
@@ -173,6 +178,7 @@ export default function CheckoutPage() {
       setLoading(false);
       return;
     }
+    setOrgName(org.name);
     const { data: t } = await supabase
       .from("tournaments")
       .select("*")
@@ -215,7 +221,7 @@ export default function CheckoutPage() {
     const { data: regs, error: regsErr } = await supabase
       .from("event_registrations")
       .select(
-        `id, event_id, partner_status,
+        `id, event_id, partner_status, partner_registration_id,
          event:events!event_id (id, name, format, event_fee_cents)`,
       )
       .eq("player_id", me.id)
@@ -234,6 +240,7 @@ export default function CheckoutPage() {
       id: string;
       event_id: string;
       partner_status: Database["public"]["Enums"]["partner_status"];
+      partner_registration_id: string | null;
       event: {
         id: string;
         name: string;
@@ -263,17 +270,25 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Pull outbound pending invites for these events so we can
-    // surface partner display + know which invite_id to email at
-    // pay-time.
+    // Resolve each doubles reg's partner via partner_invites — readable by
+    // BOTH parties (sender or recipient), unlike the partner's
+    // event_registrations row (own-rows-only RLS, so the invitee can't read
+    // the inviter's reg). We pull invites in EITHER direction, pending OR
+    // accepted, and the partner is simply whichever side of the invite isn't
+    // me. This covers:
+    //   * outbound pending (I invited, not yet accepted) → partner = invitee,
+    //     and we keep the invite id for the deferred pay-time email.
+    //   * accepted, either direction (they accepted my invite, OR I accepted
+    //     theirs) → partner = the other party; partner_status is 'confirmed'.
     const { data: invites } = await supabase
       .from("partner_invites")
       .select(
-        `id, event_id, invitee_email,
+        `id, event_id, status, inviter_player_id, invitee_email,
+         inviter:players!inviter_player_id (first_name, last_name),
          invitee:players!invitee_player_id (first_name, last_name, email)`,
       )
-      .eq("inviter_player_id", me.id)
-      .eq("status", "pending")
+      .or(`inviter_player_id.eq.${me.id},invitee_player_id.eq.${me.id}`)
+      .in("status", ["pending", "accepted"])
       .in(
         "event_id",
         mine.map((r) => r.event_id),
@@ -281,28 +296,41 @@ export default function CheckoutPage() {
     type InviteRow = {
       id: string;
       event_id: string;
+      status: string;
+      inviter_player_id: string;
       invitee_email: string | null;
+      inviter: { first_name: string; last_name: string } | null;
       invitee: {
         first_name: string;
         last_name: string;
         email: string | null;
       } | null;
     };
+    // At most one relevant invite per event; prefer an accepted one.
     const inviteByEvent = new Map<string, InviteRow>();
     for (const inv of (invites ?? []) as unknown as InviteRow[]) {
-      // If somehow multiple invites exist for the same event,
-      // newest-first ordering would matter — we didn't order
-      // explicitly, but for an inviter+event+pending tuple there
-      // should normally be at most one row.
-      inviteByEvent.set(inv.event_id, inv);
+      const existing = inviteByEvent.get(inv.event_id);
+      if (
+        !existing ||
+        (existing.status !== "accepted" && inv.status === "accepted")
+      ) {
+        inviteByEvent.set(inv.event_id, inv);
+      }
     }
 
     const built: PendingRow[] = mine.map((r) => {
       const inv = inviteByEvent.get(r.event_id);
-      const partnerLabel = inv?.invitee
-        ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
-        : inv?.invitee_email ?? null;
-      const partnerEmail = inv?.invitee?.email ?? inv?.invitee_email ?? null;
+      const iAmInviter = inv?.inviter_player_id === me.id;
+      // Partner = the side of the invite that isn't me.
+      const partnerPlayer = inv ? (iAmInviter ? inv.invitee : inv.inviter) : null;
+      const partnerLabel = partnerPlayer
+        ? `${partnerPlayer.first_name} ${partnerPlayer.last_name}`
+        : // outbound invite addressed to an email with no player record yet
+          iAmInviter
+          ? inv?.invitee_email ?? null
+          : null;
+      const partnerEmail =
+        (iAmInviter ? inv?.invitee?.email ?? inv?.invitee_email : null) ?? null;
       return {
         regId: r.id,
         eventId: r.event_id,
@@ -310,7 +338,9 @@ export default function CheckoutPage() {
         format: r.event?.format ?? "singles",
         partner_status: r.partner_status,
         eventFeeCentsOverride: r.event?.event_fee_cents ?? 0,
-        inviteId: inv?.id ?? null,
+        // Keep the invite id only for an OUTBOUND PENDING invite (the deferred
+        // pay-time email path); once accepted there's nothing left to send.
+        inviteId: inv && iAmInviter && inv.status === "pending" ? inv.id : null,
         partnerLabel,
         partnerEmail,
       };
@@ -378,6 +408,9 @@ export default function CheckoutPage() {
     (r) =>
       r.format === "doubles" &&
       r.partner_status !== "seeking" &&
+      // a confirmed pairing always has a partner — never block it, even if
+      // we couldn't resolve the partner's display name
+      r.partner_status !== "confirmed" &&
       !r.partnerLabel,
   );
 
@@ -489,6 +522,9 @@ export default function CheckoutPage() {
     }
 
     if (allPaid) {
+      // Capture receipt metadata before clearing transient state.
+      setConfirmedPaymentId(paymentId);
+      setConfirmedAt(new Date().toISOString());
       // Load the server-side receipt line items from payment_line_items.
       // These were written by create-payment-intent and are readable
       // by the player via SELECT RLS. If the query fails we show the
@@ -502,6 +538,14 @@ export default function CheckoutPage() {
         setReceiptItems(
           (liData ?? []) as { description: string; amount_cents: number }[],
         );
+        const { data: pmtRow } = await supabase
+          .from("payments")
+          .select("stripe_payment_intent_id")
+          .eq("id", paymentId)
+          .maybeSingle();
+        if (pmtRow?.stripe_payment_intent_id) {
+          setStripeIntentId(pmtRow.stripe_payment_intent_id);
+        }
       }
       setDoneEventNames(paidRows.map((r) => r.eventName));
     } else {
@@ -642,10 +686,50 @@ export default function CheckoutPage() {
               <span>Total charged</span>
               <span>{formatUsd(receiptTotal)}</span>
             </div>
+            <div style={receiptMeta}>
+              <div style={receiptMetaRow}>
+                <span style={receiptMetaLabel}>Tournament</span>
+                <span style={receiptMetaValue}>{tournament.name}</span>
+              </div>
+              {orgName && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Organizer</span>
+                  <span style={receiptMetaValue}>{orgName}</span>
+                </div>
+              )}
+              {confirmedAt && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Date</span>
+                  <span style={receiptMetaValue}>{fmtReceiptDate(confirmedAt)}</span>
+                </div>
+              )}
+              {confirmedPaymentId && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Confirmation</span>
+                  <span style={receiptMetaValue}>
+                    {confirmedPaymentId.slice(0, 8).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              {stripeIntentId && (
+                <div style={receiptMetaRow}>
+                  <span style={receiptMetaLabel}>Payment ref</span>
+                  <span style={receiptMetaValue}>{stripeIntentId}</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        <button
+          className="no-print"
+          style={printReceiptBtn}
+          onClick={() => window.print()}
+        >
+          Print receipt
+        </button>
+
+        <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
           <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={secondaryLinkBtn}>
             ← Back to tournament
           </Link>
@@ -719,8 +803,10 @@ export default function CheckoutPage() {
                     marginTop: 10,
                   }}
                 >
-                  ✓ Partner: <strong>{r.partnerLabel}</strong> — will be
-                  invited when you pay
+                  ✓ Partner: <strong>{r.partnerLabel}</strong>
+                  {r.partner_status === "confirmed"
+                    ? " — accepted"
+                    : " — will be invited when you pay"}
                 </div>
               )}
               {r.format === "doubles" && !r.partnerLabel && r.partner_status === "seeking" && (
@@ -734,18 +820,30 @@ export default function CheckoutPage() {
                   Looking for a partner — we'll help you match. You can add one anytime before the event.
                 </div>
               )}
-              {r.format === "doubles" && !r.partnerLabel && r.partner_status !== "seeking" && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: courtRed,
-                    marginTop: 10,
-                  }}
-                >
-                  ⚠ No partner picked. Go back to the tournament page
-                  and cancel + re-register this event with a partner.
-                </div>
-              )}
+              {r.format === "doubles" &&
+                r.partner_status === "confirmed" &&
+                !r.partnerLabel && (
+                  <div
+                    style={{ fontSize: 12, color: courtGreen, marginTop: 10 }}
+                  >
+                    ✓ Partner confirmed
+                  </div>
+                )}
+              {r.format === "doubles" &&
+                !r.partnerLabel &&
+                r.partner_status !== "seeking" &&
+                r.partner_status !== "confirmed" && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: courtRed,
+                      marginTop: 10,
+                    }}
+                  >
+                    ⚠ No partner picked. Go back to the tournament page
+                    and cancel + re-register this event with a partner.
+                  </div>
+                )}
             </div>
           ))}
           <div
@@ -1565,3 +1663,54 @@ const secondaryLinkBtn: CSSProperties = {
   padding: "12px 20px",
   marginTop: 12,
 };
+
+const receiptMeta: CSSProperties = {
+  marginTop: 16,
+  paddingTop: 16,
+  borderTop: `1px solid ${ruleSoft}`,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const receiptMetaRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  fontSize: 12,
+  color: inkSoft,
+};
+
+const receiptMetaLabel: CSSProperties = {
+  flexShrink: 0,
+  color: inkMuted,
+};
+
+const receiptMetaValue: CSSProperties = {
+  textAlign: "right",
+  wordBreak: "break-all",
+};
+
+const printReceiptBtn: CSSProperties = {
+  display: "block",
+  marginBottom: 16,
+  padding: "10px 18px",
+  background: "none",
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  fontSize: 13,
+  fontWeight: 600,
+  color: ink,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+function fmtReceiptDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

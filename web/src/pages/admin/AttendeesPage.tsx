@@ -79,6 +79,8 @@ function paymentBadge(status: RegistrationStatus) {
     cancelled: { label: "Cancelled", bg: bg, color: inkMuted },
     refunded: { label: "Refunded", bg: bg, color: inkMuted },
     withdrawn: { label: "Withdrawn", bg: bg, color: inkMuted },
+    waitlisted: { label: "Waitlisted", bg: warnBg, color: warnFg },
+    waitlisted_pending_payment: { label: "Waitlist — unpaid", bg: warnBg, color: warnFg },
   };
   const s = map[status] ?? { label: status, bg, color: inkMuted };
   return (

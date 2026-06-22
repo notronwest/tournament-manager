@@ -9,6 +9,24 @@ export const SEED = {
   playerEmail: "e2e-player@wmpc.test",
   partnerName: "Pat Partner", // the picked partner on the seeded pending reg
   doublesEventName: "E2E Mixed Doubles 3.5",
+  // Registration flows (#253) — each its own single-event tournament so the
+  // Register tab shows exactly one card.
+  existingPartner: {
+    tournamentSlug: "e2e-existing-partner",
+    registrantEmail: "e2e-organizer@wmpc.test", // Olive
+    partnerQuery: "Pat", // searches for the existing partner Pat
+  },
+  newPartner: {
+    tournamentSlug: "e2e-new-partner",
+    registrantEmail: "e2e-rex@wmpc.test", // Rex
+    first: "Nina",
+    last: "Newcomer",
+    email: "e2e-newpartner@wmpc.test",
+  },
+  seeker: {
+    tournamentSlug: "e2e-seeker",
+    registrantEmail: "e2e-sam@wmpc.test", // Sam
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";
@@ -19,8 +37,22 @@ export async function loginAs(page: Page, email: string) {
   await page.goto("/login");
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(PASSWORD);
-  await page.getByRole("button", { name: /sign in|log in/i }).click();
+  // Scope to the form — the page also has a nav "Sign in" button, which would
+  // otherwise trip Playwright's strict-mode (two matches).
+  await page.locator("form").getByRole("button", { name: /sign in|log in/i }).click();
   await expect(page).not.toHaveURL(/\/login/);
+}
+
+// Open a tournament's public page and switch to the Register tab, where the
+// event cards (register / partner-pick / cancel) live. The page defaults to the
+// Details tab, so every event-card interaction must do this first.
+export async function gotoRegister(
+  page: Page,
+  orgSlug = SEED.orgSlug,
+  tournamentSlug = SEED.tournamentSlug,
+) {
+  await page.goto(`/t/${orgSlug}/${tournamentSlug}`);
+  await page.getByRole("tab", { name: /register/i }).click();
 }
 
 export const test = base;

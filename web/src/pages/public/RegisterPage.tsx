@@ -1,6 +1,7 @@
 import {
   useEffect,
   useState,
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -347,7 +348,7 @@ export default function RegisterPage() {
       const existingMap = new Map<string, ExistingReg>();
       if (evs && evs.length > 0) {
         const eventIds = evs.map((e) => e.id);
-        const [regsRes, outboundRes] = await Promise.all([
+        const [regsRes, outboundRes, inboundRes] = await Promise.all([
           supabase
             .from("event_registrations")
             .select(
@@ -359,6 +360,10 @@ export default function RegisterPage() {
             )
             .eq("player_id", myPlayer.id)
             .in("event_id", eventIds)
+            // Only ACTIVE regs count as "existing" here. withdraw_self leaves
+            // the row in place (status withdrawn/cancelled, deleted_at null),
+            // so without this a withdrawn event would reload as "Registered".
+            .in("status", ["paid", "pending_payment"])
             .is("deleted_at", null),
           supabase
             .from("partner_invites")
@@ -367,6 +372,21 @@ export default function RegisterPage() {
                invitee:players!invitee_player_id (id, first_name, last_name, email, phone)`,
             )
             .eq("inviter_player_id", myPlayer.id)
+            .in("status", ["pending", "accepted"])
+            .in("event_id", eventIds)
+            .order("created_at", { ascending: false }),
+          // INBOUND invites — ones I received and accepted. The linked
+          // partner_registration embed above is RLS-blocked (it's the
+          // inviter's own-rows-only reg), and I have no OUTBOUND invite as
+          // the invitee, so without this my partner shows blank. partner_invites
+          // is readable by the recipient, so this fills the invitee's side.
+          supabase
+            .from("partner_invites")
+            .select(
+              `id, event_id, status,
+               inviter:players!inviter_player_id (id, first_name, last_name, email, phone)`,
+            )
+            .eq("invitee_player_id", myPlayer.id)
             .in("status", ["pending", "accepted"])
             .in("event_id", eventIds)
             .order("created_at", { ascending: false }),
@@ -451,6 +471,33 @@ export default function RegisterPage() {
           } else if (!cur.partnerLabel) {
             cur.partnerLabel = inv.invitee_email ?? null;
           }
+        }
+        // Fill the INVITEE side from inbound invites (the inviter is my
+        // partner). Only fills rows the linked-reg/outbound paths left blank.
+        type InboundRow = {
+          id: string;
+          event_id: string;
+          status: Database["public"]["Enums"]["partner_invite_status"];
+          inviter: {
+            id: string;
+            first_name: string;
+            last_name: string;
+            email: string | null;
+            phone: string | null;
+          } | null;
+        };
+        for (const inv of (inboundRes.data ?? []) as unknown as InboundRow[]) {
+          const cur = existingMap.get(inv.event_id);
+          if (!cur || cur.partner || !inv.inviter) continue;
+          cur.partner = {
+            id: inv.inviter.id,
+            first_name: inv.inviter.first_name,
+            last_name: inv.inviter.last_name,
+            email: inv.inviter.email,
+            phone: inv.inviter.phone,
+            regId: null,
+          };
+          cur.partnerLabel = `${inv.inviter.first_name} ${inv.inviter.last_name}`;
         }
         setExistingRegs(existingMap);
       } else {
@@ -671,22 +718,22 @@ export default function RegisterPage() {
     }[] = [];
     const autoPairs: { eventName: string; partnerName: string }[] = [];
 
-    // ─── Process withdrawals first. Soft-delete the user's reg and
-    //     cancel any pending outbound partner_invites for that event
-    //     so the would-be partner doesn't keep seeing an invite from
-    //     someone who's no longer registered. (Confirmed partners
-    //     get notified in commit C; for now they silently become
-    //     solo and can pick a new partner from the tournament page.)
+    // ─── Process withdrawals first via withdraw_self — the SAME path as
+    //     My Tournaments' Withdraw, so a PAID reg becomes 'withdrawn' with
+    //     its policy refund snapshotted (the player can then "Request refund"
+    //     on My Tournaments) and a pending reg becomes 'cancelled'. We used
+    //     to soft-delete here, which silently dropped the reg with no refund
+    //     path. withdraw_self also unpairs the doubles partner; we still
+    //     cancel any pending OUTBOUND invite below (the RPC doesn't).
     for (const ev of withdrawnEvents) {
       const existing = existingRegs.get(ev.id);
       if (!existing) continue; // defensive
-      const { error: delErr } = await supabase
-        .from("event_registrations")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", existing.regId);
-      if (delErr) {
+      const { error: wErr } = await supabase.rpc("withdraw_self", {
+        p_reg_id: existing.regId,
+      });
+      if (wErr) {
         setError(
-          `Failed to withdraw from "${ev.name}": ${delErr.message}`,
+          `Failed to withdraw from "${ev.name}": ${wErr.message}`,
         );
         setPhase("form");
         return;
@@ -1752,7 +1799,8 @@ function EventRow({
 
   // Visual treatment derived from existing-reg + diff state.
   // "added"           → blue border, "Will register" pill
-  // "withdrawn"       → red border + tint, "Will withdraw" pill + warning
+  // "withdrawn"       → amber border + tint, "Will withdraw" pill (caution, not
+  //                     an error — red is reserved for actual error messages)
   // "partner_changed" → amber border + tint, "Partner change" pill
   // "unchanged" + existing → green tint, "Registered" pill
   // "unchanged" + new      → plain (default)
@@ -1762,7 +1810,7 @@ function EventRow({
   const isPartnerChanged = change === "partner_changed";
 
   const borderColor = isWillWithdraw
-    ? "#fca5a5"
+    ? "#fbbf24"
     : isWillAdd
       ? "#2563eb"
       : isPartnerChanged
@@ -1773,48 +1821,95 @@ function EventRow({
             ? "#2563eb"
             : "#e5e7eb";
   const bg = isWillWithdraw
-    ? "#fef2f2"
+    ? "#fffbeb"
     : isPartnerChanged
       ? "#fffbeb"
       : isExistingChecked
         ? "#f0fdf4"
         : "#fff";
 
-  // PartnerSearch widget renders for any selected doubles event —
-  // new registration OR existing one. For existing regs, the
-  // selection.partner was pre-filled with the current partner in
-  // "existing" mode by the page-level init, so the widget shows
-  // them already-picked with a × clear button. The user can swap
-  // partners by clearing + picking someone else; the diff handles
-  // detection and onSubmit's partner_changed branch handles the
-  // cancel-old-invite + email side effects.
+  // Affordances (issues #2–#4): registered events read as managed cards
+  // with explicit Change-partner / Unregister buttons, and unregistered
+  // events get an explicit Register button instead of a checkbox. The
+  // staged-diff model underneath is unchanged — the buttons just call
+  // onChange({ selected }) and toggle the partner editor; the bottom bar
+  // still confirms everything at once.
+  const [editingPartner, setEditingPartner] = useState(false);
+  const hasPartner = !!existing?.partnerLabel;
+
+  // The current partner as a PlayerSelection, so "Cancel" on a change can
+  // revert to it (mirrors the page-level init).
+  const originalPartnerSelection: PlayerSelection =
+    existing?.partner && event.format === "doubles"
+      ? {
+          mode: "existing",
+          player: existing.partner as unknown as Player,
+          emailDraft: existing.partner.email ?? "",
+          phoneDraft: existing.partner.phone ?? "",
+        }
+      : emptySelection;
+
+  // Show the partner search for: a new doubles add (must pick), an existing
+  // reg with no partner yet, a staged partner change, or after the user
+  // taps "Change partner". An existing reg WITH a partner stays collapsed
+  // until then (issue #2).
   const showPartnerEditor =
-    event.format === "doubles" && selection.selected;
+    event.format === "doubles" &&
+    selection.selected &&
+    !isWillWithdraw &&
+    (isWillAdd ||
+      isPartnerChanged ||
+      editingPartner ||
+      (isExistingChecked && !hasPartner));
+
+  const cancelPartnerEdit = () => {
+    onChange({ partner: originalPartnerSelection });
+    setEditingPartner(false);
+  };
+
+  const btnBase: CSSProperties = {
+    border: "1px solid #d6d3d1",
+    background: "#fff",
+    color: "#1f2937",
+    borderRadius: 8,
+    padding: "8px 14px",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+  };
+  // Caution (not error). Red is reserved for actual error messages; a staged
+  // withdraw/remove is amber, matching the "Pending changes" / partner-change
+  // styling.
+  const cautionBtn: CSSProperties = {
+    ...btnBase,
+    color: "#92400e",
+    borderColor: "#e7c9a3",
+    background: "#fffbeb",
+  };
+  const filledBtn: CSSProperties = {
+    ...btnBase,
+    background: "#1f2937",
+    color: "#fff",
+    border: "none",
+  };
 
   return (
-    <label
+    <div
       style={{
-        display: "block",
-        padding: 12,
+        padding: 14,
         background: bg,
         border: `1px solid ${borderColor}`,
-        borderRadius: 6,
-        cursor: disabled || isIneligible ? "not-allowed" : "pointer",
+        borderRadius: 8,
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <input
-          type="checkbox"
-          checked={selection.selected}
-          disabled={disabled || isIneligible}
-          onChange={(e) => onChange({ selected: e.target.checked })}
-          style={{ marginTop: 3 }}
-        />
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontWeight: 500,
-              fontSize: 14,
+              fontWeight: 600,
+              fontSize: 15,
               display: "flex",
               alignItems: "center",
               gap: 8,
@@ -1825,77 +1920,22 @@ function EventRow({
             {isExistingChecked && <Pill bg="#dcfce7" fg="#166534">Registered</Pill>}
             {isWillAdd && <Pill bg="#dbeafe" fg="#1e40af">Will register</Pill>}
             {isWillWithdraw && (
-              <Pill bg="#fee2e2" fg="#991b1b">Will withdraw</Pill>
+              <Pill bg="#fef3c7" fg="#7a5d00">Will withdraw</Pill>
             )}
             {isPartnerChanged && (
               <Pill bg="#fef3c7" fg="#7a5d00">Partner change</Pill>
             )}
           </div>
-          {/* Current partner reminder. For an unchanged existing reg
-              we show "Partnered with X" / "Waiting for X" in green.
-              For a partner_changed reg we show "Was: X" in amber so
-              the user can see what they're moving away from. */}
-          {existing &&
-            event.format === "doubles" &&
-            existing.partnerLabel &&
-            !isPartnerChanged && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: isWillWithdraw ? "#991b1b" : "#166534",
-                  marginTop: 4,
-                }}
-              >
-                {existing.partnerStatus === "pending"
-                  ? "Waiting for "
-                  : "Partnered with "}
-                <strong>{existing.partnerLabel}</strong>
-              </div>
-            )}
-          {isPartnerChanged && existing?.partnerLabel && (
-            <div
-              style={{
-                fontSize: 12,
-                color: "#7a5d00",
-                marginTop: 4,
-              }}
-            >
-              Was: <strong>{existing.partnerLabel}</strong>. They'll be
-              notified by email when you confirm.
-            </div>
-          )}
-          {isWillWithdraw && (
-            <div
-              style={{
-                fontSize: 12,
-                color: "#991b1b",
-                marginTop: 4,
-                lineHeight: 1.5,
-              }}
-            >
-              You'll be removed from this event.{" "}
-              {existing?.partnerLabel
-                ? `${existing.partnerLabel} won't be your partner anymore. `
-                : ""}
-              Re-check the box to keep your registration.
-            </div>
-          )}
+
           <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>
             {capitalize(event.format)} · {capitalize(event.gender)} ·{" "}
             {event.points_to_win} win by {event.win_by}
           </div>
-          {/* Per-row price + tier label, shown for any selected
-              event regardless of state (will-add, registered, or
-              partner-changed). Withdrawals hide the price — it
-              isn't going to be charged. */}
+
+          {/* Per-row price + tier label. Withdrawals hide it — nothing
+              to charge. */}
           {lineItem && !isWillWithdraw && lineItem.cents > 0 && (
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 12,
-                color: "#444",
-              }}
-            >
+            <div style={{ marginTop: 6, fontSize: 12, color: "#444" }}>
               <strong>{formatUsd(lineItem.cents)}</strong>{" "}
               <span style={{ color: "#888" }}>
                 (
@@ -1908,6 +1948,67 @@ function EventRow({
               </span>
             </div>
           )}
+
+          {/* Partner line for an unchanged existing reg (issue #1: now
+              resolves the invitee's partner too). */}
+          {existing &&
+            event.format === "doubles" &&
+            existing.partnerLabel &&
+            !isPartnerChanged &&
+            !isWillWithdraw && (
+              <div
+                style={{
+                  fontSize: 13,
+                  color: "#166534",
+                  marginTop: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span aria-hidden>✓</span>
+                {existing.partnerStatus === "pending" ? (
+                  <span>
+                    Waiting for <strong>{existing.partnerLabel}</strong>
+                  </span>
+                ) : (
+                  <span>
+                    Partner: <strong>{existing.partnerLabel}</strong> — accepted
+                  </span>
+                )}
+              </div>
+            )}
+          {/* Existing doubles reg with no partner yet. */}
+          {isExistingChecked &&
+            event.format === "doubles" &&
+            !existing?.partnerLabel &&
+            !showPartnerEditor && (
+              <div style={{ fontSize: 13, color: "#1e40af", marginTop: 8 }}>
+                No partner yet — add one below.
+              </div>
+            )}
+          {isPartnerChanged && existing?.partnerLabel && (
+            <div style={{ fontSize: 12, color: "#7a5d00", marginTop: 8 }}>
+              Was: <strong>{existing.partnerLabel}</strong>. They'll be
+              notified by email when you confirm.
+            </div>
+          )}
+          {isWillWithdraw && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#7a5d00",
+                marginTop: 8,
+                lineHeight: 1.5,
+              }}
+            >
+              You'll be removed from this event.{" "}
+              {existing?.partnerLabel
+                ? `${existing.partnerLabel} won't be your partner anymore. `
+                : ""}
+            </div>
+          )}
+
           {chips.length > 0 && (
             <div
               style={{
@@ -1935,12 +2036,74 @@ function EventRow({
             </div>
           )}
           {isIneligible && (
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 6 }}>
               Not eligible: {ineligibleReasons!.join("; ")}
             </div>
           )}
         </div>
+
+        {/* Right-side primary action for the un-staged states (issue #4:
+            an explicit Register button, not a checkbox). */}
+        <div style={{ flexShrink: 0 }}>
+          {!isIneligible && !existing && !selection.selected && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ selected: true })}
+              style={filledBtn}
+            >
+              + Register
+            </button>
+          )}
+          {isWillAdd && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ selected: false })}
+              style={cautionBtn}
+            >
+              Remove
+            </button>
+          )}
+          {isWillWithdraw && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange({ selected: true })}
+              style={filledBtn}
+            >
+              Keep
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Manage actions for a registered (unchanged) event (issues #2/#3). */}
+      {isExistingChecked && (
+        <div
+          style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}
+        >
+          {event.format === "doubles" && hasPartner && !showPartnerEditor && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => setEditingPartner(true)}
+              style={btnBase}
+            >
+              Change partner
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange({ selected: false })}
+            style={cautionBtn}
+          >
+            Unregister
+          </button>
+        </div>
+      )}
+
       {showPartnerEditor && (
         <div
           style={{
@@ -1951,23 +2114,40 @@ function EventRow({
             flexDirection: "column",
             gap: 8,
           }}
-          // Picker dropdown opens on focus; clicking it shouldn't
-          // toggle the wrapping label's checkbox.
-          onClick={(e) => e.preventDefault()}
         >
           <div style={{ fontSize: 12, color: "#666" }}>
-            Your doubles partner. Search by name, email, or phone —
-            if they're not in the list yet, "Add new" to invite them.
-            They'll get an invite link to confirm.
+            Your doubles partner. Search by name, email, or phone — if
+            they're not in the list yet, "Add new" to invite them. They'll
+            get an invite link to confirm.
           </div>
           <PartnerSearch
             selection={selection.partner}
             onChange={(p) => onChange({ partner: p })}
             excludePlayerIds={excludePlayerIds}
           />
+          {/* Cancel a partner change on an existing reg — revert + collapse. */}
+          {isExistingChecked && (editingPartner || isPartnerChanged) && (
+            <button
+              type="button"
+              onClick={cancelPartnerEdit}
+              style={{
+                alignSelf: "flex-start",
+                background: "none",
+                border: "none",
+                color: "#6b7280",
+                fontSize: 12,
+                textDecoration: "underline",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                padding: 0,
+              }}
+            >
+              Cancel{hasPartner ? ` — keep ${existing!.partnerLabel}` : ""}
+            </button>
+          )}
         </div>
       )}
-    </label>
+    </div>
   );
 }
 

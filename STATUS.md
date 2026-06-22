@@ -9,6 +9,126 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Fix: paid-withdrawal crash (ambiguous payment_id) + de-red withdraw state (PR #435, TEST)
+
+**Money-path bug:** withdrawing a PAID reg failed with `column reference "payment_id" is
+ambiguous`. `refund_compute()` has an OUT column `payment_id` and its coupon-check subquery
+referenced an unqualified `payment_id` on `payment_line_items`. This broke `withdraw_self()`
+→ **all paid withdrawals** on BOTH paths (My Tournaments + register page); latent until #427
+routed register Unregister through `withdraw_self`. Fix = migration
+`20260622020000_refund_compute_fix_ambiguous.sql` (qualify `pli.payment_id`; body otherwise
+identical). Applied green on TEST (run 27927675615).
+
+**UX:** the staged "Will withdraw" state was red (read as an error). Red now reserved for
+actual error messages; withdraw state (card tint, pill, message) + Unregister/Remove buttons
+are amber (caution), matching Pending-changes / partner-change styling.
+
+Typecheck + build clean, no new lint.
+
+## 2026-06-21 — Fix: register Unregister now refundable (PR #427, TEST + migration)
+
+Triggered by "how do I request a refund after withdrawing?". Found a money-path bug: the
+register page's **Unregister** soft-deleted the reg (`deleted_at`), so a PAID withdrawal
+vanished from My Tournaments with **no refund path** — while My Tournaments' **Withdraw**
+uses `withdraw_self` (status `withdrawn` + entitled refund → "Request refund" → organizer
+approves). Converged them (Ron's pick): register Unregister now calls `withdraw_self`
+(paid→withdrawn, pending→cancelled; partner unpaired by RPC; outbound invite still
+cancelled). Companions: existing-reg load filters to active statuses (paid/pending_payment)
+so a withdrawn row doesn't reload as "Registered"; **migration**
+`20260622010000_event_regs_active_unique.sql` narrows the (event_id, player_id) partial
+unique index to active statuses so a withdrawn/cancelled row no longer blocks
+re-registration (duplicate-key) — both were latent for the My Tournaments path too. Applied
+green on TEST (run 27926642661). Refund flow reminder: **My Tournaments → Withdraw →
+Request refund → organizer approves → Refunded** (two-step; organizer is the gate).
+
+_Also: the Builder opened `feature/issue-422-printable-receipt` draining the receipt story._
+
+## 2026-06-21 — Feature: register "manage" view affordances + accepted partner (PR #423, TEST)
+
+Reworked the registration manage view (`RegisterPage.tsx`) per Ron's 4 points (mockup
+reviewed first; chose staged model + build all four):
+1. **Partner name blank after accepting an invite** — same RLS/invite-direction bug as
+   checkout: the linked-reg embed is RLS-blocked and only OUTBOUND invites were walked.
+   Added symmetric **inbound** accepted-invite resolution → "Partner: X — accepted".
+2. **Search shown when already partnered** → hidden; revealed only via "Change partner"
+   (with a Cancel that reverts the selection).
+3. **Unregister** is now an explicit button (stages withdrawal), not a buried checkbox.
+4. **Register** a new event is an explicit "+ Register" button, not a checkbox.
+Checkbox-in-a-label row → managed card; staged review-then-confirm engine untouched (buttons
+just call `onChange({selected})` / toggle a local editor). Pure frontend; typecheck+build
+clean, no new lint.
+
+🔜 Verify on TEST. Pile of unpromoted work now on `main` for one `main`→`production`
+promotion: post-login invites (#419), checkout accepted-partner fixes (#420/#421), and this
+register redesign (#423). Promote together once verified.
+
+## 2026-06-21 — Fix #2: checkout partner resolved via invites, not the reg (PR #421, TEST)
+
+PR #420 didn't actually fix it ("still the same"). It read the partner name from the
+partner's `event_registrations` row via `partner_registration_id`, but the event_regs
+SELECT policy is **own-rows-only** — the invitee can't read the inviter's reg, so the
+lookup returned nothing → still blocked. PR #421 resolves the partner through
+**`partner_invites`** instead (RLS-readable by both sender AND recipient), pulling invites
+in either direction (`pending`/`accepted`); partner = whichever side isn't me. Also made
+the doubles block **name-independent**: `partner_status='confirmed'` never blocks and
+shows "✓ Partner confirmed" if the name can't resolve. On TEST. (Lesson: the own-rows-only
+event_regs RLS means cross-player reg reads must go through a both-parties-readable table.)
+
+## 2026-06-21 — Fix: checkout blocked after accepting a partner invite (PR #420, on TEST)
+
+After accepting an invite, the invitee hit checkout and saw "⚠ No partner picked" with
+pay disabled. Cause: `accept_partner_invite` pairs both regs via `partner_registration_id`
+(`partner_status='confirmed'`), but checkout derived the partner label ONLY from the
+player's own OUTBOUND *pending* invites — the invitee has none → `partnerLabel` null → the
+doubles blocking check fired. Fix (`CheckoutPage.tsx`): resolve the confirmed partner's
+name from `partner_registration_id` and use it as the label fallback (covers invitee AND
+post-accept inviter, whose invite is no longer pending); confirmed pairings now read
+"✓ Partner: X — accepted". Pure frontend, no migration/RLS. Typecheck + build clean, no new
+lint. Affects PROD too (same code) — accepting an invite there blocks payment until shipped.
+
+🔜 **Next:** verify on TEST (accept an invite → checkout should allow pay, show the partner).
+Two unpromoted changes now sit on `main` awaiting a single `main`→`production` promotion:
+this checkout fix **and** the post-login invites feature (#419). Promote together once both
+are verified on test.
+
+## 2026-06-21 — Feature: surface pending partner invites after login (PR #419, on TEST)
+
+A pending partner invite now supersedes the tournament landing. On a genuine sign-in,
+a player with ≥1 pending invite is routed to a new **`/invites`** page (design + actions
+chosen with Ron: dedicated page, "Review invite" + inline Decline — not one-click accept).
+
+- `PartnerInviteOnboarding` (sibling to `ProfileOnboarding`): once per session, skips
+  reload restores; **profile nudge takes precedence** (does nothing if profile incomplete
+  → ProfileOnboarding sends to /profile first; invite surfaces next login).
+- `/invites` page reads the existing `PartnerInvitesContext` (no new fetch). Review →
+  existing `/t/:org/:tournament/invites/:token` accept flow; Decline → inline
+  `decline_partner_invite` RPC behind `ConfirmModal`, then `refresh()`. Empties → redirect
+  to My Tournaments. Global banner stays + now hides on `/invites`.
+- Context gained `inviteId` (decline RPC) + `tournamentName` (display). No migration / RLS /
+  money — pure frontend. Typecheck + build clean, no new lint.
+
+🔜 **Next:** Ron verifies on TEST (sign in as a user with a pending invite → should land on
+/invites). **Not promoted to prod** — awaiting that nod, then a `main`→`production`
+promotion ships the frontend to prod.
+
+## 2026-06-21 — Fix: profile save failed for orphan player records (PR #417 → prod #418)
+
+Saving a profile threw **"Cannot coerce the result to a single JSON object"** when the
+player row was an organizer-pre-created **orphan** (`auth_user_id IS NULL`). ProfilePage's
+claim path (`update players set auth_user_id = me … returning *`) hit the `players` UPDATE
+RLS policy, whose `USING` checked `auth_user_id = auth.uid()` against the **old** value
+(NULL) → 0 rows → PostgREST `.single()` coerce error. No auto-link trigger/claim function
+exists — the inline UPDATE *is* the claim path, and RLS silently blocked it.
+
+Fix (migration `20260621220000_players_claim_orphan_update.sql`): added a claim branch to
+the policy `USING` — an authenticated user may update an unlinked player row when its email
+matches their own JWT email (`lower(email) = lower(auth.jwt() ->> 'email')`). Implicit
+WITH CHECK still blocks reassigning a record to a different uid; self/org-staff edits
+unchanged. **Applied green on TEST (run 27925007421) and PROD (run 27925041505)** via the
+normal main→test, production→prod CI. Verify: as an orphan-record user, Save profile → links
+the record. (Also folded the already-deployed create-payment-intent fix into the
+`production` branch via promotion #418, reconciling the earlier hand-deploy.)
+
 ## 2026-06-21 — ✅ CONFIRMED end-to-end: a real test registration flipped to paid
 
 Closes the webhook thread below. After the signing-secret fix, Ron hit **Resend** on the
