@@ -9,6 +9,41 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Site Admin section split out from org picker (uncommitted, frontend-only)
+
+`/admin` mixed org-picking with platform tools (Create org / Platform settings / Quotes jammed
+in the header; "All players" wasn't even linked). Split into two clear areas:
+- **New `SiteAdminPage` at `/admin/site`** (platform-admin gated, RequireAuth) — a dashboard of
+  cards to the platform tools: All players, Organizations (create), Platform settings, Quotes.
+  Shows live player/org counts.
+- **`/admin` reworked into a crossroads** — for platform admins, heading "Admin" + one cream
+  "Site Admin →" card, then "Your organizations" + "Other organizations (admin override)". The
+  scattered platform buttons are gone (empty-state too). Non-admins unchanged (auto-redirect to
+  their single org).
+- Header keeps one "Admin" link → the crossroads (chosen over a separate Site Admin link).
+
+Frontend-only — no migration, no edge function, so only Cloudflare deploys on merge (CI
+migration/function workflows won't trigger). Typecheck + lint + build clean. Not browser-verified
+(gated; needs an authed platform-admin session — eyeball on test after merge). Closes #489.
+
+## 2026-06-22 — Admin player page self-ratings + hide-avatar: SHIPPED to TEST (PR #487)
+
+Follow-up — no longer uncommitted. [PR #487](https://github.com/notronwest/tournament-manager/pull/487)
+(closes #488) merged to main (`bf79168`). CI on merge: migration
+`20260622110000_player_avatar_hidden` **applied to TEST** + both edge functions
+(`admin-get-player`, `admin-update-player`) **redeployed to TEST** — all green. Frontend →
+test.bertanderne.com via Cloudflare. **Next:** smoke-test on test (edit a rating; hide/show an
+avatar → pill flips + preview dims; confirm a non-admin can't flip `avatar_hidden`). PROD gets
+the same migration + function deploys automatically on `main`→`production` promotion. Reminder:
+hiding has no visible effect for other users until a public avatar surface lands and filters
+`where not avatar_hidden`.
+
+## 2026-06-22 — #488 board card recovered → In Review (PR #487)
+
+Builder orphan-recovery: card for #488 was stuck in "In Progress" even though PR #487 was already open and correctly closes #488. Moved to **In Review**. Flagged in a PR comment that the PR bundles migration + 2 edge functions + UI (violates the never-bundle rule) — Ron's call to accept as-is or request a split.
+
+**Next:** Ron reviews PR #487; if accepted, merges → CI auto-applies migration + redeploys both edge functions to TEST → smoke-test on test.bertanderne.com.
+
 ## 2026-06-22 — Admin player page: self-ratings + hide-avatar moderation (uncommitted)
 
 Two adds to the `/admin/players/:playerId` page:
