@@ -9,6 +9,24 @@ export const SEED = {
   playerEmail: "e2e-player@wmpc.test",
   partnerName: "Pat Partner", // the picked partner on the seeded pending reg
   doublesEventName: "E2E Mixed Doubles 3.5",
+  // Registration flows (#253) — each its own single-event tournament so the
+  // Register tab shows exactly one card.
+  existingPartner: {
+    tournamentSlug: "e2e-existing-partner",
+    registrantEmail: "e2e-organizer@wmpc.test", // Olive
+    partnerQuery: "Pat", // searches for the existing partner Pat
+  },
+  newPartner: {
+    tournamentSlug: "e2e-new-partner",
+    registrantEmail: "e2e-rex@wmpc.test", // Rex
+    first: "Nina",
+    last: "Newcomer",
+    email: "e2e-newpartner@wmpc.test",
+  },
+  seeker: {
+    tournamentSlug: "e2e-seeker",
+    registrantEmail: "e2e-sam@wmpc.test", // Sam
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";
