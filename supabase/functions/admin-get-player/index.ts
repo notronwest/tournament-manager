@@ -79,7 +79,9 @@ Deno.serve(async (req: Request) => {
   const { data: player, error: playerErr } = await admin
     .from("players")
     .select(
-      "id, first_name, last_name, email, phone, gender, city, state, dob, auth_user_id, created_at",
+      "id, first_name, last_name, email, phone, gender, city, state, dob, " +
+        "self_rating_doubles, self_rating_mixed, self_rating_singles, " +
+        "avatar_path, avatar_hidden, auth_user_id, created_at",
     )
     .eq("id", playerId)
     .is("deleted_at", null)
@@ -200,7 +202,17 @@ Deno.serve(async (req: Request) => {
     };
   });
 
-  return jsonResp({ ok: true, player, account, history });
+  // Public review URL for the avatar (the bucket is public-read). Admins
+  // need to SEE the image to decide whether to hide it — so we return it
+  // regardless of avatar_hidden.
+  const avatarUrl = player.avatar_path
+    ? `${supabaseUrl}/storage/v1/object/public/avatars/${player.avatar_path
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}`
+    : null;
+
+  return jsonResp({ ok: true, player, account, history, avatarUrl });
 });
 
 function jsonResp(body: unknown, status = 200): Response {

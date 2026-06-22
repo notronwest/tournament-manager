@@ -42,6 +42,10 @@ type ProfilePatch = {
   city?: string;
   state?: string;
   contactEmail?: string;
+  // Self-reported skill ratings (numeric(4,2), 0–9.99). null clears.
+  ratingDoubles?: number | null;
+  ratingMixed?: number | null;
+  ratingSingles?: number | null;
 };
 type PasswordAction =
   | { type: "send_reset_email"; redirectTo?: string }
@@ -51,6 +55,9 @@ type Body = {
   profile?: ProfilePatch;
   loginEmail?: string;
   passwordAction?: PasswordAction;
+  // Moderation: hide/show the player's avatar (guarded so only this
+  // service_role path can change players.avatar_hidden).
+  avatarHidden?: boolean;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -110,8 +117,15 @@ Deno.serve(async (req: Request) => {
   const loginEmail =
     body.loginEmail !== undefined ? body.loginEmail.trim() : undefined;
   const passwordAction = body.passwordAction;
+  const avatarHidden =
+    typeof body.avatarHidden === "boolean" ? body.avatarHidden : undefined;
 
-  if (!profile && loginEmail === undefined && !passwordAction) {
+  if (
+    !profile &&
+    loginEmail === undefined &&
+    !passwordAction &&
+    avatarHidden === undefined
+  ) {
     return jsonResp({ error: "Nothing to update." }, 400);
   }
 
@@ -174,6 +188,25 @@ Deno.serve(async (req: Request) => {
       patch.email = v || null;
     }
 
+    // Self-ratings: numeric(4,2), clamp to [0, 9.99]; null clears.
+    const ratingCols: [keyof ProfilePatch, string][] = [
+      ["ratingDoubles", "self_rating_doubles"],
+      ["ratingMixed", "self_rating_mixed"],
+      ["ratingSingles", "self_rating_singles"],
+    ];
+    for (const [key, col] of ratingCols) {
+      const raw = profile[key];
+      if (raw === undefined) continue;
+      if (raw === null) {
+        patch[col] = null;
+        continue;
+      }
+      if (typeof raw !== "number" || Number.isNaN(raw)) {
+        return jsonResp({ error: `${col} must be a number or null.` }, 400);
+      }
+      patch[col] = Math.min(9.99, Math.max(0, raw));
+    }
+
     if (Object.keys(patch).length > 0) {
       const { error: updErr } = await admin
         .from("players")
@@ -185,6 +218,20 @@ Deno.serve(async (req: Request) => {
           500,
         );
       }
+    }
+  }
+
+  // ── Avatar moderation (hide / show) ─────────────────────────────
+  if (avatarHidden !== undefined) {
+    const { error: avErr } = await admin
+      .from("players")
+      .update({ avatar_hidden: avatarHidden })
+      .eq("id", playerId);
+    if (avErr) {
+      return jsonResp(
+        { error: `Failed to update image visibility: ${avErr.message}` },
+        500,
+      );
     }
   }
 

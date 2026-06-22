@@ -39,6 +39,11 @@ type PlayerProfile = {
   city: string | null;
   state: string | null;
   dob: string | null;
+  self_rating_doubles: number | null;
+  self_rating_mixed: number | null;
+  self_rating_singles: number | null;
+  avatar_path: string | null;
+  avatar_hidden: boolean;
   auth_user_id: string | null;
   created_at: string;
 };
@@ -71,6 +76,7 @@ type GetPlayerResponse = {
   player: PlayerProfile;
   account: Account | null;
   history: HistoryRow[];
+  avatarUrl: string | null;
   error?: string;
 };
 
@@ -87,6 +93,17 @@ async function fnError(fnErr: unknown): Promise<string> {
     // keep the generic message
   }
   return message;
+}
+
+// Mirror ProfilePage.parseRating: blank → null, clamp to [0, 9.99].
+function parseRating(s: string): number | null {
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  const n = parseFloat(trimmed);
+  if (Number.isNaN(n)) return null;
+  if (n < 0) return 0;
+  if (n > 9.99) return 9.99;
+  return n;
 }
 
 const fmtDate = (iso: string | null) =>
@@ -118,6 +135,7 @@ export default function PlayerDetailPage() {
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!playerId) return;
@@ -139,6 +157,7 @@ export default function PlayerDetailPage() {
     setPlayer(res.player);
     setAccount(res.account);
     setHistory(res.history ?? []);
+    setAvatarUrl(res.avatarUrl ?? null);
   }, [playerId]);
 
   useEffect(() => {
@@ -199,6 +218,12 @@ export default function PlayerDetailPage() {
               remounts these and their local form state resets cleanly
               (no reset-in-effect needed). */}
           <ProfileSection key={`p-${player.id}`} player={player} onSaved={setPlayer} />
+          <ImageSection
+            key={`i-${player.id}`}
+            player={player}
+            avatarUrl={avatarUrl}
+            onChanged={load}
+          />
           <AccountSection
             key={`a-${player.id}`}
             player={player}
@@ -228,6 +253,10 @@ function ProfileSection({
   const [gender, setGender] = useState<Gender | "">(player.gender ?? "");
   const [city, setCity] = useState(player.city ?? "");
   const [state, setState] = useState(player.state ?? "");
+  const ratingStr = (n: number | null) => (n != null ? String(n) : "");
+  const [ratingDoubles, setRatingDoubles] = useState(ratingStr(player.self_rating_doubles));
+  const [ratingMixed, setRatingMixed] = useState(ratingStr(player.self_rating_mixed));
+  const [ratingSingles, setRatingSingles] = useState(ratingStr(player.self_rating_singles));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -239,7 +268,10 @@ function ProfileSection({
     phone !== (player.phone ?? "") ||
     gender !== (player.gender ?? "") ||
     city !== (player.city ?? "") ||
-    state !== (player.state ?? "");
+    state !== (player.state ?? "") ||
+    ratingDoubles !== ratingStr(player.self_rating_doubles) ||
+    ratingMixed !== ratingStr(player.self_rating_mixed) ||
+    ratingSingles !== ratingStr(player.self_rating_singles);
 
   const save = async () => {
     setSaving(true);
@@ -258,6 +290,9 @@ function ProfileSection({
             gender: gender === "" ? null : gender,
             city,
             state,
+            ratingDoubles: parseRating(ratingDoubles),
+            ratingMixed: parseRating(ratingMixed),
+            ratingSingles: parseRating(ratingSingles),
           },
         },
       },
@@ -281,6 +316,9 @@ function ProfileSection({
       gender: gender === "" ? null : gender,
       city: city.trim() || null,
       state: state.trim() || null,
+      self_rating_doubles: parseRating(ratingDoubles),
+      self_rating_mixed: parseRating(ratingMixed),
+      self_rating_singles: parseRating(ratingSingles),
     });
   };
 
@@ -316,6 +354,27 @@ function ProfileSection({
         </Field>
         <Field label="State">
           <input value={state} onChange={(e) => { setState(e.target.value); setSaved(false); }} style={fieldInput} />
+        </Field>
+      </div>
+
+      <div style={{ fontSize: 12, fontWeight: 600, color: ink, margin: "20px 0 8px" }}>
+        Self-reported ratings{" "}
+        <span style={{ fontWeight: 400, color: inkMuted }}>
+          (0–9.99 · used for bracket eligibility)
+        </span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+        <Field label="Doubles (same-gender)">
+          <input type="number" step="0.01" min="0" max="9.99" placeholder="e.g. 3.5"
+            value={ratingDoubles} onChange={(e) => { setRatingDoubles(e.target.value); setSaved(false); }} style={fieldInput} />
+        </Field>
+        <Field label="Mixed doubles">
+          <input type="number" step="0.01" min="0" max="9.99" placeholder="e.g. 3.5"
+            value={ratingMixed} onChange={(e) => { setRatingMixed(e.target.value); setSaved(false); }} style={fieldInput} />
+        </Field>
+        <Field label="Singles">
+          <input type="number" step="0.01" min="0" max="9.99" placeholder="e.g. 3.0"
+            value={ratingSingles} onChange={(e) => { setRatingSingles(e.target.value); setSaved(false); }} style={fieldInput} />
         </Field>
       </div>
 
@@ -569,6 +628,118 @@ function AccountSection({
   );
 }
 
+// ─── Profile image moderation (hide / show) ───────────────────────────────────
+
+function ImageSection({
+  player,
+  avatarUrl,
+  onChanged,
+}: {
+  player: PlayerProfile;
+  avatarUrl: string | null;
+  onChanged: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hidden = player.avatar_hidden;
+
+  const toggle = async () => {
+    setBusy(true);
+    setError(null);
+    const { data, error: fnErr } = await supabase.functions.invoke(
+      "admin-update-player",
+      { body: { playerId: player.id, avatarHidden: !hidden } },
+    );
+    setBusy(false);
+    if (fnErr) {
+      setError(await fnError(fnErr));
+      return;
+    }
+    if (data && !(data as { ok?: boolean }).ok) {
+      setError((data as { error?: string }).error ?? "Failed.");
+      return;
+    }
+    await onChanged();
+  };
+
+  return (
+    <Section title="Profile image">
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div
+          style={{
+            position: "relative",
+            width: 96,
+            height: 96,
+            borderRadius: "50%",
+            overflow: "hidden",
+            background: bg,
+            border: `1px solid ${rule}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={`${player.first_name} ${player.last_name}`}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                // Dim a hidden image so the admin sees it's suppressed,
+                // while still being able to review it.
+                filter: hidden ? "grayscale(1) opacity(0.5)" : undefined,
+              }}
+            />
+          ) : (
+            <span style={{ fontSize: 22, fontWeight: 600, color: inkMuted }}>
+              {(player.first_name[0] ?? "") + (player.last_name[0] ?? "")}
+            </span>
+          )}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          {!avatarUrl ? (
+            <p style={{ fontSize: 13, color: inkSoft, margin: 0 }}>
+              No profile image uploaded — other viewers see the initials
+              placeholder.
+            </p>
+          ) : (
+            <>
+              <div style={{ marginBottom: 8 }}>
+                {hidden ? (
+                  <span style={{ ...pillBase, background: warnBg, color: warnFg }}>
+                    Hidden from other viewers
+                  </span>
+                ) : (
+                  <span style={{ ...pillBase, background: successBg, color: successFg }}>
+                    Visible
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: 12.5, color: inkSoft, margin: "0 0 10px", maxWidth: 520 }}>
+                Hiding keeps the image on file (so you can review it here) but
+                makes avatar surfaces fall back to the initials placeholder for
+                everyone else. Reversible.
+              </p>
+              <button
+                onClick={toggle}
+                disabled={busy}
+                style={busy ? { ...ctaSecondaryStyle, opacity: 0.5, cursor: "not-allowed" } : ctaSecondaryStyle}
+              >
+                {busy ? "Working…" : hidden ? "Show image" : "Hide image"}
+              </button>
+            </>
+          )}
+          {error && <div style={{ ...statusPanelStyle("danger"), marginTop: 10 }}>{error}</div>}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 // ─── Tournament history ───────────────────────────────────────────────────────
 
 function HistorySection({ history }: { history: HistoryRow[] }) {
@@ -674,6 +845,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const fieldInput = { ...inputStyle, width: 220 };
+
+const pillBase = {
+  display: "inline-block",
+  padding: "2px 10px",
+  borderRadius: 10,
+  fontSize: 11,
+  fontWeight: 600,
+};
 
 const thStyle = {
   padding: "10px 14px",
