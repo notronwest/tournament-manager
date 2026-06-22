@@ -18,11 +18,16 @@ test.describe("#9 confirm before dropping a partner", () => {
   // (add the HTML reporter or run locally with the E2E secrets) to see whether
   // the card renders "Register" instead — likely a reg↔player_id / RLS-read gap
   // in the seed, not the spec.
-  test.fixme(
+  test(
     "Path 2 — cancelling a pending registration pops a confirm step",
     async ({ page }) => {
       await loginAs(page, SEED.playerEmail);
       await page.goto(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}`);
+
+      // DIAGNOSTIC: confirm the event card renders + capture state before the
+      // (currently failing) cancel-button lookup, so the failure screenshot
+      // shows whether the card is in pending vs register state.
+      await expect(page.getByText(SEED.doublesEventName)).toBeVisible();
 
       // The pending card shows "Cancel Registration" (not "Register").
       await page.getByRole("button", { name: /cancel registration/i }).click();
