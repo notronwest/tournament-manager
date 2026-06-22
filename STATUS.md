@@ -9,6 +9,46 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Admin player page: self-ratings + hide-avatar moderation (uncommitted)
+
+Two adds to the `/admin/players/:playerId` page:
+1. **Self-reported ratings** now editable on the admin page (Doubles same-gender / Mixed /
+   Singles, the existing `self_rating_*` numeric(4,2) cols, clamp 0–9.99). Wired through
+   `admin-get-player` (returns them) + `admin-update-player` (profile patch).
+2. **Hide profile image** (moderation, reversible). New migration
+   `20260622110000_player_avatar_hidden.sql`: `players.avatar_hidden boolean default false`
+   **+ a guard trigger** so only `service_role` (the edge function) can flip it — a player
+   can't un-hide themselves via RLS. `admin-get-player` returns `avatar_path/avatar_hidden`
+   + a public `avatarUrl` so the admin can review the image; `admin-update-player` takes
+   `avatarHidden`. The page shows the avatar (dimmed when hidden) with a Hide/Show toggle.
+
+**Enforcement caveat:** NOTHING displays other players' avatars publicly today — PartnerSearch
+renders initials only; the image only shows on the player's own profile. So the flag is
+forward-looking: **when a public avatar surface lands (roster/partner cards showing photos),
+it must filter `where not avatar_hidden`.** Noted in the migration comment.
+
+Deploy model learned this session (saved to memory): **CI applies migrations + redeploys edge
+functions on merge** (main→TEST via `migrations.yml`/`edge-functions.yml`; production→PROD).
+**Do NOT hand-run `db push`/`functions deploy`.** So merging this PR auto-applies the migration
++ redeploys both functions to TEST. (CI does NOT delete removed functions — that's still manual.)
+
+Typecheck + lint + build clean. **Not browser-verified** (gated page + freshly-applied
+migration/functions). **Next:** after merge, smoke-test on test.bertanderne.com — edit a
+rating, hide/show an avatar; confirm a non-admin can't flip `avatar_hidden`.
+
+## 2026-06-22 — Platform-admin player management: SHIPPED to TEST (PR #486)
+
+Follow-up to the entry below — it's no longer uncommitted. Both edge functions
+(`admin-get-player`, `admin-update-player`) **deployed to TEST** (`mvkhdsauaqqjehxdnbuf`);
+`admin-update-player-email` **deleted on TEST**. Frontend **merged to main** (PR #486,
+merge `4afd18f`) → Cloudflare auto-deploys to test.bertanderne.com.
+**Next:** (1) smoke-test on test (open a player → set temp password → confirm history loads;
+first real E2E since the page is gated). (2) On PROD promotion, the prod project still needs
+`supabase functions deploy admin-get-player && supabase functions deploy admin-update-player
+&& supabase functions delete admin-update-player-email` (CLI is linked to prod, so no
+--project-ref there). (3) Ron's original reset-email problem is now self-serve — add/manage
+the missing test user from this page.
+
 ## 2026-06-22 — Platform-admin player management: detail page + reset password (uncommitted)
 
 Built a platform-admin **player detail / management page** at `/admin/players/:playerId`.
