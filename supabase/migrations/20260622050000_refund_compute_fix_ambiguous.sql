@@ -1,4 +1,7 @@
--- 20260622020000_refund_compute_fix_ambiguous.sql
+-- 20260622050000_refund_compute_fix_ambiguous.sql
+-- (Renumbered from 20260622020000 to stay AFTER the renumbered waitlists
+--  migration, since both define refund_compute() and this one is the fix that
+--  must win. CREATE OR REPLACE → re-applying to TEST is a no-op.)
 --
 -- Bug fix: withdrawing a PAID registration failed with
 --   "column reference \"payment_id\" is ambiguous"
