@@ -264,17 +264,25 @@ export default function CheckoutPage() {
       return;
     }
 
-    // Pull outbound pending invites for these events so we can
-    // surface partner display + know which invite_id to email at
-    // pay-time.
+    // Resolve each doubles reg's partner via partner_invites — readable by
+    // BOTH parties (sender or recipient), unlike the partner's
+    // event_registrations row (own-rows-only RLS, so the invitee can't read
+    // the inviter's reg). We pull invites in EITHER direction, pending OR
+    // accepted, and the partner is simply whichever side of the invite isn't
+    // me. This covers:
+    //   * outbound pending (I invited, not yet accepted) → partner = invitee,
+    //     and we keep the invite id for the deferred pay-time email.
+    //   * accepted, either direction (they accepted my invite, OR I accepted
+    //     theirs) → partner = the other party; partner_status is 'confirmed'.
     const { data: invites } = await supabase
       .from("partner_invites")
       .select(
-        `id, event_id, invitee_email,
+        `id, event_id, status, inviter_player_id, invitee_email,
+         inviter:players!inviter_player_id (first_name, last_name),
          invitee:players!invitee_player_id (first_name, last_name, email)`,
       )
-      .eq("inviter_player_id", me.id)
-      .eq("status", "pending")
+      .or(`inviter_player_id.eq.${me.id},invitee_player_id.eq.${me.id}`)
+      .in("status", ["pending", "accepted"])
       .in(
         "event_id",
         mine.map((r) => r.event_id),
@@ -282,64 +290,41 @@ export default function CheckoutPage() {
     type InviteRow = {
       id: string;
       event_id: string;
+      status: string;
+      inviter_player_id: string;
       invitee_email: string | null;
+      inviter: { first_name: string; last_name: string } | null;
       invitee: {
         first_name: string;
         last_name: string;
         email: string | null;
       } | null;
     };
+    // At most one relevant invite per event; prefer an accepted one.
     const inviteByEvent = new Map<string, InviteRow>();
     for (const inv of (invites ?? []) as unknown as InviteRow[]) {
-      // If somehow multiple invites exist for the same event,
-      // newest-first ordering would matter — we didn't order
-      // explicitly, but for an inviter+event+pending tuple there
-      // should normally be at most one row.
-      inviteByEvent.set(inv.event_id, inv);
-    }
-
-    // Resolve the CONFIRMED partner for paired regs. accept_partner_invite
-    // links both sides via partner_registration_id (partner_status =
-    // 'confirmed'), so once an invite is accepted neither side has a *pending*
-    // outbound invite anymore — the partner name must come from the linked
-    // registration instead. Without this, an invitee (or a post-accept
-    // inviter) shows no partner and gets blocked from paying. (#— partner
-    // accepted but checkout said "No partner picked".)
-    const partnerRegIds = mine
-      .map((r) => r.partner_registration_id)
-      .filter((id): id is string => !!id);
-    const partnerNameByRegId = new Map<string, string>();
-    if (partnerRegIds.length > 0) {
-      const { data: partnerRegs } = await supabase
-        .from("event_registrations")
-        .select(`id, player:players!player_id (first_name, last_name)`)
-        .in("id", partnerRegIds);
-      type PartnerReg = {
-        id: string;
-        player: { first_name: string; last_name: string } | null;
-      };
-      for (const pr of (partnerRegs ?? []) as unknown as PartnerReg[]) {
-        if (pr.player) {
-          partnerNameByRegId.set(
-            pr.id,
-            `${pr.player.first_name} ${pr.player.last_name}`,
-          );
-        }
+      const existing = inviteByEvent.get(inv.event_id);
+      if (
+        !existing ||
+        (existing.status !== "accepted" && inv.status === "accepted")
+      ) {
+        inviteByEvent.set(inv.event_id, inv);
       }
     }
 
     const built: PendingRow[] = mine.map((r) => {
       const inv = inviteByEvent.get(r.event_id);
-      // Prefer the pending-invite label (pre-accept, inviter side); fall back
-      // to the confirmed partner linked via partner_registration_id (either
-      // side, post-accept).
-      const confirmedPartner = r.partner_registration_id
-        ? partnerNameByRegId.get(r.partner_registration_id) ?? null
-        : null;
-      const partnerLabel = inv?.invitee
-        ? `${inv.invitee.first_name} ${inv.invitee.last_name}`
-        : inv?.invitee_email ?? confirmedPartner;
-      const partnerEmail = inv?.invitee?.email ?? inv?.invitee_email ?? null;
+      const iAmInviter = inv?.inviter_player_id === me.id;
+      // Partner = the side of the invite that isn't me.
+      const partnerPlayer = inv ? (iAmInviter ? inv.invitee : inv.inviter) : null;
+      const partnerLabel = partnerPlayer
+        ? `${partnerPlayer.first_name} ${partnerPlayer.last_name}`
+        : // outbound invite addressed to an email with no player record yet
+          iAmInviter
+          ? inv?.invitee_email ?? null
+          : null;
+      const partnerEmail =
+        (iAmInviter ? inv?.invitee?.email ?? inv?.invitee_email : null) ?? null;
       return {
         regId: r.id,
         eventId: r.event_id,
@@ -347,7 +332,9 @@ export default function CheckoutPage() {
         format: r.event?.format ?? "singles",
         partner_status: r.partner_status,
         eventFeeCentsOverride: r.event?.event_fee_cents ?? 0,
-        inviteId: inv?.id ?? null,
+        // Keep the invite id only for an OUTBOUND PENDING invite (the deferred
+        // pay-time email path); once accepted there's nothing left to send.
+        inviteId: inv && iAmInviter && inv.status === "pending" ? inv.id : null,
         partnerLabel,
         partnerEmail,
       };
@@ -415,6 +402,9 @@ export default function CheckoutPage() {
     (r) =>
       r.format === "doubles" &&
       r.partner_status !== "seeking" &&
+      // a confirmed pairing always has a partner — never block it, even if
+      // we couldn't resolve the partner's display name
+      r.partner_status !== "confirmed" &&
       !r.partnerLabel,
   );
 
@@ -773,18 +763,30 @@ export default function CheckoutPage() {
                   Looking for a partner — we'll help you match. You can add one anytime before the event.
                 </div>
               )}
-              {r.format === "doubles" && !r.partnerLabel && r.partner_status !== "seeking" && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: courtRed,
-                    marginTop: 10,
-                  }}
-                >
-                  ⚠ No partner picked. Go back to the tournament page
-                  and cancel + re-register this event with a partner.
-                </div>
-              )}
+              {r.format === "doubles" &&
+                r.partner_status === "confirmed" &&
+                !r.partnerLabel && (
+                  <div
+                    style={{ fontSize: 12, color: courtGreen, marginTop: 10 }}
+                  >
+                    ✓ Partner confirmed
+                  </div>
+                )}
+              {r.format === "doubles" &&
+                !r.partnerLabel &&
+                r.partner_status !== "seeking" &&
+                r.partner_status !== "confirmed" && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: courtRed,
+                      marginTop: 10,
+                    }}
+                  >
+                    ⚠ No partner picked. Go back to the tournament page
+                    and cancel + re-register this event with a partner.
+                  </div>
+                )}
             </div>
           ))}
           <div
