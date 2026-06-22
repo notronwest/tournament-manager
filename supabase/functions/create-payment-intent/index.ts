@@ -93,9 +93,9 @@ Deno.serve(async (req: Request) => {
 
     // @ts-expect-error to-one join shape
     const org = tournament.organizations;
-    if (!org?.stripe_account_id || org.stripe_account_status !== "active") {
-      return json({ error: "org_stripe_not_active" }, 409);
-    }
+    // NB: the org-Stripe-active check moved DOWN to the paid path only — a
+    // FREE ($0) registration needs no Stripe account, so an organizer who
+    // hasn't connected Stripe can still accept free registrations.
 
     // Map auth user → player id.
     const { data: player } = await admin
@@ -187,6 +187,13 @@ Deno.serve(async (req: Request) => {
       if (couponId) await admin.rpc("redeem_coupon", { p_coupon_id: couponId });
       await sendFreeInvites(admin, player.id, regIdsToCharge, baseUrl);
       return json({ confirmed: true, free: true }, 200);
+    }
+
+    // ── Paid path requires the organizer's Stripe Connect to be active ──
+    // (Checked here, not earlier, so the free path above is reachable for
+    // organizers who haven't connected Stripe.)
+    if (!org?.stripe_account_id || org.stripe_account_status !== "active") {
+      return json({ error: "org_stripe_not_active" }, 409);
     }
 
     // ── 4. Platform fee (Connect destination charge) ────────────────
