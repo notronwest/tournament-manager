@@ -15,6 +15,7 @@ import AdminIndexPage from "./pages/admin/AdminIndexPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
 import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
+import SiteAdminPage from "./pages/admin/SiteAdminPage";
 import PlayerDetailPage from "./pages/admin/PlayerDetailPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
@@ -287,6 +288,18 @@ export default function App() {
         element={
           <RequireAuth>
             <StripeOauthCallbackPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only Site Admin home (dashboard of platform tools).
+          Defined before the :orgSlug catch-all so "site" isn't treated as a
+          slug. The page double-gates on usePlatformAdmin. */}
+      <Route
+        path="/admin/site"
+        element={
+          <RequireAuth>
+            <SiteAdminPage />
           </RequireAuth>
         }
       />
