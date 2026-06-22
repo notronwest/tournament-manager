@@ -17,6 +17,9 @@ export default function PartnerInvitesBanner() {
 
   if (invites === null || invites.length === 0) return null;
   if (location.pathname === "/login") return null;
+  // Hide on the dedicated invites page and on the per-token accept pages —
+  // those already surface the invite in full.
+  if (location.pathname === "/invites") return null;
   if (location.pathname.includes("/invites/")) return null;
 
   return (

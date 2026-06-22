@@ -3,6 +3,7 @@ import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
 import { ProfileOnboarding } from "./auth/ProfileOnboarding";
+import { PartnerInviteOnboarding } from "./auth/PartnerInviteOnboarding";
 import FeedbackWidget from "./components/FeedbackWidget";
 import { RouteTracker, ConsentBanner } from "./components/AnalyticsConsent";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
@@ -45,6 +46,7 @@ import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import TournamentContactPage from "./pages/public/TournamentContactPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
+import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import ResetPasswordPage from "./pages/public/ResetPasswordPage";
 import AuthConfirmPage from "./pages/public/AuthConfirmPage";
@@ -74,6 +76,9 @@ export default function App() {
       <PartnerInvitesBanner />
       {/* Post-login nudge to finish an incomplete profile (soft; skippable). */}
       <ProfileOnboarding />
+      {/* Post-login surfacing of pending partner invites — routes to /invites
+          (after the profile nudge, which takes precedence). */}
+      <PartnerInviteOnboarding />
       <Routes>
         <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -93,6 +98,16 @@ export default function App() {
         element={
           <RequireAuth>
             <MyTournamentsPage />
+          </RequireAuth>
+        }
+      />
+      {/* Pending partner invites — post-login landing (and reachable from the
+          global banner). Auth required; reads the shared invites context. */}
+      <Route
+        path="/invites"
+        element={
+          <RequireAuth>
+            <PartnerInvitesPage />
           </RequireAuth>
         }
       />
