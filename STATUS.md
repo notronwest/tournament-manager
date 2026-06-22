@@ -9,6 +9,16 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Fix: join_waitlist ambiguous waitlist_position (PR #479)
+
+Joining the waitlist errored `column reference "waitlist_position" is ambiguous`. The
+function's OUT column `waitlist_position` collided with the table column in `max(waitlist_
+position)`. Qualified as `er.waitlist_position`. Migration `20260622080000`, validated on
+test (run 27970270494). NOTE: this is a RUNTIME error (only fires when the function is
+CALLED), so the `gh workflow run --ref` apply-validation doesn't catch it — need an RPC
+smoke test. Likely similar latent ambiguities in `promote_from_waitlist` /
+`waitlist_effective_position` (same waitlist_position OUT-vs-column pattern) — audit next.
+
 ## 2026-06-22 — Fix: join-waitlist 'event_not_full' (is_event_full counted paid only) (PR #477)
 
 Joining the waitlist errored "A spot just opened up — close this and register normally."
