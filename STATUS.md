@@ -9,6 +9,15 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Fix: join-waitlist 'event_not_full' (is_event_full counted paid only) (PR #477)
+
+Joining the waitlist errored "A spot just opened up — close this and register normally."
+`is_event_full` counted only `status='paid'`, so an event with all-forming (pending_payment)
+teams read as not-full server-side while the roster label + CTA counted them → mismatch →
+`join_waitlist` rejected. Fixed `is_event_full` to count ACTIVE teams (pending_payment + paid;
+doubles counted like the roster label). Migration `20260622070000`, validated on test
+(run 27969378234). Backend fix — live on test immediately (no frontend deploy needed).
+
 ## 2026-06-22 — Waitlists frontend: Join-waitlist CTA + free join (PR #475, TEST)
 
 Built the visible public flow on the validated backend: `PublicTournamentPage` event card →
