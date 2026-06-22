@@ -9,6 +9,32 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-22**
 
+## 2026-06-22 — Waitlist: "Leave waitlist" action (uncommitted)
+
+Waitlisted cards previously showed only "✓ On the waitlist" with no way out. Added a
+**Leave waitlist** button (danger-outline, next to the status) gated behind a ConfirmModal
+("Leave the waitlist? — you'll lose your place in line"; copy also warns that an invited
+partner's invite gets cancelled). Reuses the existing `onCancelPending` handler — a waitlisted
+reg is free, so no refund path is needed: it soft-deletes the reg (removing it from the queue;
+`promote_from_waitlist` filters `deleted_at is null`, and the position gap is harmless since
+promotion orders by position ASC) and cancels any outbound partner invite. Frontend only, no
+migration. Typechecks clean; lint unchanged (pre-existing errors only). Not browser-verified —
+the waitlisted card state needs a logged-in user on a full event's waitlist (seeded-data only).
+**Next:** commit both this and the badge fix below; consider browser-verifying on TEST data.
+
+## 2026-06-22 — Waitlist badge: render-layer guard for "looking for partner" (uncommitted)
+
+The PR #481 fix only flipped partner_status seeking→pending when a *registered* partner was
+picked (`resolvedPartnerId` set). A partner invited BY EMAIL creates no linked player row, so
+the reg stays 'seeking' and still showed the contradictory "Looking for partner" badge next to
+"Invited X" (e.g. John Jones / dilemo+john@gmail.com). Fixed at the render layer in
+`web/src/pages/public/PublicTournamentPage.tsx` (~L2304): badge now (a) reads "You're looking
+for a partner" — first-person, since it's the viewer's own status, not someone else's — and
+(b) is suppressed once `partnerLabel` is set, so it can't contradict the "Invited X" line.
+Typechecks clean; no data backfill needed (the `!partnerLabel` guard covers old seeking regs).
+**Next:** optionally extend the data-layer flip in the join_waitlist handler (~L1716) to also
+cover the email-invite case for stored-status consistency; commit + PR.
+
 ## 2026-06-22 — Waitlist UX: partner-status fix + 'what to expect' explainer (PR #481)
 
 (1) join_waitlist always sets partner_status='seeking', so a waitlist join WITH a picked
