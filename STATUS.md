@@ -9,6 +9,16 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — ✅ CONFIRMED end-to-end: a real test registration flipped to paid
+
+Closes the webhook thread below. After the signing-secret fix, Ron hit **Resend** on the
+failed `payment_intent.succeeded` in the Stripe sandbox → delivery returned 200, the
+registration flipped `pending_payment → paid`, and the partner invite fired. Full path
+(card → webhook → reg flip → invite) verified working on TEST. New test payments confirm
+automatically. Two follow-ups still open (see next entry): **prod** needs its own
+live-mode `whsec_` before go-live, and the CLAUDE.md "Stripe webhook setup" doc section
+is still unwritten.
+
 ## 2026-06-21 — ✅ RESOLVED: test payments now confirm (webhook signing-secret fix)
 
 Resolves the prior OPEN entry. **Root cause:** the Stripe **sandbox** webhook
