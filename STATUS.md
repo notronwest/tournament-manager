@@ -9,6 +9,18 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Fix #2: checkout partner resolved via invites, not the reg (PR #421, TEST)
+
+PR #420 didn't actually fix it ("still the same"). It read the partner name from the
+partner's `event_registrations` row via `partner_registration_id`, but the event_regs
+SELECT policy is **own-rows-only** — the invitee can't read the inviter's reg, so the
+lookup returned nothing → still blocked. PR #421 resolves the partner through
+**`partner_invites`** instead (RLS-readable by both sender AND recipient), pulling invites
+in either direction (`pending`/`accepted`); partner = whichever side isn't me. Also made
+the doubles block **name-independent**: `partner_status='confirmed'` never blocks and
+shows "✓ Partner confirmed" if the name can't resolve. On TEST. (Lesson: the own-rows-only
+event_regs RLS means cross-player reg reads must go through a both-parties-readable table.)
+
 ## 2026-06-21 — Fix: checkout blocked after accepting a partner invite (PR #420, on TEST)
 
 After accepting an invite, the invitee hit checkout and saw "⚠ No partner picked" with
