@@ -9,6 +9,26 @@ rebuilt to mockup 01 on shared publicTheme tokens. Foundation
 in place underneath.**
 Last updated: **2026-06-21**
 
+## 2026-06-21 — Feature: surface pending partner invites after login (PR #419, on TEST)
+
+A pending partner invite now supersedes the tournament landing. On a genuine sign-in,
+a player with ≥1 pending invite is routed to a new **`/invites`** page (design + actions
+chosen with Ron: dedicated page, "Review invite" + inline Decline — not one-click accept).
+
+- `PartnerInviteOnboarding` (sibling to `ProfileOnboarding`): once per session, skips
+  reload restores; **profile nudge takes precedence** (does nothing if profile incomplete
+  → ProfileOnboarding sends to /profile first; invite surfaces next login).
+- `/invites` page reads the existing `PartnerInvitesContext` (no new fetch). Review →
+  existing `/t/:org/:tournament/invites/:token` accept flow; Decline → inline
+  `decline_partner_invite` RPC behind `ConfirmModal`, then `refresh()`. Empties → redirect
+  to My Tournaments. Global banner stays + now hides on `/invites`.
+- Context gained `inviteId` (decline RPC) + `tournamentName` (display). No migration / RLS /
+  money — pure frontend. Typecheck + build clean, no new lint.
+
+🔜 **Next:** Ron verifies on TEST (sign in as a user with a pending invite → should land on
+/invites). **Not promoted to prod** — awaiting that nod, then a `main`→`production`
+promotion ships the frontend to prod.
+
 ## 2026-06-21 — Fix: profile save failed for orphan player records (PR #417 → prod #418)
 
 Saving a profile threw **"Cannot coerce the result to a single JSON object"** when the
