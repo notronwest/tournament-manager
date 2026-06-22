@@ -54,6 +54,35 @@ own domain and we verify the token client-side:
 | Production | `wducsjqyoksmluwfgjxc` |
 | Test | `mvkhdsauaqqjehxdnbuf` |
 
+## Shared visual tokens (keep in sync with `_shared/email-layout.ts`)
+
+All transactional emails sent via Resend use the same branded shell, implemented
+in `supabase/functions/_shared/email-layout.ts`. The auth templates here and that
+shared module share the same visual tokens — keep them in sync when either changes:
+
+| Token | Value | Used in |
+|---|---|---|
+| Page background | `#fafaf7` | `<body>` background |
+| Header band | `#14181f` | Dark wordmark band |
+| Card background | `#ffffff` | Inner card |
+| Card border | `#e3dec8` | Card `border` |
+| Heading color | `#14181f` | `<h1>` text |
+| Body text | `#4a5159` | Paragraph text |
+| Muted text | `#6b7280` | Secondary / footer text |
+| Link color | `#1e6cd6` | Inline links |
+| CTA button bg | `#14181f` | Primary button |
+| CTA button text | `#fafaf7` | Primary button label |
+| Logo URL | `https://bertanderne.com/email/logo@2x.png` | Header PNG |
+| Card max-width | `560px` | Wrapper `width` |
+
+### Convention for new transactional emails
+
+Any new Resend edge function should call `renderEmailHtml()` from
+`supabase/functions/_shared/email-layout.ts` instead of hand-rolling its own
+HTML shell. See that file's JSDoc for the full parameter signature.
+
+---
+
 ## Design notes
 
 - Palette follows `publicTheme.ts`: `#fafaf7` page background, `#ffffff`

@@ -28,6 +28,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -193,14 +194,15 @@ Deno.serve(async (req: Request) => {
       for (const p of byPlayer.values()) {
         const dollars = (p.totalCents / 100).toFixed(2);
         const plural = p.events.length > 1 ? "s" : "";
-        const html =
-          `<p>Hi ${escapeHtml(p.firstName ?? "there")},</p>` +
-          `<p><strong>${escapeHtml(t.name)}</strong> has been cancelled.</p>` +
-          `<p><strong>Reason:</strong> ${escapeHtml(reason)}</p>` +
-          `<p>You have been refunded <strong>$${dollars}</strong> for your registration${plural} ` +
-          `(${escapeHtml(p.events.join(", "))}). Refunds typically settle back to your original ` +
-          `payment method within 5–10 business days.</p>` +
-          `<p>We're sorry for the disruption.</p>`;
+        const html = renderEmailHtml({
+          heading: `${t.name} has been cancelled`,
+          bodyHtml: `<p style="margin:0 0 12px;font-size:15px;color:#4a5159;line-height:1.6;">Hi ${escapeHtml(p.firstName ?? "there")},</p>
+          <p style="margin:0 0 12px;font-size:15px;color:#4a5159;line-height:1.6;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+          <p style="margin:0;font-size:15px;color:#4a5159;line-height:1.6;">You have been refunded <strong>$${dollars}</strong> for your registration${plural}
+          (${escapeHtml(p.events.join(", "))}). Refunds typically settle back to your original
+          payment method within 5&ndash;10 business days.</p>`,
+          footer: `We're sorry for the disruption &mdash; bert &amp; erne tournaments.`,
+        });
         try {
           const er = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -232,14 +234,6 @@ Deno.serve(async (req: Request) => {
     return json({ error: "internal_error", detail: String((e as { message?: string })?.message ?? e) }, 500);
   }
 });
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {

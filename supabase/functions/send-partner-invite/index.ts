@@ -29,6 +29,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -149,13 +150,25 @@ Deno.serve(async (req: Request) => {
   const acceptUrl = `${baseUrl}/t/${inv.event.tournament.organization.slug}/${inv.event.tournament.slug}/invites/${inv.token}`;
 
   const subject = `${inviterName} wants you as their partner for ${eventName}`;
-  const html = renderHtml({
-    inviteeFirst,
-    inviterName,
-    eventName,
-    tournamentName,
-    orgName,
-    acceptUrl,
+  const html = renderEmailHtml({
+    headingLabel: "Partner invite",
+    heading: `Hi ${inviteeFirst} —`,
+    bodyHtml: `<p style="margin:0;font-size:15px;color:#4a5159;line-height:1.6;">
+      <strong>${escapeHtml(inviterName)}</strong> just registered for
+      <strong>${escapeHtml(eventName)}</strong> at
+      <strong>${escapeHtml(tournamentName)}</strong> and asked you to
+      be their doubles partner.
+    </p>`,
+    ctaLabel: "Accept the invite",
+    ctaUrl: acceptUrl,
+    postBodyHtml: `<p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
+      Button not working? Paste this URL into your browser:<br />
+      <span style="color:#1e6cd6;word-break:break-all;">${escapeHtml(acceptUrl)}</span>
+    </p>
+    <p style="margin:16px 0 0;font-size:13px;color:#6b7280;line-height:1.6;">
+      Nothing happens until you click the link above — if this looks like a mistake, you can safely ignore this email.
+    </p>`,
+    footer: `Sent by ${escapeHtml(orgName)} via bert &amp; erne tournaments.`,
   });
   const text = renderText({
     inviteeFirst,
@@ -199,44 +212,6 @@ function jsonResp(body: unknown, status = 200): Response {
   });
 }
 
-// Plain-string HTML keeps the function small — no template engine
-// dependency. Inline styles only (most email clients strip <style>
-// tags).
-function renderHtml(v: {
-  inviteeFirst: string;
-  inviterName: string;
-  eventName: string;
-  tournamentName: string;
-  orgName: string;
-  acceptUrl: string;
-}): string {
-  return `<!doctype html>
-<html><body style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; color: #222; max-width: 560px; margin: 0 auto; padding: 24px;">
-  <h2 style="margin: 0 0 16px; font-size: 20px;">Hi ${escapeHtml(v.inviteeFirst)} —</h2>
-  <p style="font-size: 15px; line-height: 1.5;">
-    <strong>${escapeHtml(v.inviterName)}</strong> just registered for
-    <strong>${escapeHtml(v.eventName)}</strong> at
-    <strong>${escapeHtml(v.tournamentName)}</strong> and asked you to
-    be their doubles partner.
-  </p>
-  <p style="margin: 24px 0;">
-    <a href="${v.acceptUrl}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500;">
-      Accept the invite
-    </a>
-  </p>
-  <p style="font-size: 13px; color: #666; line-height: 1.5;">
-    Or copy this link into a browser: <br>
-    <a href="${v.acceptUrl}" style="color: #2563eb; word-break: break-all;">${v.acceptUrl}</a>
-  </p>
-  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0;">
-  <p style="font-size: 12px; color: #888;">
-    Sent by ${escapeHtml(v.orgName)}. If this looks like a mistake,
-    you can ignore this email — nothing happens until you click the
-    link above.
-  </p>
-</body></html>`;
-}
-
 function renderText(v: {
   inviteeFirst: string;
   inviterName: string;
@@ -253,13 +228,4 @@ Accept the invite: ${v.acceptUrl}
 
 Sent by ${v.orgName}. If this looks like a mistake, you can ignore this email — nothing happens until you click the link above.
 `;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
