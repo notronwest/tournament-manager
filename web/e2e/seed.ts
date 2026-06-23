@@ -269,6 +269,20 @@ async function main() {
     "invite-accept invite",
   );
 
+  // 8. Self-service fixtures: my-tournaments view + withdraw. Two players with
+  //    pending regs on a dedicated event — Mona (read-only view) and Will (the
+  //    withdraw test cancels his; reset recreates it each run). Invites-view
+  //    reuses Ava's seeded inbound invite (invite-accept is skipped).
+  const selfT = await mkTournament("e2e-self-service", "E2E Self-Service Cup");
+  const selfE = await doublesEvent(selfT, "E2E Self Doubles");
+  await resetEvent(selfE);
+  const monaId = await ensurePlayer("e2e-mona@wmpc.test", "Mona", "Viewer");
+  const willId = await ensurePlayer("e2e-will@wmpc.test", "Will", "Withdraw");
+  await db.from("event_registrations").insert([
+    { event_id: selfE, player_id: monaId, status: "pending_payment", partner_status: "solo", event_fee_cents: 0 },
+    { event_id: selfE, player_id: willId, status: "pending_payment", partner_status: "solo", event_fee_cents: 0 },
+  ]);
+
   console.log("seed: e2e-test fixture ready");
 }
 

@@ -59,6 +59,14 @@ export const SEED = {
     inviteeEmail: "e2e-ava@wmpc.test", // Ava
     inviterName: "Ivan",
   },
+  selfService: {
+    tournamentName: "E2E Self-Service Cup",
+    viewerEmail: "e2e-mona@wmpc.test", // Mona — read-only view
+    withdrawEmail: "e2e-will@wmpc.test", // Will — withdraw test cancels his reg
+  },
+  invitesView: {
+    inviteeEmail: "e2e-ava@wmpc.test", // reuses Ava's seeded inbound invite
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";
