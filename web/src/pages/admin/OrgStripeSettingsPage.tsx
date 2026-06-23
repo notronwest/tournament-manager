@@ -205,18 +205,14 @@ export default function OrgStripeSettingsPage() {
             gap: 12,
           }}
         >
+          {/* Express (hosted onboarding via Account Links) is the only path:
+              Stripe deprecated OAuth for Standard Connect on new platforms, so
+              it can't be enabled in prod — exposing it was a dead end (it 500s
+              on the missing STRIPE_CONNECT_CLIENT_ID). */}
           <ConnectChoiceCard
-            title="Sign in with Stripe"
-            blurb="Quick if you already have a Stripe account. Authorize Tournament Manager, and your existing account becomes the destination for tournament payments — no re-entering business info."
-            cta={connecting ? "Opening Stripe…" : "Sign in with Stripe →"}
-            recommended
-            disabled={connecting}
-            onClick={() => void onConnect("oauth")}
-          />
-          <ConnectChoiceCard
-            title="Create a new Stripe account"
-            blurb="For organizations that don't have Stripe yet. We'll create one for you and walk through the basics (business name, bank info, identity verification) on Stripe's hosted onboarding."
-            cta={connecting ? "Opening Stripe…" : "Create a new account →"}
+            title="Connect your Stripe account"
+            blurb="We'll set up your organization's payout account through Stripe's hosted onboarding — business name, bank info, and identity verification. It takes a few minutes, and you can pause and resume."
+            cta={connecting ? "Opening Stripe…" : "Set up Stripe →"}
             disabled={connecting}
             onClick={() => void onConnect("express")}
           />
