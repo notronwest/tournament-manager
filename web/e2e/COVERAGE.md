@@ -18,19 +18,19 @@ row so the gap is visible.
 
 ## Summary (today)
 
-**9 green specs across 4 of ~12 journey areas.** Strong on the public player
-happy-path (auth login, discovery, doubles registration, cancel); **zero**
-coverage of payment, player self-service, and the entire organizer/admin surface
-— which is the bulk of the product. Roughly **1/3 of shippable journeys** at a
-happy-path level.
+**15 green specs across the public player surface.** Account/auth (incl. signup +
+reset), discovery, the full registration spread (doubles existing/new/seeker,
+singles, change-partner, cancel, discard-pick), all green. Remaining gaps:
+payment (💳 blocked on #255), player self-service, refunds, and the entire
+organizer/admin surface — the bulk of the product by journey count.
 
 | Area | Covered | Built, untested | Notes |
 |---|---|---|---|
-| Account & auth | 2 | 4 | signup/reset 📧 next |
+| Account & auth | 4 | 2 | login/out, signup, forgot-reset ✅ |
 | Public discovery | 3 | 2 | |
-| Registration (player) | 4 | 4 | singles, invite-accept, change-partner |
+| Registration (player) | 7 | 1 | invite-accept parked (profile-onboarding step) |
 | Checkout & payment | 0 | ~6 | 💳 all blocked on #255 |
-| My account / self-service | 0 | 3 | |
+| My account / self-service | 0 | 3 | next |
 | Refunds & change requests | 0 | 4 | 💳📧 |
 | Organizer — setup | 0 | ~10 | none |
 | Organizer — operations | 0 | ~8 | none |
@@ -45,8 +45,8 @@ happy-path level.
 |---|---|---|
 | Log in (email + password) | ✅ | `flows/auth.spec.ts` |
 | Log out | ✅ | `flows/auth.spec.ts` |
-| Create account (password signup → confirm) | ❌ 📧 | next — via `admin.generateLink` |
-| Forgot / reset password | ❌ 📧 | next — via `admin.generateLink` |
+| Create account (signup → confirm) | ✅ 📧 | `flows/auth-email.spec.ts` (generateLink) |
+| Forgot / reset password | ✅ 📧 | `flows/auth-email.spec.ts` (generateLink) |
 | Magic-link signup | ❌ 📧 | |
 | Google OAuth sign-in | ❌ | external provider — likely out of scope |
 | Complete / edit profile | ❌ | RequireProfile gate; avatar, ratings |
@@ -71,10 +71,10 @@ happy-path level.
 | Doubles — new partner | ✅ | `flows/registration.spec.ts` |
 | Doubles — "I need a partner" (seeker) | ✅ | `flows/registration.spec.ts` |
 | Cancel a pending registration | ✅ | `issue-09-confirm-cancel.spec.ts` (Path 2) |
-| Discard partner pick in the form | ❌ | `issue-09` Path 1 (`fixme`) |
-| Singles registration | ❌ | |
-| Accept / decline a partner invite | ❌ 📧 | `/t/.../invites/:token` |
-| Change partner before payment | ❌ 📧 | |
+| Discard partner pick in the form | ✅ | `issue-09-confirm-cancel.spec.ts` (Path 1) |
+| Singles registration | ✅ | `flows/registration.spec.ts` |
+| Accept a partner invite | ⚠️ 📧 | `flows/registration.spec.ts` (`fixme` — invitee profile-onboarding step) |
+| Change partner before payment | ✅ | `flows/registration.spec.ts` |
 
 ## Checkout & payment (#254 — gated on #255 💳)
 
