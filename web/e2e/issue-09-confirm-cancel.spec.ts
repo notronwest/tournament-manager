@@ -61,9 +61,10 @@ test.describe("#9 confirm before dropping a partner", () => {
     const modal = page.getByRole("dialog", { name: /discard your partner pick\?/i });
     await expect(modal).toBeVisible();
 
-    // Keep editing → modal closes, the partner pick survives.
+    // Keep editing → modal closes, the partner pick survives (the picked-chip
+    // controls only render when a partner is still selected).
     await modal.getByRole("button", { name: /keep editing/i }).click();
     await expect(modal).toBeHidden();
-    await expect(page.getByText(/Pat Partner/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /find a new partner/i })).toBeVisible();
   });
 });
