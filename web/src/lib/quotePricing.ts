@@ -37,6 +37,12 @@ export interface QuoteLineInput {
   qty: number;
   unitPriceCents: number;
   passThroughCostCents?: number;
+  /**
+   * True when this line's charge is a PASS-THROUGH to a third party — money the
+   * organizer pays through WMPC but that isn't Bert & Erne's margin (e.g. the
+   * PickleballBrackets registration fee). Excluded from `bertErneTakeCents`.
+   */
+  isPassthrough?: boolean;
 }
 
 export interface QuoteInputs {
@@ -74,6 +80,12 @@ export interface QuoteOutputs {
   wmpcTotalCents: number;
   organizerRevenueCents: number;
   estimatedNetCents: number;
+  /** Sum of pass-through line totals (e.g. the PickleballBrackets fee) —
+   * collected from the organizer but remitted to the third party. */
+  passthroughTotalCents: number;
+  /** Bert & Erne's actual take: service revenue minus pass-throughs. Travel is
+   * a separate reimbursed cost and isn't part of this number. */
+  bertErneTakeCents: number;
 }
 
 export function computeQuote(inputs: QuoteInputs): QuoteOutputs {
@@ -99,6 +111,16 @@ export function computeQuote(inputs: QuoteInputs): QuoteOutputs {
     (sum, l) => sum + l.lineTotalCents,
     0
   );
+
+  // Pass-through lines (e.g. the PickleballBrackets registration fee) are
+  // collected from the organizer but remitted to the third party — not B&E's
+  // margin. Track the total and B&E's actual take (service revenue minus
+  // pass-throughs).
+  const passthroughTotalCents = lines.reduce(
+    (sum, l) => sum + (l.isPassthrough ? l.lineTotalCents : 0),
+    0
+  );
+  const bertErneTakeCents = serviceSubtotalCents - passthroughTotalCents;
 
   // Travel cost
   const flagged = distanceMiles > LOCAL_RADIUS_MILES;
@@ -140,5 +162,7 @@ export function computeQuote(inputs: QuoteInputs): QuoteOutputs {
     wmpcTotalCents,
     organizerRevenueCents,
     estimatedNetCents,
+    passthroughTotalCents,
+    bertErneTakeCents,
   };
 }

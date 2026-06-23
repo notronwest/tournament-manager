@@ -1128,6 +1128,7 @@ export type Database = {
       players: {
         Row: {
           auth_user_id: string | null
+          avatar_hidden: boolean
           avatar_path: string | null
           city: string | null
           created_at: string
@@ -1147,6 +1148,7 @@ export type Database = {
         }
         Insert: {
           auth_user_id?: string | null
+          avatar_hidden?: boolean
           avatar_path?: string | null
           city?: string | null
           created_at?: string
@@ -1166,6 +1168,7 @@ export type Database = {
         }
         Update: {
           auth_user_id?: string | null
+          avatar_hidden?: boolean
           avatar_path?: string | null
           city?: string | null
           created_at?: string
@@ -1218,6 +1221,7 @@ export type Database = {
       quote_line_items: {
         Row: {
           id: string
+          is_passthrough: boolean
           label: string
           line_total_cents: number
           passthrough_cost_cents: number
@@ -1228,6 +1232,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          is_passthrough?: boolean
           label: string
           line_total_cents: number
           passthrough_cost_cents?: number
@@ -1238,6 +1243,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          is_passthrough?: boolean
           label?: string
           line_total_cents?: number
           passthrough_cost_cents?: number
@@ -1457,6 +1463,7 @@ export type Database = {
           category: Database["public"]["Enums"]["service_category"]
           created_at: string
           id: string
+          is_passthrough: boolean
           key: string
           name: string
           notes: string | null
@@ -1470,6 +1477,7 @@ export type Database = {
           category: Database["public"]["Enums"]["service_category"]
           created_at?: string
           id?: string
+          is_passthrough?: boolean
           key: string
           name: string
           notes?: string | null
@@ -1483,6 +1491,7 @@ export type Database = {
           category?: Database["public"]["Enums"]["service_category"]
           created_at?: string
           id?: string
+          is_passthrough?: boolean
           key?: string
           name?: string
           notes?: string | null
@@ -1820,7 +1829,7 @@ export type Database = {
         }
       }
       decline_partner_invite: {
-        Args: { p_invite_id: string; p_decline_message?: string | null }
+        Args: { p_decline_message?: string; p_invite_id: string }
         Returns: undefined
       }
       event_roster: {

@@ -145,6 +145,7 @@ export default function EstimatePage() {
         passThroughCostCents: svc.plus_passthrough_cost
           ? (quantities[svc.key + "_passthrough"] ?? 0) * 100
           : 0,
+        isPassthrough: svc.is_passthrough,
       }));
     // qtyForUnit reads numDays/numEvents/totalEntrants/numEntries/quantities inline
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,6 +251,7 @@ export default function EstimatePage() {
               qty: l.qty,
               unit_price_cents: l.unitPriceCents,
               passthrough_cost_cents: l.passThroughCostCents ?? 0,
+              is_passthrough: l.isPassthrough ?? false,
               line_total_cents: l.lineTotalCents,
             }))
           );
