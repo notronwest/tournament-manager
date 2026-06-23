@@ -130,4 +130,38 @@ describe("computeQuote", () => {
     expect(result.lines[0].lineTotalCents).toBe(13000);
     expect(result.wmpcTotalCents).toBe(13000);
   });
+
+  it("a pass-through line (PickleballBrackets fee) is excluded from B&E's take", () => {
+    const result = computeQuote({
+      numDays: 1,
+      numEvents: 1,
+      numEntries: 70,
+      multiEventPlayers: 0,
+      platform: "pickleballbrackets",
+      distanceMiles: 0,
+      lineItems: [
+        // $5 per registration × 70 = $350, pass-through to PickleballBrackets
+        {
+          key: "registration_pb",
+          label: "Registration (PickleballBrackets)",
+          qty: 70,
+          unitPriceCents: 500,
+          isPassthrough: true,
+        },
+        // $100 B&E setup fee — counts toward B&E's take
+        {
+          key: "create_tournament",
+          label: "Create the tournament",
+          qty: 1,
+          unitPriceCents: 10000,
+        },
+      ],
+    });
+    // WMPC cost (what the organizer pays) is unchanged: $350 + $100 = $450
+    expect(result.wmpcTotalCents).toBe(45000);
+    // The $350 PB fee is a pass-through, not B&E's margin
+    expect(result.passthroughTotalCents).toBe(35000);
+    // B&E's take excludes the pass-through: $450 - $350 = $100
+    expect(result.bertErneTakeCents).toBe(10000);
+  });
 });
