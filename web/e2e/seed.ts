@@ -285,6 +285,11 @@ async function main() {
     await db.from("partner_invites").insert({ event_id: inviteE, inviter_player_id: ivanId, invitee_player_id: avaId, invitee_email: "e2e-ava@wmpc.test", token: "e2e-accept-token" }).select("id").single(),
     "invite-accept invite",
   );
+  // A SECOND inbound invite to a dedicated viewer (Vic) for the invites-view
+  // test — separate from Ava's so the accept test (which consumes Ava's) can't
+  // empty the viewer's list.
+  const vicId = await ensurePlayer("e2e-vic@wmpc.test", "Vic", "Viewer");
+  await db.from("partner_invites").insert({ event_id: inviteE, inviter_player_id: ivanId, invitee_player_id: vicId, invitee_email: "e2e-vic@wmpc.test", token: "e2e-view-token" });
 
   // 8. Self-service fixtures: my-tournaments view + withdraw. Two players with
   //    pending regs on a dedicated event — Mona (read-only view) and Will (the

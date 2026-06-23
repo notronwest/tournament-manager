@@ -65,7 +65,7 @@ export const SEED = {
     withdrawEmail: "e2e-will@wmpc.test", // Will — withdraw test cancels his reg
   },
   invitesView: {
-    inviteeEmail: "e2e-ava@wmpc.test", // reuses Ava's seeded inbound invite
+    inviteeEmail: "e2e-vic@wmpc.test", // dedicated invitee — invite never consumed
   },
 };
 
