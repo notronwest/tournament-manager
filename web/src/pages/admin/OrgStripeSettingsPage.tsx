@@ -107,8 +107,8 @@ export default function OrgStripeSettingsPage() {
   // Clears the org's Stripe link locally (resets stripe_account_id +
   // status to not_connected). Does NOT delete the underlying Stripe
   // account — that lives on Stripe's side and can be cleaned up from
-  // their dashboard if needed. After disconnect the picker reappears
-  // and the org can choose OAuth or Express afresh.
+  // their dashboard if needed. After disconnect the Express setup
+  // card reappears so the org can connect afresh.
   //
   // RLS: org admins (and platform admins via has_org_role) can update
   // the organizations row, so this works as a direct client write.
@@ -355,11 +355,10 @@ export default function OrgStripeSettingsPage() {
           body={
             <>
               This unlinks <strong>{org?.name}</strong> from its Stripe
-              account ({accountId ?? "—"}). After disconnect you can
-              reconnect with either OAuth (sign in) or a new Express
-              account. The Stripe account itself isn't deleted — it
-              still exists in your Stripe dashboard if you want to
-              clean it up separately.
+              account ({accountId ?? "—"}). After disconnect you can set
+              up Stripe again from scratch. The Stripe account itself
+              isn't deleted — it still exists in your Stripe dashboard if
+              you want to clean it up separately.
             </>
           }
           confirmLabel={disconnecting ? "Disconnecting…" : "Disconnect"}
