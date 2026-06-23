@@ -73,15 +73,23 @@ test.describe("registration (#253)", () => {
     await expect(page.getByRole("button", { name: /cancel registration/i })).toBeVisible();
   });
 
-  // The invitee is routed through a profile-onboarding step on the accept page
-  // (the snapshot shows the full "Your profile" form before the Accept button,
-  // not just the RequireProfile first/last/email gate). Needs the spec to clear
-  // that step first (Save profile) — owed; parked so it doesn't block the wave.
-  test.fixme("accept a partner invite", async ({ page }) => {
+  test("accept a partner invite", async ({ page }) => {
     await loginAs(page, SEED.inviteAccept.inviteeEmail);
     await page.goto(`/t/${SEED.orgSlug}/${SEED.inviteAccept.tournamentSlug}/invites/${SEED.inviteAccept.token}`);
 
-    await page.getByRole("button", { name: /^accept/i }).click();
+    // The accept page hard-redirects to /profile until the player profile has
+    // loaded with a name — the real new-invitee path. Complete it (pre-filled
+    // from the seed) and ?return= brings us back to the invite. On a warm load
+    // the Accept button is there directly; handle either.
+    const accept = page.getByRole("button", { name: /^accept/i });
+    const saveProfile = page.getByRole("button", { name: /save profile/i });
+    await expect(accept.or(saveProfile).first()).toBeVisible({ timeout: 30_000 });
+    if (await saveProfile.isVisible()) {
+      await saveProfile.click();
+      await expect(accept).toBeVisible({ timeout: 30_000 });
+    }
+
+    await accept.click();
     await expect(page.getByRole("heading", { name: /partner confirmed/i })).toBeVisible();
   });
 });
