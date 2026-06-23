@@ -30,7 +30,7 @@ organizer/admin surface — the bulk of the product by journey count.
 | Public discovery | 3 | 2 | |
 | Registration (player) | 7 | 1 | invite-accept parked (profile-onboarding step) |
 | Checkout & payment | 0 | ~6 | 💳 all blocked on #255 |
-| My account / self-service | 0 | 3 | next |
+| My account / self-service | 3 | 0 | ✅ |
 | Refunds & change requests | 0 | 4 | 💳📧 |
 | Organizer — setup | 0 | ~10 | none |
 | Organizer — operations | 0 | ~8 | none |
@@ -90,9 +90,9 @@ organizer/admin surface — the bulk of the product by journey count.
 
 | Journey | Status | Spec / note |
 |---|---|---|
-| View my tournaments / registrations | ❌ | `/my-tournaments` |
-| View my partner invites | ❌ | `/invites` |
-| Withdraw from an event | ❌ 💳📧 | |
+| View my tournaments / registrations | ✅ | `flows/self-service.spec.ts` |
+| View my partner invites | ✅ | `flows/self-service.spec.ts` |
+| Withdraw from an event (pending reg) | ✅ | `flows/self-service.spec.ts` (paid-reg refund still 💳) |
 
 ## Refunds & change requests
 
