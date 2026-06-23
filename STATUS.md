@@ -4,7 +4,29 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
-Last updated: **2026-06-22**
+Last updated: **2026-06-23**
+
+## 2026-06-23 — Promoted to production (PR #494): Stripe Express-only + quote pass-through
+
+Stripe go-live work + a promotion.
+
+- **Stripe org onboarding → Express-only** (PR #495, closes #496). The "Sign in
+  with Stripe" (OAuth) card 500'd on the missing `STRIPE_CONNECT_CLIENT_ID` —
+  Stripe deprecated OAuth for Standard Connect on new platforms, so it can't be
+  enabled in prod. Removed the OAuth card; **Express (hosted onboarding via
+  Account Links) is the only path**. Backend `oauth` branch + `stripe-connect-
+  oauth-callback` now dead/unreachable (harmless; retire later).
+- **Promoted main→production (PR #494)** — PROD migration green
+  (`20260623000000_quote_passthrough` — additive `is_passthrough` columns), no
+  function changes; frontend via Cloudflare. Also carried quote pass-through (#493).
+
+**Stripe go-live status:** live secret key ✓, webhook signing secret ✓,
+publishable key ✓ (Cloudflare prod), webhook URL confirmed
+(`https://wducsjqyoksmluwfgjxc.supabase.co/functions/v1/stripe-webhook`),
+onboarding UI no longer dead-ends. **Still owed:** null out stale TEST-mode
+`stripe_account_id` (+ `stripe_connected_account_id` copies) so any org that
+connected under test keys is forced to re-onboard live — otherwise they show
+"connected" but live charges fail. Verify a live webhook delivery returns 200.
 
 ## 2026-06-22 — Promoted main→production (PR #491): big session batch incl. waitlists
 
