@@ -1,4 +1,16 @@
 import { test as base, expect, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+
+// Service-role admin client for specs that need to mint email tokens
+// (generateLink) or set up auth users directly — used by the email flows so we
+// never need a real inbox. Requires E2E_SUPABASE_URL + E2E_SUPABASE_SERVICE_ROLE_KEY
+// in the test step env (see regression.yml).
+export function admin() {
+  const url = process.env.E2E_SUPABASE_URL;
+  const key = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("admin(): missing E2E_SUPABASE_URL / E2E_SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, key, { auth: { persistSession: false } });
+}
 
 // Deterministic identities created by e2e/seed.ts. Keep these in sync with
 // the seed. Passwords come from CI secret E2E_TEST_PASSWORD.
