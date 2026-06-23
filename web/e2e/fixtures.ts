@@ -39,6 +39,26 @@ export const SEED = {
     tournamentSlug: "e2e-seeker",
     registrantEmail: "e2e-sam@wmpc.test", // Sam
   },
+  singles: {
+    tournamentSlug: "e2e-singles",
+    registrantEmail: "e2e-sid@wmpc.test", // Sid
+  },
+  discard: {
+    tournamentSlug: "e2e-discard",
+    registrantEmail: "e2e-dana@wmpc.test", // Dana, no existing reg
+    partnerQuery: "Pat",
+  },
+  changePartner: {
+    tournamentSlug: "e2e-change-partner",
+    registrantEmail: "e2e-cam@wmpc.test", // Cam, pending reg w/ Pat
+    newPartnerQuery: "Quinn",
+  },
+  inviteAccept: {
+    tournamentSlug: "e2e-invite",
+    token: "e2e-accept-token",
+    inviteeEmail: "e2e-ava@wmpc.test", // Ava
+    inviterName: "Ivan",
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";

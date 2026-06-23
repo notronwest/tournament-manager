@@ -197,6 +197,78 @@ async function main() {
     await db.from("event_registrations").delete().eq("event_id", fe);
   }
 
+  // 7. Registration-remainder fixtures (#253): singles, discard-form (#9 P1),
+  //    change-partner, invite-accept. One tournament per flow (single card).
+  const mkTournament = async (slug: string, name: string) =>
+    (ok(
+      await db
+        .from("tournaments")
+        .upsert(
+          { organization_id: org.id, slug, name, status: "published", starts_at: "2099-01-01", ends_at: "2099-01-02" },
+          { onConflict: "organization_id,slug" },
+        )
+        .select("id")
+        .single(),
+      `tournament ${slug}`,
+    ) as { id: string }).id;
+  const resetEvent = async (eventId: string) => {
+    await db.from("partner_invites").delete().eq("event_id", eventId);
+    await db.from("event_registrations").delete().eq("event_id", eventId);
+  };
+  const doublesEvent = async (tid: string, name: string) =>
+    selectOrInsert(
+      "events",
+      { tournament_id: tid, name },
+      { tournament_id: tid, name, format: "doubles", gender: "mixed" },
+      `event ${name}`,
+    );
+
+  // Singles — registrant has no partner picker, just Save.
+  const singlesT = await mkTournament("e2e-singles", "E2E Singles Cup");
+  const singlesE = await selectOrInsert(
+    "events",
+    { tournament_id: singlesT, name: "E2E Singles 3.5" },
+    { tournament_id: singlesT, name: "E2E Singles 3.5", format: "singles", gender: "mixed" },
+    "singles event",
+  );
+  await resetEvent(singlesE);
+  await ensurePlayer("e2e-sid@wmpc.test", "Sid", "Singles");
+
+  // Discard-form (#9 Path 1) — registrant starts with NO reg, picks then backs out.
+  const discardT = await mkTournament("e2e-discard", "E2E Discard Cup");
+  const discardE = await doublesEvent(discardT, "E2E Discard Doubles");
+  await resetEvent(discardE);
+  await ensurePlayer("e2e-dana@wmpc.test", "Dana", "Discard");
+
+  // Change-partner — registrant has a pending doubles reg (+ Pat invite) so the
+  // "Change partner" button shows; the test switches the pick to Quinn.
+  const changeT = await mkTournament("e2e-change-partner", "E2E Change-Partner Cup");
+  const changeE = await doublesEvent(changeT, "E2E Change Doubles");
+  await resetEvent(changeE);
+  const camId = await ensurePlayer("e2e-cam@wmpc.test", "Cam", "Changer");
+  await ensurePlayer("e2e-quinn@wmpc.test", "Quinn", "Quick");
+  ok(
+    await db.from("event_registrations").insert({ event_id: changeE, player_id: camId, status: "pending_payment", partner_status: "pending", event_fee_cents: 0 }).select("id").single(),
+    "cam reg",
+  );
+  await db.from("partner_invites").insert({ event_id: changeE, inviter_player_id: camId, invitee_player_id: partnerId, invitee_email: "e2e-partner@wmpc.test" });
+
+  // Invite-accept — inviter (Ivan) has a pending reg + a pending invite (fixed
+  // token) to the invitee (Ava), who logs in and accepts.
+  const inviteT = await mkTournament("e2e-invite", "E2E Invite Cup");
+  const inviteE = await doublesEvent(inviteT, "E2E Invite Doubles");
+  await resetEvent(inviteE);
+  const ivanId = await ensurePlayer("e2e-ivan@wmpc.test", "Ivan", "Inviter");
+  const avaId = await ensurePlayer("e2e-ava@wmpc.test", "Ava", "Acceptor");
+  ok(
+    await db.from("event_registrations").insert({ event_id: inviteE, player_id: ivanId, status: "pending_payment", partner_status: "pending", event_fee_cents: 0 }).select("id").single(),
+    "ivan reg",
+  );
+  ok(
+    await db.from("partner_invites").insert({ event_id: inviteE, inviter_player_id: ivanId, invitee_player_id: avaId, invitee_email: "e2e-ava@wmpc.test", token: "e2e-accept-token" }).select("id").single(),
+    "invite-accept invite",
+  );
+
   console.log("seed: e2e-test fixture ready");
 }
 

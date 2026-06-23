@@ -45,15 +45,25 @@ test.describe("#9 confirm before dropping a partner", () => {
     },
   );
 
-  // Path 1 (backing out of the register FORM after picking a partner → a
-  // "Discard your partner pick?" confirm). Needs the multi-step PartnerSearch
-  // flow (its picker opens its OWN role="dialog" sheet, so the test must
-  // disambiguate three overlapping dialogs) and a register-eligible identity
-  // with no existing reg on the event (e.g. seed organizer Olive, who holds
-  // none). The discard modal's accessible name is "Discard your partner pick?"
-  // and its keep-button is "Keep editing".
-  test.fixme(
-    "Path 1 — backing out of the register form after picking a partner",
-    async () => {},
-  );
+  test("Path 1 — backing out of the register form after picking a partner", async ({ page }) => {
+    // A registrant with no existing reg on the discard event picks a partner,
+    // then backs out → must confirm before the pick is discarded.
+    await loginAs(page, SEED.discard.registrantEmail);
+    await gotoRegister(page, SEED.orgSlug, SEED.discard.tournamentSlug);
+
+    await page.getByRole("button", { name: /^register$/i }).click();
+    await page.getByPlaceholder(/search by name, email, or phone/i).fill(SEED.discard.partnerQuery);
+    await page.getByRole("button", { name: /^search$/i }).click();
+    await page.getByRole("button", { name: /^pick$/i }).first().click();
+
+    // Back out → a confirm naming the pick (scoped by the modal's title).
+    await page.getByRole("button", { name: /^not now$/i }).click();
+    const modal = page.getByRole("dialog", { name: /discard your partner pick\?/i });
+    await expect(modal).toBeVisible();
+
+    // Keep editing → modal closes, the partner pick survives.
+    await modal.getByRole("button", { name: /keep editing/i }).click();
+    await expect(modal).toBeHidden();
+    await expect(page.getByText(/Pat Partner/i)).toBeVisible();
+  });
 });

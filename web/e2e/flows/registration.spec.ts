@@ -45,4 +45,39 @@ test.describe("registration (#253)", () => {
 
     await expect(page.getByRole("link", { name: /go to checkout/i })).toBeVisible();
   });
+
+  test("register for a singles event (no partner picker)", async ({ page }) => {
+    await loginAs(page, SEED.singles.registrantEmail);
+    await gotoRegister(page, SEED.orgSlug, SEED.singles.tournamentSlug);
+
+    await page.getByRole("button", { name: /^register$/i }).click();
+    // Singles: no partner mode, just Save.
+    await page.getByRole("button", { name: /^save$/i }).click();
+
+    await expect(page.getByRole("link", { name: /go to checkout/i })).toBeVisible();
+  });
+
+  test("change partner on a pending registration", async ({ page }) => {
+    await loginAs(page, SEED.changePartner.registrantEmail);
+    await gotoRegister(page, SEED.orgSlug, SEED.changePartner.tournamentSlug);
+
+    await page.getByRole("button", { name: /change partner/i }).click();
+    await page
+      .getByPlaceholder(/search by name, email, or phone/i)
+      .fill(SEED.changePartner.newPartnerQuery);
+    await page.getByRole("button", { name: /^search$/i }).click();
+    await page.getByRole("button", { name: /^pick$/i }).first().click();
+    await page.getByRole("button", { name: /save partner change/i }).click();
+
+    // Still a pending reg afterward → cancel affordance returns.
+    await expect(page.getByRole("button", { name: /cancel registration/i })).toBeVisible();
+  });
+
+  test("accept a partner invite", async ({ page }) => {
+    await loginAs(page, SEED.inviteAccept.inviteeEmail);
+    await page.goto(`/t/${SEED.orgSlug}/${SEED.inviteAccept.tournamentSlug}/invites/${SEED.inviteAccept.token}`);
+
+    await page.getByRole("button", { name: /^accept/i }).click();
+    await expect(page.getByRole("heading", { name: /partner confirmed/i })).toBeVisible();
+  });
 });
