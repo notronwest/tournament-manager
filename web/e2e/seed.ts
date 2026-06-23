@@ -48,10 +48,27 @@ async function selectOrInsert(
 
 // Create-or-get an auth user + its players row. Returns the player id.
 async function ensurePlayer(email: string, firstName: string, lastName: string): Promise<string> {
+  // Fast path for an existing fixture: find the players row by its indexed
+  // email and keep its name current. This avoids paginating auth.users, which
+  // grows unbounded from the signup/reset specs' timestamped users — the old
+  // listUsers() fallback (50/page) silently missed fixtures once it crossed 50.
+  const existing = await db
+    .from("players")
+    .select("id")
+    .eq("email", email)
+    .is("deleted_at", null)
+    .limit(1);
+  if (!existing.error && existing.data && existing.data.length) {
+    const id = (existing.data[0] as { id: string }).id;
+    await db.from("players").update({ first_name: firstName, last_name: lastName }).eq("id", id);
+    return id;
+  }
+
   const created = await db.auth.admin.createUser({ email, password, email_confirm: true });
   let authUserId = created.data?.user?.id;
   if (!authUserId) {
-    const list = await db.auth.admin.listUsers();
+    // Backstop for an auth user that exists without a players row.
+    const list = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
     authUserId = list.data.users.find((u) => u.email === email)?.id;
   }
   if (!authUserId) throw new Error(`seed: could not create or find auth user ${email}`);
