@@ -389,6 +389,7 @@ export default function QuoteEditorPage() {
         qty: qtyForUnit(svc.unit, svc.key),
         unitPriceCents: effectivePrice(svc.key, svc.unit_price_cents),
         passThroughCostCents: lineStates[svc.key]?.passThroughCostCents ?? 0,
+        isPassthrough: svc.is_passthrough,
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog, selected, lineStates, numDays, numEvents, totalEntrants, onsiteMgmtMode]);
@@ -542,6 +543,7 @@ export default function QuoteEditorPage() {
           qty: l.qty,
           unit_price_cents: l.unitPriceCents,
           passthrough_cost_cents: l.passThroughCostCents ?? 0,
+          is_passthrough: l.isPassthrough ?? false,
           line_total_cents: l.lineTotalCents,
         })),
         // Travel as a virtual line item if flagged
@@ -645,11 +647,25 @@ export default function QuoteEditorPage() {
             </table>
           )}
         </div>
-        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-          <SummaryCell label="WMPC cost" value={formatDollars(viewingRevision.subtotal_cents)} color={courtYellow} />
-          <SummaryCell label="Organizer revenue" value={formatDollars(viewingRevision.estimated_revenue_cents)} color={courtGreen} />
-          <SummaryCell label="Estimated net" value={formatDollars(viewingRevision.estimated_net_cents)} color={viewingRevision.estimated_net_cents >= 0 ? courtGreen : courtRed} />
-        </div>
+        {(() => {
+          const revPassthrough = viewingRevision.quote_line_items.reduce(
+            (s, li) => s + (li.is_passthrough ? li.line_total_cents : 0),
+            0,
+          );
+          return (
+            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+              <SummaryCell label="WMPC cost" value={formatDollars(viewingRevision.subtotal_cents)} color={courtYellow} />
+              <SummaryCell label="Organizer revenue" value={formatDollars(viewingRevision.estimated_revenue_cents)} color={courtGreen} />
+              <SummaryCell label="Estimated net" value={formatDollars(viewingRevision.estimated_net_cents)} color={viewingRevision.estimated_net_cents >= 0 ? courtGreen : courtRed} />
+              {revPassthrough > 0 && (
+                <>
+                  <SummaryCell label="PickleballBrackets fee" value={formatDollars(revPassthrough)} color="#6b7280" />
+                  <SummaryCell label="Bert & Erne take" value={formatDollars(viewingRevision.subtotal_cents - revPassthrough)} color={courtGreen} />
+                </>
+              )}
+            </div>
+          );
+        })()}
       </main>
     );
   }
@@ -1116,6 +1132,12 @@ export default function QuoteEditorPage() {
           <SummaryCell label="WMPC cost" value={formatDollars(quote.wmpcTotalCents)} color={courtYellow} />
           <SummaryCell label="Organizer revenue" value={formatDollars(quote.organizerRevenueCents)} color={courtGreen} />
           <SummaryCell label="Estimated net" value={formatDollars(quote.estimatedNetCents)} color={quote.estimatedNetCents >= 0 ? courtGreen : "#e05050"} />
+          {quote.passthroughTotalCents > 0 && (
+            <>
+              <SummaryCell label="PickleballBrackets fee" value={formatDollars(quote.passthroughTotalCents)} color="#6b7280" />
+              <SummaryCell label="Bert & Erne take" value={formatDollars(quote.bertErneTakeCents)} color={courtGreen} />
+            </>
+          )}
           {quote.travel.flagged && (
             <span style={{ fontSize: 11, color: courtYellow, fontFamily: bodyFontStack, opacity: 0.8, maxWidth: 160, lineHeight: 1.3 }}>
               ⚠ Travel est. included ({formatDollars(quote.travel.totalCents)})
