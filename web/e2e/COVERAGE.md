@@ -28,7 +28,7 @@ organizer/admin surface — the bulk of the product by journey count.
 |---|---|---|---|
 | Account & auth | 4 | 2 | login/out, signup, forgot-reset ✅ |
 | Public discovery | 3 | 2 | |
-| Registration (player) | 7 | 1 | invite-accept parked (profile-onboarding step) |
+| Registration (player) | 8 | 0 | full spread incl. invite-accept ✅ |
 | Checkout & payment | 0 | ~6 | 💳 all blocked on #255 |
 | My account / self-service | 3 | 0 | ✅ |
 | Refunds & change requests | 0 | 4 | 💳📧 |
@@ -73,7 +73,7 @@ organizer/admin surface — the bulk of the product by journey count.
 | Cancel a pending registration | ✅ | `issue-09-confirm-cancel.spec.ts` (Path 2) |
 | Discard partner pick in the form | ✅ | `issue-09-confirm-cancel.spec.ts` (Path 1) |
 | Singles registration | ✅ | `flows/registration.spec.ts` |
-| Accept a partner invite | ⚠️ 📧 | `flows/registration.spec.ts` (`fixme` — invitee profile-onboarding step) |
+| Accept a partner invite | ✅ 📧 | `flows/registration.spec.ts` (handles the new-invitee profile step) |
 | Change partner before payment | ✅ | `flows/registration.spec.ts` |
 
 ## Checkout & payment (#254 — gated on #255 💳)
