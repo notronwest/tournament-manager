@@ -6,6 +6,53 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Fix: unregister left stale "awaiting partner" on the public tournament page
+
+Bug (Ron, on TEST): register for a doubles event → Manage → Unregister, but the
+event card still showed **AWAITING PARTNER** with a Manage button instead of
+reverting to Register. Root cause in `PublicTournamentPage.tsx`: the "my
+registrations" query (drives per-event card state) filtered only on
+`deleted_at IS NULL`, **not on status**. `withdraw_self` (the Unregister/Withdraw
+path) leaves the row in place with status `withdrawn`/`cancelled` and
+`deleted_at` NULL, so the stale row's `partner_status='pending'` fell through the
+state derivation into the `awaiting_partner` branch (no withdrawn/cancelled case).
+
+Fix: add the same status allowlist RegisterPage already uses —
+`.in("status", ["paid","pending_payment","waitlisted","waitlisted_pending_payment"])`
+— so terminal regs (withdrawn/cancelled/refunded) no longer drive the card; it
+reverts to the Register CTA. Sibling `MyTournamentsPage` already handles
+`withdrawn` explicitly, so it was not affected. typecheck clean; remaining lint is
+pre-existing/unrelated. **Verified by root-cause + static checks only** — the
+auth+registration flow can't be exercised locally; needs the TEST eyeball after
+deploy. One-line change, no migration.
+
+**Next:** promote `main`→production with the rest of the pending mobile/UX batch,
+then re-run the register→manage→unregister flow on TEST to confirm the card flips
+back to Register.
+
+## 2026-06-24 — Design decision: tournament logo + packet PDF (Option C) — not yet built
+
+Scoped a feature to let organizers upload a **tournament logo** and a **packet
+PDF**, surfaced on the public tournament home page. Mocked three logo placements;
+Ron picked **Option C — cover banner + overlapping square logo badge** (graceful
+fallbacks: no cover → existing cream gradient band; no logo → no badge, header
+unchanged). Agreed implementation shape:
+
+- **Data (the risky part):** new migration adds `tournaments.logo_path` /
+  `cover_path` / `packet_path` (store object *paths*, not URLs — mirrors
+  `players.avatar_path`). One public-read bucket `tournament-assets`, objects
+  namespaced by `<tournament_id>/…`; **write RLS keyed on `is_org_member()`** of
+  the tournament's org (not auth.uid() like avatars, since assets are org-owned).
+- **Calls made:** one bucket, 10 MB limit (PDF ceiling), logo/cover 2 MB enforced
+  client-side; **PNG/JPG only — SVG dropped for v1** (XSS surface on public origin).
+- **UI:** restructure the `<header>` at `PublicTournamentPage.tsx:635` (cover bleeds
+  to card edges, logo overlaps with negative margin-top); packet download button in
+  the Meta row; upload control in the tournament wizard (admin).
+
+**Next:** nothing built yet. Ron to choose — write this up as a `story` on Project
+#1 (preferred, since it's migration + storage RLS) **or** build it directly. No
+code/migration touched this session.
+
 ## 2026-06-24 — Register page: focused "Manage your registration" view — on TEST (#512, closes #511)
 
 Ron's feedback: "Manage" was too busy — it dumped you into the full "Pick your
