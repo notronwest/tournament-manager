@@ -1358,6 +1358,21 @@ export default function RegisterPage() {
 
   const submitting = phase === "submitting";
 
+  // "Manage" entry: the tournament page links to ?event=<id> for an event you're
+  // already registered for. In that case show a FOCUSED single-registration view
+  // — just that event's card (status, partner, Change partner, Unregister) — and
+  // hide the event picker + "register for others". Registering for more events
+  // lives on the tournament page. The scope is display-only: the diff/submit below
+  // still operate on the full event set, so hidden events are never touched.
+  const manageEventId =
+    preselectEventId && existingRegs.has(preselectEventId)
+      ? preselectEventId
+      : null;
+  const isManageMode = manageEventId !== null;
+  const visibleEvents = isManageMode
+    ? events.filter((e) => e.id === manageEventId)
+    : events;
+
   return (
     <Shell>
       <Link
@@ -1367,7 +1382,9 @@ export default function RegisterPage() {
         ← {tournament.name}
       </Link>
       <h1 style={{ ...pageH1Style, margin: "12px 0 8px" }}>
-        Register for {tournament.name}
+        {isManageMode
+          ? "Manage your registration"
+          : `Register for ${tournament.name}`}
       </h1>
       <p style={{ color: inkSoft, margin: "0 0 24px", fontSize: 14, lineHeight: 1.55 }}>
         {me?.first_name ? (
@@ -1438,12 +1455,12 @@ export default function RegisterPage() {
           />
         )}
 
-        <Section title="Pick your events">
+        <Section title={isManageMode ? "Your registration" : "Pick your events"}>
           {events.length === 0 ? (
             <Empty>No events available for registration.</Empty>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {events.map((ev) => {
+              {visibleEvents.map((ev) => {
                 const sel = selections.get(ev.id)!;
                 const existing = existingRegs.get(ev.id);
                 const eligResult = me
@@ -1489,8 +1506,10 @@ export default function RegisterPage() {
         {/* Running total — reflects the FULL post-submit basket
             (kept existing regs + the player's current picks). Only
             renders when something is selected so a fresh form
-            doesn't show "$0.00 across 0 events". */}
-        {lineItems.length > 0 && (
+            doesn't show "$0.00 across 0 events". Hidden in the focused
+            Manage view — you've already paid, you're not checking out, so the
+            payment total is just noise (#516). */}
+        {!isManageMode && lineItems.length > 0 && (
           <div
             style={{
               padding: 16,
@@ -2072,16 +2091,9 @@ function EventRow({
               Remove
             </button>
           )}
-          {isWillWithdraw && (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => onChange({ selected: true })}
-              style={filledBtn}
-            >
-              Keep
-            </button>
-          )}
+          {/* No per-card "Keep" — undoing a staged withdrawal is the top
+              "Pending changes → Undo" link or the Cancel button, so the card
+              doesn't offer a competing action on top of Unregister. */}
         </div>
       </div>
 

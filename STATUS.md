@@ -4,7 +4,209 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
-Last updated: **2026-06-22**
+Last updated: **2026-06-24**
+
+## 2026-06-24 — Register card: center partner note + stop PendingPaymentsBar collision — on TEST (#519, closes #518)
+
+Ron (TEST, Register tab, pending doubles card): (1) the "Your partner won't be
+notified until you check out" note was right-aligned under the Cancel button →
+now `alignSelf:stretch` + `textAlign:center` so it spans/centers across the
+Change-partner + Cancel button row. (2) The "hiding" yellow box = the global
+**PendingPaymentsBar** (amber, fixed bottom:0) colliding with the page's own
+**StickyCheckoutBar** (also bottom:0) which covered it. Both redundant on a
+tournament page that has a pending → PendingPaymentsBar now hides there (like it
+already does on `/checkout`). Build passes. Part of the mobile/UX batch on TEST
+awaiting the 390px eyeball + promotion.
+
+## 2026-06-24 — Manage view: hide the payment-total box — on TEST (#517, closes #516)
+
+Ron (reviewing the focused Manage view on TEST): the yellow "1 event (Entry) $25"
+payment-total box is noise there — you've already paid, you're not checking out.
+Gated it on `!isManageMode` in RegisterPage; fresh-registration/checkout flow still
+shows it. One-line change. Part of the mobile/UX batch on TEST awaiting the 390px
+eyeball + promotion. (Focused Manage view #512 confirmed live + correct on TEST per
+Ron's screenshot.)
+
+## 2026-06-24 — Mobile: My Tournaments reg row stacks (Withdraw no longer clips) — on TEST (#514, closes #513)
+
+The My Tournaments card reg row (`event name | status badge + Withdraw/Request-refund`)
+was one `space-between` flex row; at ~390px the long "Paid · Awaiting partner" badge +
+Withdraw button overflowed and Withdraw clipped off the right. Below 767px the row now
+stacks (name on top, badge + actions below, left-aligned) and the actions wrap; desktop
+unchanged. matchMedia per the inline-styles convention. Part of the mobile/UX batch on
+TEST awaiting the 390px eyeball + promotion. (Mobile header hamburger confirmed rendering
+on TEST per Ron's screenshot.)
+
+## 2026-06-24 — Fix: unregister left stale "awaiting partner" on the public tournament page
+
+Bug (Ron, on TEST): register for a doubles event → Manage → Unregister, but the
+event card still showed **AWAITING PARTNER** with a Manage button instead of
+reverting to Register. Root cause in `PublicTournamentPage.tsx`: the "my
+registrations" query (drives per-event card state) filtered only on
+`deleted_at IS NULL`, **not on status**. `withdraw_self` (the Unregister/Withdraw
+path) leaves the row in place with status `withdrawn`/`cancelled` and
+`deleted_at` NULL, so the stale row's `partner_status='pending'` fell through the
+state derivation into the `awaiting_partner` branch (no withdrawn/cancelled case).
+
+Fix: add the same status allowlist RegisterPage already uses —
+`.in("status", ["paid","pending_payment","waitlisted","waitlisted_pending_payment"])`
+— so terminal regs (withdrawn/cancelled/refunded) no longer drive the card; it
+reverts to the Register CTA. Sibling `MyTournamentsPage` already handles
+`withdrawn` explicitly, so it was not affected. typecheck clean; remaining lint is
+pre-existing/unrelated. **Verified by root-cause + static checks only** — the
+auth+registration flow can't be exercised locally; needs the TEST eyeball after
+deploy. One-line change, no migration.
+
+**Merged as #515** (`main`, merge commit `04ac5f9`) → now on TEST via auto-deploy.
+**Next:** re-run the register→manage→unregister flow on TEST to confirm the card
+flips back to Register, then promote `main`→production with the rest of the pending
+mobile/UX batch.
+
+## 2026-06-24 — Design decision: tournament logo + packet PDF (Option C) — not yet built
+
+Scoped a feature to let organizers upload a **tournament logo** and a **packet
+PDF**, surfaced on the public tournament home page. Mocked three logo placements;
+Ron picked **Option C — cover banner + overlapping square logo badge** (graceful
+fallbacks: no cover → existing cream gradient band; no logo → no badge, header
+unchanged). Agreed implementation shape:
+
+- **Data (the risky part):** new migration adds `tournaments.logo_path` /
+  `cover_path` / `packet_path` (store object *paths*, not URLs — mirrors
+  `players.avatar_path`). One public-read bucket `tournament-assets`, objects
+  namespaced by `<tournament_id>/…`; **write RLS keyed on `is_org_member()`** of
+  the tournament's org (not auth.uid() like avatars, since assets are org-owned).
+- **Calls made:** one bucket, 10 MB limit (PDF ceiling), logo/cover 2 MB enforced
+  client-side; **PNG/JPG only — SVG dropped for v1** (XSS surface on public origin).
+- **UI:** restructure the `<header>` at `PublicTournamentPage.tsx:635` (cover bleeds
+  to card edges, logo overlaps with negative margin-top); packet download button in
+  the Meta row; upload control in the tournament wizard (admin).
+
+**Next:** nothing built yet. Ron to choose — write this up as a `story` on Project
+#1 (preferred, since it's migration + storage RLS) **or** build it directly. No
+code/migration touched this session.
+
+## 2026-06-24 — Register page: focused "Manage your registration" view — on TEST (#512, closes #511)
+
+Ron's feedback: "Manage" was too busy — it dumped you into the full "Pick your
+events" picker (offering to register for OTHER events), and a staged withdrawal
+had a per-card "Keep" button competing with Cancel. Fix: when RegisterPage is
+entered with `?event=<id>` (the tournament-page "Manage" link) AND you're
+registered for it, render a focused single-registration view — title "Manage your
+registration", only that event's card (status, partner, Change partner,
+Unregister), no picker, no "+ Register". Removed the per-card "Keep" (undo a
+staged withdrawal via the top Pending-changes "Undo" or Cancel). **Scope is
+display-only** — diff/submit still use the full event set, so hidden events are
+never touched and the fresh-registration flow is unchanged; withdrawal/refund
+logic untouched. typecheck+build pass. Needs the ~390px TEST eyeball with the
+rest of the mobile/UX batch before promotion.
+
+## 2026-06-24 — Scroll-to-top on navigation + Feedback moved into mobile header — on TEST
+
+Two more UX fixes on TEST (`main` ahead of `production`; all pending one promotion):
+
+- **Scroll resets on route change** (#510, closes #509). React Router's component
+  `<Routes>` never reset scroll, so a new page kept the prior page's offset (tap a
+  tournament from mid-list → land partway down). Added `components/ScrollToTop.tsx`
+  (`window.scrollTo(0,0)` on `location.pathname` change), mounted in `App` inside
+  the Router. Keyed on pathname so tab/param/hash changes don't jump to top.
+- **Feedback in the mobile header** (#508, closes #507). On ≤767px the floating
+  Feedback FAB is hidden and Feedback is an item in the hamburger dropdown; tapping
+  it fires a `wmpc:open-feedback` window event the FeedbackWidget opens its panel on.
+  Desktop FAB unchanged. (Supersedes the FAB-raise from #506.)
+
+**Next (per #500):** ~390px eyeball on the TEST preview for the full mobile-chrome
+set — hamburger nav with reachable Sign out, Feedback in the dropdown (no floating
+button), and scroll starting at top on every navigation — then promote `main`→
+`production`.
+
+## 2026-06-24 — Mobile: responsive header nav (hamburger) + Feedback FAB — on TEST (#506, closes #505)
+
+Fixed the #500-audit **HIGH** finding the earlier mobile work (#502) left untouched:
+the signed-in `SiteHeader` nav clipped below 767px and **cut off "Sign out"** (a
+phone user was trapped). Now below 767px the nav collapses to a **hamburger →
+full-width dropdown** (greeting + every link + Sign out, ≥44px taps, closes on
+tap/viewport-change). Desktop markup untouched (no regression). Also raised the
+Feedback FAB (bottom 80→150 on mobile) off the sticky Register CTA (the MEDIUM
+finding). `matchMedia` per inline-styles convention; menu-close via the change
+callback + item onClick (no set-state-in-effect). Local typecheck+build+eslint
+pass; CI green.
+
+**Next:** per #500, **eyeball at ~390px on the TEST preview signed in** (hamburger
+shows, dropdown lists a reachable Sign out, nothing clips) before it rides a
+promotion to prod. `main` is now ahead of `production` by the E2E suite + register
+fixes + mobile fixes — promote when ready.
+
+## 2026-06-24 — Platform-admin user management + Site Admin section (now in PROD)
+
+Re-adding a consolidated handoff for the admin work merged 06-22 — all three PRs are now in
+`origin/production` (promoted), so the `avatar_hidden` migration + both edge functions are live
+on PROD too.
+
+- **PR #486** — platform-admin **player management** page `/admin/players/:playerId` (reached from
+  the all-players list). Profile edit, login-email change, **password reset** (send branded email
+  OR set a one-time temp password), cross-org tournament history. Backed by service-role,
+  platform-admin-gated edge functions `admin-get-player` + `admin-update-player` (the latter
+  supersedes/replaces the deleted `admin-update-player-email`).
+- **PR #487** — same page: **self-ratings** editable (Doubles/Mixed/Singles, 0–9.99) + reversible
+  **hide profile image** moderation. Migration `20260622110000_player_avatar_hidden.sql` adds
+  `players.avatar_hidden` + a guard trigger so only `service_role` can flip it (a player can't
+  un-hide themselves). ⚠️ Flag is **forward-looking**: nothing shows other players' avatars
+  publicly yet (PartnerSearch is initials-only) — a future public avatar surface must filter
+  `where not avatar_hidden`.
+- **PR #490** — **Site Admin** section: `/admin` is now a clean crossroads (Site Admin card +
+  your orgs), and `/admin/site` is a dashboard of platform tools (All players, Organizations,
+  Platform settings, Quotes). Removed the platform buttons that were crammed into the org picker.
+
+Deploy model confirmed + saved to memory: **migrations + edge functions auto-apply via CI on
+merge** (main→TEST, production→PROD); never hand-run `db push`/`functions deploy`. **Next:** none
+required — possible follow-up is a direct "Site Admin" link in the global header if wanted.
+
+## 2026-06-24 — Register click scrolls the expanded card into view (PR #499)
+
+Clicking **Register** on an event entered focus mode but left the viewport where it was, so
+the user had to scroll down to reach the register form. In the `#98` focus-mode effect
+(`PublicTournamentPage.tsx`), on focus we now `card.scrollIntoView({ block: "start" })` (smooth,
+or instant under reduced-motion) to bring the top of the register box to the top of the viewport.
+The initial focus call switched to `focus({ preventScroll: true })` so it no longer yanks the
+viewport back down to the first input (which would undo the scroll). No sticky top header to clear
+(only fixed elements are the scrim + a bottom pending-group bar), so `block: "start"` lands clean.
+Typecheck passes. Single file. Not browser-verified.
+
+## 2026-06-24 — Registration overlay no longer closes on outside click (PR #498)
+
+On the public tournament page, the focused-event registration overlay (`#98` focus mode)
+dismissed when you clicked the scrim/backdrop, calling `setFocusedEventId(null)` and collapsing
+the in-progress form. Made the scrim inert: removed its `onClick`, switched `cursor` to
+`default`, and updated the now-stale comments (incl. the defensive "collapse on external focus
+release" effect). The overlay now closes only via the form's **Cancel** button, a successful
+submit, or **Esc** (Esc kept as the keyboard equivalent of Cancel — routes through the same
+discard-confirm flow). Scrim keeps `pointer-events:auto` while focused so stray clicks are
+absorbed, not passed to the dimmed cards behind it. Single file: `PublicTournamentPage.tsx`.
+Typecheck + lint clean (31 pre-existing lint problems, baseline unchanged). Not browser-verified.
+
+🔜 Next: eyeball on test after merge; if Esc-to-close is also unwanted, pull the Esc handler.
+
+## 2026-06-23 — Promoted to production (PR #494): Stripe Express-only + quote pass-through
+
+Stripe go-live work + a promotion.
+
+- **Stripe org onboarding → Express-only** (PR #495, closes #496). The "Sign in
+  with Stripe" (OAuth) card 500'd on the missing `STRIPE_CONNECT_CLIENT_ID` —
+  Stripe deprecated OAuth for Standard Connect on new platforms, so it can't be
+  enabled in prod. Removed the OAuth card; **Express (hosted onboarding via
+  Account Links) is the only path**. Backend `oauth` branch + `stripe-connect-
+  oauth-callback` now dead/unreachable (harmless; retire later).
+- **Promoted main→production (PR #494)** — PROD migration green
+  (`20260623000000_quote_passthrough` — additive `is_passthrough` columns), no
+  function changes; frontend via Cloudflare. Also carried quote pass-through (#493).
+
+**Stripe go-live status:** live secret key ✓, webhook signing secret ✓,
+publishable key ✓ (Cloudflare prod), webhook URL confirmed
+(`https://wducsjqyoksmluwfgjxc.supabase.co/functions/v1/stripe-webhook`),
+onboarding UI no longer dead-ends. **Still owed:** null out stale TEST-mode
+`stripe_account_id` (+ `stripe_connected_account_id` copies) so any org that
+connected under test keys is forced to re-onboard live — otherwise they show
+"connected" but live charges fail. Verify a live webhook delivery returns 200.
 
 ## 2026-06-22 — Promoted main→production (PR #491): big session batch incl. waitlists
 

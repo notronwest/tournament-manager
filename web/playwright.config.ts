@@ -6,6 +6,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -35,6 +36,23 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // Desktop journey suite — excludes the mobile/ specs.
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      testIgnore: "**/mobile/**",
+    },
+    // Mobile profiles run only the mobile/ specs (audit now; journey
+    // coverage as those specs are made mobile-aware).
+    {
+      name: "iphone",
+      use: { ...devices["iPhone 13"] }, // WebKit, ~390px, touch
+      testMatch: "**/mobile/**",
+    },
+    {
+      name: "pixel",
+      use: { ...devices["Pixel 5"] }, // Chromium, ~393px, touch
+      testMatch: "**/mobile/**",
+    },
   ],
 });

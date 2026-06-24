@@ -547,7 +547,14 @@ function TournamentCard({
           return (
             <div key={reg.id} style={regRowStyle}>
               <span style={eventNameStyle}>{reg.event_name}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
                 <span
                   style={{
                     ...statusPillStyle,
@@ -770,11 +777,20 @@ const cardMetaStyle: CSSProperties = {
   margin: "2px 0 0",
 };
 
+// Mobile-first (#500): the event name + status badge + Withdraw/Request-refund
+// buttons sat in one space-between row, which clipped the Withdraw button off
+// the right edge at ~390px. Below 767px, stack the row (name on top, badge +
+// actions below, left-aligned). matchMedia per the inline-styles convention.
+const isMobileViewport =
+  typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 767px)").matches;
+
 const regRowStyle: CSSProperties = {
   display: "flex",
-  alignItems: "center",
+  flexDirection: isMobileViewport ? "column" : "row",
+  alignItems: isMobileViewport ? "flex-start" : "center",
   justifyContent: "space-between",
-  gap: 12,
+  gap: isMobileViewport ? 6 : 12,
   padding: "6px 0",
   borderTop: `1px solid ${bg}`,
 };

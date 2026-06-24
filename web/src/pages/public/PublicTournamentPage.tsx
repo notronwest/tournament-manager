@@ -152,6 +152,13 @@ const prefersReducedMotion =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// Phone-width layout. Mobile-first: where a row places actions beside content,
+// it stacks on mobile so the content column never collapses (the EventCard
+// header otherwise squeezed its meta text to one character per line — #500).
+const isMobileViewport =
+  typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 767px)").matches;
+
 // Public tournament page at /t/:orgSlug/:tournamentSlug. Anonymous-
 // readable thanks to existing RLS: tournaments + events with status
 // in ('published', 'closed', 'completed') are readable by anyone.
@@ -398,6 +405,18 @@ export default function PublicTournamentPage({
         )
         .eq("player_id", myPlayer.id)
         .in("event_id", eventIds)
+        // Only ACTIVE regs drive the per-event card state. withdraw_self
+        // (the Unregister/Withdraw path) leaves the row in place with
+        // status withdrawn/cancelled and deleted_at NULL, so without this
+        // filter a just-unregistered doubles event still reads its stale
+        // partner_status='pending' as "awaiting_partner" (mirrors the same
+        // allowlist RegisterPage uses).
+        .in("status", [
+          "paid",
+          "pending_payment",
+          "waitlisted",
+          "waitlisted_pending_payment",
+        ])
         .is("deleted_at", null),
       supabase
         .from("partner_invites")
@@ -606,11 +625,12 @@ export default function PublicTournamentPage({
     {/* #98: translucent scrim — always in the DOM so the CSS opacity
         transition fires on both open and close. pointer-events:none
         when inactive so it never intercepts normal page clicks.
-        Clicking the scrim exits focus mode directly (no discard-
-        confirm), matching the mockup: scrim click = "step back." */}
+        Clicking the scrim is intentionally inert: while registering,
+        the overlay only closes via the form's Cancel button (or a
+        successful submit). pointer-events:auto while focused still
+        blocks stray clicks from reaching the dimmed cards behind it. */}
     <div
       aria-hidden="true"
-      onClick={() => setFocusedEventId(null)}
       style={{
         position: "fixed",
         inset: 0,
@@ -620,7 +640,7 @@ export default function PublicTournamentPage({
         opacity: focusedEventId ? 1 : 0,
         pointerEvents: focusedEventId ? "auto" : "none",
         transition: prefersReducedMotion ? undefined : "opacity 0.2s ease",
-        cursor: "pointer",
+        cursor: "default",
       }}
     />
     <Shell>
@@ -1504,9 +1524,11 @@ function EventCard({
   };
 
   // ─── #98: collapse form when focus is released externally ────────
-  // Scrim click drives focusedEventId → null at the page level, which
-  // makes isFocused go false here while editMode is still set. Collapse
-  // without the discard-confirm — scrim click is a direct "step back."
+  // Defensive: if focusedEventId is cleared at the page level while
+  // this card still has an open form (editMode set), collapse it.
+  // The scrim no longer triggers this (clicking outside is inert) —
+  // closing goes through the Cancel button / submit — but keep the
+  // guard so any future external focus release stays consistent.
   useEffect(() => {
     if (!isFocused && editMode !== null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -1557,8 +1579,19 @@ function EventCard({
       );
     };
 
+    // Bring the top of the now-expanded card into view so the user
+    // doesn't have to scroll down to the register form. preventScroll
+    // on the focus() below keeps the initial focus from yanking the
+    // viewport back down to the first input.
+    requestAnimationFrame(() => {
+      card?.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+
     // Move initial focus to the first interactive element in the card.
-    requestAnimationFrame(() => getFocusables()[0]?.focus());
+    requestAnimationFrame(() => getFocusables()[0]?.focus({ preventScroll: true }));
 
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -2328,8 +2361,18 @@ function EventCard({
           }}
         />
       )}
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 16,
+          alignItems: "flex-start",
+          // Mobile-first: stack so the action buttons drop BELOW the content
+          // instead of squeezing the text column to ~0 (which collapsed the
+          // meta line to one character per line + overlapped the title — #500).
+          flexDirection: isMobileViewport ? "column" : "row",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0, width: isMobileViewport ? "100%" : undefined }}>
           {/* Title + status pill */}
           <div
             style={{
@@ -2461,8 +2504,11 @@ function EventCard({
                 fontSize: 11,
                 lineHeight: 1.4,
                 color: ink,
-                maxWidth: 180,
-                textAlign: "left",
+                // Span the full action column (the Change-partner + Cancel
+                // button row) and center, instead of tucking under the right
+                // button.
+                alignSelf: "stretch",
+                textAlign: "center",
               }}
             >
               Your partner won't be notified until you check out.
