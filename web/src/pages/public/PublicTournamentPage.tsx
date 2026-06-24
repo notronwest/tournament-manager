@@ -606,11 +606,12 @@ export default function PublicTournamentPage({
     {/* #98: translucent scrim — always in the DOM so the CSS opacity
         transition fires on both open and close. pointer-events:none
         when inactive so it never intercepts normal page clicks.
-        Clicking the scrim exits focus mode directly (no discard-
-        confirm), matching the mockup: scrim click = "step back." */}
+        Clicking the scrim is intentionally inert: while registering,
+        the overlay only closes via the form's Cancel button (or a
+        successful submit). pointer-events:auto while focused still
+        blocks stray clicks from reaching the dimmed cards behind it. */}
     <div
       aria-hidden="true"
-      onClick={() => setFocusedEventId(null)}
       style={{
         position: "fixed",
         inset: 0,
@@ -620,7 +621,7 @@ export default function PublicTournamentPage({
         opacity: focusedEventId ? 1 : 0,
         pointerEvents: focusedEventId ? "auto" : "none",
         transition: prefersReducedMotion ? undefined : "opacity 0.2s ease",
-        cursor: "pointer",
+        cursor: "default",
       }}
     />
     <Shell>
@@ -1504,9 +1505,11 @@ function EventCard({
   };
 
   // ─── #98: collapse form when focus is released externally ────────
-  // Scrim click drives focusedEventId → null at the page level, which
-  // makes isFocused go false here while editMode is still set. Collapse
-  // without the discard-confirm — scrim click is a direct "step back."
+  // Defensive: if focusedEventId is cleared at the page level while
+  // this card still has an open form (editMode set), collapse it.
+  // The scrim no longer triggers this (clicking outside is inert) —
+  // closing goes through the Cancel button / submit — but keep the
+  // guard so any future external focus release stays consistent.
   useEffect(() => {
     if (!isFocused && editMode !== null) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
