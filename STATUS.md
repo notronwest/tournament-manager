@@ -4,7 +4,21 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
-Last updated: **2026-06-23**
+Last updated: **2026-06-24**
+
+## 2026-06-24 — Registration overlay no longer closes on outside click (PR #498)
+
+On the public tournament page, the focused-event registration overlay (`#98` focus mode)
+dismissed when you clicked the scrim/backdrop, calling `setFocusedEventId(null)` and collapsing
+the in-progress form. Made the scrim inert: removed its `onClick`, switched `cursor` to
+`default`, and updated the now-stale comments (incl. the defensive "collapse on external focus
+release" effect). The overlay now closes only via the form's **Cancel** button, a successful
+submit, or **Esc** (Esc kept as the keyboard equivalent of Cancel — routes through the same
+discard-confirm flow). Scrim keeps `pointer-events:auto` while focused so stray clicks are
+absorbed, not passed to the dimmed cards behind it. Single file: `PublicTournamentPage.tsx`.
+Typecheck + lint clean (31 pre-existing lint problems, baseline unchanged). Not browser-verified.
+
+🔜 Next: eyeball on test after merge; if Esc-to-close is also unwanted, pull the Esc handler.
 
 ## 2026-06-23 — Promoted to production (PR #494): Stripe Express-only + quote pass-through
 
