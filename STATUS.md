@@ -6,6 +6,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Mobile: My Tournaments reg row stacks (Withdraw no longer clips) — on TEST (#514, closes #513)
+
+The My Tournaments card reg row (`event name | status badge + Withdraw/Request-refund`)
+was one `space-between` flex row; at ~390px the long "Paid · Awaiting partner" badge +
+Withdraw button overflowed and Withdraw clipped off the right. Below 767px the row now
+stacks (name on top, badge + actions below, left-aligned) and the actions wrap; desktop
+unchanged. matchMedia per the inline-styles convention. Part of the mobile/UX batch on
+TEST awaiting the 390px eyeball + promotion. (Mobile header hamburger confirmed rendering
+on TEST per Ron's screenshot.)
+
 ## 2026-06-24 — Fix: unregister left stale "awaiting partner" on the public tournament page
 
 Bug (Ron, on TEST): register for a doubles event → Manage → Unregister, but the
