@@ -5,6 +5,7 @@ import { RequireProfile } from "./auth/RequireProfile";
 import { ProfileOnboarding } from "./auth/ProfileOnboarding";
 import { PartnerInviteOnboarding } from "./auth/PartnerInviteOnboarding";
 import FeedbackWidget from "./components/FeedbackWidget";
+import ScrollToTop from "./components/ScrollToTop";
 import { RouteTracker, ConsentBanner } from "./components/AnalyticsConsent";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
@@ -97,6 +98,8 @@ export default function App() {
     <CustomDomainProvider>
     <PartnerInvitesProvider>
     <PendingPaymentsProvider>
+      {/* Reset scroll to the top on every route change (React Router doesn't). */}
+      <ScrollToTop />
       {/* Global top banner — rendered once for the whole app.
           SiteHeader hides itself on /login so the only "Sign in"
           surface there is the page itself. */}
