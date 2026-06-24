@@ -27,6 +27,16 @@ export default function PendingPaymentsBar() {
   // the bar's CTA points back at the same place.
   if (location.pathname.endsWith("/checkout")) return null;
 
+  // Hide on a tournament page that has a pending here — that page renders its
+  // OWN sticky "Go to checkout" bar (also fixed bottom:0), so showing this
+  // global amber bar too just collides (it sits hidden behind the page bar).
+  if (
+    groups.some(
+      (g) => location.pathname === `/t/${g.orgSlug}/${g.tournamentSlug}`,
+    )
+  )
+    return null;
+
   // Single-tournament case: one row in the bar with a direct
   // Check out CTA pointing at that tournament's checkout.
   // Multi-tournament case: still one bar, but the CTA + label
