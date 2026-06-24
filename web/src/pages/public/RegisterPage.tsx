@@ -1506,8 +1506,10 @@ export default function RegisterPage() {
         {/* Running total — reflects the FULL post-submit basket
             (kept existing regs + the player's current picks). Only
             renders when something is selected so a fresh form
-            doesn't show "$0.00 across 0 events". */}
-        {lineItems.length > 0 && (
+            doesn't show "$0.00 across 0 events". Hidden in the focused
+            Manage view — you've already paid, you're not checking out, so the
+            payment total is just noise (#516). */}
+        {!isManageMode && lineItems.length > 0 && (
           <div
             style={{
               padding: 16,
