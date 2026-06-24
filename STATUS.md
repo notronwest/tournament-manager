@@ -36,9 +36,10 @@ pre-existing/unrelated. **Verified by root-cause + static checks only** — the
 auth+registration flow can't be exercised locally; needs the TEST eyeball after
 deploy. One-line change, no migration.
 
-**Next:** promote `main`→production with the rest of the pending mobile/UX batch,
-then re-run the register→manage→unregister flow on TEST to confirm the card flips
-back to Register.
+**Merged as #515** (`main`, merge commit `04ac5f9`) → now on TEST via auto-deploy.
+**Next:** re-run the register→manage→unregister flow on TEST to confirm the card
+flips back to Register, then promote `main`→production with the rest of the pending
+mobile/UX batch.
 
 ## 2026-06-24 — Design decision: tournament logo + packet PDF (Option C) — not yet built
 
