@@ -3,8 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
+Current state: **Promoted to production 2026-06-24 (PR #520): the mobile/UX batch — frontend-only, no migrations/functions. PROD == main.**
 Last updated: **2026-06-24**
+
+## 2026-06-24 — Promoted to production (PR #520): mobile/UX batch (frontend-only)
+
+Promoted `main`→`production` — **36 commits, no migrations, no edge-function/config
+changes** (the migrate/deploy workflows correctly stayed idle; just the Cloudflare
+prod frontend rebuilt). PROD now == main. Shipped: responsive mobile header
+(hamburger, Sign-out reachable) + Feedback-in-dropdown; scroll-to-top on
+navigation; focused "Manage your registration" view (no picker / no Keep / no
+payment-total box); centered partner-notify note; PendingPaymentsBar no longer
+collides with the page checkout bar; My Tournaments reg row stacks (Withdraw no
+longer clips); E2E flow suite; quote pass-through; Stripe Express-only onboarding;
+waitlist partner-status polish. All TEST-validated + phone-width reviewed.
+
+**Next:** spot-check the live prod site (Cloudflare deploy is async, not observable
+from CI). `#516`-style polish is all shipped; open issues remaining are tracked on
+the board.
 
 ## 2026-06-24 — Register card: center partner note + stop PendingPaymentsBar collision — on TEST (#519, closes #518)
 
