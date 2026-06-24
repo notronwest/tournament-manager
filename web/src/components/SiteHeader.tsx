@@ -60,6 +60,32 @@ export default function SiteHeader() {
     isPlatformAdmin: boolean;
   } | null>(null);
 
+  // Responsive chrome. The signed-in nav is wide (greeting + up to 4 links +
+  // Sign out beside a 240px logo); below the 767px breakpoint it overflows and
+  // clips — "Sign out" gets cut off and a phone user is trapped (#500 audit).
+  // So on mobile we collapse the nav into a hamburger + dropdown. matchMedia
+  // (not a CSS media query) because the styles are inline, per project convention.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    // setState inside this change callback (not synchronously in the effect
+    // body) is the recommended subscribe pattern. Also collapse any open menu
+    // when the viewport crosses the breakpoint. Route-change closing is handled
+    // by each menu item's onClick (tapping a link navigates and closes it).
+    const onChange = (e: MediaQueryListEvent) => {
+      setIsMobile(e.matches);
+      setMenuOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -154,6 +180,31 @@ export default function SiteHeader() {
   // matches what RequireAuth sets when it bounces — LoginPage reads
   // location.state.from?.pathname.
   const signInState = { from: location };
+
+  // The nav as data — used to render the mobile dropdown. Desktop keeps its
+  // own inline markup below (unchanged), so the two layouts stay independent
+  // and desktop carries zero regression risk.
+  type NavEntry = {
+    key: string;
+    label: string;
+    to?: string;
+    onClick?: () => void;
+    state?: typeof signInState;
+    variant: "ghost" | "cta" | "primary";
+  };
+  const mobileEntries: NavEntry[] = [
+    { key: "getting-started", label: "Getting Started", to: "/getting-started", variant: "ghost" },
+  ];
+  if (!loading) {
+    if (!user) {
+      mobileEntries.push({ key: "signin", label: "Sign in", to: "/login", state: signInState, variant: "primary" });
+    } else {
+      mobileEntries.push({ key: "my-tournaments", label: "My Tournaments", to: "/my-tournaments", variant: "cta" });
+      if (showAdminLink) mobileEntries.push({ key: "admin", label: "Admin", to: "/admin", variant: "ghost" });
+      mobileEntries.push({ key: "profile", label: "Profile", to: "/profile", variant: "ghost" });
+      mobileEntries.push({ key: "signout", label: "Sign out", onClick: () => void onSignOut(), variant: "ghost" });
+    }
+  }
 
   return (
     <>
@@ -250,6 +301,17 @@ export default function SiteHeader() {
           />
         </Link>
 
+        {isMobile ? (
+          <button
+            type="button"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+            style={hamburgerStyle}
+          >
+            {menuOpen ? "✕" : "☰"}
+          </button>
+        ) : (
         <nav
           style={{
             display: "flex",
@@ -303,7 +365,41 @@ export default function SiteHeader() {
             </>
           )}
         </nav>
+        )}
       </div>
+
+      {isMobile && menuOpen && (
+        <div style={mobileMenuStyle}>
+          {user && firstName && (
+            <div style={mobileGreetingStyle}>Hi, {firstName}</div>
+          )}
+          {mobileEntries.map((e) =>
+            e.to ? (
+              <Link
+                key={e.key}
+                to={e.to}
+                state={e.state}
+                onClick={() => setMenuOpen(false)}
+                style={mobileItemStyle(e.variant)}
+              >
+                {e.label}
+              </Link>
+            ) : (
+              <button
+                key={e.key}
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  e.onClick?.();
+                }}
+                style={mobileItemStyle(e.variant)}
+              >
+                {e.label}
+              </button>
+            ),
+          )}
+        </div>
+      )}
     </header>
     </>
   );
@@ -363,3 +459,73 @@ const primaryLinkStyle: CSSProperties = {
   fontFamily: "inherit",
   fontSize: 13,
 };
+
+// ── Mobile (≤767px) chrome ───────────────────────────────────────────
+// The authed nav collapses into a hamburger + full-width dropdown so it
+// never clips and every item (incl. Sign out) is a ≥44px tap target (#500).
+
+const hamburgerStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 44,
+  height: 44,
+  background: "transparent",
+  color: CREAM,
+  border: `1px solid ${CREAM_BORDER}`,
+  borderRadius: 8,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: 20,
+  lineHeight: 1,
+};
+
+const mobileMenuStyle: CSSProperties = {
+  borderTop: `1px solid ${CREAM_BORDER}`,
+  background: INK,
+  padding: 12,
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+
+const mobileGreetingStyle: CSSProperties = {
+  color: CREAM_DIM,
+  fontSize: 14,
+  padding: "6px 12px 2px",
+};
+
+function mobileItemStyle(
+  variant: "ghost" | "cta" | "primary",
+): CSSProperties {
+  const base: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    minHeight: 44,
+    padding: "10px 14px",
+    borderRadius: 8,
+    fontFamily: "inherit",
+    fontSize: 15,
+    textDecoration: "none",
+    textAlign: "left",
+    width: "100%",
+    boxSizing: "border-box",
+    cursor: "pointer",
+  };
+  if (variant === "ghost") {
+    return {
+      ...base,
+      color: CREAM,
+      background: "transparent",
+      border: `1px solid ${CREAM_BORDER}`,
+    };
+  }
+  // cta + primary share the court-yellow filled look.
+  return {
+    ...base,
+    color: INK,
+    background: COURT_YELLOW,
+    border: "none",
+    fontWeight: 600,
+  };
+}
