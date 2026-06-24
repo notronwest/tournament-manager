@@ -6,6 +6,21 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Register page: focused "Manage your registration" view — on TEST (#512, closes #511)
+
+Ron's feedback: "Manage" was too busy — it dumped you into the full "Pick your
+events" picker (offering to register for OTHER events), and a staged withdrawal
+had a per-card "Keep" button competing with Cancel. Fix: when RegisterPage is
+entered with `?event=<id>` (the tournament-page "Manage" link) AND you're
+registered for it, render a focused single-registration view — title "Manage your
+registration", only that event's card (status, partner, Change partner,
+Unregister), no picker, no "+ Register". Removed the per-card "Keep" (undo a
+staged withdrawal via the top Pending-changes "Undo" or Cancel). **Scope is
+display-only** — diff/submit still use the full event set, so hidden events are
+never touched and the fresh-registration flow is unchanged; withdrawal/refund
+logic untouched. typecheck+build pass. Needs the ~390px TEST eyeball with the
+rest of the mobile/UX batch before promotion.
+
 ## 2026-06-24 — Scroll-to-top on navigation + Feedback moved into mobile header — on TEST
 
 Two more UX fixes on TEST (`main` ahead of `production`; all pending one promotion):
