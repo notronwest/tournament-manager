@@ -50,6 +50,16 @@ test.describe("mobile audit", () => {
     }
   });
 
+  // The populated card state — a pending doubles reg renders the action
+  // cluster (Change partner + Cancel Registration) beside the meta. This is
+  // the state that collapsed to one-char-per-line on mobile (#500). Logged in
+  // as Mona, who holds a seeded pending reg on the self-service tournament.
+  test("register tab — pending card (action buttons + meta)", async ({ page }, ti) => {
+    await loginAs(page, SEED.selfService.viewerEmail);
+    await gotoRegister(page, SEED.orgSlug, "e2e-self-service");
+    await snap(page, ti, "register-pending-card");
+  });
+
   test("checkout", async ({ page }, ti) => {
     await loginAs(page, SEED.playerEmail);
     await page.goto(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}/checkout`);

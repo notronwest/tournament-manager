@@ -152,6 +152,13 @@ const prefersReducedMotion =
   typeof window !== "undefined" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// Phone-width layout. Mobile-first: where a row places actions beside content,
+// it stacks on mobile so the content column never collapses (the EventCard
+// header otherwise squeezed its meta text to one character per line — #500).
+const isMobileViewport =
+  typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 767px)").matches;
+
 // Public tournament page at /t/:orgSlug/:tournamentSlug. Anonymous-
 // readable thanks to existing RLS: tournaments + events with status
 // in ('published', 'closed', 'completed') are readable by anyone.
@@ -2331,8 +2338,18 @@ function EventCard({
           }}
         />
       )}
-      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 16,
+          alignItems: "flex-start",
+          // Mobile-first: stack so the action buttons drop BELOW the content
+          // instead of squeezing the text column to ~0 (which collapsed the
+          // meta line to one character per line + overlapped the title — #500).
+          flexDirection: isMobileViewport ? "column" : "row",
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0, width: isMobileViewport ? "100%" : undefined }}>
           {/* Title + status pill */}
           <div
             style={{
