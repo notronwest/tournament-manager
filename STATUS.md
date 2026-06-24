@@ -6,6 +6,25 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Scroll-to-top on navigation + Feedback moved into mobile header — on TEST
+
+Two more UX fixes on TEST (`main` ahead of `production`; all pending one promotion):
+
+- **Scroll resets on route change** (#510, closes #509). React Router's component
+  `<Routes>` never reset scroll, so a new page kept the prior page's offset (tap a
+  tournament from mid-list → land partway down). Added `components/ScrollToTop.tsx`
+  (`window.scrollTo(0,0)` on `location.pathname` change), mounted in `App` inside
+  the Router. Keyed on pathname so tab/param/hash changes don't jump to top.
+- **Feedback in the mobile header** (#508, closes #507). On ≤767px the floating
+  Feedback FAB is hidden and Feedback is an item in the hamburger dropdown; tapping
+  it fires a `wmpc:open-feedback` window event the FeedbackWidget opens its panel on.
+  Desktop FAB unchanged. (Supersedes the FAB-raise from #506.)
+
+**Next (per #500):** ~390px eyeball on the TEST preview for the full mobile-chrome
+set — hamburger nav with reachable Sign out, Feedback in the dropdown (no floating
+button), and scroll starting at top on every navigation — then promote `main`→
+`production`.
+
 ## 2026-06-24 — Mobile: responsive header nav (hamburger) + Feedback FAB — on TEST (#506, closes #505)
 
 Fixed the #500-audit **HIGH** finding the earlier mobile work (#502) left untouched:
