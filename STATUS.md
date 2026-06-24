@@ -6,6 +6,23 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Mobile: responsive header nav (hamburger) + Feedback FAB — on TEST (#506, closes #505)
+
+Fixed the #500-audit **HIGH** finding the earlier mobile work (#502) left untouched:
+the signed-in `SiteHeader` nav clipped below 767px and **cut off "Sign out"** (a
+phone user was trapped). Now below 767px the nav collapses to a **hamburger →
+full-width dropdown** (greeting + every link + Sign out, ≥44px taps, closes on
+tap/viewport-change). Desktop markup untouched (no regression). Also raised the
+Feedback FAB (bottom 80→150 on mobile) off the sticky Register CTA (the MEDIUM
+finding). `matchMedia` per inline-styles convention; menu-close via the change
+callback + item onClick (no set-state-in-effect). Local typecheck+build+eslint
+pass; CI green.
+
+**Next:** per #500, **eyeball at ~390px on the TEST preview signed in** (hamburger
+shows, dropdown lists a reachable Sign out, nothing clips) before it rides a
+promotion to prod. `main` is now ahead of `production` by the E2E suite + register
+fixes + mobile fixes — promote when ready.
+
 ## 2026-06-24 — Platform-admin user management + Site Admin section (now in PROD)
 
 Re-adding a consolidated handoff for the admin work merged 06-22 — all three PRs are now in
