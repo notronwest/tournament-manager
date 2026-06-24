@@ -29,6 +29,22 @@ export default function FeedbackWidget() {
   const panelRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
+  // On phones the bottom sticky Register CTA sits at the bottom edge, and the
+  // launcher at bottom:80 overlapped it (#500 audit). Raise the launcher above
+  // the bar on mobile. matchMedia (inline styles, no CSS media query).
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   // Close on outside click.
   useEffect(() => {
     if (state.phase !== "open") return;
@@ -106,7 +122,12 @@ export default function FeedbackWidget() {
 
   return (
     <div
-      style={{ position: "fixed", bottom: 80, right: 20, zIndex: 50 }}
+      style={{
+        position: "fixed",
+        bottom: isMobile ? 150 : 80,
+        right: 20,
+        zIndex: 50,
+      }}
       ref={panelRef}
     >
       {/* Floating launcher button */}
