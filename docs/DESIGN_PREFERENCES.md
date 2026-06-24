@@ -15,6 +15,27 @@ wrong — bring it back in line. Date entries when you add new ones.
 
 ---
 
+## Mobile-first (hard rule — standing issue #500)
+
+**Design, build, and test every UI at phone width (~390px) FIRST**, then scale
+up to desktop. Never desktop-first-then-shrink. Most WMPC users are on phones.
+
+- **No row that places actions/controls beside content may shrink the content
+  column to ~0 on mobile** — such rows must **stack** (or wrap) on mobile.
+  Failure to learn from: the `EventCard` header put the Change-partner /
+  Cancel-registration buttons beside a `minWidth:0` text column, so at 390px the
+  meta line wrapped one character per line and the buttons overlapped the title
+  (perfect on desktop). Fixed by stacking the row on mobile (`isMobileViewport`).
+- **Test populated states, not just empty ones.** A card looks fine empty and
+  breaks once it has status pills + action buttons. The E2E mobile audit
+  (`web/e2e/mobile/`, iPhone+Pixel) must render each component state.
+- **Tap targets ≥ 44px**; floating elements (e.g. the Feedback button) must not
+  overlap primary CTAs at phone width.
+- Page-overflow checks are necessary but **not sufficient** — clipped (not
+  scrolled) overflow passes them; review actual phone-width screenshots.
+
+---
+
 ## tournament-manager specifics
 
 - **Palette identity.** tournament-manager runs a slightly different blue
