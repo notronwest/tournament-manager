@@ -2504,8 +2504,11 @@ function EventCard({
                 fontSize: 11,
                 lineHeight: 1.4,
                 color: ink,
-                maxWidth: 180,
-                textAlign: "left",
+                // Span the full action column (the Change-partner + Cancel
+                // button row) and center, instead of tucking under the right
+                // button.
+                alignSelf: "stretch",
+                textAlign: "center",
               }}
             >
               Your partner won't be notified until you check out.
