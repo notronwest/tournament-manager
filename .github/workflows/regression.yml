@@ -58,6 +58,10 @@ jobs:
         env:
           E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
           E2E_TEST_PASSWORD: ${{ secrets.E2E_TEST_PASSWORD }}
+          # Email-flow specs mint confirm/recovery tokens via the admin API
+          # (generateLink) instead of a real inbox.
+          E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
         run: npm run test:e2e
 
       # Per-test history (B): ingest the JSON report into e2e_test_results in the

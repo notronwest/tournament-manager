@@ -1,4 +1,16 @@
 import { test as base, expect, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+
+// Service-role admin client for specs that need to mint email tokens
+// (generateLink) or set up auth users directly — used by the email flows so we
+// never need a real inbox. Requires E2E_SUPABASE_URL + E2E_SUPABASE_SERVICE_ROLE_KEY
+// in the test step env (see regression.yml).
+export function admin() {
+  const url = process.env.E2E_SUPABASE_URL;
+  const key = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("admin(): missing E2E_SUPABASE_URL / E2E_SUPABASE_SERVICE_ROLE_KEY");
+  return createClient(url, key, { auth: { persistSession: false } });
+}
 
 // Deterministic identities created by e2e/seed.ts. Keep these in sync with
 // the seed. Passwords come from CI secret E2E_TEST_PASSWORD.
@@ -26,6 +38,34 @@ export const SEED = {
   seeker: {
     tournamentSlug: "e2e-seeker",
     registrantEmail: "e2e-sam@wmpc.test", // Sam
+  },
+  singles: {
+    tournamentSlug: "e2e-singles",
+    registrantEmail: "e2e-sid@wmpc.test", // Sid
+  },
+  discard: {
+    tournamentSlug: "e2e-discard",
+    registrantEmail: "e2e-dana@wmpc.test", // Dana, no existing reg
+    partnerQuery: "Pat",
+  },
+  changePartner: {
+    tournamentSlug: "e2e-change-partner",
+    registrantEmail: "e2e-cam@wmpc.test", // Cam, pending reg w/ Pat
+    newPartnerQuery: "Quinn",
+  },
+  inviteAccept: {
+    tournamentSlug: "e2e-invite",
+    token: "e2e-accept-token",
+    inviteeEmail: "e2e-ava@wmpc.test", // Ava
+    inviterName: "Ivan",
+  },
+  selfService: {
+    tournamentName: "E2E Self-Service Cup",
+    viewerEmail: "e2e-mona@wmpc.test", // Mona — read-only view
+    withdrawEmail: "e2e-will@wmpc.test", // Will — withdraw test cancels his reg
+  },
+  invitesView: {
+    inviteeEmail: "e2e-vic@wmpc.test", // dedicated invitee — invite never consumed
   },
 };
 
