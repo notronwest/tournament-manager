@@ -1560,8 +1560,19 @@ function EventCard({
       );
     };
 
+    // Bring the top of the now-expanded card into view so the user
+    // doesn't have to scroll down to the register form. preventScroll
+    // on the focus() below keeps the initial focus from yanking the
+    // viewport back down to the first input.
+    requestAnimationFrame(() => {
+      card?.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+
     // Move initial focus to the first interactive element in the card.
-    requestAnimationFrame(() => getFocusables()[0]?.focus());
+    requestAnimationFrame(() => getFocusables()[0]?.focus({ preventScroll: true }));
 
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {

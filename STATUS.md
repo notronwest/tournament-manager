@@ -6,6 +6,17 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Register click scrolls the expanded card into view (PR #499)
+
+Clicking **Register** on an event entered focus mode but left the viewport where it was, so
+the user had to scroll down to reach the register form. In the `#98` focus-mode effect
+(`PublicTournamentPage.tsx`), on focus we now `card.scrollIntoView({ block: "start" })` (smooth,
+or instant under reduced-motion) to bring the top of the register box to the top of the viewport.
+The initial focus call switched to `focus({ preventScroll: true })` so it no longer yanks the
+viewport back down to the first input (which would undo the scroll). No sticky top header to clear
+(only fixed elements are the scrim + a bottom pending-group bar), so `block: "start"` lands clean.
+Typecheck passes. Single file. Not browser-verified.
+
 ## 2026-06-24 — Registration overlay no longer closes on outside click (PR #498)
 
 On the public tournament page, the focused-event registration overlay (`#98` focus mode)
