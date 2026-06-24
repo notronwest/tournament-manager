@@ -29,9 +29,10 @@ export default function FeedbackWidget() {
   const panelRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
-  // On phones the bottom sticky Register CTA sits at the bottom edge, and the
-  // launcher at bottom:80 overlapped it (#500 audit). Raise the launcher above
-  // the bar on mobile. matchMedia (inline styles, no CSS media query).
+  // On phones the floating launcher crowded the bottom sticky Register CTA
+  // (#500 audit), so on mobile we hide the FAB and surface Feedback as an item
+  // in the SiteHeader hamburger dropdown instead. matchMedia (inline styles,
+  // no CSS media query).
   const [isMobile, setIsMobile] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -43,6 +44,14 @@ export default function FeedbackWidget() {
     const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Let the mobile header (which has no FAB) open the panel via a window event.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const open = () => setState({ phase: "open" });
+    window.addEventListener("wmpc:open-feedback", open);
+    return () => window.removeEventListener("wmpc:open-feedback", open);
   }, []);
 
   // Close on outside click.
@@ -120,18 +129,19 @@ export default function FeedbackWidget() {
 
   const isOpen = state.phase === "open" || state.phase === "submitting" || state.phase === "success" || state.phase === "error";
 
+  // On mobile, with the FAB hidden and the entry point in the header, there's
+  // nothing to render unless the panel is open — don't mount an empty fixed box.
+  if (isMobile && !isOpen) return null;
+
   return (
     <div
-      style={{
-        position: "fixed",
-        bottom: isMobile ? 150 : 80,
-        right: 20,
-        zIndex: 50,
-      }}
+      style={{ position: "fixed", bottom: 80, right: 20, zIndex: 50 }}
       ref={panelRef}
     >
-      {/* Floating launcher button */}
-      {!isOpen && (
+      {/* Floating launcher button — desktop only. On mobile the entry point is
+          a "Feedback" item in the SiteHeader hamburger dropdown, which dispatches
+          the `wmpc:open-feedback` event the effect above listens for. */}
+      {!isOpen && !isMobile && (
         <button
           onClick={openPanel}
           aria-label="Send feedback"

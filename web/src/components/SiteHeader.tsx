@@ -205,6 +205,15 @@ export default function SiteHeader() {
       mobileEntries.push({ key: "signout", label: "Sign out", onClick: () => void onSignOut(), variant: "ghost" });
     }
   }
+  // On mobile there's no floating Feedback FAB (it crowded the bottom CTA), so
+  // surface Feedback here for everyone. Tapping it fires the event the
+  // FeedbackWidget listens for, which opens its panel.
+  mobileEntries.push({
+    key: "feedback",
+    label: "Feedback",
+    onClick: () => window.dispatchEvent(new CustomEvent("wmpc:open-feedback")),
+    variant: "ghost",
+  });
 
   return (
     <>
