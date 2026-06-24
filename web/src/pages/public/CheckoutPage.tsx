@@ -1624,9 +1624,17 @@ const backLinkStyle: CSSProperties = {
   fontWeight: 500,
 };
 
+// Mobile-first (#500): phone-width check, mirrors the prefers-reduced-motion
+// guard pattern. Checked once per page lifetime.
+const isMobileViewport =
+  typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 767px)").matches;
+
 const checkoutGrid: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 320px",
+  // Stack on mobile so the 320px Order Summary (with the pay button) doesn't
+  // run off-screen and clip the primary CTA (#500).
+  gridTemplateColumns: isMobileViewport ? "1fr" : "1fr 320px",
   gap: 24,
 };
 
@@ -1643,7 +1651,8 @@ const summaryCard: CSSProperties = {
   border: `1px solid ${rule}`,
   borderRadius: 10,
   alignSelf: "flex-start",
-  position: "sticky",
+  // Sticky only on desktop; on mobile it stacks below the cards as a normal block.
+  position: isMobileViewport ? "static" : "sticky",
   top: 16,
 };
 

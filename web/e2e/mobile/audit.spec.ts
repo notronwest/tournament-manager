@@ -60,10 +60,12 @@ test.describe("mobile audit", () => {
     await snap(page, ti, "register-pending-card");
   });
 
-  test("checkout", async ({ page }, ti) => {
-    await loginAs(page, SEED.playerEmail);
-    await page.goto(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}/checkout`);
-    await snap(page, ti, "checkout");
+  // Populated checkout (Mona has a seeded pending reg) — the two-column
+  // grid (cards + Order Summary/pay button) is what overflowed on mobile (#500).
+  test("checkout (populated)", async ({ page }, ti) => {
+    await loginAs(page, SEED.selfService.viewerEmail);
+    await page.goto(`/t/${SEED.orgSlug}/e2e-self-service/checkout`);
+    await snap(page, ti, "checkout-populated");
   });
 
   test("my-tournaments", async ({ page }, ti) => {
