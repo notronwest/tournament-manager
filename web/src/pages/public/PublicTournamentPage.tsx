@@ -405,6 +405,18 @@ export default function PublicTournamentPage({
         )
         .eq("player_id", myPlayer.id)
         .in("event_id", eventIds)
+        // Only ACTIVE regs drive the per-event card state. withdraw_self
+        // (the Unregister/Withdraw path) leaves the row in place with
+        // status withdrawn/cancelled and deleted_at NULL, so without this
+        // filter a just-unregistered doubles event still reads its stale
+        // partner_status='pending' as "awaiting_partner" (mirrors the same
+        // allowlist RegisterPage uses).
+        .in("status", [
+          "paid",
+          "pending_payment",
+          "waitlisted",
+          "waitlisted_pending_payment",
+        ])
         .is("deleted_at", null),
       supabase
         .from("partner_invites")
