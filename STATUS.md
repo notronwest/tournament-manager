@@ -6,6 +6,31 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Platform-admin user management + Site Admin section (now in PROD)
+
+Re-adding a consolidated handoff for the admin work merged 06-22 — all three PRs are now in
+`origin/production` (promoted), so the `avatar_hidden` migration + both edge functions are live
+on PROD too.
+
+- **PR #486** — platform-admin **player management** page `/admin/players/:playerId` (reached from
+  the all-players list). Profile edit, login-email change, **password reset** (send branded email
+  OR set a one-time temp password), cross-org tournament history. Backed by service-role,
+  platform-admin-gated edge functions `admin-get-player` + `admin-update-player` (the latter
+  supersedes/replaces the deleted `admin-update-player-email`).
+- **PR #487** — same page: **self-ratings** editable (Doubles/Mixed/Singles, 0–9.99) + reversible
+  **hide profile image** moderation. Migration `20260622110000_player_avatar_hidden.sql` adds
+  `players.avatar_hidden` + a guard trigger so only `service_role` can flip it (a player can't
+  un-hide themselves). ⚠️ Flag is **forward-looking**: nothing shows other players' avatars
+  publicly yet (PartnerSearch is initials-only) — a future public avatar surface must filter
+  `where not avatar_hidden`.
+- **PR #490** — **Site Admin** section: `/admin` is now a clean crossroads (Site Admin card +
+  your orgs), and `/admin/site` is a dashboard of platform tools (All players, Organizations,
+  Platform settings, Quotes). Removed the platform buttons that were crammed into the org picker.
+
+Deploy model confirmed + saved to memory: **migrations + edge functions auto-apply via CI on
+merge** (main→TEST, production→PROD); never hand-run `db push`/`functions deploy`. **Next:** none
+required — possible follow-up is a direct "Site Admin" link in the global header if wanted.
+
 ## 2026-06-24 — Register click scrolls the expanded card into view (PR #499)
 
 Clicking **Register** on an event entered focus mode but left the viewport where it was, so
