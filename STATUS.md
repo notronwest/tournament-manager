@@ -6,6 +6,15 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Manage view: hide the payment-total box — on TEST (#517, closes #516)
+
+Ron (reviewing the focused Manage view on TEST): the yellow "1 event (Entry) $25"
+payment-total box is noise there — you've already paid, you're not checking out.
+Gated it on `!isManageMode` in RegisterPage; fresh-registration/checkout flow still
+shows it. One-line change. Part of the mobile/UX batch on TEST awaiting the 390px
+eyeball + promotion. (Focused Manage view #512 confirmed live + correct on TEST per
+Ron's screenshot.)
+
 ## 2026-06-24 — Mobile: My Tournaments reg row stacks (Withdraw no longer clips) — on TEST (#514, closes #513)
 
 The My Tournaments card reg row (`event name | status badge + Withdraw/Request-refund`)
