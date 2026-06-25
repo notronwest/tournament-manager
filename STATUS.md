@@ -6,6 +6,36 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-24 (PR #520): the mobile/UX batch — frontend-only, no migrations/functions. PROD == main.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Fix: "Partner up" with a seeker no longer hits the waitlist (+ server count)
+
+Bug (Ron, on TEST): an event was full where one of the slots was a player who
+registered as "I need a partner" (an open seeker). Clicking **Partner up →** on
+that seeker showed "This event is full — you'll join the waitlist" and waitlisted
+the joiner — but pairing into a seeker's open slot doesn't add a team, so it
+should just register them.
+
+Two root causes, both fixed:
+- **Client** (`PublicTournamentPage.tsx`): `handlePartnerUp` opened the register
+  form but never told the submit path it was filling an existing slot, so the
+  `isFull` gate fired → `join_waitlist`. Added a `joiningSeeker` flag (set on
+  Partner-up; cleared when the partner changes, the user switches to seeking, or
+  the form closes). When set, submit bypasses the waitlist and runs the normal
+  pairing INSERT + outbound invite (seeker accepts via the existing flow). Banner
+  + cost line updated for the slot-fill case. No DB insert guard exists, so the
+  client bypass is safe.
+- **Server** (new migration `…_is_event_full_discount_spoken_seekers`):
+  `is_event_full` counted a spoken-for seeker AND their joiner as two teams,
+  diverging from the roster/client count. Now a seeking reg with a pending inbound
+  invite from an active registrant is discounted (mirrors `event_roster`'s
+  `pending_partner_reg_id`), so a partnered-into seeker isn't double-counted.
+  Return type unchanged → no type regen.
+
+typecheck clean; lint unchanged (pre-existing only). **Verified by root-cause +
+static checks only** — the auth + full-event + seeker flow can't be exercised
+locally. **Next:** on TEST after merge, fill an event to capacity with an open
+seeker, Partner up on them, and confirm the joiner registers (not waitlisted) and
+no 5th team appears.
+
 ## 2026-06-24 — Promoted to production (PR #520): mobile/UX batch (frontend-only)
 
 Promoted `main`→`production` — **36 commits, no migrations, no edge-function/config
