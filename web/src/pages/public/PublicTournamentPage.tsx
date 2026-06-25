@@ -2047,6 +2047,17 @@ function EventCard({
   // cancel directly — the action is less consequential (issue #9).
   const hasPickedPartner =
     !!myStatus?.partnerLabel && !myStatus?.isSeekingPartner;
+  // I joined an already-registered seeker (clicked "Partner up" on them):
+  // my roster row is a pending INVITER whose invitee already holds their
+  // own slot (pending_partner_reg_id set). Filling an existing slot means
+  // "Change partner" is hidden — swapping would orphan the team in a
+  // possibly-full event. Mirrors the manage view (RegisterPage).
+  const myRosterRow = rosterRows.find(
+    (r) => r.registration_id === myStatus?.regId,
+  );
+  const joinedRegisteredPartner =
+    myRosterRow?.partner_status === "pending" &&
+    myRosterRow?.pending_partner_reg_id != null;
   const requestCancel = () => {
     if (hasPickedPartner) setConfirmCancel(true);
     else void onCancelPending();
@@ -2158,7 +2169,7 @@ function EventCard({
     if (myStatus?.state === "pending_payment") {
       return (
         <div style={{ display: "flex", gap: 6 }}>
-          {isDoubles && !expanded && (
+          {isDoubles && !expanded && !joinedRegisteredPartner && (
             <button
               type="button"
               onClick={startChangePartner}

@@ -80,6 +80,15 @@ type ExistingReg = {
   // outbound invite (singles, or partner accepted way back and the
   // row aged out somehow — defensive).
   inviteId: string | null;
+  // True when I joined an ALREADY-REGISTERED player (I clicked
+  // "Partner up" on a seeker): I'm the inviter and the player I invited
+  // already holds their own slot in this event. Such a join fills an
+  // existing slot, so "Change partner" is hidden — swapping would orphan
+  // the team in a possibly-full event (the full waitlist-reshuffle is
+  // intentionally out of scope; see the IMG_8891 discussion). Only set
+  // while the invite is still pending; a confirmed pair falls back to the
+  // normal change-partner flow.
+  joinedRegisteredPartner: boolean;
 };
 
 // Change classification for an event, computed from existingRegs +
@@ -442,6 +451,7 @@ export default function RegisterPage() {
                 }
               : null,
             inviteId: null,
+            joinedRegisteredPartner: false,
           });
         }
         // Walk outbound invites — newest first thanks to the order
@@ -498,6 +508,34 @@ export default function RegisterPage() {
             regId: null,
           };
           cur.partnerLabel = `${inv.inviter.first_name} ${inv.inviter.last_name}`;
+        }
+
+        // Flag "I joined an already-registered partner" — RLS blocks reading
+        // another player's registration directly, so we go through the
+        // event_roster RPC (security definer). For MY pending-inviter row
+        // (inviteId set), pending_partner_reg_id is non-null exactly when the
+        // player I invited already holds their own slot — i.e. I filled a
+        // seeker's open spot. Gate "Change partner" off that.
+        const rosterEventIds = Array.from(existingMap.entries())
+          .filter(([, reg]) => reg.inviteId)
+          .map(([eid]) => eid);
+        if (rosterEventIds.length > 0) {
+          const { data: roster } = await supabase.rpc("event_roster", {
+            p_event_ids: rosterEventIds,
+          });
+          if (!cancelled) {
+            const pendingByRegId = new Map(
+              ((roster ?? []) as {
+                registration_id: string;
+                pending_partner_reg_id: string | null;
+              }[]).map((r) => [r.registration_id, r.pending_partner_reg_id]),
+            );
+            for (const reg of existingMap.values()) {
+              if (reg.inviteId && pendingByRegId.get(reg.regId)) {
+                reg.joinedRegisteredPartner = true;
+              }
+            }
+          }
         }
         setExistingRegs(existingMap);
       } else {
@@ -2102,16 +2140,30 @@ function EventRow({
         <div
           style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}
         >
-          {event.format === "doubles" && hasPartner && !showPartnerEditor && (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => setEditingPartner(true)}
-              style={btnBase}
-            >
-              Change partner
-            </button>
-          )}
+          {event.format === "doubles" &&
+            hasPartner &&
+            !showPartnerEditor &&
+            !existing?.joinedRegisteredPartner && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => setEditingPartner(true)}
+                style={btnBase}
+              >
+                Change partner
+              </button>
+            )}
+          {/* When I joined an already-registered player (filled their open
+              slot), swapping partners is disallowed — it would orphan the
+              team in a possibly-full event. Explain the missing control. */}
+          {event.format === "doubles" &&
+            hasPartner &&
+            existing?.joinedRegisteredPartner && (
+              <span style={{ fontSize: 12, color: "#6b7280", alignSelf: "center" }}>
+                You joined this player's open slot — to switch partners,
+                unregister and register again.
+              </span>
+            )}
           <button
             type="button"
             disabled={disabled}
