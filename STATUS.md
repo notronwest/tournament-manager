@@ -6,6 +6,34 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-24 (PR #520): the mobile/UX batch — frontend-only, no migrations/functions. PROD == main.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Testing: daytime regression cron + mobile e2e assertions (PR open, NOT merged)
+
+Implements the two tournament-manager tasks from the daemon repo's
+`infrastructure/testing-agent/TM-PENDING.md` (daemon PR #42). On branch
+`feat/mobile-e2e-assertions`; PR opened, **left unmerged** per request.
+
+1. **Second regression cron.** `.github/workflows/regression.yml` now fires
+   `15 9` **and** `15 17` UTC so the testing agent's twice-daily (07:00/15:00
+   local) triage gets a fresh CI result. Same job, no other edits.
+2. **Mobile audit: assert, don't screenshot.** ("merge `e2e/mobile`" was a
+   no-op — `origin/e2e/mobile` has 0 commits not in main; `web/e2e/mobile/` is
+   already there.) `web/e2e/mobile/audit.spec.ts` upgraded from screenshot-only
+   to real gates on the iPhone 13 / Pixel 5 projects against POPULATED states:
+   primary CTA in-viewport + right edge ≤ viewport (catches the clipped
+   "Continue to payment"), content column `clientWidth` floor (catches the
+   1fr/320px checkout grid that never stacked), tap targets ≥ 44px. Screenshots
+   kept as artifacts only. Added `data-testid="checkout-content-col"` to the
+   checkout left column for a deterministic column-collapse gate. Also **wired
+   the core flow suite (`web/e2e/flows/`) onto the mobile projects** (config
+   `testMatch`) + a viewport-aware `openPartnerPicker` helper so the
+   partner-picker flows pass on the phone's bottom-sheet too.
+
+**Verified locally:** app + e2e typecheck clean; `playwright test --list` shows
+the assertions on `[iphone]`/`[pixel]` and flows scheduled on both (71 tests).
+**NOT run** — the suite needs the deployed test app + E2E secrets (CI only); the
+acceptance (fails pre-fix / passes post-fix) is by construction. Next: Ron
+reviews; first green-secrets CI run confirms the flow suite at phone width.
+
 ## 2026-06-24 — Hide "Change partner" when you joined an already-registered player
 
 Follow-up to the Partner-up fix (Ron, on TEST): a player who joined another

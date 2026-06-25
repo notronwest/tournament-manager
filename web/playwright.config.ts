@@ -42,17 +42,20 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
       testIgnore: "**/mobile/**",
     },
-    // Mobile profiles run only the mobile/ specs (audit now; journey
-    // coverage as those specs are made mobile-aware).
+    // Mobile profiles run the mobile/ audit AND the core flow suite, so the
+    // journeys are exercised at phone width (~390px, touch) — not just audited
+    // statically. The flow specs use viewport-aware helpers (loginAs /
+    // gotoRegister / openPartnerPicker) so the same specs pass on both desktop
+    // and mobile.
     {
       name: "iphone",
       use: { ...devices["iPhone 13"] }, // WebKit, ~390px, touch
-      testMatch: "**/mobile/**",
+      testMatch: ["**/mobile/**", "**/flows/**"],
     },
     {
       name: "pixel",
       use: { ...devices["Pixel 5"] }, // Chromium, ~393px, touch
-      testMatch: "**/mobile/**",
+      testMatch: ["**/mobile/**", "**/flows/**"],
     },
   ],
 });

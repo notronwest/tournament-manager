@@ -1,4 +1,11 @@
-import { test, expect, loginAs, gotoRegister, SEED } from "../fixtures";
+import {
+  test,
+  expect,
+  loginAs,
+  gotoRegister,
+  openPartnerPicker,
+  SEED,
+} from "../fixtures";
 
 // E2E flow group #253 — doubles registration variants. Each flow runs against
 // its own single-event tournament (seed), so the Register tab has one card and
@@ -10,7 +17,9 @@ test.describe("registration (#253)", () => {
     await gotoRegister(page, SEED.orgSlug, SEED.existingPartner.tournamentSlug);
 
     await page.getByRole("button", { name: /^register$/i }).click();
-    // Default mode is "I have a partner" → inline PartnerSearch.
+    // Default mode is "I have a partner". On mobile the picker is a bottom
+    // sheet; openPartnerPicker opens it (no-op on desktop's inline search).
+    await openPartnerPicker(page);
     await page
       .getByPlaceholder(/search by name, email, or phone/i)
       .fill(SEED.existingPartner.partnerQuery);
@@ -26,6 +35,7 @@ test.describe("registration (#253)", () => {
     await gotoRegister(page, SEED.orgSlug, SEED.newPartner.tournamentSlug);
 
     await page.getByRole("button", { name: /^register$/i }).click();
+    await openPartnerPicker(page);
     await page.getByRole("button", { name: /add new player/i }).click();
     await page.getByPlaceholder("First name *").fill(SEED.newPartner.first);
     await page.getByPlaceholder("Last name *").fill(SEED.newPartner.last);
@@ -62,6 +72,7 @@ test.describe("registration (#253)", () => {
     await gotoRegister(page, SEED.orgSlug, SEED.changePartner.tournamentSlug);
 
     await page.getByRole("button", { name: /change partner/i }).click();
+    await openPartnerPicker(page);
     await page
       .getByPlaceholder(/search by name, email, or phone/i)
       .fill(SEED.changePartner.newPartnerQuery);

@@ -95,5 +95,19 @@ export async function gotoRegister(
   await page.getByRole("tab", { name: /register/i }).click();
 }
 
+// Open the doubles partner picker so the search/add controls are interactable.
+// On mobile (≤767px) PartnerSearch renders a "Choose a doubles partner" trigger
+// that opens a bottom sheet; on desktop the search is inline and there's no
+// trigger. Calling this before the partner steps lets the SAME flow specs run
+// on both the desktop and the phone (iphone/pixel) projects.
+export async function openPartnerPicker(page: Page) {
+  const trigger = page.getByRole("button", {
+    name: /choose a doubles partner/i,
+  });
+  if (await trigger.isVisible().catch(() => false)) {
+    await trigger.click();
+  }
+}
+
 export const test = base;
 export { expect };
