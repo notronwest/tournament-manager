@@ -1,4 +1,4 @@
-import { test, expect, admin } from "../fixtures";
+import { test, expect, admin, expectSignedIn } from "../fixtures";
 
 // E2E flow group #251 — the email-gated half of auth: account creation and
 // forgot-password. No real inbox: we mint the confirm/recovery token via the
@@ -31,7 +31,8 @@ test.describe("account & auth — email flows (#251)", () => {
 
     await page.goto(`/auth/confirm?token_hash=${tokenHash}&type=signup&next=/`);
     await expect(page).not.toHaveURL(/\/login/);
-    await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
+    // Authed signal — Sign out (in the bar on desktop, in the hamburger on mobile).
+    await expectSignedIn(page);
   });
 
   test("forgot password → reset link → set a new password", async ({ page }) => {

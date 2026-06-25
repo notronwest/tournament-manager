@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Page, type Locator } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 
 // Service-role admin client for specs that need to mint email tokens
@@ -93,6 +93,60 @@ export async function gotoRegister(
 ) {
   await page.goto(`/t/${orgSlug}/${tournamentSlug}`);
   await page.getByRole("tab", { name: /register/i }).click();
+}
+
+// Open the doubles partner picker so the search/add controls are interactable.
+// On mobile (≤767px) PartnerSearch renders a "Choose a doubles partner" trigger
+// that opens a bottom sheet; on desktop the search is inline and there's no
+// trigger. Calling this before the partner steps lets the SAME flow specs run
+// on both the desktop and the phone (iphone/pixel) projects.
+export async function openPartnerPicker(page: Page) {
+  const trigger = page.getByRole("button", {
+    name: /choose a doubles partner/i,
+  });
+  if (await trigger.isVisible().catch(() => false)) {
+    await trigger.click();
+  }
+}
+
+// ── Mobile-aware helpers ──────────────────────────────────────────────────
+// Below the 767px breakpoint SiteHeader collapses the whole signed-in nav
+// (greeting + links + Sign out) into a HAMBURGER + dropdown (see SiteHeader.tsx,
+// the #500 fix). So on the phone projects "Sign out"/"Sign in" live INSIDE the
+// menu and aren't in the top bar — a desktop-written assertion that looks for
+// them directly fails. openAccountMenu opens the menu when the hamburger is
+// present (mobile) and is a no-op on desktop, so the SAME spec runs on both.
+export async function openAccountMenu(page: Page) {
+  // aria-label is "Open menu" only while closed → matches solely when we need
+  // to open it; if already open (or on desktop, no hamburger) this no-ops.
+  const burger = page.getByRole("button", { name: /open menu/i });
+  if (await burger.isVisible().catch(() => false)) {
+    await burger.click();
+  }
+}
+
+// Authed signal that works on both desktop (Sign out in the bar) and mobile
+// (Sign out in the hamburger dropdown). The greeting is desktop-only chrome, so
+// specs assert presence of Sign out here, not the "Hi, X" text.
+export async function expectSignedIn(page: Page) {
+  await openAccountMenu(page);
+  await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
+}
+
+// Click a control that may sit under the site-wide FIXED bottom bar
+// (PendingPaymentsBar / the register page's own "Go to checkout" bar — both
+// position:fixed; bottom:0; high z-index). Playwright's auto-scroll lands the
+// target just inside the viewport — i.e. UNDER that bar — so the click is
+// intercepted and the test hangs to its 60s timeout on the phone projects
+// (where the bar covers proportionally more of the short viewport). Scrolling
+// the element to the viewport CENTER first clears both the bottom bar and the
+// sticky top header, mirroring what a real user does (scroll, then tap).
+export async function tapClear(locator: Locator) {
+  await locator.scrollIntoViewIfNeeded();
+  await locator.evaluate((el) =>
+    (el as HTMLElement).scrollIntoView({ block: "center", inline: "nearest" }),
+  );
+  await locator.click();
 }
 
 export const test = base;

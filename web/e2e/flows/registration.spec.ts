@@ -1,4 +1,12 @@
-import { test, expect, loginAs, gotoRegister, SEED } from "../fixtures";
+import {
+  test,
+  expect,
+  loginAs,
+  gotoRegister,
+  openPartnerPicker,
+  tapClear,
+  SEED,
+} from "../fixtures";
 
 // E2E flow group #253 — doubles registration variants. Each flow runs against
 // its own single-event tournament (seed), so the Register tab has one card and
@@ -9,14 +17,16 @@ test.describe("registration (#253)", () => {
     await loginAs(page, SEED.existingPartner.registrantEmail);
     await gotoRegister(page, SEED.orgSlug, SEED.existingPartner.tournamentSlug);
 
-    await page.getByRole("button", { name: /^register$/i }).click();
-    // Default mode is "I have a partner" → inline PartnerSearch.
+    await tapClear(page.getByRole("button", { name: /^register$/i }));
+    // Default mode is "I have a partner". On mobile the picker is a bottom
+    // sheet; openPartnerPicker opens it (no-op on desktop's inline search).
+    await openPartnerPicker(page);
     await page
       .getByPlaceholder(/search by name, email, or phone/i)
       .fill(SEED.existingPartner.partnerQuery);
     await page.getByRole("button", { name: /^search$/i }).click();
     await page.getByRole("button", { name: /^pick$/i }).first().click();
-    await page.getByRole("button", { name: /^save$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^save$/i }));
 
     await expect(page.getByRole("link", { name: /go to checkout/i })).toBeVisible();
   });
@@ -25,12 +35,13 @@ test.describe("registration (#253)", () => {
     await loginAs(page, SEED.newPartner.registrantEmail);
     await gotoRegister(page, SEED.orgSlug, SEED.newPartner.tournamentSlug);
 
-    await page.getByRole("button", { name: /^register$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^register$/i }));
+    await openPartnerPicker(page);
     await page.getByRole("button", { name: /add new player/i }).click();
     await page.getByPlaceholder("First name *").fill(SEED.newPartner.first);
     await page.getByPlaceholder("Last name *").fill(SEED.newPartner.last);
     await page.getByPlaceholder("Email *").fill(SEED.newPartner.email);
-    await page.getByRole("button", { name: /^save$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^save$/i }));
 
     await expect(page.getByRole("link", { name: /go to checkout/i })).toBeVisible();
   });
@@ -39,9 +50,9 @@ test.describe("registration (#253)", () => {
     await loginAs(page, SEED.seeker.registrantEmail);
     await gotoRegister(page, SEED.orgSlug, SEED.seeker.tournamentSlug);
 
-    await page.getByRole("button", { name: /^register$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^register$/i }));
     await page.getByRole("radio", { name: /i need a partner/i }).click();
-    await page.getByRole("button", { name: /^save$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^save$/i }));
 
     await expect(page.getByRole("link", { name: /go to checkout/i })).toBeVisible();
   });
@@ -50,9 +61,9 @@ test.describe("registration (#253)", () => {
     await loginAs(page, SEED.singles.registrantEmail);
     await gotoRegister(page, SEED.orgSlug, SEED.singles.tournamentSlug);
 
-    await page.getByRole("button", { name: /^register$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^register$/i }));
     // Singles: no partner mode, just Save.
-    await page.getByRole("button", { name: /^save$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^save$/i }));
 
     await expect(page.getByRole("link", { name: /go to checkout/i })).toBeVisible();
   });
@@ -61,13 +72,14 @@ test.describe("registration (#253)", () => {
     await loginAs(page, SEED.changePartner.registrantEmail);
     await gotoRegister(page, SEED.orgSlug, SEED.changePartner.tournamentSlug);
 
-    await page.getByRole("button", { name: /change partner/i }).click();
+    await tapClear(page.getByRole("button", { name: /change partner/i }));
+    await openPartnerPicker(page);
     await page
       .getByPlaceholder(/search by name, email, or phone/i)
       .fill(SEED.changePartner.newPartnerQuery);
     await page.getByRole("button", { name: /^search$/i }).click();
     await page.getByRole("button", { name: /^pick$/i }).first().click();
-    await page.getByRole("button", { name: /save partner change/i }).click();
+    await tapClear(page.getByRole("button", { name: /save partner change/i }));
 
     // Still a pending reg afterward → cancel affordance returns.
     await expect(page.getByRole("button", { name: /cancel registration/i })).toBeVisible();
@@ -85,11 +97,11 @@ test.describe("registration (#253)", () => {
     const saveProfile = page.getByRole("button", { name: /save profile/i });
     await expect(accept.or(saveProfile).first()).toBeVisible({ timeout: 30_000 });
     if (await saveProfile.isVisible()) {
-      await saveProfile.click();
+      await tapClear(saveProfile);
       await expect(accept).toBeVisible({ timeout: 30_000 });
     }
 
-    await accept.click();
+    await tapClear(accept);
     await expect(page.getByRole("heading", { name: /partner confirmed/i })).toBeVisible();
   });
 });

@@ -780,7 +780,10 @@ export default function CheckoutPage() {
       </p>
 
       <div style={checkoutGrid}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div
+          data-testid="checkout-content-col"
+          style={{ display: "flex", flexDirection: "column", gap: 12 }}
+        >
           {rows.map((r) => (
             <div key={r.regId} style={checkoutCard}>
               <div

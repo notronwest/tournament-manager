@@ -1436,6 +1436,13 @@ function EventCard({
   // path skips the partner-invite insert and stamps
   // partner_status='seeking' on the reg.
   const [seekingPartner, setSeekingPartner] = useState(false);
+  // True when this register form was opened via a roster "Partner up →"
+  // on an ALREADY-REGISTERED open seeker. Filling that seeker's slot is
+  // net-zero on team count (the seeker becomes spoken-for, the joiner
+  // takes the slot), so it must bypass the isFull → waitlist gate even
+  // when the event is at capacity. Cleared whenever the partner
+  // selection changes, the user switches to seeking, or the form closes.
+  const [joiningSeeker, setJoiningSeeker] = useState(false);
   // Paired-roles: which of the two sides the registrant is on ('a'
   // or 'b'). Only relevant when event.is_paired_roles is true; null
   // otherwise. Must be set before submitting a paired-roles reg.
@@ -1511,6 +1518,7 @@ function EventCard({
     setEditMode("change-partner");
     setPartner(emptySelection);
     setSeekingPartner(myStatus?.isSeekingPartner ?? false);
+    setJoiningSeeker(false);
     setFormError(null);
   };
 
@@ -1518,6 +1526,7 @@ function EventCard({
     setEditMode(null);
     setPartner(emptySelection);
     setSeekingPartner(false);
+    setJoiningSeeker(false);
     setRegistrationSide(null);
     setFormError(null);
     onReleaseFocus();
@@ -1535,6 +1544,7 @@ function EventCard({
       setEditMode(null);
       setPartner(emptySelection);
       setSeekingPartner(false);
+      setJoiningSeeker(false);
       setRegistrationSide(null);
       setFormError(null);
     }
@@ -1744,7 +1754,14 @@ function EventCard({
           : inboundInviteId
             ? "solo"
             : "pending";
-    if (isFull) {
+    // Joining an already-registered open seeker FILLS their existing
+    // slot — the seeker becomes spoken-for (no longer counted) and this
+    // joiner takes the slot, so team count is unchanged. Never waitlist
+    // that case even when the event is at capacity; fall through to the
+    // normal pairing INSERT + outbound invite below.
+    const fillsOpenSlot =
+      isDoubles && !seekingPartner && joiningSeeker && resolvedPartnerId != null;
+    if (isFull && !fillsOpenSlot) {
       // FULL event → join the WAITLIST (free). join_waitlist creates a
       // 'waitlisted' reg (partner_status seeking for doubles / solo for
       // singles) and re-checks fullness server-side. No checkout — payment
@@ -1848,6 +1865,7 @@ function EventCard({
     setEditMode(null);
     setPartner(emptySelection);
     setSeekingPartner(false);
+    setJoiningSeeker(false);
     setSubmitting(false);
     onReleaseFocus();
     await onChanged();
@@ -2029,6 +2047,17 @@ function EventCard({
   // cancel directly — the action is less consequential (issue #9).
   const hasPickedPartner =
     !!myStatus?.partnerLabel && !myStatus?.isSeekingPartner;
+  // I joined an already-registered seeker (clicked "Partner up" on them):
+  // my roster row is a pending INVITER whose invitee already holds their
+  // own slot (pending_partner_reg_id set). Filling an existing slot means
+  // "Change partner" is hidden — swapping would orphan the team in a
+  // possibly-full event. Mirrors the manage view (RegisterPage).
+  const myRosterRow = rosterRows.find(
+    (r) => r.registration_id === myStatus?.regId,
+  );
+  const joinedRegisteredPartner =
+    myRosterRow?.partner_status === "pending" &&
+    myRosterRow?.pending_partner_reg_id != null;
   const requestCancel = () => {
     if (hasPickedPartner) setConfirmCancel(true);
     else void onCancelPending();
@@ -2051,6 +2080,7 @@ function EventCard({
     }
     setEditMode("register");
     setSeekingPartner(false);
+    setJoiningSeeker(true);
     setFormError(null);
     // Async lookup: search by exact name, then prefer the player
     // who's already registered for this event (using the
@@ -2139,7 +2169,7 @@ function EventCard({
     if (myStatus?.state === "pending_payment") {
       return (
         <div style={{ display: "flex", gap: 6 }}>
-          {isDoubles && !expanded && (
+          {isDoubles && !expanded && !joinedRegisteredPartner && (
             <button
               type="button"
               onClick={startChangePartner}
@@ -2236,6 +2266,11 @@ function EventCard({
   };
 
   const partnerPicked = partner.mode !== "empty";
+  // Render-side mirror of the submit-time check: when the open form is
+  // partnering into an existing seeker's slot, the "full → waitlist"
+  // framing doesn't apply — they register and pay normally.
+  const fillsOpenSlot =
+    isDoubles && !seekingPartner && joiningSeeker && partnerPicked;
   // #9: name of the picked partner, for the discard-confirm copy.
   const pickedPartnerName =
     partner.mode === "existing"
@@ -2559,7 +2594,26 @@ function EventCard({
               what they've already signed up for. */}
           {/* Full event → joining means the WAITLIST. Explain what to expect
               (free now, pay only if promoted) and hide the normal cost line. */}
-          {editMode === "register" && isFull && (
+          {editMode === "register" && isFull && fillsOpenSlot && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: "10px 12px",
+                background: "#eff6ff",
+                border: "1px solid #bfdbfe",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "#1e3a8a",
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>You're filling an open partner slot.</strong>{" "}
+              This event is full, but joining a player who's looking for a
+              partner takes their existing spot — it doesn't add a team, so
+              you register normally{regFeeCents > 0 ? " and pay the entry" : ""}.
+            </div>
+          )}
+          {editMode === "register" && isFull && !fillsOpenSlot && (
             <div
               style={{
                 marginBottom: 12,
@@ -2582,7 +2636,7 @@ function EventCard({
               {isDoubles ? " Your partner pick carries over." : ""}
             </div>
           )}
-          {editMode === "register" && regFeeCents > 0 && !isFull && (
+          {editMode === "register" && regFeeCents > 0 && (!isFull || fillsOpenSlot) && (
             <div
               style={{
                 marginBottom: 12,
@@ -2689,6 +2743,7 @@ function EventCard({
                   onClick={() => {
                     setSeekingPartner(true);
                     setPartner(emptySelection);
+                    setJoiningSeeker(false);
                   }}
                   style={partnerModeTileStyle(seekingPartner)}
                 >
@@ -2720,7 +2775,12 @@ function EventCard({
                   </div>
                   <PartnerSearch
                     selection={partner}
-                    onChange={setPartner}
+                    onChange={(sel) => {
+                      // Manually changing the partner away from the
+                      // pre-filled seeker drops the slot-fill bypass.
+                      setPartner(sel);
+                      setJoiningSeeker(false);
+                    }}
                     excludePlayerIds={[
                       ...(me ? [me.id] : []),
                       ...Array.from(alreadyRegisteredPlayerIds),

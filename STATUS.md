@@ -3,8 +3,107 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Promoted to production 2026-06-22 (PR #491): free registration, refund/withdraw fixes, register/manage UX, post-login invites, and WAITLISTS (DB + Join-waitlist flow). All 7 migrations applied green to PROD; functions deployed.**
+Current state: **Promoted to production 2026-06-24 (PR #520): the mobile/UX batch — frontend-only, no migrations/functions. PROD == main.**
 Last updated: **2026-06-24**
+
+## 2026-06-24 — Testing: daytime regression cron + mobile e2e assertions (PR open, NOT merged)
+
+Implements the two tournament-manager tasks from the daemon repo's
+`infrastructure/testing-agent/TM-PENDING.md` (daemon PR #42). On branch
+`feat/mobile-e2e-assertions`; PR opened, **left unmerged** per request.
+
+1. **Second regression cron.** `.github/workflows/regression.yml` now fires
+   `15 9` **and** `15 17` UTC so the testing agent's twice-daily (07:00/15:00
+   local) triage gets a fresh CI result. Same job, no other edits.
+2. **Mobile audit: assert, don't screenshot.** ("merge `e2e/mobile`" was a
+   no-op — `origin/e2e/mobile` has 0 commits not in main; `web/e2e/mobile/` is
+   already there.) `web/e2e/mobile/audit.spec.ts` upgraded from screenshot-only
+   to real gates on the iPhone 13 / Pixel 5 projects against POPULATED states:
+   primary CTA in-viewport + right edge ≤ viewport (catches the clipped
+   "Continue to payment"), content column `clientWidth` floor (catches the
+   1fr/320px checkout grid that never stacked), tap targets ≥ 44px. Screenshots
+   kept as artifacts only. Added `data-testid="checkout-content-col"` to the
+   checkout left column for a deterministic column-collapse gate. Also **wired
+   the core flow suite (`web/e2e/flows/`) onto the mobile projects** (config
+   `testMatch`) + a viewport-aware `openPartnerPicker` helper so the
+   partner-picker flows pass on the phone's bottom-sheet too.
+
+**Verified locally:** app + e2e typecheck clean; `playwright test --list` shows
+the assertions on `[iphone]`/`[pixel]` and flows scheduled on both (71 tests).
+**NOT run** — the suite needs the deployed test app + E2E secrets (CI only); the
+acceptance (fails pre-fix / passes post-fix) is by construction. Next: Ron
+reviews; first green-secrets CI run confirms the flow suite at phone width.
+
+## 2026-06-24 — Hide "Change partner" when you joined an already-registered player
+
+Follow-up to the Partner-up fix (Ron, on TEST): a player who joined another
+player's open slot ("Partner up" on a seeker) shouldn't be able to **change
+partners** — swapping would orphan the team in a possibly-full event, and the
+correct behavior (bounce them to the waitlist) is intentionally out of scope.
+Per Ron: just remove the option in that case.
+
+Detection (RLS-safe): for MY pending-inviter registration, the player I invited
+already holds their own slot iff `event_roster`'s `pending_partner_reg_id` is set
+(security-definer RPC — I can't read another player's reg row directly).
+- **RegisterPage** (the "Manage your registration" view in the screenshot): added
+  `ExistingReg.joinedRegisteredPartner`, set via one `event_roster` call in the
+  load; hides the "Change partner" button and shows a one-line explanation
+  ("you joined this player's open slot — unregister and re-register to switch").
+- **PublicTournamentPage**: the only "Change partner" is in the `pending_payment`
+  card action; gated on the same signal computed from already-loaded `rosterRows`
+  (my row is a `pending` inviter with `pending_partner_reg_id` set) — no new query.
+
+Scope: applies while the join invite is still pending (the "Waiting for X" state).
+A confirmed pair falls back to the normal change-partner flow. Frontend-only, no
+migration. typecheck clean; lint unchanged (pre-existing only). **Verified by
+root-cause + static checks only** — needs the TEST eyeball: join a seeker, then
+confirm "Change partner" is gone on both the manage view and the tournament card.
+
+## 2026-06-24 — Fix: "Partner up" with a seeker no longer hits the waitlist (+ server count)
+
+Bug (Ron, on TEST): an event was full where one of the slots was a player who
+registered as "I need a partner" (an open seeker). Clicking **Partner up →** on
+that seeker showed "This event is full — you'll join the waitlist" and waitlisted
+the joiner — but pairing into a seeker's open slot doesn't add a team, so it
+should just register them.
+
+Two root causes, both fixed:
+- **Client** (`PublicTournamentPage.tsx`): `handlePartnerUp` opened the register
+  form but never told the submit path it was filling an existing slot, so the
+  `isFull` gate fired → `join_waitlist`. Added a `joiningSeeker` flag (set on
+  Partner-up; cleared when the partner changes, the user switches to seeking, or
+  the form closes). When set, submit bypasses the waitlist and runs the normal
+  pairing INSERT + outbound invite (seeker accepts via the existing flow). Banner
+  + cost line updated for the slot-fill case. No DB insert guard exists, so the
+  client bypass is safe.
+- **Server** (new migration `…_is_event_full_discount_spoken_seekers`):
+  `is_event_full` counted a spoken-for seeker AND their joiner as two teams,
+  diverging from the roster/client count. Now a seeking reg with a pending inbound
+  invite from an active registrant is discounted (mirrors `event_roster`'s
+  `pending_partner_reg_id`), so a partnered-into seeker isn't double-counted.
+  Return type unchanged → no type regen.
+
+typecheck clean; lint unchanged (pre-existing only). **Verified by root-cause +
+static checks only** — the auth + full-event + seeker flow can't be exercised
+locally. **Next:** on TEST after merge, fill an event to capacity with an open
+seeker, Partner up on them, and confirm the joiner registers (not waitlisted) and
+no 5th team appears.
+
+## 2026-06-24 — Promoted to production (PR #520): mobile/UX batch (frontend-only)
+
+Promoted `main`→`production` — **36 commits, no migrations, no edge-function/config
+changes** (the migrate/deploy workflows correctly stayed idle; just the Cloudflare
+prod frontend rebuilt). PROD now == main. Shipped: responsive mobile header
+(hamburger, Sign-out reachable) + Feedback-in-dropdown; scroll-to-top on
+navigation; focused "Manage your registration" view (no picker / no Keep / no
+payment-total box); centered partner-notify note; PendingPaymentsBar no longer
+collides with the page checkout bar; My Tournaments reg row stacks (Withdraw no
+longer clips); E2E flow suite; quote pass-through; Stripe Express-only onboarding;
+waitlist partner-status polish. All TEST-validated + phone-width reviewed.
+
+**Next:** spot-check the live prod site (Cloudflare deploy is async, not observable
+from CI). `#516`-style polish is all shipped; open issues remaining are tracked on
+the board.
 
 ## 2026-06-24 — Register card: center partner note + stop PendingPaymentsBar collision — on TEST (#519, closes #518)
 
