@@ -1,4 +1,4 @@
-import { test, expect, loginAs, SEED } from "../fixtures";
+import { test, expect, loginAs, tapClear, SEED } from "../fixtures";
 
 // E2E flow group — player self-service: my registrations, withdraw, my invites.
 // All RequireAuth-only and exercisable without Stripe (pending regs withdraw
@@ -15,9 +15,9 @@ test.describe("self-service", () => {
   test("withdraw from an event", async ({ page }) => {
     await loginAs(page, SEED.selfService.withdrawEmail);
     await page.goto("/my-tournaments");
-    await page.getByRole("button", { name: /^withdraw$/i }).first().click();
+    await tapClear(page.getByRole("button", { name: /^withdraw$/i }).first());
     // Confirm step, then the reg is no longer withdrawable → the button is gone.
-    await page.getByRole("button", { name: /confirm withdrawal/i }).click();
+    await tapClear(page.getByRole("button", { name: /confirm withdrawal/i }));
     await expect(page.getByRole("button", { name: /^withdraw$/i })).toHaveCount(0);
   });
 

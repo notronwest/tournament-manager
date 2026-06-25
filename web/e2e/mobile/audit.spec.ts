@@ -1,4 +1,4 @@
-import { test, expect, loginAs, gotoRegister, SEED } from "../fixtures";
+import { test, expect, loginAs, gotoRegister, tapClear, SEED } from "../fixtures";
 import type { Page, Locator, TestInfo } from "@playwright/test";
 
 // Mobile audit — runs on the iphone (iPhone 13 / WebKit) + pixel (Pixel 5 /
@@ -138,7 +138,7 @@ test.describe("mobile audit — screenshots", () => {
   test("register form + partner sheet", async ({ page }, ti) => {
     await loginAs(page, SEED.existingPartner.registrantEmail);
     await gotoRegister(page, SEED.orgSlug, SEED.existingPartner.tournamentSlug);
-    await page.getByRole("button", { name: /^register$/i }).click();
+    await tapClear(page.getByRole("button", { name: /^register$/i }));
     await snap(page, ti, "register-form");
     const trigger = page.getByRole("button", {
       name: /choose a doubles partner/i,
