@@ -6,6 +6,31 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **Promoted to production 2026-06-24 (PR #520): the mobile/UX batch — frontend-only, no migrations/functions. PROD == main.**
 Last updated: **2026-06-24**
 
+## 2026-06-24 — Hide "Change partner" when you joined an already-registered player
+
+Follow-up to the Partner-up fix (Ron, on TEST): a player who joined another
+player's open slot ("Partner up" on a seeker) shouldn't be able to **change
+partners** — swapping would orphan the team in a possibly-full event, and the
+correct behavior (bounce them to the waitlist) is intentionally out of scope.
+Per Ron: just remove the option in that case.
+
+Detection (RLS-safe): for MY pending-inviter registration, the player I invited
+already holds their own slot iff `event_roster`'s `pending_partner_reg_id` is set
+(security-definer RPC — I can't read another player's reg row directly).
+- **RegisterPage** (the "Manage your registration" view in the screenshot): added
+  `ExistingReg.joinedRegisteredPartner`, set via one `event_roster` call in the
+  load; hides the "Change partner" button and shows a one-line explanation
+  ("you joined this player's open slot — unregister and re-register to switch").
+- **PublicTournamentPage**: the only "Change partner" is in the `pending_payment`
+  card action; gated on the same signal computed from already-loaded `rosterRows`
+  (my row is a `pending` inviter with `pending_partner_reg_id` set) — no new query.
+
+Scope: applies while the join invite is still pending (the "Waiting for X" state).
+A confirmed pair falls back to the normal change-partner flow. Frontend-only, no
+migration. typecheck clean; lint unchanged (pre-existing only). **Verified by
+root-cause + static checks only** — needs the TEST eyeball: join a seeker, then
+confirm "Change partner" is gone on both the manage view and the tournament card.
+
 ## 2026-06-24 — Fix: "Partner up" with a seeker no longer hits the waitlist (+ server count)
 
 Bug (Ron, on TEST): an event was full where one of the slots was a player who
