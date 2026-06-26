@@ -3,8 +3,21 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Promoted to production 2026-06-24 (PR #520): the mobile/UX batch — frontend-only, no migrations/functions. PROD == main.**
-Last updated: **2026-06-24**
+Current state: **Promoted to production 2026-06-25 (PR #525): register seeker fixes + `is_event_full` migration + mobile e2e. PROD == main.**
+Last updated: **2026-06-25**
+
+## 2026-06-25 — Promoted to production (PR #525)
+
+`main` → `production` promotion. 8 commits since PR #520. PROD == main again.
+
+Shipped:
+- **fix(register):** partner-up with a seeker fills the slot, not the waitlist (#521)
+- **fix(register):** hide "Change partner" when you joined a registered player (#522)
+- **DB migration** `20260624130000_is_event_full_discount_spoken_seekers.sql` — `is_event_full` now accounts for discount / spoken-for seekers. Additive, monotonic; **applied to PROD Supabase** (migrations workflow ✅ success, 22s).
+- Mobile-aware e2e flow suite + fail-fast stop + daytime regression cron (#523, #524).
+
+Pre-flight all green (ahead_by 8, no destructive DDL, PROD secrets present). Next: nothing pending — `main` and `production` are level.
+
 
 ## 2026-06-24 — Testing: daytime regression cron + mobile e2e assertions (PR open, NOT merged)
 

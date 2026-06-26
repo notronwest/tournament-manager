@@ -72,8 +72,9 @@ export function ConsentBanner() {
       }}
     >
       <p style={{ margin: 0, flex: 1, minWidth: 240, fontSize: 13, color: inkSoft, lineHeight: 1.5 }}>
-        We use cookies for analytics to understand how the site is used and
-        make it better. No ads, no selling data.
+        We use cookies for analytics and anonymous session insights to
+        understand how the site is used and make it better. No ads, no selling
+        data.
       </p>
       <div style={{ display: "flex", gap: 8 }}>
         <button
