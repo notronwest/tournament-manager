@@ -1,7 +1,12 @@
 // web/src/lib/analytics.ts
 //
-// GA4 (gtag.js) analytics, gated on cookie consent (#407). Nothing loads
-// and no cookies are set until the visitor accepts via the consent banner.
+// Consent orchestrator for site analytics. Two tools, ONE cookie-consent gate:
+//   • GA4 (gtag.js) — traffic / conversion counts (this file).
+//   • PostHog — product analytics + session replay ("where do users get
+//     stuck": rage clicks, funnels, recordings) — see ./posthog.ts.
+// Nothing loads, no cookies are set, and no session is recorded until the
+// visitor accepts the consent banner (#407). Each tool is independently inert
+// when its env var is unset, so either, both, or neither can be configured.
 //
 // The Measurement ID is a build-time env var (VITE_GA_MEASUREMENT_ID) — set
 // it in Cloudflare Pages per project (prod = the real property; leave the
@@ -14,6 +19,13 @@
 //   - getConsent()/setConsent() drive the ConsentBanner.
 //   - trackPageView(path)    on every SPA route change (RouteTracker).
 //   - trackEvent(name, ...)  funnel events (checkout_started, etc.).
+
+import {
+  posthogConfigured,
+  loadPostHog,
+  posthogPageView,
+  posthogEvent,
+} from "./posthog";
 
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined;
 const CONSENT_KEY = "wmpc_analytics_consent";
@@ -29,10 +41,10 @@ declare global {
 
 let loaded = false;
 
-// True when a Measurement ID is configured for this build. The consent
-// banner stays hidden entirely when analytics isn't configured.
+// True when EITHER tool is configured for this build. The consent banner stays
+// hidden entirely when no analytics is configured.
 export function analyticsConfigured(): boolean {
-  return Boolean(GA_ID);
+  return Boolean(GA_ID) || posthogConfigured();
 }
 
 export function getConsent(): Consent | null {
@@ -51,7 +63,10 @@ export function setConsent(value: Consent): void {
     // Storage blocked (private mode / cookies off) — honor the choice for
     // this session only; just don't persist it.
   }
-  if (value === "granted") loadGa();
+  if (value === "granted") {
+    loadGa();
+    void loadPostHog();
+  }
 }
 
 // Injects the gtag.js script + bootstraps the dataLayer. Idempotent. Only
@@ -78,25 +93,34 @@ function loadGa(): void {
   window.gtag("config", GA_ID, { send_page_view: false });
 }
 
-// Call once at startup. Loads gtag only if the visitor consented on a
-// previous visit; otherwise stays inert until the banner is accepted.
+// Call once at startup. Loads the configured tools only if the visitor
+// consented on a previous visit; otherwise stays inert until the banner is
+// accepted.
 export function initAnalytics(): void {
-  if (getConsent() === "granted") loadGa();
+  if (getConsent() === "granted") {
+    loadGa();
+    void loadPostHog();
+  }
 }
 
 export function trackPageView(path: string): void {
-  if (!loaded || !GA_ID) return;
-  window.gtag("event", "page_view", {
-    page_path: path,
-    page_location: window.location.href,
-    page_title: document.title,
-  });
+  if (loaded && GA_ID) {
+    window.gtag("event", "page_view", {
+      page_path: path,
+      page_location: window.location.href,
+      page_title: document.title,
+    });
+  }
+  // PostHog guards its own loaded/configured state.
+  posthogPageView(path);
 }
 
 export function trackEvent(
   name: string,
   params?: Record<string, unknown>,
 ): void {
-  if (!loaded || !GA_ID) return;
-  window.gtag("event", name, params ?? {});
+  if (loaded && GA_ID) {
+    window.gtag("event", name, params ?? {});
+  }
+  posthogEvent(name, params);
 }
