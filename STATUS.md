@@ -3,8 +3,42 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Promoted to production 2026-06-25 (PR #525): register seeker fixes + `is_event_full` migration + mobile e2e. PROD == main.**
-Last updated: **2026-06-25**
+Current state: **Diagnosed live Stripe money-routing bug (org linked to wrong account); OAuth "connect existing account" fix in review (PR #530). Prod promotion 2026-06-25 (PR #525) still current.**
+Last updated: **2026-07-02**
+
+## 2026-07-02 — Stripe: wrong connected account received live money; OAuth fix (PR #530, in review)
+
+**The bug (live money).** Pickleball Angels' org was linked to Stripe account
+`acct_1Tokl3ReQkBTIdyE` — an Express account our platform **auto-created** —
+not the org's intended existing account `acct_1Tlc4lJZLtIthjeo`. Destination
+charges route to `organizations.stripe_account_id`
+([create-payment-intent:284](web/src/../../supabase/functions/create-payment-intent/index.ts)),
+so a live registration's money landed in the wrong (but Ron-controlled)
+account. Root cause: Express onboarding **always mints a new account**; the
+UI never exposed the "connect an *existing* account" (OAuth) path, which was
+fully built (edge fns + callback + route) but hidden behind a stale "OAuth is
+deprecated" comment.
+
+**The fix (PR #530, frontend-only).** Surfaced OAuth in
+`OrgStripeSettingsPage`: not_connected picker now offers "Connect an existing
+Stripe account" (OAuth, recommended) + "Create a new" (Express); connected
+states get "Connect a different account →" to re-point without a disconnect
+gap. typecheck/build ✓, no new lint errors.
+
+**Config done:** `STRIPE_CONNECT_CLIENT_ID` set on both Supabase projects
+(test + prod). OAuth is enabled on the platform (live client id
+`ca_UcQP0…`).
+
+**Still open / next:**
+1. **Allow-list the redirect URI** `${origin}/admin/oauth/stripe-callback` in
+   Stripe → Connect → OAuth (currently only `bertanderne.co…`) — for
+   localhost + prod domain. Without it OAuth rejects.
+2. **Merge #530 → main (TEST)**, verify OAuth round-trip, then promote.
+3. **Re-point Pickleball Angels**: after deploy, on the org's Stripe settings
+   click "Connect a different account →" and authorize `…Tlc4` (the intended
+   account). Confirm which account holds the correct payout bank first.
+4. **Reconcile the live money** already in `…Tokl3` (refund + re-register, or
+   pay out) — Ron's call, done in Stripe. Not yet actioned.
 
 ## 2026-06-25 — Promoted to production (PR #525)
 
