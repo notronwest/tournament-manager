@@ -3,8 +3,38 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Promoted to production 2026-07-02 (PR #531): Stripe OAuth "connect existing account" fix (frontend-only). PROD == main. Still TODO: re-point Pickleball Angels + reconcile live money in wrong account.**
+Current state: **Per-tournament platform-fee override: backend in review (PR #532, PR A of 2); UI + types = PR B (needs columns on TEST first). Prod still at PR #531 (OAuth fix).**
 Last updated: **2026-07-02**
+
+## 2026-07-02 — Per-tournament platform-fee override (PR #532, backend, in review)
+
+Feature: `platform_settings` stays the **global default** fee; tournaments get
+an **optional override** (inherit when unset). Split server-ahead into two PRs.
+
+**PR A / #532 (backend, this PR):**
+- Migration `20260702170000_tournament_platform_fee_override.sql`: nullable
+  `tournaments.platform_fee_bps` + `platform_fee_fixed_cents` (both-null =
+  inherit; both-set = override; check constraints for both-or-neither + ranges).
+- `trg_enforce_tournament_fee_admin` trigger — **platform-admin-only** guard on
+  the fee columns (org admins can't zero out the platform's cut). Fires only on
+  a fee-column change, so normal tournament edits are unaffected.
+- `create-payment-intent` uses the override when set, else the global default.
+  Backward-compatible.
+
+**Decisions (confirmed w/ Ron):** platform-admin-only editing (UI + trigger);
+unset tournaments inherit the global default.
+
+**Next:**
+1. Merge #532 → main (applies migration + deploys edge fn to TEST).
+2. **PR B:** regenerate TS types from TEST (needs `supabase link` to the TEST
+   project — Ron has the test DB password), then add the platform-admin-only
+   fee control to the tournament wizard (`TournamentWizardPage`).
+3. Ron: set the **global default** to $5 on `/admin/platform` (independent of
+   this feature; the page already works). NB fee is **per checkout/payment**,
+   not per event-entry.
+
+Also still open from earlier today: re-point Pickleball Angels + reconcile the
+live money in the wrong Stripe account (see prior entries).
 
 ## 2026-07-02 — Promoted OAuth fix to production (PR #531)
 
