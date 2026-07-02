@@ -3,10 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Diagnosed live Stripe money-routing bug (org linked to wrong account); OAuth "connect existing account" fix in review (PR #530). Prod promotion 2026-06-25 (PR #525) still current.**
+Current state: **Promoted to production 2026-07-02 (PR #531): Stripe OAuth "connect existing account" fix (frontend-only). PROD == main. Still TODO: re-point Pickleball Angels + reconcile live money in wrong account.**
 Last updated: **2026-07-02**
 
-## 2026-07-02 — Stripe: wrong connected account received live money; OAuth fix (PR #530, in review)
+## 2026-07-02 — Promoted OAuth fix to production (PR #531)
+
+`main` → `production`, frontend + docs only (no migrations/functions — the
+OAuth edge functions already existed on prod; #530 just surfaced them in the
+UI). Redirect URI confirmed allow-listed in Stripe; `STRIPE_CONNECT_CLIENT_ID`
+set on prod. PROD == main.
+
+**Still open (Ron, in Stripe/app — not code):**
+1. **Re-point Pickleball Angels**: on the org's Stripe settings click "Connect
+   a different account →" and authorize the intended account `…Tlc4`
+   (confirm it holds the correct payout bank first).
+2. **Reconcile the live money** already in the wrong account `…Tokl3` (refund +
+   re-register, or pay out).
+
+## 2026-07-02 — Stripe: wrong connected account received live money; OAuth fix (PR #530, merged)
 
 **The bug (live money).** Pickleball Angels' org was linked to Stripe account
 `acct_1Tokl3ReQkBTIdyE` — an Express account our platform **auto-created** —
