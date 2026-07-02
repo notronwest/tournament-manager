@@ -205,13 +205,24 @@ export default function OrgStripeSettingsPage() {
             gap: 12,
           }}
         >
-          {/* Express (hosted onboarding via Account Links) is the only path:
-              Stripe deprecated OAuth for Standard Connect on new platforms, so
-              it can't be enabled in prod — exposing it was a dead end (it 500s
-              on the missing STRIPE_CONNECT_CLIENT_ID). */}
+          {/* Two paths. OAuth ("Sign in with Stripe") links an EXISTING
+              Stripe account — use this when the org already has one, so the
+              money routes to that exact account instead of a fresh one.
+              Requires STRIPE_CONNECT_CLIENT_ID set on the Supabase project +
+              the redirect URI allow-listed in Stripe's Connect OAuth settings.
+              Express (hosted onboarding via Account Links) CREATES a new
+              account — use it only when the org has no Stripe account yet. */}
           <ConnectChoiceCard
-            title="Connect your Stripe account"
-            blurb="We'll set up your organization's payout account through Stripe's hosted onboarding — business name, bank info, and identity verification. It takes a few minutes, and you can pause and resume."
+            title="Connect an existing Stripe account"
+            blurb="Already have a Stripe account for this organization? Sign in with Stripe to link that exact account — registration money routes straight to it. Fastest if you're already set up."
+            cta={connecting ? "Opening Stripe…" : "Sign in with Stripe →"}
+            recommended
+            disabled={connecting}
+            onClick={() => void onConnect("oauth")}
+          />
+          <ConnectChoiceCard
+            title="Create a new Stripe account"
+            blurb="No Stripe account yet? We'll set one up through Stripe's hosted onboarding — business name, bank info, and identity verification. Takes a few minutes; you can pause and resume."
             cta={connecting ? "Opening Stripe…" : "Set up Stripe →"}
             disabled={connecting}
             onClick={() => void onConnect("express")}
@@ -282,14 +293,29 @@ export default function OrgStripeSettingsPage() {
           </a>
         )}
         {status !== "not_connected" && (
-          <button
-            type="button"
-            onClick={() => setConfirmDisconnect(true)}
-            disabled={disconnecting}
-            style={disconnectBtnStyle}
-          >
-            Disconnect Stripe
-          </button>
+          <>
+            {/* Re-point the org at a DIFFERENT existing Stripe account
+                without a disconnect gap — the OAuth callback overwrites
+                stripe_account_id with whatever account you authorize. Use
+                this to fix a wrong link (e.g. an auto-created Express
+                account) by signing in with the account you actually want. */}
+            <button
+              type="button"
+              onClick={() => void onConnect("oauth")}
+              disabled={connecting}
+              style={connecting ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+            >
+              {connecting ? "Opening Stripe…" : "Connect a different account →"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDisconnect(true)}
+              disabled={disconnecting}
+              style={disconnectBtnStyle}
+            >
+              Disconnect Stripe
+            </button>
+          </>
         )}
       </div>
 
