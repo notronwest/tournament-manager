@@ -3,8 +3,30 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Analytics admin-exclusion in review (PR #534). Registration rating-gate: 3 UX mockups built (`mockups/rating-gate-{A,B,C}*.html`), awaiting Ron's pick before building in RegisterPage. Fee-override backend live in prod (#533); PR B (wizard UI) pending type regen.**
+Current state: **Chip-based self-rating: Ron picked mockup C. Built as 2 stacked PRs — #535 (RatingPicker + profile) and #536 (register rating-gate banner, based on #535). Analytics admin-exclusion #534 also in review. Fee-override backend live in prod; PR B (wizard UI) pending type regen.**
 Last updated: **2026-07-03**
+
+## 2026-07-03 — Chip-based self-rating: profile + registration gate (PRs #535, #536)
+
+Ron picked **mockup C** (batch banner) and asked to also switch the profile
+screen to the same chip control. Built as two stacked PRs:
+- **#535** (→ main): new shared `RatingPicker` component (segmented 2.5–5.0
+  chips, tap-to-clear, preserves off-scale legacy values). ProfilePage's three
+  free-text number inputs → stacked `RatingPicker`s; state string→number|null;
+  `parseRating` retired.
+- **#536** (stacked on #535): `RatingGateBanner` on `RegisterPage` — when a
+  player can't register for rating-restricted events purely due to a missing
+  self-rating, one banner captures all needed formats; saving writes ratings +
+  updates `me` → eligibility re-runs → events unlock. No profile round trip.
+  Skippable. Ratings stay optional (no locked-decision change).
+
+**Next:** merge #535 → main (retargets #536 to main), then merge #536.
+Manual verify on TEST (tournament w/ skill-restricted event + unrated player).
+
+**Also this session:** `CLAUDE.md` gained an "Engineering standard" section
+(working-tree edit, still uncommitted at time of writing) — notably: mockups
+should duplicate the REAL page/component, not clean-room designs (the 3
+rating-gate mockups were clean-room). Confirm whether to commit it.
 
 ## 2026-07-03 — Registration rating-gate: 3 UX mockups for review
 
