@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
     // no entry_fee_cents — the total comes from compute_checkout_total.)
     const { data: tournament, error: tErr } = await admin
       .from("tournaments")
-      .select("id, organization_id, status, organizations!inner(slug, stripe_account_id, stripe_account_status)")
+      .select("id, organization_id, status, platform_fee_bps, platform_fee_fixed_cents, organizations!inner(slug, stripe_account_id, stripe_account_status)")
       .eq("slug", tournamentSlug)
       .single();
     if (tErr || !tournament) return json({ error: "tournament_not_found" }, 404);
@@ -197,15 +197,27 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 4. Platform fee (Connect destination charge) ────────────────
-    // Read from the platform_settings singleton (edited no-code by the
-    // site super-admin), NOT an env var.
-    const { data: settings } = await admin
-      .from("platform_settings")
-      .select("platform_fee_bps, platform_fee_fixed_cents")
-      .eq("id", true)
-      .single();
-    const feeBps = settings?.platform_fee_bps ?? 0;
-    const feeFixed = settings?.platform_fee_fixed_cents ?? 0;
+    // Per-tournament override wins when set (both columns non-null);
+    // otherwise fall back to the platform_settings global default. Both
+    // are edited no-code by platform admins (per-tournament in the wizard,
+    // global on /admin/platform), NOT env vars.
+    let feeBps: number;
+    let feeFixed: number;
+    if (
+      tournament.platform_fee_bps !== null &&
+      tournament.platform_fee_fixed_cents !== null
+    ) {
+      feeBps = tournament.platform_fee_bps;
+      feeFixed = tournament.platform_fee_fixed_cents;
+    } else {
+      const { data: settings } = await admin
+        .from("platform_settings")
+        .select("platform_fee_bps, platform_fee_fixed_cents")
+        .eq("id", true)
+        .single();
+      feeBps = settings?.platform_fee_bps ?? 0;
+      feeFixed = settings?.platform_fee_fixed_cents ?? 0;
+    }
     const platformFeeCents = Math.round((totalCents * feeBps) / 10000) + feeFixed;
 
     // ── 5. Create or reuse the PaymentIntent ────────────────────────
