@@ -3,8 +3,23 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Analytics admin-exclusion in review (PR #534). Registration rating-gate flow = design agreed (inline capture), not yet built. Fee-override backend live in prod (#533); PR B (wizard UI) still pending type regen.**
+Current state: **Analytics admin-exclusion in review (PR #534). Registration rating-gate: 3 UX mockups built (`mockups/rating-gate-{A,B,C}*.html`), awaiting Ron's pick before building in RegisterPage. Fee-override backend live in prod (#533); PR B (wizard UI) pending type regen.**
 Last updated: **2026-07-03**
+
+## 2026-07-03 — Registration rating-gate: 3 UX mockups for review
+
+Built 3 interactive mockups (uncommitted, in `mockups/`) for capturing a
+self-rating when a player hits a skill-restricted event, so Ron can pick the UX
+before implementation. All keep the block for restricted events + profile
+ratings optional (no locked-decision change):
+- **A** `rating-gate-A-inline-expand.html` — blocked event row expands in place.
+- **B** `rating-gate-B-modal.html` — tapping the event opens a focused dialog.
+- **C** `rating-gate-C-batch-banner.html` — top prompt sets every needed rating
+  at once, unlocking all restricted events.
+
+Next: Ron picks (A/B/C or a hybrid) → build into `RegisterPage` (inline rating
+input + save + re-check eligibility). Optionally commit mockups on a `mockup/`
+branch.
 
 ## 2026-07-03 — Analytics admin-exclusion (PR #534) + registration rating-gate design
 
