@@ -15,6 +15,7 @@ import {
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
 import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
+import { RatingGateBanner } from "../../components/RatingGateBanner";
 import {
   computeLineItems,
   formatUsd,
@@ -1490,6 +1491,21 @@ export default function RegisterPage() {
                 }
               }
             }}
+          />
+        )}
+
+        {/* Batch rating gate (mockup C): when the player can't register for
+            skill-restricted events purely because they have no self-rating on
+            file, prompt for all needed formats at once. Saving writes the
+            ratings and updates `me`, which re-runs checkEligibility below and
+            unlocks the affected events. Not shown in Manage mode (already
+            registered). */}
+        {!isManageMode && me && (
+          <RatingGateBanner
+            player={me}
+            events={events}
+            disabled={submitting}
+            onSaved={(r) => setMe((prev) => (prev ? { ...prev, ...r } : prev))}
           />
         )}
 
