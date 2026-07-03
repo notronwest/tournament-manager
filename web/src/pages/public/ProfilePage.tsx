@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import type { Database } from "../../types/supabase";
+import { RatingPicker } from "../../components/RatingPicker";
 import {
   contentColStyle,
   courtRed,
@@ -77,9 +78,9 @@ export default function ProfilePage() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState<PlayerGender | "">("");
-  const [ratingDoubles, setRatingDoubles] = useState("");
-  const [ratingMixed, setRatingMixed] = useState("");
-  const [ratingSingles, setRatingSingles] = useState("");
+  const [ratingDoubles, setRatingDoubles] = useState<number | null>(null);
+  const [ratingMixed, setRatingMixed] = useState<number | null>(null);
+  const [ratingSingles, setRatingSingles] = useState<number | null>(null);
   // Optional password setup shown only on first-fill — lets a
   // magic-link signup opt into a password while they're already
   // filling in their profile, so they don't have to come back later
@@ -170,19 +171,9 @@ export default function ProfilePage() {
         setLastName(me.last_name ?? "");
         setPhone(me.phone ?? "");
         setGender(me.gender ?? "");
-        setRatingDoubles(
-          me.self_rating_doubles != null
-            ? String(me.self_rating_doubles)
-            : "",
-        );
-        setRatingMixed(
-          me.self_rating_mixed != null ? String(me.self_rating_mixed) : "",
-        );
-        setRatingSingles(
-          me.self_rating_singles != null
-            ? String(me.self_rating_singles)
-            : "",
-        );
+        setRatingDoubles(me.self_rating_doubles ?? null);
+        setRatingMixed(me.self_rating_mixed ?? null);
+        setRatingSingles(me.self_rating_singles ?? null);
         if (me.avatar_path) {
           const { data: urlData } = supabase.storage
             .from("avatars")
@@ -300,9 +291,9 @@ export default function ProfilePage() {
       last_name: lastName.trim(),
       phone: phone.trim() || null,
       gender: (gender || null) as PlayerGender | null,
-      self_rating_doubles: parseRating(ratingDoubles),
-      self_rating_mixed: parseRating(ratingMixed),
-      self_rating_singles: parseRating(ratingSingles),
+      self_rating_doubles: ratingDoubles,
+      self_rating_mixed: ratingMixed,
+      self_rating_singles: ratingSingles,
       avatar_path: resolvedAvatarPath,
       // Include email in the payload only when the player record
       // currently has none — captures the missing email without
@@ -657,50 +648,39 @@ export default function ProfilePage() {
           <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
             <strong>Self-reported rating</strong>{" "}
             <span style={{ color: inkMuted }}>
-              (optional — helps organizers seed brackets)
+              (optional — helps organizers seed brackets; tap a level, tap
+              again to clear)
             </span>
           </div>
-          <FieldRow>
-            <Field label="Doubles (same-gender)">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="9.99"
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
+            <div>
+              <div style={ratingRowLabelStyle}>Doubles (same-gender)</div>
+              <RatingPicker
                 value={ratingDoubles}
-                onChange={(e) => setRatingDoubles(e.target.value)}
-                style={inputStyle}
+                onChange={setRatingDoubles}
                 disabled={busy}
-                placeholder="e.g. 3.5"
+                ariaLabel="Doubles self-rating"
               />
-            </Field>
-            <Field label="Mixed doubles">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="9.99"
+            </div>
+            <div>
+              <div style={ratingRowLabelStyle}>Mixed doubles</div>
+              <RatingPicker
                 value={ratingMixed}
-                onChange={(e) => setRatingMixed(e.target.value)}
-                style={inputStyle}
+                onChange={setRatingMixed}
                 disabled={busy}
-                placeholder="e.g. 3.5"
+                ariaLabel="Mixed doubles self-rating"
               />
-            </Field>
-            <Field label="Singles">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="9.99"
+            </div>
+            <div>
+              <div style={ratingRowLabelStyle}>Singles</div>
+              <RatingPicker
                 value={ratingSingles}
-                onChange={(e) => setRatingSingles(e.target.value)}
-                style={inputStyle}
+                onChange={setRatingSingles}
                 disabled={busy}
-                placeholder="e.g. 3.0"
+                ariaLabel="Singles self-rating"
               />
-            </Field>
-          </FieldRow>
+            </div>
+          </div>
         </div>
 
         {isFirstFill && (
@@ -936,15 +916,12 @@ export default function ProfilePage() {
 // Helpers + small UI bits
 // ─────────────────────────────────────────────────────────────────────
 
-function parseRating(s: string): number | null {
-  const trimmed = s.trim();
-  if (!trimmed) return null;
-  const n = parseFloat(trimmed);
-  if (Number.isNaN(n)) return null;
-  if (n < 0) return 0;
-  if (n > 9.99) return 9.99;
-  return n;
-}
+const ratingRowLabelStyle: CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: inkSoft,
+  marginBottom: 8,
+};
 
 function Shell({ children }: { children: ReactNode }) {
   return (
