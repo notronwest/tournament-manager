@@ -3,8 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Chip-based self-rating: Ron picked mockup C. Built as 2 stacked PRs — #535 (RatingPicker + profile) and #536 (register rating-gate banner, based on #535). Analytics admin-exclusion #534 also in review. Fee-override backend live in prod; PR B (wizard UI) pending type regen.**
+Current state: **Merged to main/TEST (NOT prod): #534 analytics admin-exclusion, #535 chip RatingPicker + profile + CLAUDE.md engineering standard, #536 register rating-gate banner. main typecheck+build green; prod 11 commits behind (frontend-only, no migrations). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-03**
+
+## 2026-07-03 — Merged #534 + #535 + #536 to main/TEST (no prod promotion)
+
+Per Ron: folded the CLAUDE.md "Engineering standard" into #535 and merged all
+three open PRs to `main` (TEST only — explicitly NOT promoted to production):
+- **#534** — exclude platform admins from GA/PostHog/replay.
+- **#535** — shared `RatingPicker` chip control + profile swap + the CLAUDE.md
+  engineering-standard section.
+- **#536** — `RatingGateBanner` on RegisterPage (retargeted base → main after
+  #535 merged).
+
+All frontend/docs — no migrations/functions, so TEST just gets a frontend
+deploy. `main` typecheck + build green post-merge. **Prod is 11 commits behind
+main and intentionally untouched.**
+
+**Next:** manual verify on TEST (esp. #536: tournament w/ skill-restricted
+event + unrated player → banner unlocks). Promote to production when Ron's
+ready. Untracked `mockups/rating-gate-{A,B,C}*.html` still in working tree
+(not committed). Fee-override PR B (wizard UI) still pending type regen.
 
 ## 2026-07-03 — Chip-based self-rating: profile + registration gate (PRs #535, #536)
 
