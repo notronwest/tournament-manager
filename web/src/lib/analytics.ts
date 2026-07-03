@@ -25,12 +25,27 @@ import {
   loadPostHog,
   posthogPageView,
   posthogEvent,
+  setPosthogExcluded,
 } from "./posthog";
 
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined;
 const CONSENT_KEY = "wmpc_analytics_consent";
 
 type Consent = "granted" | "denied";
+
+// When true, the current viewer (a logged-in platform admin) is excluded from
+// ALL analytics — GA4 + PostHog + session replay — so their own extensive
+// admin sessions don't pollute product analytics. Driven by RouteTracker from
+// usePlatformAdmin. Gates both the initial load and every subsequent event.
+let excluded = false;
+
+// Set the exclusion for the current viewer. Forwards to PostHog (which also
+// opts out / stops replay if already running); GA is gated via the `excluded`
+// checks in loadGa/trackPageView/trackEvent below.
+export function setAnalyticsExcluded(value: boolean): void {
+  excluded = value;
+  setPosthogExcluded(value);
+}
 
 declare global {
   interface Window {
@@ -72,7 +87,7 @@ export function setConsent(value: Consent): void {
 // Injects the gtag.js script + bootstraps the dataLayer. Idempotent. Only
 // ever called after consent === "granted".
 function loadGa(): void {
-  if (loaded || !GA_ID) return;
+  if (loaded || !GA_ID || excluded) return;
   loaded = true;
 
   const script = document.createElement("script");
@@ -104,6 +119,7 @@ export function initAnalytics(): void {
 }
 
 export function trackPageView(path: string): void {
+  if (excluded) return;
   if (loaded && GA_ID) {
     window.gtag("event", "page_view", {
       page_path: path,
@@ -119,6 +135,7 @@ export function trackEvent(
   name: string,
   params?: Record<string, unknown>,
 ): void {
+  if (excluded) return;
   if (loaded && GA_ID) {
     window.gtag("event", name, params ?? {});
   }
