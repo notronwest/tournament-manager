@@ -3,10 +3,54 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Diagnosed live Stripe money-routing bug (org linked to wrong account); OAuth "connect existing account" fix in review (PR #530). Prod promotion 2026-06-25 (PR #525) still current.**
+Current state: **Per-tournament platform-fee override: backend in review (PR #532, PR A of 2); UI + types = PR B (needs columns on TEST first). Prod still at PR #531 (OAuth fix).**
 Last updated: **2026-07-02**
 
-## 2026-07-02 — Stripe: wrong connected account received live money; OAuth fix (PR #530, in review)
+## 2026-07-02 — Per-tournament platform-fee override (PR #532, backend, in review)
+
+Feature: `platform_settings` stays the **global default** fee; tournaments get
+an **optional override** (inherit when unset). Split server-ahead into two PRs.
+
+**PR A / #532 (backend, this PR):**
+- Migration `20260702170000_tournament_platform_fee_override.sql`: nullable
+  `tournaments.platform_fee_bps` + `platform_fee_fixed_cents` (both-null =
+  inherit; both-set = override; check constraints for both-or-neither + ranges).
+- `trg_enforce_tournament_fee_admin` trigger — **platform-admin-only** guard on
+  the fee columns (org admins can't zero out the platform's cut). Fires only on
+  a fee-column change, so normal tournament edits are unaffected.
+- `create-payment-intent` uses the override when set, else the global default.
+  Backward-compatible.
+
+**Decisions (confirmed w/ Ron):** platform-admin-only editing (UI + trigger);
+unset tournaments inherit the global default.
+
+**Next:**
+1. Merge #532 → main (applies migration + deploys edge fn to TEST).
+2. **PR B:** regenerate TS types from TEST (needs `supabase link` to the TEST
+   project — Ron has the test DB password), then add the platform-admin-only
+   fee control to the tournament wizard (`TournamentWizardPage`).
+3. Ron: set the **global default** to $5 on `/admin/platform` (independent of
+   this feature; the page already works). NB fee is **per checkout/payment**,
+   not per event-entry.
+
+Also still open from earlier today: re-point Pickleball Angels + reconcile the
+live money in the wrong Stripe account (see prior entries).
+
+## 2026-07-02 — Promoted OAuth fix to production (PR #531)
+
+`main` → `production`, frontend + docs only (no migrations/functions — the
+OAuth edge functions already existed on prod; #530 just surfaced them in the
+UI). Redirect URI confirmed allow-listed in Stripe; `STRIPE_CONNECT_CLIENT_ID`
+set on prod. PROD == main.
+
+**Still open (Ron, in Stripe/app — not code):**
+1. **Re-point Pickleball Angels**: on the org's Stripe settings click "Connect
+   a different account →" and authorize the intended account `…Tlc4`
+   (confirm it holds the correct payout bank first).
+2. **Reconcile the live money** already in the wrong account `…Tokl3` (refund +
+   re-register, or pay out).
+
+## 2026-07-02 — Stripe: wrong connected account received live money; OAuth fix (PR #530, merged)
 
 **The bug (live money).** Pickleball Angels' org was linked to Stripe account
 `acct_1Tokl3ReQkBTIdyE` — an Express account our platform **auto-created** —
