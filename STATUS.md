@@ -3,8 +3,33 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Per-tournament platform-fee override BACKEND live in prod (PR #533): migration + edge fn applied to PROD. PROD == main. Next: PR B (wizard UI + regen types from TEST).**
+Current state: **Analytics admin-exclusion in review (PR #534). Registration rating-gate flow = design agreed (inline capture), not yet built. Fee-override backend live in prod (#533); PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-03**
+
+## 2026-07-03 — Analytics admin-exclusion (PR #534) + registration rating-gate design
+
+**PR #534 (in review):** exclude platform admins from GA4 + PostHog + session
+replay. Sessions are anonymous (never `identify()`'d) so exclusion is
+client-side: `RouteTracker` gates on `usePlatformAdmin`, holds off init until
+admin status is known, opts out + stops replay for admins, flips on
+login/logout. typecheck/build ✓. (Local `node_modules` was missing
+`posthog-js` — in package.json, not installed; `npm install` fixed it. CI
+installs fresh.)
+
+**Registration rating-gate — design decided, NOT built yet.** Problem Ron hit:
+a player forced to complete their profile (name+email — good) then still can't
+register for a rating-restricted event because they have no self-rating, and
+the only fix is a round trip back to the profile screen → ping-pong. Key
+insight: a self-rating is **only needed for events with min/max_rating set**
+(`eligibility.ts`); open events don't check it. So a blanket "require rating in
+profile" is the wrong lever (forces open-event players to rate; changes the
+locked "ratings optional" decision).
+**Agreed direction (pending Ron's final yes):** capture the rating **inline on
+the register page** at the point an event is ineligible *because* "no {format}
+self-rating on file" — small rating input + save + re-check, no trip to the
+profile screen. Keeps the block for restricted events, keeps profile ratings
+optional (no locked-decision change). Next: build the inline control in
+`RegisterPage`.
 
 ## 2026-07-03 — Promoted fee-override backend to production (PR #533)
 
