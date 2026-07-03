@@ -3,8 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Per-tournament platform-fee override: backend in review (PR #532, PR A of 2); UI + types = PR B (needs columns on TEST first). Prod still at PR #531 (OAuth fix).**
-Last updated: **2026-07-02**
+Current state: **Per-tournament platform-fee override BACKEND live in prod (PR #533): migration + edge fn applied to PROD. PROD == main. Next: PR B (wizard UI + regen types from TEST).**
+Last updated: **2026-07-03**
+
+## 2026-07-03 — Promoted fee-override backend to production (PR #533)
+
+`main` → `production`. Verified on TEST first (migration + edge fn + lint all
+green), then promoted. **PROD migration applied ✓ (16s), edge fn deployed ✓.**
+PROD == main. The `tournaments.platform_fee_bps/_fixed_cents` columns + the
+platform-admin-only trigger + the override-aware `create-payment-intent` are
+now live in prod (backward-compatible; global default still $0 until set).
+
+**Next:**
+1. **PR B (UI):** regen TS types from **TEST** (`supabase link` to the test
+   project — needs test DB password; CLI currently linked to prod), then add
+   the platform-admin-only fee control to `TournamentWizardPage`.
+2. Ron: set the **global default** to $5 on `/admin/platform` when ready.
+3. Interim before PR B: set a per-tournament override via SQL
+   (`update tournaments set platform_fee_bps=…, platform_fee_fixed_cents=… where slug='…'`).
 
 ## 2026-07-02 — Per-tournament platform-fee override (PR #532, backend, in review)
 
