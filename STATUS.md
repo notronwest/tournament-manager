@@ -32,10 +32,15 @@ Supabase project yet). TSA files type-clean + compile via its vite dev pipeline;
 its edits sit in the working tree on branch `claude/site-admin-coach-access` and
 should be committed off `main` as their own 3-file PR.
 
-**Next:** commit + PR to `main` in *both* repos (frontend-only, no migration) —
-Bert & Erne off `main`; TSA a fresh branch off `main` with only the three
-env-banner files. Optional: set `VITE_APP_ENV` per Cloudflare project to drive
-it explicitly instead of by hostname/DB-ref inference.
+**Shipped as PRs (both In Review, CI green):**
+- Bert & Erne — PR #539 (branch `feat/env-banner`, Closes #540).
+- TSA (third-shot-academy) — PR #102 (branch `feat/env-banner`, Closes #103).
+- Both story issues on the WMPC Roadmap board: feature / Soon / In Review.
+
+**Next:** Ron merges each In Review PR. On merge, TEST projects auto-deploy and
+the strip lights up (`test.bertanderne.com`, `third-shot-academy-test.pages.dev`);
+prod stays clean. Optional later: set `VITE_APP_ENV` per Cloudflare project to
+drive it explicitly instead of by hostname/DB-ref inference.
 
 ## 2026-07-03 — Merged #534 + #535 + #536 to main/TEST (no prod promotion)
 
