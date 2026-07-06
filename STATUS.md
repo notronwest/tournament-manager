@@ -3,7 +3,7 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Local: added a non-prod env banner (TEST/DEV strip) — new, uncommitted on `main`. Prior: merged to main/TEST (NOT prod) #534/#535/#536; prod 11 commits behind (frontend-only). Fee-override PR B (wizard UI) still pending type regen.**
+Current state: **Env banner (TEST/DEV strip) MERGED to main/TEST in both repos — B&E #539 (closed #540), TSA #102 (closed #103); NOT promoted to prod. Prior: main/TEST #534/#535/#536; prod behind (frontend-only). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-06**
 
 ## 2026-07-06 — Env banner (TEST/DEV strip across the top)
@@ -32,15 +32,16 @@ Supabase project yet). TSA files type-clean + compile via its vite dev pipeline;
 its edits sit in the working tree on branch `claude/site-admin-coach-access` and
 should be committed off `main` as their own 3-file PR.
 
-**Shipped as PRs (both In Review, CI green):**
-- Bert & Erne — PR #539 (branch `feat/env-banner`, Closes #540).
-- TSA (third-shot-academy) — PR #102 (branch `feat/env-banner`, Closes #103).
-- Both story issues on the WMPC Roadmap board: feature / Soon / In Review.
+**MERGED to main/TEST in both repos (CI green, squash):**
+- Bert & Erne — PR #539 → main `3055d53` (closed #540).
+- TSA (third-shot-academy) — PR #102 → main `ffdbda7` (closed #103).
+- Both board cards → Done. Merged to `main` only — **NOT promoted to production.**
 
-**Next:** Ron merges each In Review PR. On merge, TEST projects auto-deploy and
-the strip lights up (`test.bertanderne.com`, `third-shot-academy-test.pages.dev`);
-prod stays clean. Optional later: set `VITE_APP_ENV` per Cloudflare project to
-drive it explicitly instead of by hostname/DB-ref inference.
+**Next:** TEST projects auto-deploy from the merges — verify the strip shows on
+`test.bertanderne.com` and `third-shot-academy-test.pages.dev`, and confirm prod
+stays clean. Promote to prod (merge `main`→`production`) when Ron's ready.
+Optional later: set `VITE_APP_ENV` per Cloudflare project to drive it explicitly
+instead of by hostname/DB-ref inference.
 
 ## 2026-07-03 — Merged #534 + #535 + #536 to main/TEST (no prod promotion)
 
