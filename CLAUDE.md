@@ -1,5 +1,14 @@
 # Tournament Manager — Claude context
 
+> **WHICH REPO IS THIS — read before doing anything.** This is **Bert & Erne**
+> (`tournament-manager`): the pickleball **tournament / event-management**
+> product — brackets, registration, quotes/pricing, CourtReserve integration,
+> checkout. Brand: *Bert & Erne*. **This is NOT `third-shot-academy`** (the
+> separate coach-analysis / player-ratings product, formerly `rating-hub`). Do
+> **not** carry code patterns, domain models, data schemas, or branding between
+> the two — they are different products that happen to share a fleet. When
+> unsure, this repo's own docs win.
+
 > **Strategic context** — For the *why* (manifesto) and *what's next* (strategy) across all four repos in this stack, see `../wmpc-meta/strategy.md`. That sibling directory is auto-synced on every `git pull` via `scripts/claude-bootstrap.sh` — run it once after first cloning to install the hooks. Update `wmpc-meta/strategy.md` after meaningful strategic decisions; engineering specs stay in this repo's docs.
 
 
