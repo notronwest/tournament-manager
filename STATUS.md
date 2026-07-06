@@ -3,8 +3,39 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Merged to main/TEST (NOT prod): #534 analytics admin-exclusion, #535 chip RatingPicker + profile + CLAUDE.md engineering standard, #536 register rating-gate banner. main typecheck+build green; prod 11 commits behind (frontend-only, no migrations). Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-03**
+Current state: **Local: added a non-prod env banner (TEST/DEV strip) — new, uncommitted on `main`. Prior: merged to main/TEST (NOT prod) #534/#535/#536; prod 11 commits behind (frontend-only). Fee-override PR B (wizard UI) still pending type regen.**
+Last updated: **2026-07-06**
+
+## 2026-07-06 — Env banner (TEST/DEV strip across the top)
+
+Added a thin amber strip across the very top of every page signifying a
+non-production environment, so TEST never gets mistaken for the live site.
+- **`web/src/lib/env.ts`** — `getEnvLabel()`, fail-safe toward prod (only shows
+  when it can *positively* identify non-prod). Order: `VITE_APP_ENV` override →
+  localhost→DEV (before the DB check, since local `.env` points at the PROD
+  Supabase ref) → Supabase project ref (prod `wducsjqyoksmluwfgjxc`→hidden,
+  test `mvkhdsauaqqjehxdnbuf`→TEST) → hostname (`test.*`, `*-test.pages.dev`).
+- **`web/src/components/EnvBanner.tsx`** — the strip (`--warning` token,
+  `role=status`); returns `null` on prod. **`App.tsx`** — mounted first, above
+  the sticky `SiteHeader`.
+- Verified: typecheck clean, renders desktop + mobile (no h-scroll), no console
+  errors. Auto-lights on `test.bertanderne.com` after merge (that project builds
+  with the test Supabase URL); stays hidden on prod. No dashboard config needed.
+
+**Update (same day):** unified the detection order so hostname (`test.*` /
+`*-test.pages.dev`) is checked *before* the Supabase ref — a `*-test` host reads
+as TEST even if it's still pointed at the prod DB (matters mid-cutover). Same
+`env.ts`/`EnvBanner.tsx`/`App.tsx` trio mirrored into **TSA
+(third-shot-academy)**, structurally identical (only refs/hostnames differ: prod
+`cjtfhegtgbfwccnruood`, TEST via hostname since TSA has no separate test
+Supabase project yet). TSA files type-clean + compile via its vite dev pipeline;
+its edits sit in the working tree on branch `claude/site-admin-coach-access` and
+should be committed off `main` as their own 3-file PR.
+
+**Next:** commit + PR to `main` in *both* repos (frontend-only, no migration) —
+Bert & Erne off `main`; TSA a fresh branch off `main` with only the three
+env-banner files. Optional: set `VITE_APP_ENV` per Cloudflare project to drive
+it explicitly instead of by hostname/DB-ref inference.
 
 ## 2026-07-03 — Merged #534 + #535 + #536 to main/TEST (no prod promotion)
 

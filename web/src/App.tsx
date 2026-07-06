@@ -4,6 +4,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
 import { ProfileOnboarding } from "./auth/ProfileOnboarding";
 import { PartnerInviteOnboarding } from "./auth/PartnerInviteOnboarding";
+import EnvBanner from "./components/EnvBanner";
 import FeedbackWidget from "./components/FeedbackWidget";
 import ScrollToTop from "./components/ScrollToTop";
 import { RouteTracker, ConsentBanner } from "./components/AnalyticsConsent";
@@ -98,6 +99,9 @@ export default function App() {
     <CustomDomainProvider>
     <PartnerInvitesProvider>
     <PendingPaymentsProvider>
+      {/* Non-prod strip across the very top (TEST / DEV). Renders nothing on
+          production. First element so it sits above the sticky header. */}
+      <EnvBanner />
       {/* Reset scroll to the top on every route change (React Router doesn't). */}
       <ScrollToTop />
       {/* Global top banner — rendered once for the whole app.
