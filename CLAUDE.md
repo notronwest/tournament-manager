@@ -374,3 +374,21 @@ posture for all code work in this repo (interactive sessions and the Builder):
 
 This raises the floor; it does not override this repo's specific conventions
 above (branch/PR discipline, mobile-first, design tokens, docs-in-the-same-change).
+
+## UI work — required before any visual change
+
+Before ANY change to visual/UI code (a page, component, layout, nav, or style)
+— this is a gate, not a suggestion:
+
+- **Consult our design system FIRST.** `../wmpc-meta/design-system/` (tokens) +
+  this repo's `docs/DESIGN_PREFERENCES.md` govern look, spacing, layout, and
+  brand. Reuse existing components and tokens; do not invent one-off styles.
+- **Component behavior + accessibility: follow shadcn/ui + Radix conventions**
+  (accessible primitives, keyboard + ARIA, focus management) — but **style with
+  our design tokens, NOT Tailwind.** This stack uses inline styles + a minimal
+  index.css, no CSS framework; a Tailwind/shadcn migration is a separate,
+  deliberate project, not something to introduce inside an unrelated UI change.
+- **Mobile-first is non-negotiable.** Design AND verify at **390px width FIRST**,
+  then scale up. A UI change that has not been checked at 390px is NOT done.
+- **Uncovered pattern?** Fetch the specific Radix / shadcn (or Material 3) doc
+  for that component rather than freelancing or guessing at the design.
