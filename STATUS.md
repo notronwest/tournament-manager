@@ -3,7 +3,7 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **PROD PROMOTED — `production` now level with `main` (0 behind) via #541: analytics admin-exclusion (#534), self-rating picker (#535) + registration rating-gate (#536), CLAUDE identity header (#537/#538), env banner (#539, inert on prod). Frontend-only (no migrations/functions). Remote branches pruned 101→1 (only open PR #171 kept). Fee-override PR B (wizard UI) still pending type regen.**
+Current state: **PROD PROMOTED — `production` now level with `main` (0 behind) via #541: analytics admin-exclusion (#534), self-rating picker (#535) + registration rating-gate (#536), CLAUDE identity header (#537/#538), env banner (#539, inert on prod). Frontend-only (no migrations/functions). Remote branches pruned to just `main` + `production` — #171 closed as superseded by #371 (checkout friendly-errors already on main/prod). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-13**
 
 ## 2026-07-13 — Prod promotion (#541) + remote branch cleanup
@@ -17,11 +17,16 @@ Last updated: **2026-07-13**
   fails on promotion PRs (they close no story) — non-blocking (UNSTABLE), merged
   through it.
 - **Branch hygiene:** pruned **100 stale remote branches** (86 with MERGED PRs,
-  10 closed-unmerged, 4 dead/no-PR with closed issues). Remote now: `main`,
-  `production`, and `fix/checkout-surface-edge-error` (open PR #171) only.
-- **Next:** verify prod build on the live site once Cloudflare finishes. #171
-  (checkout error-surfacing) is stale + **conflicting** — needs a rebase before
-  it can land; flagged, not touched.
+  10 closed-unmerged, 4 dead/no-PR with closed issues), then **closed #171**
+  (the last open PR) as **superseded by #371** — a rebase attempt revealed main
+  already ships a strictly more complete version of that checkout-error fix
+  (`readEdgeErrorCode` + `paymentErrorMessage` + `paymentErrorCode` state +
+  "message the organizer" link), already on main/prod. Remote now: `main` +
+  `production` only.
+- **Next:** verify prod build on the live site once Cloudflare finishes.
+  Uncommitted in the working tree (pre-existing, not from these sessions): a
+  CLAUDE.md "UI work gate" section (+18) worth committing, and a scratch
+  `.mockups/index.html` header exploration.
 
 ## 2026-07-06 — Env banner (TEST/DEV strip across the top)
 
