@@ -3,8 +3,25 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Env banner (TEST/DEV strip) MERGED to main/TEST in both repos — B&E #539 (closed #540), TSA #102 (closed #103); NOT promoted to prod. Prior: main/TEST #534/#535/#536; prod behind (frontend-only). Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-06**
+Current state: **PROD PROMOTED — `production` now level with `main` (0 behind) via #541: analytics admin-exclusion (#534), self-rating picker (#535) + registration rating-gate (#536), CLAUDE identity header (#537/#538), env banner (#539, inert on prod). Frontend-only (no migrations/functions). Remote branches pruned 101→1 (only open PR #171 kept). Fee-override PR B (wizard UI) still pending type regen.**
+Last updated: **2026-07-13**
+
+## 2026-07-13 — Prod promotion (#541) + remote branch cleanup
+
+- **Promoted `main` → `production`** via PR #541 (merge commit `74f1f03`). 15
+  commits, **frontend + docs only — zero migrations, zero edge functions**, so
+  a clean prod Cloudflare rebuild with no PROD Supabase changes. Shipped #534
+  (analytics admin-exclusion), #535 (chip self-rating picker), #536
+  (registration rating-gate), #537/#538 (CLAUDE identity header), #539 (env
+  banner — renders nothing on prod by design). The issue-reference CI check
+  fails on promotion PRs (they close no story) — non-blocking (UNSTABLE), merged
+  through it.
+- **Branch hygiene:** pruned **100 stale remote branches** (86 with MERGED PRs,
+  10 closed-unmerged, 4 dead/no-PR with closed issues). Remote now: `main`,
+  `production`, and `fix/checkout-surface-edge-error` (open PR #171) only.
+- **Next:** verify prod build on the live site once Cloudflare finishes. #171
+  (checkout error-surfacing) is stale + **conflicting** — needs a rebase before
+  it can land; flagged, not touched.
 
 ## 2026-07-06 — Env banner (TEST/DEV strip across the top)
 
