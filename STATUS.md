@@ -28,10 +28,12 @@ Last updated: **2026-07-13**
   change; `.mockups/` now gitignored. Had to go via PR — a pre-push hook blocks
   non-STATUS direct pushes to `main` (STATUS-only pushes are allowed; that's how
   these handoff commits land).
-- **Next:** verify prod build on the live site once Cloudflare finishes. Working
-  tree has an unrelated **wmpc-meta auto-sync of CLAUDE.md** (mockup-policy
-  block, +70/-5) that the `git pull` produced — pending Ron's call on whether to
-  commit it (would need its own PR).
+- **wmpc-meta CLAUDE.md sync merged** via #545 (`ea2e29a`, closed #544): mockup
+  policy now says a mockup is the real page rendered end-to-end in a clickable
+  preview, never a chat-inline widget. Working tree clean; remote back to `main`
+  + `production` only.
+- **Next:** verify prod build on the live site once Cloudflare finishes. No
+  pending working-tree changes.
 
 ## 2026-07-06 — Env banner (TEST/DEV strip across the top)
 
