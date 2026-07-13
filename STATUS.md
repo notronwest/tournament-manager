@@ -23,10 +23,15 @@ Last updated: **2026-07-13**
   (`readEdgeErrorCode` + `paymentErrorMessage` + `paymentErrorCode` state +
   "message the organizer" link), already on main/prod. Remote now: `main` +
   `production` only.
-- **Next:** verify prod build on the live site once Cloudflare finishes.
-  Uncommitted in the working tree (pre-existing, not from these sessions): a
-  CLAUDE.md "UI work gate" section (+18) worth committing, and a scratch
-  `.mockups/index.html` header exploration.
+- **CLAUDE.md UI-work gate merged** via #543 (`1c97671`, closed #542): design-
+  system-first + shadcn/Radix behavior + mobile-first @390px before any visual
+  change; `.mockups/` now gitignored. Had to go via PR — a pre-push hook blocks
+  non-STATUS direct pushes to `main` (STATUS-only pushes are allowed; that's how
+  these handoff commits land).
+- **Next:** verify prod build on the live site once Cloudflare finishes. Working
+  tree has an unrelated **wmpc-meta auto-sync of CLAUDE.md** (mockup-policy
+  block, +70/-5) that the `git pull` produced — pending Ron's call on whether to
+  commit it (would need its own PR).
 
 ## 2026-07-06 — Env banner (TEST/DEV strip across the top)
 
