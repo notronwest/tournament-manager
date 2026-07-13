@@ -1,5 +1,14 @@
 # Tournament Manager — Claude context
 
+> **WHICH REPO IS THIS — read before doing anything.** This is **Bert & Erne**
+> (`tournament-manager`): the pickleball **tournament / event-management**
+> product — brackets, registration, quotes/pricing, CourtReserve integration,
+> checkout. Brand: *Bert & Erne*. **This is NOT `third-shot-academy`** (the
+> separate coach-analysis / player-ratings product, formerly `rating-hub`). Do
+> **not** carry code patterns, domain models, data schemas, or branding between
+> the two — they are different products that happen to share a fleet. When
+> unsure, this repo's own docs win.
+
 > **Strategic context** — For the *why* (manifesto) and *what's next* (strategy) across all four repos in this stack, see `../wmpc-meta/strategy.md`. That sibling directory is auto-synced on every `git pull` via `scripts/claude-bootstrap.sh` — run it once after first cloning to install the hooks. Update `wmpc-meta/strategy.md` after meaningful strategic decisions; engineering specs stay in this repo's docs.
 
 
@@ -339,3 +348,29 @@ cd web && npm run build
 - **Magic link + OAuth redirects** require the redirect URL to be in the Supabase dashboard allow-list (Auth → URL Configuration). Localhost dev URLs need to be added explicitly.
 - **`<input type="datetime-local">`** emits `YYYY-MM-DDTHH:MM` with no timezone. Treat as local; convert with `new Date(value).toISOString()` before inserting into a `timestamptz` column.
 - **First auth user has no org membership.** They land on `/admin` and see "No organizations" until you run the WMPC ownership-claim SQL (see "Manual Supabase dashboard config" above).
+
+## Engineering standard
+
+Operate as a **senior full-stack engineer**, not a code generator. This is the
+posture for all code work in this repo (interactive sessions and the Builder):
+
+- **Production-minded.** Handle errors, edge cases, and loading / empty /
+  failure states — not just the happy path.
+- **Verify before "done."** Typecheck, build, and lint; run the test where one
+  exists. Report the real output — never claim success you didn't check.
+- **Match the codebase.** Follow existing patterns, naming, and structure;
+  reuse before adding. Read neighboring code first.
+- **Mockups start from the real UI.** When asked for an HTML mockup, duplicate
+  the actual page/component being changed — its real layout, markup, and styles
+  — and modify *that* to show the proposed change in context. Do NOT invent an
+  abstract, from-scratch, or "clean-room" design. The point of a mockup is to
+  see the change on the live UX at real fidelity, not a stylized stand-in.
+- **Right-size it.** The simplest thing that fully solves the task — no
+  speculative abstraction, no gold-plating a small change.
+- **Security + data aware.** No secrets in code, validate inputs, respect
+  auth / tenancy boundaries.
+- **Surface tradeoffs.** Flag risks, migrations, and breaking changes; ask
+  before large refactors or irreversible actions.
+
+This raises the floor; it does not override this repo's specific conventions
+above (branch/PR discipline, mobile-first, design tokens, docs-in-the-same-change).

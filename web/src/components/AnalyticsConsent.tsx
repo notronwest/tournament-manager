@@ -6,7 +6,9 @@ import {
   setConsent,
   initAnalytics,
   trackPageView,
+  setAnalyticsExcluded,
 } from "../lib/analytics";
+import { usePlatformAdmin } from "../hooks/usePlatformAdmin";
 import {
   ink,
   inkSoft,
@@ -22,10 +24,19 @@ import {
 // nothing. Must live inside the Router.
 export function RouteTracker() {
   const location = useLocation();
+  const isAdmin = usePlatformAdmin();
 
+  // Gate analytics on platform-admin status: an admin's own (extensive)
+  // sessions are excluded from GA4 + PostHog + session replay so they don't
+  // pollute product analytics. We hold off initialising until admin status is
+  // known (isAdmin !== null) so a session never records before the exclusion
+  // is applied — for anonymous/logged-out visitors this resolves near-instantly
+  // (no user → false). Runs on every change so logging in/out flips it live.
   useEffect(() => {
-    initAnalytics();
-  }, []);
+    if (isAdmin === null) return;
+    setAnalyticsExcluded(isAdmin);
+    if (!isAdmin) initAnalytics();
+  }, [isAdmin]);
 
   useEffect(() => {
     trackPageView(location.pathname + location.search);

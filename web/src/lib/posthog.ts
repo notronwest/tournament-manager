@@ -30,6 +30,10 @@ const HOST =
 // resolve, so the capture helpers below are safe no-ops before then.
 let ph: PostHog | null = null;
 let loading = false;
+// True when the current viewer is excluded from capture (e.g. a logged-in
+// platform admin — see analytics.ts). Blocks loadPostHog() from initialising,
+// and opts out + stops replay if PostHog is already running.
+let excluded = false;
 
 // True when a project key is configured for this build. analytics.ts ORs this
 // with the GA4 check so the consent banner shows whenever EITHER is configured.
@@ -41,7 +45,7 @@ export function posthogConfigured(): boolean {
 // posthog-js is DYNAMICALLY imported here so it ships as a separate chunk loaded
 // only on consent — the main bundle (and visitors who decline) never pay for it.
 export async function loadPostHog(): Promise<void> {
-  if (ph || loading || !KEY) return;
+  if (ph || loading || !KEY || excluded) return;
   loading = true;
 
   const { default: posthog } = await import("posthog-js");
@@ -73,6 +77,22 @@ export async function loadPostHog(): Promise<void> {
     persistence: "localStorage+cookie",
   });
   ph = posthog;
+}
+
+// Exclude (or re-include) the current viewer from ALL PostHog capture +
+// session replay. Idempotent. If PostHog is already running, opt out and stop
+// the in-flight recording immediately; if it hasn't loaded yet, the flag makes
+// loadPostHog() a no-op so nothing ever starts. Used to keep platform admins'
+// own sessions out of product analytics.
+export function setPosthogExcluded(v: boolean): void {
+  excluded = v;
+  if (!ph) return;
+  if (v) {
+    ph.opt_out_capturing();
+    ph.stopSessionRecording?.();
+  } else {
+    ph.opt_in_capturing();
+  }
 }
 
 // SPA page view. No-op until loaded (post-consent) and configured.

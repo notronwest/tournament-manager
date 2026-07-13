@@ -3,8 +3,142 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Per-tournament platform-fee override: backend in review (PR #532, PR A of 2); UI + types = PR B (needs columns on TEST first). Prod still at PR #531 (OAuth fix).**
-Last updated: **2026-07-02**
+Current state: **Env banner (TEST/DEV strip) MERGED to main/TEST in both repos — B&E #539 (closed #540), TSA #102 (closed #103); NOT promoted to prod. Prior: main/TEST #534/#535/#536; prod behind (frontend-only). Fee-override PR B (wizard UI) still pending type regen.**
+Last updated: **2026-07-06**
+
+## 2026-07-06 — Env banner (TEST/DEV strip across the top)
+
+Added a thin amber strip across the very top of every page signifying a
+non-production environment, so TEST never gets mistaken for the live site.
+- **`web/src/lib/env.ts`** — `getEnvLabel()`, fail-safe toward prod (only shows
+  when it can *positively* identify non-prod). Order: `VITE_APP_ENV` override →
+  localhost→DEV (before the DB check, since local `.env` points at the PROD
+  Supabase ref) → Supabase project ref (prod `wducsjqyoksmluwfgjxc`→hidden,
+  test `mvkhdsauaqqjehxdnbuf`→TEST) → hostname (`test.*`, `*-test.pages.dev`).
+- **`web/src/components/EnvBanner.tsx`** — the strip (`--warning` token,
+  `role=status`); returns `null` on prod. **`App.tsx`** — mounted first, above
+  the sticky `SiteHeader`.
+- Verified: typecheck clean, renders desktop + mobile (no h-scroll), no console
+  errors. Auto-lights on `test.bertanderne.com` after merge (that project builds
+  with the test Supabase URL); stays hidden on prod. No dashboard config needed.
+
+**Update (same day):** unified the detection order so hostname (`test.*` /
+`*-test.pages.dev`) is checked *before* the Supabase ref — a `*-test` host reads
+as TEST even if it's still pointed at the prod DB (matters mid-cutover). Same
+`env.ts`/`EnvBanner.tsx`/`App.tsx` trio mirrored into **TSA
+(third-shot-academy)**, structurally identical (only refs/hostnames differ: prod
+`cjtfhegtgbfwccnruood`, TEST via hostname since TSA has no separate test
+Supabase project yet). TSA files type-clean + compile via its vite dev pipeline;
+its edits sit in the working tree on branch `claude/site-admin-coach-access` and
+should be committed off `main` as their own 3-file PR.
+
+**MERGED to main/TEST in both repos (CI green, squash):**
+- Bert & Erne — PR #539 → main `3055d53` (closed #540).
+- TSA (third-shot-academy) — PR #102 → main `ffdbda7` (closed #103).
+- Both board cards → Done. Merged to `main` only — **NOT promoted to production.**
+
+**Next:** TEST projects auto-deploy from the merges — verify the strip shows on
+`test.bertanderne.com` and `third-shot-academy-test.pages.dev`, and confirm prod
+stays clean. Promote to prod (merge `main`→`production`) when Ron's ready.
+Optional later: set `VITE_APP_ENV` per Cloudflare project to drive it explicitly
+instead of by hostname/DB-ref inference.
+
+## 2026-07-03 — Merged #534 + #535 + #536 to main/TEST (no prod promotion)
+
+Per Ron: folded the CLAUDE.md "Engineering standard" into #535 and merged all
+three open PRs to `main` (TEST only — explicitly NOT promoted to production):
+- **#534** — exclude platform admins from GA/PostHog/replay.
+- **#535** — shared `RatingPicker` chip control + profile swap + the CLAUDE.md
+  engineering-standard section.
+- **#536** — `RatingGateBanner` on RegisterPage (retargeted base → main after
+  #535 merged).
+
+All frontend/docs — no migrations/functions, so TEST just gets a frontend
+deploy. `main` typecheck + build green post-merge. **Prod is 11 commits behind
+main and intentionally untouched.**
+
+**Next:** manual verify on TEST (esp. #536: tournament w/ skill-restricted
+event + unrated player → banner unlocks). Promote to production when Ron's
+ready. Untracked `mockups/rating-gate-{A,B,C}*.html` still in working tree
+(not committed). Fee-override PR B (wizard UI) still pending type regen.
+
+## 2026-07-03 — Chip-based self-rating: profile + registration gate (PRs #535, #536)
+
+Ron picked **mockup C** (batch banner) and asked to also switch the profile
+screen to the same chip control. Built as two stacked PRs:
+- **#535** (→ main): new shared `RatingPicker` component (segmented 2.5–5.0
+  chips, tap-to-clear, preserves off-scale legacy values). ProfilePage's three
+  free-text number inputs → stacked `RatingPicker`s; state string→number|null;
+  `parseRating` retired.
+- **#536** (stacked on #535): `RatingGateBanner` on `RegisterPage` — when a
+  player can't register for rating-restricted events purely due to a missing
+  self-rating, one banner captures all needed formats; saving writes ratings +
+  updates `me` → eligibility re-runs → events unlock. No profile round trip.
+  Skippable. Ratings stay optional (no locked-decision change).
+
+**Next:** merge #535 → main (retargets #536 to main), then merge #536.
+Manual verify on TEST (tournament w/ skill-restricted event + unrated player).
+
+**Also this session:** `CLAUDE.md` gained an "Engineering standard" section
+(working-tree edit, still uncommitted at time of writing) — notably: mockups
+should duplicate the REAL page/component, not clean-room designs (the 3
+rating-gate mockups were clean-room). Confirm whether to commit it.
+
+## 2026-07-03 — Registration rating-gate: 3 UX mockups for review
+
+Built 3 interactive mockups (uncommitted, in `mockups/`) for capturing a
+self-rating when a player hits a skill-restricted event, so Ron can pick the UX
+before implementation. All keep the block for restricted events + profile
+ratings optional (no locked-decision change):
+- **A** `rating-gate-A-inline-expand.html` — blocked event row expands in place.
+- **B** `rating-gate-B-modal.html` — tapping the event opens a focused dialog.
+- **C** `rating-gate-C-batch-banner.html` — top prompt sets every needed rating
+  at once, unlocking all restricted events.
+
+Next: Ron picks (A/B/C or a hybrid) → build into `RegisterPage` (inline rating
+input + save + re-check eligibility). Optionally commit mockups on a `mockup/`
+branch.
+
+## 2026-07-03 — Analytics admin-exclusion (PR #534) + registration rating-gate design
+
+**PR #534 (in review):** exclude platform admins from GA4 + PostHog + session
+replay. Sessions are anonymous (never `identify()`'d) so exclusion is
+client-side: `RouteTracker` gates on `usePlatformAdmin`, holds off init until
+admin status is known, opts out + stops replay for admins, flips on
+login/logout. typecheck/build ✓. (Local `node_modules` was missing
+`posthog-js` — in package.json, not installed; `npm install` fixed it. CI
+installs fresh.)
+
+**Registration rating-gate — design decided, NOT built yet.** Problem Ron hit:
+a player forced to complete their profile (name+email — good) then still can't
+register for a rating-restricted event because they have no self-rating, and
+the only fix is a round trip back to the profile screen → ping-pong. Key
+insight: a self-rating is **only needed for events with min/max_rating set**
+(`eligibility.ts`); open events don't check it. So a blanket "require rating in
+profile" is the wrong lever (forces open-event players to rate; changes the
+locked "ratings optional" decision).
+**Agreed direction (pending Ron's final yes):** capture the rating **inline on
+the register page** at the point an event is ineligible *because* "no {format}
+self-rating on file" — small rating input + save + re-check, no trip to the
+profile screen. Keeps the block for restricted events, keeps profile ratings
+optional (no locked-decision change). Next: build the inline control in
+`RegisterPage`.
+
+## 2026-07-03 — Promoted fee-override backend to production (PR #533)
+
+`main` → `production`. Verified on TEST first (migration + edge fn + lint all
+green), then promoted. **PROD migration applied ✓ (16s), edge fn deployed ✓.**
+PROD == main. The `tournaments.platform_fee_bps/_fixed_cents` columns + the
+platform-admin-only trigger + the override-aware `create-payment-intent` are
+now live in prod (backward-compatible; global default still $0 until set).
+
+**Next:**
+1. **PR B (UI):** regen TS types from **TEST** (`supabase link` to the test
+   project — needs test DB password; CLI currently linked to prod), then add
+   the platform-admin-only fee control to `TournamentWizardPage`.
+2. Ron: set the **global default** to $5 on `/admin/platform` when ready.
+3. Interim before PR B: set a per-tournament override via SQL
+   (`update tournaments set platform_fee_bps=…, platform_fee_fixed_cents=… where slug='…'`).
 
 ## 2026-07-02 — Per-tournament platform-fee override (PR #532, backend, in review)
 
