@@ -6,6 +6,17 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED — `production` now level with `main` (0 behind) via #541: analytics admin-exclusion (#534), self-rating picker (#535) + registration rating-gate (#536), CLAUDE identity header (#537/#538), env banner (#539, inert on prod). Frontend-only (no migrations/functions). Remote branches pruned to just `main` + `production` — #171 closed as superseded by #371 (checkout friendly-errors already on main/prod). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-13**
 
+## 2026-07-13 — (cross-repo) TSA promoted to prod from this session
+
+Same session also took **third-shot-academy** to production (its own STATUS has
+the detail): landed 10 ready onboarding/auth PRs into TSA `main` in DB→FN→UX
+order, resolved a trivial `App.tsx` auth-route conflict (#270 vs #271), verified
+TEST + a local `vite build`, then promoted TSA `main`→`production` (#279) — 50
+migrations + 12 edge functions applied to PROD Supabase, CI green. No B&E code
+changed here. **B&E note:** `main` is 6 *docs-only* commits ahead of
+`production` (CLAUDE gate + STATUS); an optional cosmetic promotion, app already
+current on prod.
+
 ## 2026-07-13 — Prod promotion (#541) + remote branch cleanup
 
 - **Promoted `main` → `production`** via PR #541 (merge commit `74f1f03`). 15
