@@ -12,10 +12,11 @@ Same session also took **third-shot-academy** to production (its own STATUS has
 the detail): landed 10 ready onboarding/auth PRs into TSA `main` in DB→FN→UX
 order, resolved a trivial `App.tsx` auth-route conflict (#270 vs #271), verified
 TEST + a local `vite build`, then promoted TSA `main`→`production` (#279) — 50
-migrations + 12 edge functions applied to PROD Supabase, CI green. No B&E code
-changed here. **B&E note:** `main` is 6 *docs-only* commits ahead of
-`production` (CLAUDE gate + STATUS); an optional cosmetic promotion, app already
-current on prod.
+migrations + 12 edge functions applied to PROD Supabase, CI green. Then **pruned
+31 stale TSA branches** (25 merged, 4 closed-unmerged, 2 dead) — TSA remote now
+`main` + `production` only, matching B&E. No B&E code changed here. **B&E note:**
+`main` is 6 *docs-only* commits ahead of `production` (CLAUDE gate + STATUS); an
+optional cosmetic promotion, app already current on prod.
 
 ## 2026-07-13 — Prod promotion (#541) + remote branch cleanup
 
