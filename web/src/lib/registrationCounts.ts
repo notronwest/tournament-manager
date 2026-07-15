@@ -8,7 +8,7 @@ import { supabase } from "../supabase";
 // count returns 0. The RPC returns an aggregate count only (no PII).
 //
 // The RPC name isn't in the generated `Database` types until it reaches the
-// linked (prod) project and types are regenerated, so the call is cast here
+// linked (prod) project and types are regenerated, so the client is cast here
 // — the single place that knows about this until the next `gen types`. On
 // ANY failure (RPC missing, network) this resolves to an empty map, so the
 // UI just omits the stat rather than erroring.
@@ -18,18 +18,24 @@ export type TournamentRegCount = {
   registered_count: number;
 };
 
-type RegCountRpc = (
-  fn: "tournament_registration_counts",
-  args: { p_tournament_ids: string[] },
-) => Promise<{ data: TournamentRegCount[] | null; error: unknown }>;
+// Cast the CLIENT (not the bare `supabase.rpc` method): detaching the method
+// into a local — `const rpc = supabase.rpc` — loses the `this` binding that
+// supabase-js's rpc() needs, so calling it throws and the count silently
+// stays empty. Invoke it as a method on the client so `this` stays bound.
+type RegCountClient = {
+  rpc: (
+    fn: "tournament_registration_counts",
+    args: { p_tournament_ids: string[] },
+  ) => Promise<{ data: TournamentRegCount[] | null; error: unknown }>;
+};
 
 export async function fetchTournamentRegCounts(
   tournamentIds: string[],
 ): Promise<Map<string, number>> {
   if (tournamentIds.length === 0) return new Map();
   try {
-    const rpc = supabase.rpc as unknown as RegCountRpc;
-    const { data, error } = await rpc("tournament_registration_counts", {
+    const client = supabase as unknown as RegCountClient;
+    const { data, error } = await client.rpc("tournament_registration_counts", {
       p_tournament_ids: tournamentIds,
     });
     if (error || !data) return new Map();
