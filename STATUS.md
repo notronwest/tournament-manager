@@ -23,8 +23,17 @@ merge):
   shows a "Registered · N players" header Meta. Hidden at 0.
 - Verified locally with a stubbed count: both surfaces render, no horizontal
   overflow at 390px, graceful degradation confirmed (prod DB lacks the RPC).
-- **MERGE ORDER: #551 first** (RPC → TEST), **then #552** (verify preview vs
-  TEST). After the RPC reaches prod, re-run `gen types` to drop the local cast.
+- **#551 merged** (RPC on TEST). On the #552 preview Ron found the counts showed
+  **nothing** — root cause: the RPC counted the tournament-level `registrations`
+  table, which the app **never writes** (registration is per-event via
+  `event_registrations`; the admin "total players" counts distinct player_id
+  there). v1 counted an empty table → 0 everywhere.
+- **Fix #554** (`db/fix-registration-counts-event-registrations`, closes #553):
+  recount DISTINCT player_id over a tournament's events (paid/pending,
+  non-deleted), seekers included — matches the admin grain.
+- **MERGE ORDER now: #554 first** (corrected RPC → TEST), reload the #552 preview
+  to confirm counts appear, **then #552**. After the RPC reaches prod, re-run
+  `gen types` to drop the local cast in `lib/registrationCounts`.
 
 ## 2026-07-13 — (cross-repo) TSA promoted to prod from this session
 
