@@ -4,7 +4,27 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **PROD PROMOTED — `production` now level with `main` (0 behind) via #541: analytics admin-exclusion (#534), self-rating picker (#535) + registration rating-gate (#536), CLAUDE identity header (#537/#538), env banner (#539, inert on prod). Frontend-only (no migrations/functions). Remote branches pruned to just `main` + `production` — #171 closed as superseded by #371 (checkout friendly-errors already on main/prod). Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-13**
+Last updated: **2026-07-15**
+
+## 2026-07-15 — Registered-players count on browse card + tournament header (2 PRs)
+
+Feature request: show "total registered players" on the public browse cards and
+the tournament page header. Shipped as a DB→UX split (both PRs green, awaiting
+merge):
+- **DB #551** (`db/registration-counts-rpc`, closes #549) — `SECURITY DEFINER`
+  RPC `tournament_registration_counts(uuid[]) → (tournament_id, registered_count)`,
+  counting tournament-level `registrations` (paid+pending, non-deleted),
+  granted to anon+authenticated. Needed because RLS hides `registrations` from
+  anon, so a client-side count returns 0.
+- **UX #552** (`feat/registered-players-count`, closes #550) — new
+  `lib/registrationCounts` helper (typed cast until `gen types` picks up the
+  RPC; empty-map on failure → graceful degrade). HomePage batches counts for
+  visible cards → "N players registered" under the meta; PublicTournamentPage
+  shows a "Registered · N players" header Meta. Hidden at 0.
+- Verified locally with a stubbed count: both surfaces render, no horizontal
+  overflow at 390px, graceful degradation confirmed (prod DB lacks the RPC).
+- **MERGE ORDER: #551 first** (RPC → TEST), **then #552** (verify preview vs
+  TEST). After the RPC reaches prod, re-run `gen types` to drop the local cast.
 
 ## 2026-07-13 — (cross-repo) TSA promoted to prod from this session
 
