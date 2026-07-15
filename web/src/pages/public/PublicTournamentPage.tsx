@@ -12,6 +12,7 @@ import { PartnerSearch } from "../../components/PartnerSearch";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
 import { formatUsd } from "../../lib/pricing";
+import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
 import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
   deriveRegistrationStatus,
@@ -190,6 +191,9 @@ export default function PublicTournamentPage({
   // event_registrations from this page (inline register / cancel).
   const { refresh: refreshPending, groups: pendingGroups } = usePendingPayments();
   const [tournament, setTournament] = useState<Tournament | null>(null);
+  // Total registered players for this tournament (null until loaded via the
+  // anon RPC). Shown in the header; omitted when 0 or unavailable.
+  const [registeredCount, setRegisteredCount] = useState<number | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   // Ordered pricing tiers for this tournament. Backfilled by migration
   // 20260526170000 — every existing tournament has at least one
@@ -292,6 +296,13 @@ export default function PublicTournamentPage({
       return;
     }
     setTournament(t);
+
+    // Total registered players — anon RPC (registrations RLS blocks a direct
+    // count). Fire-and-forget so it never blocks the events/roster loads; the
+    // header omits the stat if it fails or is 0.
+    void fetchTournamentRegCounts([t.id]).then((m) =>
+      setRegisteredCount(m.get(t.id) ?? 0),
+    );
 
     const { data: evs, error: evErr } = await supabase
       .from("events")
@@ -697,6 +708,14 @@ export default function PublicTournamentPage({
                     : "Open"
             }
           />
+          {registeredCount !== null && registeredCount > 0 && (
+            <Meta
+              label="Registered"
+              value={`${registeredCount} ${
+                registeredCount === 1 ? "player" : "players"
+              }`}
+            />
+          )}
           {regFeeCents > 0 && (
             <div style={{ marginLeft: "auto", textAlign: "right" }}>
               <div
