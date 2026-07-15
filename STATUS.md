@@ -45,10 +45,20 @@ merge):
   card and the tournament header, consistent with the RPC; no overflow at 390px.
   (Branch-alias preview may serve a stale detail chunk — use the per-commit URL.)
 - **So #554 (event_registrations grain) was still the right RPC fix** — the
-  binding bug was hiding it. **Next: merge #552.** After the RPC reaches prod,
-  re-run `gen types` to drop the local cast.
+  binding bug was hiding it.
+- **#552 MERGED** (main `9cd32ff`). **Confirmed LIVE on `test.bertanderne.com`**
+  (screenshot): fundraiser header "REGISTERED · 8 players", cards show counts
+  (E2E 1-2), TEST Supabase `mvkhdsauaqqjehxdnbuf`, build `index-CFbKVg9c.js`, no
+  service worker. Ron reported "still nothing" post-merge → could NOT reproduce;
+  diagnosed as his browser's cached old bundle (hard-refresh didn't evict the
+  immutable-hashed chunks) — recommended an incognito window to confirm.
+- **Next:** (1) promote main→production when ready — ships the RPC + UX to prod;
+  (2) after RPC reaches prod, re-run `gen types` to drop the local cast in
+  `lib/registrationCounts`. Also pending: CLAUDE.md wmpc-meta bootstrap sync
+  (+54/-37) sitting uncommitted in the working tree.
 - **Lesson:** don't stub the exact call under test — the stub hid a real
-  binding bug that only a live RPC call would surface.
+  binding bug that only a live RPC call would surface. And verify fixes on the
+  canonical deploy (`test.bertanderne.com`), not flaky preview/branch-alias URLs.
 
 ## 2026-07-13 — (cross-repo) TSA promoted to prod from this session
 
