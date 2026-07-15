@@ -3,8 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **PROD PROMOTED — `production` now level with `main` (0 behind) via #541: analytics admin-exclusion (#534), self-rating picker (#535) + registration rating-gate (#536), CLAUDE identity header (#537/#538), env banner (#539, inert on prod). Frontend-only (no migrations/functions). Remote branches pruned to just `main` + `production` — #171 closed as superseded by #371 (checkout friendly-errors already on main/prod). Fee-override PR B (wizard UI) still pending type regen.**
+Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-15**
+
+## 2026-07-15 — Promoted to production (#557)
+
+- Merged `main`→`production` (merge `7a399b2`), 18 commits. **Apply DB migrations
+  (prod): success** — the 2 `tournament_registration_counts` migrations
+  (create + recount-from-event_registrations) applied to PROD Supabase. Both are
+  `create or replace function` + grant → additive, no data-loss ops. No edge fns.
+- Shipped: registered-players count (#551/#554/#552), auth profile-probe fixes
+  (#547/#548), CLAUDE/STATUS docs.
+- **Verified live on bertanderne.com:** PROD Supabase (`wducsjqyoksmluwfgjxc`),
+  count RPC fires; card shows "1 player registered", header "Registered · 1
+  player"; **env banner correctly absent on prod** (fail-safe confirmed in the
+  real environment). NOTE: first check right after merge showed nothing — the
+  prod Cloudflare build was still deploying; re-check after build success.
+- **Next:** re-run `gen types` now that the RPC is on prod, then drop the local
+  cast in `lib/registrationCounts` (small follow-up PR).
 
 ## 2026-07-15 — Registered-players count on browse card + tournament header (2 PRs)
 
