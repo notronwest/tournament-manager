@@ -214,6 +214,23 @@ async function main() {
     await db.from("event_registrations").delete().eq("event_id", fe);
   }
 
+  // Purge the test-created invitee. The "invite someone not in the system" spec
+  // creates a brand-new player (e2e-newpartner@wmpc.test) through the UI every
+  // run; nothing else recreates it, so without this it accumulates unbounded
+  // (58 duplicate rows had piled up — #546). Clear any references first, then
+  // hard-delete, so each run starts with that person genuinely "not in the
+  // system" and the players table stays clean.
+  const stale = await db
+    .from("players")
+    .select("id")
+    .eq("email", "e2e-newpartner@wmpc.test");
+  const staleIds = (stale.data ?? []).map((r) => (r as { id: string }).id);
+  if (staleIds.length) {
+    await db.from("partner_invites").delete().in("invitee_player_id", staleIds);
+    await db.from("event_registrations").delete().in("player_id", staleIds);
+    await db.from("players").delete().in("id", staleIds);
+  }
+
   // 7. Registration-remainder fixtures (#253): singles, discard-form (#9 P1),
   //    change-partner, invite-accept. One tournament per flow (single card).
   const mkTournament = async (slug: string, name: string) =>
