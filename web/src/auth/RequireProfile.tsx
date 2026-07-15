@@ -33,62 +33,68 @@ export function RequireProfile({ children }: { children: ReactNode }) {
     }
     let cancelled = false;
     (async () => {
-      // The profile probe can be ABORTED by the post-login auth transition:
-      // supabase-js swaps the session mid-flight, so this request fails with no
-      // response (seen in the trace as status -1). An errored probe must be
-      // treated as "unknown — retry", NOT as "no profile" — otherwise a fully
-      // valid, complete user is wrongly ejected to /profile (the flaky-nightly
-      // bug: #546). Only a SUCCESSFUL query that genuinely returns no complete
-      // row should bounce. Retry with backoff; the race resolves within an
-      // attempt or two once the new session settles.
-      for (let attempt = 0; attempt < 6 && !cancelled; attempt++) {
-        const { data, error } = await supabase
+      // Right after login there's a window where `user` is set but the
+      // supabase client's session token isn't attached to requests yet. A
+      // profile probe fired in that window either ABORTS (error — status -1 in
+      // the trace) OR, worse, runs effectively unauthenticated and comes back
+      // with ZERO rows via RLS *with no error at all*. Both must be treated as
+      // "unknown — retry", NOT as "no profile" — otherwise a fully valid user
+      // is wrongly ejected to /profile (the flaky nightly: #546). A settled
+      // session returns the row within a moment, so we retry a no-row/errored
+      // probe a few times and only bounce once "no row" PERSISTS across every
+      // attempt. (A row that EXISTS but is incomplete is a definitive answer —
+      // bounce immediately, no retry.)
+      const MAX_ATTEMPTS = 6;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS && !cancelled; attempt++) {
+        const { data } = await supabase
           .from("players")
           .select("id, first_name, last_name, email")
           .eq("auth_user_id", user.id)
           .is("deleted_at", null)
           .maybeSingle();
         if (cancelled) return;
-        if (error) {
-          // Transient (usually the aborted request during the auth swap).
-          // Back off and retry rather than ejecting the user.
+
+        if (data) {
+          // Definitive row — final decision, no retry. If it has names but no
+          // email and the auth session has one (e.g. Google OAuth supplied it),
+          // backfill silently; otherwise gate on name+email completeness.
+          if (
+            data.first_name?.trim() &&
+            data.last_name?.trim() &&
+            !data.email?.trim() &&
+            user.email
+          ) {
+            await supabase
+              .from("players")
+              .update({ email: user.email })
+              .eq("id", data.id);
+            if (cancelled) return;
+            setHasProfile(true);
+          } else {
+            setHasProfile(
+              !!(
+                data.first_name?.trim() &&
+                data.last_name?.trim() &&
+                data.email?.trim()
+              ),
+            );
+          }
+          setChecking(false);
+          return;
+        }
+
+        // No row (errored OR empty). Likely the post-login race — back off and
+        // retry before concluding the profile is genuinely absent.
+        if (attempt < MAX_ATTEMPTS - 1) {
           await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
           continue;
         }
-
-        // If the player row has names but no email and the auth session
-        // already has one (e.g. Google OAuth supplied it), backfill
-        // silently rather than bouncing the user to the profile form.
-        if (
-          data &&
-          data.first_name?.trim() &&
-          data.last_name?.trim() &&
-          !data.email?.trim() &&
-          user.email
-        ) {
-          await supabase
-            .from("players")
-            .update({ email: user.email })
-            .eq("id", data.id);
-          if (cancelled) return;
-          setHasProfile(true);
-        } else {
-          setHasProfile(
-            !!(
-              data &&
-              data.first_name?.trim() &&
-              data.last_name?.trim() &&
-              data.email?.trim()
-            ),
-          );
-        }
+        // "No row" persisted across every attempt → genuinely no/incomplete
+        // profile. Bounce to /profile.
+        setHasProfile(false);
         setChecking(false);
         return;
       }
-      // Every attempt errored — a real backend outage, not the routine
-      // auth-swap race. Do NOT bounce a possibly-valid user on a transient
-      // failure: stay in the loading state (checking stays true) and let the
-      // next auth/user change re-run this check.
     })();
     return () => {
       cancelled = true;
