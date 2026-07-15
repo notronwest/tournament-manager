@@ -7,6 +7,7 @@ import {
   pickActivePricingTier,
   type PricingTier,
 } from "../../lib/pricingTiers";
+import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
 import {
   bodyFontStack,
   bg,
@@ -71,6 +72,10 @@ type TournamentWithOrg = Tournament & {
 // Events are included to support skill-level filtering.
 export default function HomePage() {
   const [tournaments, setTournaments] = useState<TournamentWithOrg[]>([]);
+  // Per-tournament registered-player counts (id → count), loaded after the
+  // cards via an anon RPC. Non-blocking: cards render immediately, the count
+  // line fills in when this resolves (empty map if the RPC is unavailable).
+  const [regCounts, setRegCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -116,6 +121,14 @@ export default function HomePage() {
         (data ?? []) as unknown as TournamentWithOrg[],
       );
       setLoading(false);
+
+      // Registered-player counts for the visible cards — one batched RPC.
+      // Fired after the cards are shown so it never delays the grid; on
+      // failure the map stays empty and cards simply omit the count.
+      const counts = await fetchTournamentRegCounts(
+        (data ?? []).map((t) => t.id),
+      );
+      if (!cancelled) setRegCounts(counts);
     })();
     return () => {
       cancelled = true;
@@ -350,6 +363,7 @@ export default function HomePage() {
                 key={t.id}
                 tournament={t}
                 stripeIdx={i % 3 as 0 | 1 | 2}
+                registeredCount={regCounts.get(t.id) ?? 0}
               />
             ))}
           </div>
@@ -426,9 +440,11 @@ function FilterControl({ label, children }: { label: string; children: ReactNode
 function TournamentCard({
   tournament,
   stripeIdx,
+  registeredCount,
 }: {
   tournament: TournamentWithOrg;
   stripeIdx: 0 | 1 | 2;
+  registeredCount: number;
 }) {
   const org = tournament.organizations;
   // Defensive: if RLS hid the org row somehow we can't link safely.
@@ -466,11 +482,22 @@ function TournamentCard({
       <div style={cardBodyStyle}>
         <span style={cardPillStyle}>{pillText}</span>
         <h3 style={cardH3Style}>{tournament.name}</h3>
-        <p style={cardMetaStyle}>
+        <p
+          style={{
+            ...cardMetaStyle,
+            marginBottom: registeredCount > 0 ? 6 : cardMetaStyle.marginBottom,
+          }}
+        >
           {[org.name, dateRange, tournament.location_name]
             .filter(Boolean)
             .join(" · ")}
         </p>
+        {registeredCount > 0 && (
+          <p style={cardRegisteredStyle}>
+            {registeredCount} {registeredCount === 1 ? "player" : "players"}{" "}
+            registered
+          </p>
+        )}
         {priceLabel !== "—" && (
           <div style={cardPriceRowStyle}>
             {priceLabel !== "Free" && (
@@ -737,6 +764,16 @@ const cardH3Style: CSSProperties = {
 
 const cardMetaStyle: CSSProperties = {
   fontSize: 13,
+  color: inkSoft,
+  margin: "0 0 16px",
+  lineHeight: 1.45,
+};
+
+// Social-proof stat under the meta line — slightly bolder than the meta so
+// it reads as a count, in the same muted ink so it doesn't fight the price.
+const cardRegisteredStyle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
   color: inkSoft,
   margin: "0 0 16px",
   lineHeight: 1.45,

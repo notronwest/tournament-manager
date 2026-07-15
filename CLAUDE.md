@@ -349,6 +349,54 @@ cd web && npm run build
 - **`<input type="datetime-local">`** emits `YYYY-MM-DDTHH:MM` with no timezone. Treat as local; convert with `new Date(value).toISOString()` before inserting into a `timestamptz` column.
 - **First auth user has no org membership.** They land on `/admin` and see "No organizations" until you run the WMPC ownership-claim SQL (see "Manual Supabase dashboard config" above).
 
+
+
+<!-- wmpc-block:environments:v1 START -->
+## Deploy environments — TEST vs PR **preview** vs PROD (they differ)
+
+There are **three** running environments, not two. Know which one you're
+looking at, because they do **not** share configuration:
+
+| Environment | Comes from | Cloudflare variable scope |
+|---|---|---|
+| **TEST** | the `main` branch build | the `main`/TEST build's variables |
+| **PR preview** | **every open PR** gets its own preview deploy | the **preview** (non-production) scope — set **separately** |
+| **PROD** | the `production` branch build | the production scope |
+
+**The trap that costs real debugging time:** a PR **preview is not TEST.**
+Cloudflare builds each deploy with the variables/secrets configured for *that
+deploy's scope*, and for our Vite SPAs the `VITE_*` values are **baked into the
+bundle at build time**. So a PR preview is compiled against the **preview**
+scope's `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV`,
+`VITE_COACH_AI_SECRET`, `VITE_GOOGLE_CLIENT_ID`, etc. — which are configured
+independently of TEST. If any of those differ or lag, the preview points at a
+**different Supabase project / different keys / a missing secret** than TEST and
+**behaves differently for reasons that have nothing to do with the code.**
+
+**Because of this, always:**
+
+- **Name the environment** when you hand work over. Say "validate on the **PR
+  preview** (its own env-var scope, *not* TEST)" — don't let anyone assume the
+  preview equals TEST.
+- **Suspect the env vars first** when a preview misbehaves but the code looks
+  right. Confirm the preview's Supabase URL / keys / secret are the intended
+  ones *before* debugging code. `VITE_APP_ENV` and the Supabase URL are visible
+  in the running app — check them.
+- **Add any new var/secret a feature needs to the preview scope too**, not just
+  TEST/PROD. Set only in TEST → the PR preview won't have it and fails in a way
+  that looks like a code bug (and it must be in PROD before promotion).
+- **Remember `VITE_*` is build-time.** Changing a Cloudflare variable takes
+  effect only after the PR **re-builds/re-deploys** — a page refresh won't pick
+  it up.
+
+Migrations are the mirror image: a preview is **frontend-only against the live
+DB**, and a migration applies **only on merge to `main`** — so the DB the
+preview talks to is real/live, while the schema change it may depend on isn't
+there until merged (why DB and UX ship as separate PRs — see the migration
+convention).
+<!-- wmpc-block:environments:v1 END -->
+
+<!-- wmpc-block:engineering-standard:v2 START -->
 ## Engineering standard
 
 Operate as a **senior full-stack engineer**, not a code generator. This is the
@@ -358,13 +406,39 @@ posture for all code work in this repo (interactive sessions and the Builder):
   failure states — not just the happy path.
 - **Verify before "done."** Typecheck, build, and lint; run the test where one
   exists. Report the real output — never claim success you didn't check.
+- **Delegate to sub-agents to protect your context — by default, not as a last
+  resort.** For well-scoped, context-heavy work, spin up a sub-agent (the
+  Task/Agent tool) and keep only its *result* in your main thread. Reach for it
+  whenever it applies: broad multi-file searches and codebase exploration (use
+  the **Explore** agent — you want the conclusion, not the file dumps);
+  **mechanical sweeps** with clear rules ("convert all ~20 loading states to
+  `<Loading>`"); research questions; and independent parallel workstreams (launch
+  them in one message so they run concurrently). **You stay the owner:** the main
+  session *verifies* (typecheck/build/lint), *reviews the diff*, and *ships the
+  single PR* — the sub-agent does the legwork, you keep the judgment and the
+  context window. **Don't** delegate trivial quick edits (the round-trip costs
+  more than it saves), work needing tight back-and-forth with Ron, or **parallel
+  edits to the same files** (they clobber each other — serialize, or give each
+  agent its own worktree). A budget-capped headless run (the Builder) weighs the
+  extra token cost before fanning out; an interactive session should lean in,
+  since context is the scarce resource.
 - **Match the codebase.** Follow existing patterns, naming, and structure;
   reuse before adding. Read neighboring code first.
-- **Mockups start from the real UI.** When asked for an HTML mockup, duplicate
-  the actual page/component being changed — its real layout, markup, and styles
-  — and modify *that* to show the proposed change in context. Do NOT invent an
-  abstract, from-scratch, or "clean-room" design. The point of a mockup is to
-  see the change on the live UX at real fidelity, not a stylized stand-in.
+- **Mockups are the real page, running and interactive — never an inline
+  widget.** When asked to "do a mockup," the deliverable is the **actual page
+  rendered end-to-end with the proposed change inline**, served in a **real,
+  clickable browser preview**: start the app's dev server and open the real
+  route, or — only if that's genuinely impractical — write a full standalone
+  HTML page that duplicates the real page and open *that* in the preview.
+  Duplicate the real page/component being changed (its true layout, markup,
+  styles, and design tokens) and modify *that* in context; never an abstract,
+  from-scratch, or "clean-room" stand-in. **Do NOT** deliver a mockup as a
+  chat-inline visualization/widget (e.g. a `show_widget` / visualize call, or an
+  SVG/HTML blob embedded in the reply) — the whole point is to **feel the real
+  UX by interacting with it before we build**, which a static inline widget
+  can't do. If the target page doesn't exist yet, build the new page full-size
+  and interactive in a real preview all the same. Fall back to a static image or
+  snippet only when explicitly asked for one.
 - **Right-size it.** The simplest thing that fully solves the task — no
   speculative abstraction, no gold-plating a small change.
 - **Security + data aware.** No secrets in code, validate inputs, respect
@@ -374,3 +448,43 @@ posture for all code work in this repo (interactive sessions and the Builder):
 
 This raises the floor; it does not override this repo's specific conventions
 above (branch/PR discipline, mobile-first, design tokens, docs-in-the-same-change).
+<!-- wmpc-block:engineering-standard:v2 END -->
+
+<!-- wmpc-block:ui-work:v2 START -->
+## UI work — required before any visual change
+
+Before ANY change to visual/UI code (a page, component, layout, nav, or style)
+— this is a gate, not a suggestion:
+
+- **Consult our design system FIRST.** `../wmpc-meta/design-system/` (tokens) +
+  this repo's `docs/DESIGN_PREFERENCES.md` govern look, spacing, layout, and
+  brand. Reuse existing components and tokens; do not invent one-off styles.
+- **Component behavior + accessibility: follow shadcn/ui + Radix conventions**
+  (accessible primitives, keyboard + ARIA, focus management) — but **style with
+  our design tokens, NOT Tailwind.** This stack uses inline styles + a minimal
+  index.css, no CSS framework; a Tailwind/shadcn migration is a separate,
+  deliberate project, not something to introduce inside an unrelated UI change.
+- **Mobile-first is non-negotiable.** Design AND verify at **390px width FIRST**,
+  then scale up. A UI change that has not been checked at 390px is NOT done.
+- **Mockups run in a real, interactive preview — not a chat-inline widget.**
+  When Ron asks to "do a mockup," render the **whole page** with the change
+  inline in a **clickable browser preview** (the app's dev server on the real
+  route, or a full standalone HTML page duplicated from the real one) so the UX
+  can be *felt* before we build. Never a `show_widget` / inline SVG-or-HTML blob.
+  Full rule under **Engineering standard → Mockups**.
+- **Uncovered pattern?** Fetch the specific Radix / shadcn (or Material 3) doc
+  for that component rather than freelancing or guessing at the design.
+- **Never overwhelm the user — guide them, don't dump the whole surface.** A
+  config screen is a design failure when it's a **wall of granular controls the
+  user has to reverse-engineer** — the *Stripe restricted-key permissions screen*
+  anti-pattern: dozens of ungrouped toggles, two unexplained columns ("Permissions
+  vs Connect Permissions"), no search, and a primary field ambiguous enough to
+  look like a filter. Instead: **sensible defaults**; a **preset for the common
+  task** (one click does the 90% case); **search/filter** on any long list;
+  **plain-language labels** (no unexplained jargon or ambiguous columns);
+  **progressive disclosure** (advanced/rare options collapsed by default); and
+  **bulk actions** for repetitive rows. There should be one **obvious primary
+  path**; the long tail is opt-in. If a screen forces the user to understand the
+  whole domain model just to make one choice, it needs redesigning — flag it, don't
+  ship it.
+<!-- wmpc-block:ui-work:v2 END -->

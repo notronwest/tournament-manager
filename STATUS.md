@@ -3,8 +3,103 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **Env banner (TEST/DEV strip) MERGED to main/TEST in both repos — B&E #539 (closed #540), TSA #102 (closed #103); NOT promoted to prod. Prior: main/TEST #534/#535/#536; prod behind (frontend-only). Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-06**
+Current state: **PROD PROMOTED — `production` now level with `main` (0 behind) via #541: analytics admin-exclusion (#534), self-rating picker (#535) + registration rating-gate (#536), CLAUDE identity header (#537/#538), env banner (#539, inert on prod). Frontend-only (no migrations/functions). Remote branches pruned to just `main` + `production` — #171 closed as superseded by #371 (checkout friendly-errors already on main/prod). Fee-override PR B (wizard UI) still pending type regen.**
+Last updated: **2026-07-15**
+
+## 2026-07-15 — Registered-players count on browse card + tournament header (2 PRs)
+
+Feature request: show "total registered players" on the public browse cards and
+the tournament page header. Shipped as a DB→UX split (both PRs green, awaiting
+merge):
+- **DB #551** (`db/registration-counts-rpc`, closes #549) — `SECURITY DEFINER`
+  RPC `tournament_registration_counts(uuid[]) → (tournament_id, registered_count)`,
+  counting tournament-level `registrations` (paid+pending, non-deleted),
+  granted to anon+authenticated. Needed because RLS hides `registrations` from
+  anon, so a client-side count returns 0.
+- **UX #552** (`feat/registered-players-count`, closes #550) — new
+  `lib/registrationCounts` helper (typed cast until `gen types` picks up the
+  RPC; empty-map on failure → graceful degrade). HomePage batches counts for
+  visible cards → "N players registered" under the meta; PublicTournamentPage
+  shows a "Registered · N players" header Meta. Hidden at 0.
+- Verified locally with a stubbed count: both surfaces render, no horizontal
+  overflow at 390px, graceful degradation confirmed (prod DB lacks the RPC).
+- **#551 merged** (RPC on TEST). On the #552 preview Ron found the counts showed
+  **nothing** — root cause: the RPC counted the tournament-level `registrations`
+  table, which the app **never writes** (registration is per-event via
+  `event_registrations`; the admin "total players" counts distinct player_id
+  there). v1 counted an empty table → 0 everywhere.
+- **Fix #554** (`db/fix-registration-counts-event-registrations`, closes #553):
+  recount DISTINCT player_id over a tournament's events (paid/pending,
+  non-deleted), seekers included — matches the admin grain.
+- **#554 merged** (RPC → TEST) but counts STILL showed nothing. **Real root
+  cause: a JS binding bug** in `lib/registrationCounts` — `const rpc =
+  supabase.rpc; rpc(...)` detached the method, so supabase-js's `rpc()` ran with
+  `this===undefined` and **threw** (`TypeError: reading 'rest'`) before the
+  request; the `catch` swallowed it → empty map → count always hidden,
+  regardless of RPC/table. (Both #551 and #554 looked broken for this reason;
+  my local **stub test masked it** by returning before the real call.)
+- **Fix (commit `69c1d3f` on #552):** call `.rpc` as a bound method on the
+  (retyped) client. Proven via a bound-vs-unbound test against a live anon RPC.
+- **Verified end-to-end** on the fresh per-commit preview (`ec265086…`) vs TEST:
+  "1st Annual First Responder Fundraiser" shows **8 players** on both the browse
+  card and the tournament header, consistent with the RPC; no overflow at 390px.
+  (Branch-alias preview may serve a stale detail chunk — use the per-commit URL.)
+- **So #554 (event_registrations grain) was still the right RPC fix** — the
+  binding bug was hiding it.
+- **#552 MERGED** (main `9cd32ff`). **Confirmed LIVE on `test.bertanderne.com`**
+  (screenshot): fundraiser header "REGISTERED · 8 players", cards show counts
+  (E2E 1-2), TEST Supabase `mvkhdsauaqqjehxdnbuf`, build `index-CFbKVg9c.js`, no
+  service worker. Ron reported "still nothing" post-merge → could NOT reproduce;
+  diagnosed as his browser's cached old bundle (hard-refresh didn't evict the
+  immutable-hashed chunks) — recommended an incognito window to confirm.
+- **Next:** (1) promote main→production when ready — ships the RPC + UX to prod;
+  (2) after RPC reaches prod, re-run `gen types` to drop the local cast in
+  `lib/registrationCounts`. Also pending: CLAUDE.md wmpc-meta bootstrap sync
+  (+54/-37) sitting uncommitted in the working tree.
+- **Lesson:** don't stub the exact call under test — the stub hid a real
+  binding bug that only a live RPC call would surface. And verify fixes on the
+  canonical deploy (`test.bertanderne.com`), not flaky preview/branch-alias URLs.
+
+## 2026-07-13 — (cross-repo) TSA promoted to prod from this session
+
+Same session also took **third-shot-academy** to production (its own STATUS has
+the detail): landed 10 ready onboarding/auth PRs into TSA `main` in DB→FN→UX
+order, resolved a trivial `App.tsx` auth-route conflict (#270 vs #271), verified
+TEST + a local `vite build`, then promoted TSA `main`→`production` (#279) — 50
+migrations + 12 edge functions applied to PROD Supabase, CI green. Then **pruned
+31 stale TSA branches** (25 merged, 4 closed-unmerged, 2 dead) — TSA remote now
+`main` + `production` only, matching B&E. No B&E code changed here. **B&E note:**
+`main` is 6 *docs-only* commits ahead of `production` (CLAUDE gate + STATUS); an
+optional cosmetic promotion, app already current on prod.
+
+## 2026-07-13 — Prod promotion (#541) + remote branch cleanup
+
+- **Promoted `main` → `production`** via PR #541 (merge commit `74f1f03`). 15
+  commits, **frontend + docs only — zero migrations, zero edge functions**, so
+  a clean prod Cloudflare rebuild with no PROD Supabase changes. Shipped #534
+  (analytics admin-exclusion), #535 (chip self-rating picker), #536
+  (registration rating-gate), #537/#538 (CLAUDE identity header), #539 (env
+  banner — renders nothing on prod by design). The issue-reference CI check
+  fails on promotion PRs (they close no story) — non-blocking (UNSTABLE), merged
+  through it.
+- **Branch hygiene:** pruned **100 stale remote branches** (86 with MERGED PRs,
+  10 closed-unmerged, 4 dead/no-PR with closed issues), then **closed #171**
+  (the last open PR) as **superseded by #371** — a rebase attempt revealed main
+  already ships a strictly more complete version of that checkout-error fix
+  (`readEdgeErrorCode` + `paymentErrorMessage` + `paymentErrorCode` state +
+  "message the organizer" link), already on main/prod. Remote now: `main` +
+  `production` only.
+- **CLAUDE.md UI-work gate merged** via #543 (`1c97671`, closed #542): design-
+  system-first + shadcn/Radix behavior + mobile-first @390px before any visual
+  change; `.mockups/` now gitignored. Had to go via PR — a pre-push hook blocks
+  non-STATUS direct pushes to `main` (STATUS-only pushes are allowed; that's how
+  these handoff commits land).
+- **wmpc-meta CLAUDE.md sync merged** via #545 (`ea2e29a`, closed #544): mockup
+  policy now says a mockup is the real page rendered end-to-end in a clickable
+  preview, never a chat-inline widget. Working tree clean; remote back to `main`
+  + `production` only.
+- **Next:** verify prod build on the live site once Cloudflare finishes. No
+  pending working-tree changes.
 
 ## 2026-07-06 — Env banner (TEST/DEV strip across the top)
 
