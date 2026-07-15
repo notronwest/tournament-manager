@@ -31,9 +31,24 @@ merge):
 - **Fix #554** (`db/fix-registration-counts-event-registrations`, closes #553):
   recount DISTINCT player_id over a tournament's events (paid/pending,
   non-deleted), seekers included — matches the admin grain.
-- **MERGE ORDER now: #554 first** (corrected RPC → TEST), reload the #552 preview
-  to confirm counts appear, **then #552**. After the RPC reaches prod, re-run
-  `gen types` to drop the local cast in `lib/registrationCounts`.
+- **#554 merged** (RPC → TEST) but counts STILL showed nothing. **Real root
+  cause: a JS binding bug** in `lib/registrationCounts` — `const rpc =
+  supabase.rpc; rpc(...)` detached the method, so supabase-js's `rpc()` ran with
+  `this===undefined` and **threw** (`TypeError: reading 'rest'`) before the
+  request; the `catch` swallowed it → empty map → count always hidden,
+  regardless of RPC/table. (Both #551 and #554 looked broken for this reason;
+  my local **stub test masked it** by returning before the real call.)
+- **Fix (commit `69c1d3f` on #552):** call `.rpc` as a bound method on the
+  (retyped) client. Proven via a bound-vs-unbound test against a live anon RPC.
+- **Verified end-to-end** on the fresh per-commit preview (`ec265086…`) vs TEST:
+  "1st Annual First Responder Fundraiser" shows **8 players** on both the browse
+  card and the tournament header, consistent with the RPC; no overflow at 390px.
+  (Branch-alias preview may serve a stale detail chunk — use the per-commit URL.)
+- **So #554 (event_registrations grain) was still the right RPC fix** — the
+  binding bug was hiding it. **Next: merge #552.** After the RPC reaches prod,
+  re-run `gen types` to drop the local cast.
+- **Lesson:** don't stub the exact call under test — the stub hid a real
+  binding bug that only a live RPC call would surface.
 
 ## 2026-07-13 — (cross-repo) TSA promoted to prod from this session
 
