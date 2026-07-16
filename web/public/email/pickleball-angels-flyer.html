@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Pickleball Angels — flyer for email</title>
+  <style>
+    :root { --navy:#123a5e; --green:#1f5f3f; --gold:#e8c520; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px 16px 48px;
+      font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1f2937; background: #f3f4f6; line-height: 1.5;
+    }
+    .wrap { max-width: 680px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 4px; color: var(--green); }
+    p.sub { margin: 0 0 20px; color: #6b7280; font-size: 14px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 20px; box-shadow: 0 4px 14px rgba(0,0,0,0.05); }
+    ol { margin: 4px 0 18px; padding-left: 22px; }
+    ol li { margin: 6px 0; }
+    kbd { background:#111827; color:#fff; border-radius:4px; padding:1px 6px; font-size:12px; font-family:inherit; }
+    .btn {
+      display:inline-flex; align-items:center; gap:8px; cursor:pointer;
+      background: var(--green); color:#fff; border:0; border-radius:10px;
+      font-size:15px; font-weight:700; padding:12px 20px; font-family:inherit;
+    }
+    .btn:hover { filter: brightness(1.06); }
+    .ok { color: var(--green); font-weight:700; font-size:14px; margin-left:10px; visibility:hidden; }
+    .ok.show { visibility:visible; }
+    .flyerbox { border:2px dashed #d1d5db; border-radius:12px; padding:14px; margin-top:18px; text-align:center; background:#fafafa; }
+    .flyerbox .hint { font-size:12px; color:#9ca3af; text-transform:uppercase; letter-spacing:.5px; margin-bottom:10px; }
+    .flyerbox img { max-width:100%; height:auto; border:0; border-radius:6px; }
+    .url { margin-top:20px; font-size:13px; color:#6b7280; word-break:break-all; }
+    .url code { background:#f3f4f6; padding:2px 6px; border-radius:4px; }
+    .fallback { margin-top:14px; font-size:13px; color:#6b7280; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Pickleball Angels flyer — ready for your email</h1>
+    <p class="sub">The image is hosted, so it won't bloat or get blocked the way an attached/embedded image does. Add it to your email like this:</p>
+
+    <div class="card">
+      <ol>
+        <li>Click <strong>Copy flyer</strong> below.</li>
+        <li>Open a new email (Gmail, Outlook, Apple Mail…) and click in the message body.</li>
+        <li>Paste with <kbd>Cmd</kbd>+<kbd>V</kbd> (Mac) or <kbd>Ctrl</kbd>+<kbd>V</kbd> (Windows).</li>
+      </ol>
+      <button class="btn" id="copyBtn" onclick="copyFlyer()">📋 Copy flyer for email</button>
+      <span class="ok" id="ok">Copied! Now paste into your email.</span>
+
+      <div class="flyerbox">
+        <div class="hint">This is what will paste in — click through goes to pickleballangels.com</div>
+        <a href="https://pickleballangels.com" id="flyerLink">
+          <img id="flyerImg"
+               src="https://pickleballangels.com/email/pickleball-angels-2026.png"
+               alt="5th Annual Pickleball Angels Tournament — Saturday, September 12, starts 8 AM, Community Campus Pickleball Courts, 100 Campus Dr, Portsmouth NH. $75 per person, includes 2 events. Womens / Mens / Mixed, 2.75–4.0+. Register at pickleballangels.com"
+               width="600" />
+        </a>
+      </div>
+
+      <div class="fallback">
+        Button didn't work? Right-click the image → <em>Copy Image</em>, then paste — or select everything in the dashed box, copy, and paste.
+      </div>
+
+      <div class="url">
+        Direct image link (for a website or an <code>&lt;img&gt;</code> tag):<br />
+        <code>https://pickleballangels.com/email/pickleball-angels-2026.png</code>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function copyFlyer() {
+      const html =
+        '<a href="https://pickleballangels.com">' +
+        '<img src="https://pickleballangels.com/email/pickleball-angels-2026.png" ' +
+        'alt="5th Annual Pickleball Angels Tournament — Saturday, September 12, 8 AM, Community Campus Pickleball Courts, 100 Campus Dr, Portsmouth NH. $75 per person." ' +
+        'width="600" style="max-width:100%;height:auto;border:0;display:block;" /></a>';
+      const text =
+        "5th Annual Pickleball Angels Tournament — Saturday, September 12 (raindate Sun 9/13), starts 8 AM. " +
+        "Community Campus Pickleball Courts, 100 Campus Dr, Portsmouth NH. $75 per person (includes 2 events). " +
+        "All proceeds benefit the PSU Angel Fund. Register: https://pickleballangels.com";
+      const ok = document.getElementById('ok');
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([text], { type: 'text/plain' }),
+          }),
+        ]);
+        ok.classList.add('show');
+        setTimeout(() => ok.classList.remove('show'), 4000);
+      } catch (e) {
+        // Fallback: select the image so the user can copy manually.
+        const range = document.createRange();
+        range.selectNode(document.getElementById('flyerLink'));
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        alert('Your browser blocked one-click copy. The flyer is now selected — press Cmd+C (or Ctrl+C) to copy, then paste into your email.');
+      }
+    }
+  </script>
+</body>
+</html>
