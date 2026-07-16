@@ -20,6 +20,22 @@ Last updated: **2026-07-16**
   - https://pickleballangels.com/email/pickleball-angels-flyer.html (flyer renders, Copy button → "Copied!")
 - Promotion batch was docs + static assets only (no migrations/functions) — clean.
 
+## 2026-07-15 — Quote: split "WMPC cost" from PickleballBrackets fee (#563)
+
+- Ron flagged quote `a2db1d13…`: "WMPC cost $2,850" was the **all-in** (B&E
+  services + pass-through PBB fee), shown alongside a redundant "PBB fee" + "B&E
+  take". Math was correct ($1,900 + $950 = $2,850) — the *framing* was wrong.
+- **Fix #563** (`fix/quote-wmpc-cost-split-pbb-fee`, closes #562): reframe from
+  WMPC's perspective on ALL quote surfaces — **WMPC cost = all-in − passthrough**
+  ($1,900), **PickleballBrackets fee** shown separately ($950), drop the all-in
+  total. New shared `wmpcServiceCostCents()` helper. Admin editor (live +
+  revision), customer quote (identifies passthrough via the `is_passthrough`
+  catalog flag), contract footer. Removed the redundant "B&E take" admin cell.
+- **Display-only** — stored `subtotal_cents` unchanged; no migration.
+- tsc + build + quotePricing tests (6) pass. **NOT yet eyeballed on the live
+  authed quote page** (admin/customer need login/token) — verify quote
+  `a2db1d13…` on the #563 preview (should read WMPC cost $1,900 · PBB fee $950).
+
 ## 2026-07-15 — Promoted to production (#557)
 
 - Merged `main`→`production` (merge `7a399b2`), 18 commits. **Apply DB migrations
