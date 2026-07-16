@@ -4,7 +4,21 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-15**
+Last updated: **2026-07-16**
+
+## 2026-07-16 — Pickleball Angels flyer hosted + promoted to prod (#558/#559/#561)
+
+- Ron's customer couldn't email the 5th-annual Pickleball Angels flyer (embedded/attached image
+  getting blocked/bloated). Fix: host it + give a copy-paste page.
+- Added two static assets under `web/public/email/` (same pattern as `logo@2x.png`):
+  - `pickleball-angels-2026.png` (the flyer, 1080x1350, green version)
+  - `pickleball-angels-flyer.html` — shows the flyer, one-click **Copy flyer for email** button
+    (writes a linked `<img>` referencing the prod URL to the clipboard), paste instructions.
+- **No app/route/DB changes.** #559 → main (TEST verified image/png). Promotion #561 (main→production,
+  merge commit `4dc224c`) → PROD; **LIVE + verified in real Chrome**:
+  - https://pickleballangels.com/email/pickleball-angels-2026.png (image/png, 785,023 bytes)
+  - https://pickleballangels.com/email/pickleball-angels-flyer.html (flyer renders, Copy button → "Copied!")
+- Promotion batch was docs + static assets only (no migrations/functions) — clean.
 
 ## 2026-07-15 — Promoted to production (#557)
 
