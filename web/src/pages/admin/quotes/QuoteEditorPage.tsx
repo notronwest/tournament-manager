@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../../supabase";
 import { useAuth } from "../../../auth/AuthProvider";
 import { usePlatformAdmin } from "../../../hooks/usePlatformAdmin";
-import { computeQuote } from "../../../lib/quotePricing";
+import { computeQuote, wmpcServiceCostCents } from "../../../lib/quotePricing";
 import type { QuoteLineInput, QuotePlatform } from "../../../lib/quotePricing";
 import {
   LOCAL_RADIUS_MILES,
@@ -654,15 +654,12 @@ export default function QuoteEditorPage() {
           );
           return (
             <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-              <SummaryCell label="WMPC cost" value={formatDollars(viewingRevision.subtotal_cents)} color={courtYellow} />
+              <SummaryCell label="WMPC cost" value={formatDollars(wmpcServiceCostCents(viewingRevision.subtotal_cents, revPassthrough))} color={courtYellow} />
+              {revPassthrough > 0 && (
+                <SummaryCell label="PickleballBrackets fee" value={formatDollars(revPassthrough)} color="#6b7280" />
+              )}
               <SummaryCell label="Organizer revenue" value={formatDollars(viewingRevision.estimated_revenue_cents)} color={courtGreen} />
               <SummaryCell label="Estimated net" value={formatDollars(viewingRevision.estimated_net_cents)} color={viewingRevision.estimated_net_cents >= 0 ? courtGreen : courtRed} />
-              {revPassthrough > 0 && (
-                <>
-                  <SummaryCell label="PickleballBrackets fee" value={formatDollars(revPassthrough)} color="#6b7280" />
-                  <SummaryCell label="Bert & Erne take" value={formatDollars(viewingRevision.subtotal_cents - revPassthrough)} color={courtGreen} />
-                </>
-              )}
             </div>
           );
         })()}
@@ -1129,15 +1126,12 @@ export default function QuoteEditorPage() {
         }}
       >
         <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
-          <SummaryCell label="WMPC cost" value={formatDollars(quote.wmpcTotalCents)} color={courtYellow} />
+          <SummaryCell label="WMPC cost" value={formatDollars(wmpcServiceCostCents(quote.wmpcTotalCents, quote.passthroughTotalCents))} color={courtYellow} />
+          {quote.passthroughTotalCents > 0 && (
+            <SummaryCell label="PickleballBrackets fee" value={formatDollars(quote.passthroughTotalCents)} color="#6b7280" />
+          )}
           <SummaryCell label="Organizer revenue" value={formatDollars(quote.organizerRevenueCents)} color={courtGreen} />
           <SummaryCell label="Estimated net" value={formatDollars(quote.estimatedNetCents)} color={quote.estimatedNetCents >= 0 ? courtGreen : "#e05050"} />
-          {quote.passthroughTotalCents > 0 && (
-            <>
-              <SummaryCell label="PickleballBrackets fee" value={formatDollars(quote.passthroughTotalCents)} color="#6b7280" />
-              <SummaryCell label="Bert & Erne take" value={formatDollars(quote.bertErneTakeCents)} color={courtGreen} />
-            </>
-          )}
           {quote.travel.flagged && (
             <span style={{ fontSize: 11, color: courtYellow, fontFamily: bodyFontStack, opacity: 0.8, maxWidth: 160, lineHeight: 1.3 }}>
               ⚠ Travel est. included ({formatDollars(quote.travel.totalCents)})

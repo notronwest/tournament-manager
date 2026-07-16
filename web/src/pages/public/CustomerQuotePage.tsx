@@ -22,6 +22,7 @@ import {
   sectionH2Style,
   statusPanelStyle,
 } from "../../lib/publicTheme";
+import { wmpcServiceCostCents } from "../../lib/quotePricing";
 import type { Database, Json } from "../../types/supabase";
 
 type ServiceCategory = Database["public"]["Enums"]["service_category"];
@@ -76,7 +77,7 @@ export default function CustomerQuotePage() {
   const { token } = useParams<{ token: string }>();
 
   const [payload, setPayload] = useState<QuotePayload | null>(null);
-  const [catalog, setCatalog] = useState<Pick<ServiceRow, 'key' | 'category'>[]>([]);
+  const [catalog, setCatalog] = useState<Pick<ServiceRow, 'key' | 'category' | 'is_passthrough'>[]>([]);
   // If there's no token segment in the URL, we're immediately invalid.
   const [loading, setLoading] = useState(!!token);
   const [invalid, setInvalid] = useState(!token);
@@ -93,7 +94,7 @@ export default function CustomerQuotePage() {
 
     Promise.all([
       supabase.rpc("get_quote_by_token", { p_token: token }),
-      supabase.from("service_catalog").select("key,category").eq("active", true),
+      supabase.from("service_catalog").select("key,category,is_passthrough").eq("active", true),
     ]).then(([{ data: quoteData, error: quoteErr }, { data: catData }]) => {
       setLoading(false);
       if (quoteErr || !quoteData) {
@@ -119,6 +120,13 @@ export default function CustomerQuotePage() {
     for (const s of catalog) {
       m[s.key] = s.category as ServiceCategory;
     }
+    return m;
+  }, [catalog]);
+
+  // service_key → is this a pass-through (PickleballBrackets fee) line?
+  const passthroughByKey = useMemo(() => {
+    const m: Record<string, boolean> = {};
+    for (const s of catalog) m[s.key] = !!s.is_passthrough;
     return m;
   }, [catalog]);
 
@@ -151,6 +159,17 @@ export default function CustomerQuotePage() {
   const selectedSubtotal = useMemo(
     () => selectedLines.reduce((sum, li) => sum + li.line_total_cents, 0),
     [selectedLines]
+  );
+
+  // Pass-through (PickleballBrackets fee) portion of the selected lines, split
+  // out so "WMPC cost" reflects only Bert & Erne's services.
+  const selectedPassthrough = useMemo(
+    () =>
+      selectedLines.reduce(
+        (sum, li) => sum + (passthroughByKey[li.service_key] ? li.line_total_cents : 0),
+        0,
+      ),
+    [selectedLines, passthroughByKey]
   );
 
   const organizerRevenue = useMemo(() => {
@@ -395,7 +414,10 @@ export default function CustomerQuotePage() {
           alignItems: "center",
           flexWrap: "wrap",
         }}>
-          <SummaryCell label="WMPC cost" value={formatDollars(selectedSubtotal)} color={courtYellow} />
+          <SummaryCell label="WMPC cost" value={formatDollars(wmpcServiceCostCents(selectedSubtotal, selectedPassthrough))} color={courtYellow} />
+          {selectedPassthrough > 0 && (
+            <SummaryCell label="PickleballBrackets fee" value={formatDollars(selectedPassthrough)} color={inkSoft} />
+          )}
           <SummaryCell
             label="Organizer revenue (est.)"
             value={formatDollars(organizerRevenue)}
