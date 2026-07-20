@@ -4,7 +4,44 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-16**
+Last updated: **2026-07-20**
+
+## 2026-07-20 — Org contact lists: import CSV/XLSX + email all contacts (3 PRs open, #565/#566/#567)
+
+Ron: club owners want to **import contacts** from a `.csv`/`.xls`/`.xlsx` file and
+**email everyone on their contact list** — "contacts and players in the same table."
+
+- **Design tension resolved:** `players` is the shared global table (locked #2, no
+  org column) and registrants live in tournament+fee-scoped `registrations` — neither
+  can hold a plain contact. Ron picked the **tiny link table**: person data stays in
+  `players`; a new `organization_contacts (org_id, player_id, source)` only stores
+  imported/manual people. **The full list = links ∪ registrants, computed at read
+  time** (no backfill, no trigger, never stale). Send via **Resend Broadcasts +
+  Audiences** (one Audience per org; Resend owns unsubscribe/suppression/reputation).
+  Import parses **client-side (SheetJS)** — raw file never uploaded.
+- Built as **3 ordered PRs** (never-bundle rule), all green locally, NOT merged:
+  - **#565 [DB]** `db/organization-contacts` — `organization_contacts` table + RLS
+    (`is_org_member`) + `organizations.resend_audience_id`. Additive only.
+  - **#566 [Functions]** `feat/contacts-edge-functions` — `import-contacts` (dedup
+    players by email, never mutates shared rows, link w/ `source:'import'`, cap 5000)
+    + `send-contact-broadcast` (union recipients, ensure+sync Resend Audience,
+    create+send Broadcast, consent flag, unsubscribe footer). `cancel-tournament`
+    auth pattern; `deno lint` clean.
+  - **#567 [UI]** `feat/org-contacts-page` — `/admin/:orgSlug/contacts` (nav + route):
+    unioned list w/ source pills + search + remove; import panel (SheetJS parse +
+    header auto-map + preview); compose panel (subject/body + emailable count +
+    required permission checkbox + ConfirmModal). `lib/orgContacts.ts` casts the
+    client for `organization_contacts` until types regen (registrationCounts
+    precedent). SheetJS pinned to official CDN `xlsx-0.20.3` (npm's is vuln 0.18.5).
+- **Verify done:** web `typecheck` + `build` pass, new files `eslint` clean (repo's 31
+  pre-existing lint problems unchanged); SheetJS parse + auto-map validated in
+  isolation. **NOT** browser-E2E'd (auth-gated + migration not on TEST yet).
+- **Merge order + prereqs:** merge **#565 → #566 → #567**. After #565 hits TEST,
+  **regenerate `web/src/types/supabase.ts`** and drop the `orgContacts.ts` cast
+  (follow-up). **Resend account must have Broadcasts + Audiences enabled.** Confirm
+  the `audience_id`↔`segment_id` field name against the live API at deploy (flagged
+  in-code). Story: #564. Follow-ups: per-org sender branding/domain; import-time
+  incremental Audience sync; segments/subset sends; manual "add a contact" form.
 
 ## 2026-07-16 — Pickleball Angels flyer hosted + promoted to prod (#558/#559/#561)
 
