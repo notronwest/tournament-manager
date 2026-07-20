@@ -6,6 +6,28 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-20**
 
+## 2026-07-20 — Builder board hygiene: #569 reconciled (In Progress → In Review, no dup PR)
+
+- Single-item Builder run tasked with recovering "orphaned In Progress
+  issue #569" (Phase A(a)) — same false premise as #568: `feat/contacts-edge-functions`
+  already had a valid, open PR **#566** (`Closes #569`, `MERGEABLE`/`CLEAN`,
+  checks green) from the org-contacts build documented below.
+- Re-verified independently: checked out the branch in a scratch worktree,
+  confirmed the diff is edge-functions-only (`import-contacts` +
+  `send-contact-broadcast`, no web/UI changes), and read both functions
+  against #569's AC — dedup-by-email import (cap 5000, org-staff gated,
+  never overwrites a matched player) and broadcast (recipients = contacts
+  ∪ registrants, per-org Resend Audience ensure+sync, explicit consent
+  flag) both match.
+- Per the no-duplicate-PR guard, did **not** open a second PR — moved the
+  card from stale **In Progress** to **In Review** and commented on #569
+  explaining the reconciliation (tagged `<!-- wmpc-builder -->`). Flagged
+  in the comment that #565 (migration) must merge before #566 since
+  `send-contact-broadcast` reads tables/columns #565 creates.
+- **Left untouched (out of scope for this single-item run):** #570
+  (PR #567) shows the identical stale-status pattern — same fix, next pass.
+- No code changed this session; main checkout untouched throughout.
+
 ## 2026-07-20 — Builder board hygiene: #568 reconciled (In Progress → In Review, no dup PR)
 
 - Single-item Builder run tasked with recovering "orphaned In Progress
