@@ -152,6 +152,13 @@ export default function ContractPage() {
   const lineItems = revision?.quote_line_items ?? [];
 
   const subtotalCents = revision?.subtotal_cents ?? 0;
+  // Split the all-in cost into what WMPC pays for Bert & Erne's services vs the
+  // pass-through PickleballBrackets fee — shown as two totals, no all-in line.
+  const passthroughCents = lineItems.reduce(
+    (s, li) => s + (li.is_passthrough ? li.line_total_cents : 0),
+    0,
+  );
+  const wmpcCostCents = subtotalCents - passthroughCents;
   const generatedDate = new Date(contract.generated_at).toLocaleDateString("en-US", {
     year: "numeric", month: "long", day: "numeric",
   });
@@ -336,11 +343,19 @@ export default function ContractPage() {
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: `2px solid ${ink}` }}>
-                  <td colSpan={3} style={{ padding: "10px 0", fontWeight: 700, fontSize: 14, color: ink }}>Total</td>
+                  <td colSpan={3} style={{ padding: "10px 0", fontWeight: 700, fontSize: 14, color: ink }}>WMPC cost</td>
                   <td style={{ padding: "10px 0", textAlign: "right", fontWeight: 700, fontSize: 16, color: ink }}>
-                    {formatDollars(subtotalCents)}
+                    {formatDollars(wmpcCostCents)}
                   </td>
                 </tr>
+                {passthroughCents > 0 && (
+                  <tr>
+                    <td colSpan={3} style={{ padding: "4px 0 10px", fontWeight: 700, fontSize: 14, color: inkSoft }}>PickleballBrackets fee</td>
+                    <td style={{ padding: "4px 0 10px", textAlign: "right", fontWeight: 700, fontSize: 16, color: inkSoft }}>
+                      {formatDollars(passthroughCents)}
+                    </td>
+                  </tr>
+                )}
               </tfoot>
             </table>
           )}

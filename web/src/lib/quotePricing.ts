@@ -88,6 +88,20 @@ export interface QuoteOutputs {
   bertErneTakeCents: number;
 }
 
+/**
+ * Reframe the all-in WMPC cost from WMPC's (the customer's) perspective: what
+ * WMPC pays for Bert & Erne's services, i.e. everything EXCEPT the pass-through
+ * PickleballBrackets fee (which WMPC pays but is remitted to PBB). Quote
+ * surfaces show this alongside a separate "PickleballBrackets fee" line rather
+ * than a single all-in figure; the two sum to the all-in total.
+ */
+export function wmpcServiceCostCents(
+  totalCents: number,
+  passthroughCents: number,
+): number {
+  return totalCents - passthroughCents;
+}
+
 export function computeQuote(inputs: QuoteInputs): QuoteOutputs {
   const {
     numDays,
