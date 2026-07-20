@@ -6,6 +6,27 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-20**
 
+## 2026-07-20 — Builder board hygiene: #568 reconciled (In Progress → In Review, no dup PR)
+
+- Single-item Builder run tasked with recovering "orphaned In Progress
+  issue #568" (Phase A(a)) — but the premise didn't hold: `db/organization-contacts`
+  already had a valid, open PR **#565** (from the org-contacts build documented
+  just below) that `Closes #568`, is `MERGEABLE`, and has all checks green
+  (issue-link check, migration lint, Cloudflare preview build).
+- Re-verified independently: checked out the branch in a scratch worktree,
+  `npm run typecheck` + `npm run build` both clean; diff matches #568's AC
+  (new `organization_contacts` table, RLS via `is_org_member`, nullable
+  `organizations.resend_audience_id`, additive-only migration).
+- Per the no-duplicate-PR guard, did **not** open a second PR — instead moved
+  the board card's status from stale **In Progress** to **In Review** to match
+  reality, and commented on #568 explaining the reconciliation
+  (tagged `<!-- wmpc-builder -->`).
+- **Left untouched (out of scope for this single-item run):** #569 (PR #566)
+  and #570 (PR #567) show the identical stale-status pattern (In Progress with
+  an already-open, valid, linked PR) — same fix, just not done in this run.
+  Next Builder pass (or Ron) should reconcile those two the same way.
+- No code changed this session; main checkout untouched throughout.
+
 ## 2026-07-20 — Org contact lists: import CSV/XLSX + email all contacts (3 PRs open, #565/#566/#567)
 
 Ron: club owners want to **import contacts** from a `.csv`/`.xls`/`.xlsx` file and
