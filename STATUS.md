@@ -32,9 +32,17 @@ Last updated: **2026-07-16**
   revision), customer quote (identifies passthrough via the `is_passthrough`
   catalog flag), contract footer. Removed the redundant "B&E take" admin cell.
 - **Display-only** — stored `subtotal_cents` unchanged; no migration.
-- tsc + build + quotePricing tests (6) pass. **NOT yet eyeballed on the live
-  authed quote page** (admin/customer need login/token) — verify quote
-  `a2db1d13…` on the #563 preview (should read WMPC cost $1,900 · PBB fee $950).
+- tsc + build + quotePricing tests (6) pass. **MERGED to main** (`cf22eba`) →
+  deployed to TEST only. **NOT on production** — the flagged quote `a2db1d13…`
+  lives on PROD, so it won't reflect the fix until `main`→`production` is
+  promoted (main is 3 ahead of production).
+- **Heads-up:** the working tree had a **pre-existing parallel implementation**
+  of this same fix (from branch `fix/quote-wmpc-cost-passthrough-split` — adds a
+  `wmpcCostCents` field to the pricing *engine* + a test, vs #563's display-site
+  `wmpcServiceCostCents()` helper). #563 supersedes it. I **stashed** it
+  (`stash@{0}` on this machine) rather than discard — recoverable if the
+  engine-field architecture is preferred instead.
+- **NOT yet eyeballed on the live authed quote page** (needs login/token).
 
 ## 2026-07-15 — Promoted to production (#557)
 
