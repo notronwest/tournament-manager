@@ -24,31 +24,48 @@ charging code. Everything else is the proposed architecture.
 
 ## The locked decision (CLAUDE.md #4)
 
-Stripe **Connect destination charges**: each org connects its own
-Stripe account; we charge on the platform account with
-`transfer_data.destination = <org account>` and take
-`application_fee_amount`. Not separate-charges-and-transfers.
+Stripe **Connect direct charges**: each org connects its own Stripe
+account; we create the PaymentIntent **on that connected account**
+(`{ stripeAccount: org.stripe_account_id }`) and take
+`application_fee_amount`. The organizer is merchant of record — the
+money settles into **their** balance (never the platform's), they get
+the 1099-K, their statement descriptor shows, and they pay Stripe's
+processing fee. The platform's only cut is the application fee.
+
+> **History:** this started as **destination charges** (charge on the
+> platform account, `transfer_data.destination = <org account>`). We cut
+> over to **direct charges** on 2026-07-22 because the destination model
+> routed every registration's gross through the platform's balance and
+> 1099-K even though it was pass-through to the organizer. Direct charges
+> keep the platform out of the money flow entirely. The trade-off Ron
+> accepted: organizers absorb the Stripe processing fee, and — for
+> Express connected accounts (platform-created) rather than Standard
+> (OAuth-connected) — the platform retains dispute/negative-balance
+> liability per Stripe's Connect rules.
 
 ## Architecture: server-creates-intent + client-confirms
 
 Pure client-side intent creation is rejected because the **amount must
 be authoritative** (entry + per-event tiers + coupons) and we need
-`application_fee_amount` + `transfer_data.destination` + idempotency.
-So the server creates the PaymentIntent; the browser only confirms it
-with the Payment Element.
+`application_fee_amount` + connected-account scoping + idempotency. So
+the server creates the PaymentIntent **on the connected account**; the
+browser only confirms it with the Payment Element — and because a
+direct-charge `client_secret` is connected-account-scoped, the server
+also returns `connectedAccountId` so the browser can init Stripe.js with
+`loadStripe(pk, { stripeAccount })` (see `web/src/lib/stripe.ts`).
 
 ```
 CheckoutPage  ──POST {orgSlug, tournamentSlug, couponCode?}──▶  create-payment-intent (edge fn)
                                                                   │ auth = player JWT
                                                                   │ compute authoritative total (RPC)
                                                                   │ apply coupon (validate_coupon)
-                                                                  │ create PaymentIntent (destination + fee)
+                                                                  │ create PaymentIntent ON connected acct (direct + fee)
                                                                   │ upsert payments(pending) + line_items
-   ◀────────────── { clientSecret, paymentId } ─────────────────┘
+   ◀───────── { clientSecret, paymentId, connectedAccountId } ───┘
    │
    │ stripe.confirmPayment(Payment Element)
    ▼
- Stripe ──webhook payment_intent.succeeded──▶ stripe-webhook (edge fn)
+ Stripe ──webhook payment_intent.succeeded (Connect event, on connected acct)──▶ stripe-webhook (edge fn)
                                                 │ verify signature
                                                 │ payments → succeeded (+ charge id) [idempotent]
                                                 │ flip linked event_registrations → paid
@@ -112,6 +129,28 @@ SECURITY DEFINER.
    - Then copy the endpoint's signing secret into the secret above.
 5. **`compute_checkout_total` RPC** — approved (option A). Ron writes it
    (SECURITY DEFINER). Tracked in **Card A**.
+
+## Cutover to direct charges — required Stripe Dashboard step
+
+The code changes (intent creation on the connected account, connected-
+account-scoped Stripe.js, connected-account-scoped refunds) are not
+sufficient on their own. Because payment/donation events now fire on the
+**connected account**, the Stripe webhook endpoint MUST be reconfigured
+or Stripe will never deliver them and registrations will never flip to
+`paid`:
+
+1. **Stripe Dashboard → Developers → Webhooks →** the existing endpoint
+   (the one whose secret is `STRIPE_WEBHOOK_SIGNING_SECRET`) **→ enable
+   "Listen to events on Connected accounts."** The signing secret is
+   per-endpoint, so enabling Connect events on the *existing* endpoint
+   keeps the current secret valid — no new secret needed. Do this on the
+   **TEST** platform account first, then **PROD** before promotion.
+2. Verify with a real end-to-end test on TEST: register + pay against a
+   **test connected account**, confirm the webhook flips the reg to
+   `paid`, then withdraw/refund and confirm the refund debits the
+   *connected* account (not the platform).
+3. Only after that end-to-end check passes does this promote to PROD
+   (money path — do not ship without sign-off).
 
 ## Proposed sub-story split
 

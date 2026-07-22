@@ -13,10 +13,21 @@
 // source of truth), never optimistically in the browser. The handler is
 // idempotent — re-delivered events are no-ops.
 //
+// DIRECT charges (see docs/STRIPE_CHARGING.md): payments/donations now settle
+// on the ORGANIZER'S connected account, so payment_intent.* and charge.*
+// events fire on the CONNECTED account, not the platform. The Stripe webhook
+// endpoint MUST therefore be configured to "listen to events on connected
+// accounts" (Dashboard → Developers → Webhooks → the endpoint → enable Connect
+// events) — otherwise Stripe never delivers them and registrations never flip
+// to paid. The signing secret is per-endpoint, so enabling Connect events on
+// the EXISTING endpoint keeps STRIPE_WEBHOOK_SIGNING_SECRET valid. The handler
+// body is account-agnostic: it keys off pi.id / our own rows, so no per-event
+// stripeAccount scoping is needed here; event.account is logged for tracing.
+//
 // Required secrets:
 //   STRIPE_SECRET_KEY                  — already set.
-//   STRIPE_WEBHOOK_SIGNING_SECRET      — new; from the Stripe webhook
-//                                        endpoint after first deploy.
+//   STRIPE_WEBHOOK_SIGNING_SECRET      — from the Stripe webhook endpoint
+//                                        (the one now emitting Connect events).
 //   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — auto-injected.
 
 // @ts-expect-error remote import resolved at runtime by Deno
@@ -54,6 +65,11 @@ Deno.serve(async (req: Request) => {
       status: 400,
     });
   }
+
+  // event.account is the connected account the event fired on (direct
+  // charges); absent for any residual platform-account event. Logged for
+  // tracing which organizer a payment settled on.
+  console.log(`stripe-webhook: ${event.type} account=${event.account ?? "platform"}`);
 
   try {
     switch (event.type) {
