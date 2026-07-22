@@ -6,14 +6,14 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
-## 2026-07-22 — Stripe Connect: destination → DIRECT charges (branch `feat/direct-charges`)
+## 2026-07-22 — Stripe Connect: destination → DIRECT charges (PR #574)
 
 - **Why:** Ron saw Pickleball Angels registrations passing through the WMPC/
   platform Stripe balance (gross on his 1099-K + dispute liability) even though
   it's pass-through to the organizer. Decision: **direct charges, all orgs** —
   money never touches the platform balance; organizer is merchant of record and
   absorbs the Stripe processing fee; refunds still driveable from our platform.
-- **Code (branch, not yet merged):**
+- **Code (PR #574 → `main`):**
   - `create-payment-intent` + `create-donation-intent`: create the
     PaymentIntent **on the connected account** (`{ stripeAccount }`), dropped
     `transfer_data.destination`, kept `application_fee_amount` (registrations)
@@ -37,13 +37,38 @@ Last updated: **2026-07-22**
 - **BLOCKER before it works — Ron's manual Stripe step:** events now fire on the
   connected account, so the webhook endpoint must **"Listen to events on
   Connected accounts"** (same signing secret). Do on **TEST** first.
-- **Next:** open PR → `main` (→ TEST) → enable Connect events on TEST webhook →
-  end-to-end test on a test connected account (register+pay → reg flips paid →
-  refund debits connected acct) → then `main`→`production` PR + enable Connect
-  events on PROD webhook. **Money path — do not promote without sign-off.**
+- **Next:** merging #574 → `main` (→ TEST). Then Ron enables Connect events on
+  the TEST webhook → end-to-end test on a test connected account (register+pay →
+  reg flips paid → refund debits connected acct) → then `main`→`production` PR +
+  enable Connect events on PROD webhook. **Money path — do not promote without
+  sign-off.**
 - **Caveat to revisit:** Express (platform-created) connected accounts keep
   platform dispute/negative-balance liability under Connect rules; Standard
   (OAuth) accounts — like the Angels' `acct_1Tlc4…` — are fully clean.
+## 2026-07-22 — Contact email v2: recipient filtering + delivery status page (5-PR stack, IN PROGRESS)
+
+Ron asked for (both, together): recipient **filtering** (individual pick / source
+imported-vs-manual / date added / registration status) + a **delivery status
+page** (delivered/opened/clicked/bounced/unsubscribed). Decision: **switch all
+contact email to Resend batch-send** (per-recipient email ids → clean tracking +
+filtering; we own the unsubscribe link + `organization_contacts.unsubscribed_at`,
+instead of Resend Broadcast's built-in one).
+
+**Planned stack:**
+1. **[DB]** `contact_broadcasts` (send log + rollups) + `contact_broadcast_recipients`
+   (per-recipient, correlated by `resend_email_id`), RLS org-read/server-write.
+   → **PR #573 (closes #572) — DONE, green.**
+2. **[FN]** rewrite `send-contact-broadcast`: accept filtered subset / explicit
+   player-id picks, batch-send via Resend, log broadcast + recipient rows, own
+   unsubscribe link (signed token → public unsubscribe route sets
+   `unsubscribed_at`). — TODO
+3. **[FN]** `resend-webhook`: verify signing secret, ingest delivered/opened/
+   clicked/bounced/complained/unsubscribed → update recipient status + rollups. — TODO
+4. **[UI]** OrgContactsPage: source/date-added/registration-status filters +
+   per-row checkboxes + select-all-filtered + live recipient count. — TODO
+5. **[UI]** Email history / delivery-status page + route/nav. — TODO
+- Manual step for Ron: add the webhook URL + `RESEND_WEBHOOK_SECRET` in the
+  Resend dashboard (exact values provided when #3 lands).
 
 ## 2026-07-22 — Promoted to production (#571): contact manager + quote split
 
