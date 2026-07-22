@@ -30,6 +30,7 @@ import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
 import ContractPage from "./pages/admin/quotes/ContractPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import OrgContactsPage from "./pages/admin/OrgContactsPage";
+import ContactEmailsPage from "./pages/admin/ContactEmailsPage";
 import OrgDangerZonePage from "./pages/admin/OrgDangerZonePage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
@@ -367,6 +368,7 @@ export default function App() {
         />
         <Route path="locations" element={<LocationsPage />} />
         <Route path="contacts" element={<OrgContactsPage />} />
+        <Route path="contacts/emails" element={<ContactEmailsPage />} />
         <Route path="tournaments" element={<TournamentsListPage />} />
         <Route
           path="tournaments/new"
