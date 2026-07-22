@@ -6,6 +6,31 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Contact email v2: recipient filtering + delivery status page (5-PR stack, IN PROGRESS)
+
+Ron asked for (both, together): recipient **filtering** (individual pick / source
+imported-vs-manual / date added / registration status) + a **delivery status
+page** (delivered/opened/clicked/bounced/unsubscribed). Decision: **switch all
+contact email to Resend batch-send** (per-recipient email ids → clean tracking +
+filtering; we own the unsubscribe link + `organization_contacts.unsubscribed_at`,
+instead of Resend Broadcast's built-in one).
+
+**Planned stack:**
+1. **[DB]** `contact_broadcasts` (send log + rollups) + `contact_broadcast_recipients`
+   (per-recipient, correlated by `resend_email_id`), RLS org-read/server-write.
+   → **PR #573 (closes #572) — DONE, green.**
+2. **[FN]** rewrite `send-contact-broadcast`: accept filtered subset / explicit
+   player-id picks, batch-send via Resend, log broadcast + recipient rows, own
+   unsubscribe link (signed token → public unsubscribe route sets
+   `unsubscribed_at`). — TODO
+3. **[FN]** `resend-webhook`: verify signing secret, ingest delivered/opened/
+   clicked/bounced/complained/unsubscribed → update recipient status + rollups. — TODO
+4. **[UI]** OrgContactsPage: source/date-added/registration-status filters +
+   per-row checkboxes + select-all-filtered + live recipient count. — TODO
+5. **[UI]** Email history / delivery-status page + route/nav. — TODO
+- Manual step for Ron: add the webhook URL + `RESEND_WEBHOOK_SECRET` in the
+  Resend dashboard (exact values provided when #3 lands).
+
 ## 2026-07-22 — Promoted to production (#571): contact manager + quote split
 
 - Merged `main`→`production` (`17f797f`), 11 commits. **PROD pipeline all green:**
