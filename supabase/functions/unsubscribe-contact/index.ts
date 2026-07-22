@@ -69,19 +69,15 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Credit the broadcast's unsubscribe count once per person.
+    // Credit the originating broadcast: mark this recipient row unsubscribed.
+    // The status page counts unsubscribes by aggregating these timestamps, so
+    // there's no rollup counter to race on.
     if (!alreadyUnsubscribed) {
-      const { data: bc } = await admin
-        .from("contact_broadcasts")
-        .select("unsubscribed_count")
-        .eq("id", broadcastId)
-        .maybeSingle();
-      if (bc) {
-        await admin
-          .from("contact_broadcasts")
-          .update({ unsubscribed_count: (bc.unsubscribed_count ?? 0) + 1 })
-          .eq("id", broadcastId);
-      }
+      await admin
+        .from("contact_broadcast_recipients")
+        .update({ unsubscribed_at: nowIso, last_event_at: nowIso })
+        .eq("broadcast_id", broadcastId)
+        .eq("player_id", playerId);
     }
 
     const { data: org } = await admin
