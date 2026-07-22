@@ -6,6 +6,35 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Direct charges VERIFIED working on TEST (#574 follow-up)
+
+Deployed #574 to TEST and ran end-to-end verification against the live TEST site
+(`tournament-manager-test.pages.dev`, donation flow — anonymous, no login needed).
+
+- **Fix verified at the Stripe level.** Completed a real TEST-mode direct charge
+  programmatically (scoped `window.Stripe(pk,{stripeAccount})` + Stripe synthetic
+  test PM) on the WMPC connected account `acct_1TdCzTBfxtiBn6ne`:
+  `pi_3Tw1W5BfxtiBn6ne0e1ElEG5` → **status `succeeded`**. Intent created on the
+  connected account, confirmed with connected-account scoping — the exact money
+  path we shipped, working.
+- **Diagnosed Ron's "client_secret does not match any PaymentIntent" error:** it's
+  the scoping mismatch. Proved on the live bundle that **unscoped** Stripe.js
+  reproduces his exact error while **scoped** resolves fine. Deployed frontend is
+  CORRECT (`getStripeForAccount` ships as `loadStripe(pk,{stripeAccount})`; both
+  CheckoutPage + DonatePage use it). Conclusion: his error was a **stale cached
+  frontend** (old unscoped bundle hitting the new connected-account intent).
+- **Could NOT complete verification two ways:** (a) the in-app browser can't type
+  into Stripe's cross-origin card iframe (had to confirm via API instead); (b) the
+  `donations` table is RLS-blocked for anon, so I can't read the webhook's row flip.
+- **PENDING Ron (2 checks):** (1) hard-refresh / private window → run a real `4242`
+  UI payment to confirm his browser now gets the fixed bundle; (2) confirm the
+  **webhook** flipped it — Stripe TEST Dashboard → Connected-accounts destination →
+  delivery for `pi_3Tw1W5…` = HTTP 200, and/or admin donations report shows the
+  **$25 "E2E Direct-Charge" donation (id `566c25a5-c1f5-4f41-a5dd-6286270287c8`)**
+  as *succeeded*. If pending → webhook Connected-events setting needs a look.
+- **Then:** `main`→`production` PR + enable Connect events on the PROD webhook.
+  **Money path — do not promote without sign-off.** Left a $25 test donation on TEST.
+
 ## 2026-07-22 — Wizard Save button now confirms the save (#582)
 
 Ron: the edit-mode section Save button showed "Saving…" then reverted to "Save"
