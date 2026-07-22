@@ -601,6 +601,8 @@ function ComposePanel({
   const recipientCount = recipientIds.length;
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [bodyIsHtml, setBodyIsHtml] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [consent, setConsent] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -613,7 +615,7 @@ function ComposePanel({
       const { data, error: fnErr } = await supabase.functions.invoke("send-contact-broadcast", {
         // Always pass the explicit recipient list so the send matches exactly
         // what's shown (filters + individual picks, or all emailable).
-        body: { organizationId: orgId, subject: subject.trim(), body, consent: true, playerIds: recipientIds },
+        body: { organizationId: orgId, subject: subject.trim(), body, consent: true, playerIds: recipientIds, bodyIsHtml },
       });
       if (fnErr) {
         setError(await readFnError(fnErr));
@@ -645,14 +647,76 @@ function ComposePanel({
         maxLength={200}
       />
 
-      <label style={fieldLabel}>Message</label>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <label style={{ ...fieldLabel, marginBottom: 0 }}>Message</label>
+        <div style={{ display: "flex", gap: 4 }} role="tablist" aria-label="Message format">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!bodyIsHtml}
+            onClick={() => { setBodyIsHtml(false); setShowPreview(false); }}
+            style={modeBtnStyle(!bodyIsHtml)}
+          >
+            Plain text
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={bodyIsHtml}
+            onClick={() => setBodyIsHtml(true)}
+            style={modeBtnStyle(bodyIsHtml)}
+          >
+            HTML
+          </button>
+        </div>
+      </div>
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        placeholder="Write your message… Blank lines start a new paragraph."
-        rows={8}
-        style={{ ...inputStyle, marginBottom: 14, resize: "vertical", fontFamily: bodyFontStack }}
+        placeholder={
+          bodyIsHtml
+            ? "Paste your HTML here — e.g. <h2>Big news</h2><p>…</p>. It's sent inside the club's branded header, footer, and unsubscribe link."
+            : "Write your message… Blank lines start a new paragraph."
+        }
+        rows={bodyIsHtml ? 12 : 8}
+        spellCheck={!bodyIsHtml}
+        style={{
+          ...inputStyle,
+          marginBottom: bodyIsHtml ? 8 : 14,
+          resize: "vertical",
+          fontFamily: bodyIsHtml ? "ui-monospace, SFMono-Regular, Menlo, monospace" : bodyFontStack,
+          fontSize: bodyIsHtml ? 12.5 : undefined,
+        }}
       />
+      {bodyIsHtml && (
+        <div style={{ marginBottom: 14 }}>
+          <button
+            type="button"
+            onClick={() => setShowPreview((p) => !p)}
+            disabled={!body.trim()}
+            style={{ ...ctaSecondaryStyle, padding: "5px 12px", fontSize: 12, opacity: body.trim() ? 1 : 0.5 }}
+          >
+            {showPreview ? "Hide preview" : "Show preview"}
+          </button>
+          {showPreview && body.trim() && (
+            <iframe
+              title="Email preview"
+              // Sandboxed with no allow-* so scripts can't run — renders the
+              // admin's HTML safely without executing it in our app.
+              sandbox=""
+              srcDoc={body}
+              style={{
+                width: "100%",
+                height: 340,
+                marginTop: 10,
+                border: `1px solid ${rule}`,
+                borderRadius: 6,
+                background: "#fff",
+              }}
+            />
+          )}
+        </div>
+      )}
 
       <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: inkSoft, marginBottom: 14, cursor: "pointer" }}>
         <input
@@ -798,6 +862,21 @@ const fieldLabel: CSSProperties = {
   letterSpacing: "0.04em",
   marginBottom: 6,
 };
+
+// Segmented Plain-text / HTML toggle button.
+function modeBtnStyle(active: boolean): CSSProperties {
+  return {
+    padding: "4px 11px",
+    fontSize: 12,
+    fontWeight: 600,
+    borderRadius: 5,
+    cursor: "pointer",
+    fontFamily: bodyFontStack,
+    border: `1px solid ${active ? ink : rule}`,
+    background: active ? ink : "transparent",
+    color: active ? "#ffffff" : inkSoft,
+  };
+}
 
 const unsubPill: CSSProperties = {
   display: "inline-block",
