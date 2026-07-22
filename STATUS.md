@@ -6,6 +6,33 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Direct charges FULLY GREEN on TEST end-to-end (webhook fixed)
+
+Follow-up to the verify entry below. The webhook was NOT flipping regs to paid:
+payment succeeded on the connected account but the reg sat unpaid ("Payment
+received… finalizing… refresh" limbo). Ruled out on our side — endpoint live
+(unsigned POST → 400 sig-check), `verify_jwt=false` in config.toml, deployed code
+correct. Root cause was the **Stripe event-destination config / signing secret**
+for Connected-account events (the manual step). Ron fixed it → **resolved**.
+
+- **Full direct-charge path now works end-to-end on TEST**, through the real UI:
+  registration checkout completes a direct charge → webhook flips the reg to paid.
+  Ron's earlier "client_secret does not match" was confirmed to be a **stale cached
+  frontend** (fixed by hard-refresh).
+- **Verified surfaces:** intent created on connected account · connected-account-
+  scoped Stripe.js confirm · connected-account refund path (code) · webhook
+  receiving Connected-account events + flipping regs.
+- **How Ron verifies "funneling correctly":** platform ledger now shows ONLY the
+  app fee per registration (no +$75 charge / −$75 transfer pair like the old
+  destination-charge ledger); donations = $0 platform entries; full charge lands on
+  the connected account (Connect → Accounts → the org). Cleanest view: Connect →
+  Application fees.
+- **NEXT — prod promotion (money path, needs sign-off):** `main`→`production` PR,
+  AND repeat the **Connected-accounts webhook setup on the PROD Stripe account**
+  (event destination set to Connected accounts + `STRIPE_WEBHOOK_SIGNING_SECRET`
+  matching that destination's secret) — otherwise PROD regs hit the same
+  paid-but-stuck-unpaid limbo. Bake into the promotion checklist.
+
 ## 2026-07-22 — Direct charges VERIFIED working on TEST (#574 follow-up)
 
 Deployed #574 to TEST and ran end-to-end verification against the live TEST site
