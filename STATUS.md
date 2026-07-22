@@ -4,7 +4,7 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-20**
+Last updated: **2026-07-22**
 
 ## 2026-07-20 — Builder board hygiene: #569 reconciled (In Progress → In Review, no dup PR)
 
@@ -48,6 +48,27 @@ Last updated: **2026-07-20**
   an already-open, valid, linked PR) — same fix, just not done in this run.
   Next Builder pass (or Ron) should reconcile those two the same way.
 - No code changed this session; main checkout untouched throughout.
+
+## 2026-07-22 — Org contact lists MERGED to main → LIVE on TEST (#565/#566/#567)
+
+Merged all three in order (#565→#566→#567, squash). CI green:
+- **Apply DB migrations (test): success** — `organization_contacts` + `resend_audience_id`
+  now on TEST Supabase.
+- **Deploy edge functions (test): success** — `import-contacts` + `send-contact-broadcast`
+  live on TEST.
+- Cloudflare TEST frontend rebuilds from `main` → Contacts page at
+  `/admin/:orgSlug/contacts`. **NOT promoted to production.**
+- Closed #568/#569/#570; umbrella #564 can close when verified.
+
+**Next / prereqs before it actually sends:**
+1. **Regenerate types from TEST** (`web/src/types/supabase.ts`) now `organization_contacts`
+   is applied, then drop the cast in `lib/orgContacts.ts` (CLI is linked to prod — needs
+   `supabase link` to TEST + the test DB password). Cosmetic; app works via the cast.
+2. **Resend account must have Broadcasts + Audiences enabled** (paid feature) or the send
+   errors. Confirm `audience_id`↔`segment_id` field name against the live API.
+3. **Smoke on `test.bertanderne.com`:** import a CSV + an XLSX (dedup + skipped counts),
+   then email an org whose only contact is your own address first; unsubscribe + re-send
+   to confirm suppression. Then promote main→production when happy.
 
 ## 2026-07-20 — Org contact lists: import CSV/XLSX + email all contacts (3 PRs open, #565/#566/#567)
 
