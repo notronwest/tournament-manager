@@ -84,20 +84,77 @@ export default function OrgContactsPage() {
     };
   }, [org, reloadKey]);
 
+  // Recipient filters + individual selection.
+  const [sourceFilter, setSourceFilter] = useState<"all" | ContactSource>("all");
+  const [subscribedOnly, setSubscribedOnly] = useState(true);
+  const [addedSince, setAddedSince] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
   const emailable = useMemo(
     () => (contacts ?? []).filter((c) => c.email && !c.unsubscribed),
     [contacts],
   );
+  const emailableIds = useMemo(
+    () => new Set(emailable.map((c) => c.playerId)),
+    [emailable],
+  );
 
-  const filtered = useMemo(() => {
+  // Rows shown = search + source + date-added + subscription filters.
+  const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return contacts ?? [];
-    return (contacts ?? []).filter((c) =>
-      `${c.firstName} ${c.lastName} ${c.email ?? ""} ${c.city ?? ""}`
-        .toLowerCase()
-        .includes(q),
-    );
-  }, [contacts, search]);
+    return (contacts ?? []).filter((c) => {
+      if (
+        q &&
+        !`${c.firstName} ${c.lastName} ${c.email ?? ""} ${c.city ?? ""}`
+          .toLowerCase()
+          .includes(q)
+      )
+        return false;
+      if (sourceFilter !== "all" && c.source !== sourceFilter) return false;
+      if (subscribedOnly && c.unsubscribed) return false;
+      if (addedSince) {
+        // Registrants have no "added" date; a date floor excludes them.
+        if (!c.addedAt || c.addedAt.slice(0, 10) < addedSince) return false;
+      }
+      return true;
+    });
+  }, [contacts, search, sourceFilter, subscribedOnly, addedSince]);
+
+  const visibleEmailable = useMemo(
+    () => visible.filter((c) => emailableIds.has(c.playerId)),
+    [visible, emailableIds],
+  );
+  const allVisibleSelected =
+    visibleEmailable.length > 0 &&
+    visibleEmailable.every((c) => selected.has(c.playerId));
+
+  // Recipients the send targets: the checked emailable, or ALL emailable when
+  // nothing is checked (so "email everyone" still works with no fuss).
+  const recipientIds = useMemo(() => {
+    if (selected.size > 0)
+      return emailable.filter((c) => selected.has(c.playerId)).map((c) => c.playerId);
+    return emailable.map((c) => c.playerId);
+  }, [selected, emailable]);
+
+  function toggleAllVisible() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleEmailable.forEach((c) => next.delete(c.playerId));
+      else visibleEmailable.forEach((c) => next.add(c.playerId));
+      return next;
+    });
+  }
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const hasActiveFilter =
+    sourceFilter !== "all" || !subscribedOnly || addedSince !== "" || search.trim() !== "";
 
   if (!org) return null;
 
@@ -118,12 +175,14 @@ export default function OrgContactsPage() {
           Import contacts
         </button>
         <button
-          style={emailable.length > 0 ? ctaSecondaryStyle : { ...ctaSecondaryStyle, opacity: 0.5, cursor: "not-allowed" }}
-          disabled={emailable.length === 0}
+          style={recipientIds.length > 0 ? ctaSecondaryStyle : { ...ctaSecondaryStyle, opacity: 0.5, cursor: "not-allowed" }}
+          disabled={recipientIds.length === 0}
           onClick={() => setPanel(panel === "compose" ? "none" : "compose")}
-          title={emailable.length === 0 ? "No contacts with an email address yet" : undefined}
+          title={recipientIds.length === 0 ? "No contacts with an email address selected" : undefined}
         >
-          Email all contacts
+          {selected.size > 0
+            ? `Email ${recipientIds.length} selected`
+            : `Email all contacts (${recipientIds.length})`}
         </button>
       </div>
 
@@ -150,7 +209,8 @@ export default function OrgContactsPage() {
       {panel === "compose" && org && (
         <ComposePanel
           orgId={org.id}
-          recipientCount={emailable.length}
+          recipientIds={recipientIds}
+          selectionActive={selected.size > 0}
           onClose={() => setPanel("none")}
           onSent={(n) => {
             setActionMsg(`Your message is being sent to ${n} contact${n === 1 ? "" : "s"}.`);
@@ -184,24 +244,73 @@ export default function OrgContactsPage() {
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 13, color: inkMuted }}>
-              {contacts.length} contact{contacts.length === 1 ? "" : "s"}
-              {" · "}
-              {emailable.length} emailable
-            </div>
+          {/* Filters */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value as "all" | ContactSource)}
+              style={{ ...inputStyle, maxWidth: 180 }}
+              aria-label="Filter by source"
+            >
+              <option value="all">All sources</option>
+              <option value="registrant">Registrants</option>
+              <option value="import">Imported</option>
+              <option value="manual">Added manually</option>
+            </select>
+            <label style={{ fontSize: 13, color: inkSoft, display: "flex", gap: 6, alignItems: "center" }}>
+              Added since
+              <input
+                type="date"
+                value={addedSince}
+                onChange={(e) => setAddedSince(e.target.value)}
+                style={{ ...inputStyle, maxWidth: 160 }}
+              />
+            </label>
+            <label style={{ fontSize: 13, color: inkSoft, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={subscribedOnly}
+                onChange={(e) => setSubscribedOnly(e.target.checked)}
+                style={{ width: 15, height: 15 }}
+              />
+              Subscribed only
+            </label>
             <input
               type="search"
               placeholder="Search name, email, city…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ ...inputStyle, maxWidth: 260 }}
+              style={{ ...inputStyle, maxWidth: 220, marginLeft: "auto" }}
             />
           </div>
+
+          {/* Count + selection summary */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 13, color: inkMuted }}>
+              {visible.length} shown · {emailable.length} emailable
+              {selected.size > 0 && ` · ${selected.size} selected`}
+            </div>
+            {selected.size > 0 && (
+              <button style={ghostButtonStyle} onClick={() => setSelected(new Set())}>
+                Clear selection
+              </button>
+            )}
+          </div>
+
           <div style={{ overflowX: "auto", border: `1px solid ${rule}`, borderRadius: 10 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 640 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 680 }}>
               <thead>
                 <tr style={{ background: cream }}>
+                  <th style={{ ...thStyle, width: 36, textAlign: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleAllVisible}
+                      disabled={visibleEmailable.length === 0}
+                      title="Select all shown emailable"
+                      style={{ width: 15, height: 15 }}
+                    />
+                  </th>
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Email</th>
                   <th style={thStyle}>Phone</th>
@@ -211,41 +320,60 @@ export default function OrgContactsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c) => (
-                  <tr key={c.playerId} style={{ borderTop: `1px solid ${ruleSoft}` }}>
-                    <td style={tdStyle}>
-                      {c.firstName} {c.lastName}
-                    </td>
-                    <td style={{ ...tdStyle, color: c.email ? ink : inkMuted }}>
-                      {c.email ?? "—"}
-                      {c.unsubscribed && (
-                        <span style={unsubPill} title="Unsubscribed — excluded from emails">
-                          unsubscribed
-                        </span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>{c.phone ?? "—"}</td>
-                    <td style={tdStyle}>{c.city ?? "—"}</td>
-                    <td style={tdStyle}>
-                      <SourcePill source={c.source} />
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: "right" }}>
-                      {c.source === "registrant" ? (
-                        <span style={{ color: inkMuted, fontSize: 12 }} title="Registrants are managed via their registration">
-                          —
-                        </span>
-                      ) : (
-                        <button style={ghostButtonStyle} onClick={() => setRemoveTarget(c)}>
-                          Remove
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
+                {visible.map((c) => {
+                  const canPick = emailableIds.has(c.playerId);
+                  return (
+                    <tr
+                      key={c.playerId}
+                      style={{
+                        borderTop: `1px solid ${ruleSoft}`,
+                        background: selected.has(c.playerId) ? "#f4f9ff" : undefined,
+                      }}
+                    >
+                      <td style={{ ...tdStyle, textAlign: "center" }}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(c.playerId)}
+                          disabled={!canPick}
+                          onChange={() => toggleOne(c.playerId)}
+                          title={canPick ? undefined : "No email / unsubscribed — can't be emailed"}
+                          style={{ width: 15, height: 15 }}
+                        />
+                      </td>
+                      <td style={tdStyle}>
+                        {c.firstName} {c.lastName}
+                      </td>
+                      <td style={{ ...tdStyle, color: c.email ? ink : inkMuted }}>
+                        {c.email ?? "—"}
+                        {c.unsubscribed && (
+                          <span style={unsubPill} title="Unsubscribed — excluded from emails">
+                            unsubscribed
+                          </span>
+                        )}
+                      </td>
+                      <td style={tdStyle}>{c.phone ?? "—"}</td>
+                      <td style={tdStyle}>{c.city ?? "—"}</td>
+                      <td style={tdStyle}>
+                        <SourcePill source={c.source} />
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>
+                        {c.source === "registrant" ? (
+                          <span style={{ color: inkMuted, fontSize: 12 }} title="Registrants are managed via their registration">
+                            —
+                          </span>
+                        ) : (
+                          <button style={ghostButtonStyle} onClick={() => setRemoveTarget(c)}>
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {visible.length === 0 && (
                   <tr>
-                    <td style={{ ...tdStyle, color: inkMuted }} colSpan={6}>
-                      No contacts match “{search}”.
+                    <td style={{ ...tdStyle, color: inkMuted }} colSpan={7}>
+                      No contacts match {hasActiveFilter ? "these filters" : "your search"}.
                     </td>
                   </tr>
                 )}
@@ -459,15 +587,18 @@ function ImportPanel({
 // ── Compose / email panel ─────────────────────────────────────────────
 function ComposePanel({
   orgId,
-  recipientCount,
+  recipientIds,
+  selectionActive,
   onClose,
   onSent,
 }: {
   orgId: string;
-  recipientCount: number;
+  recipientIds: string[];
+  selectionActive: boolean;
   onClose: () => void;
   onSent: (n: number) => void;
 }) {
+  const recipientCount = recipientIds.length;
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [consent, setConsent] = useState(false);
@@ -480,7 +611,9 @@ function ComposePanel({
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("send-contact-broadcast", {
-        body: { organizationId: orgId, subject: subject.trim(), body, consent: true },
+        // Always pass the explicit recipient list so the send matches exactly
+        // what's shown (filters + individual picks, or all emailable).
+        body: { organizationId: orgId, subject: subject.trim(), body, consent: true, playerIds: recipientIds },
       });
       if (fnErr) {
         setError(await readFnError(fnErr));
@@ -495,9 +628,9 @@ function ComposePanel({
 
   return (
     <div style={{ ...panelStyle, marginBottom: 20 }}>
-      <PanelHeader title="Email all contacts" onClose={onClose} />
+      <PanelHeader title={selectionActive ? "Email selected contacts" : "Email all contacts"} onClose={onClose} />
       <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 14px", lineHeight: 1.55 }}>
-        This goes to <strong>{recipientCount}</strong> contact{recipientCount === 1 ? "" : "s"} with
+        This goes to <strong>{recipientCount}</strong> {selectionActive ? "selected " : ""}contact{recipientCount === 1 ? "" : "s"} with
         an email address (unsubscribed contacts are skipped). Recipients get a one-click
         unsubscribe link automatically.
       </p>
