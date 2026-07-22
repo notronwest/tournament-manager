@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
+import { RequirePlatformAdmin } from "./auth/RequirePlatformAdmin";
 import { ProfileOnboarding } from "./auth/ProfileOnboarding";
 import { PartnerInviteOnboarding } from "./auth/PartnerInviteOnboarding";
 import EnvBanner from "./components/EnvBanner";
@@ -356,15 +357,27 @@ export default function App() {
         />
         <Route
           path="tools/round-robin"
-          element={<RoundRobinEstimatorPage />}
+          element={
+            <RequirePlatformAdmin>
+              <RoundRobinEstimatorPage />
+            </RequirePlatformAdmin>
+          }
         />
         <Route
           path="tools/seed-event"
-          element={<SeedEventPage />}
+          element={
+            <RequirePlatformAdmin>
+              <SeedEventPage />
+            </RequirePlatformAdmin>
+          }
         />
         <Route
           path="tools/test-players"
-          element={<TestPlayersPage />}
+          element={
+            <RequirePlatformAdmin>
+              <TestPlayersPage />
+            </RequirePlatformAdmin>
+          }
         />
         <Route path="locations" element={<LocationsPage />} />
         <Route path="contacts" element={<OrgContactsPage />} />
