@@ -210,3 +210,8 @@ verify_jwt = false
 # with the service-role key) is the authentication.
 [functions.unsubscribe-contact]
 verify_jwt = false
+
+# Resend calls this endpoint server-to-server with no Supabase JWT; the Svix
+# signature check (RESEND_WEBHOOK_SECRET) inside the function is the auth.
+[functions.resend-webhook]
+verify_jwt = false
