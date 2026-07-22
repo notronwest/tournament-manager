@@ -6,6 +6,14 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Promoted to production (#588): platform-admin-only tools
+
+Merged `main`→`production` (`1c58299`). **Frontend-only — no migrations/functions**
+(contact-email v2 + direct charges already on prod via #583). Ships #587: RR
+estimator / Seed test data / Test players / Danger zone hidden from org admins +
+route-guarded. Prod Cloudflare build success. Not visually verified on the authed
+prod nav. main == production (0 behind).
+
 ## 2026-07-22 — Dev/test tools restricted to platform admins (#587)
 
 Ron: RR estimator, Seed test data, Test players, Danger zone should be
