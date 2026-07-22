@@ -6,6 +6,15 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Contact email: HTML body support (#585)
+
+Ron: clubs will want to paste HTML formatting. Built (PR #585, closes #584):
+`send-contact-broadcast` takes optional `bodyIsHtml` → sends body as raw HTML
+inside the branded layout (else plain-text escaped). Compose box gets a
+Plain text / HTML toggle + a sandboxed-iframe preview. Plain text stays default.
+No stored-XSS: the history page (ContactEmailsPage) renders subject only, never
+body. [FN]+[UI], no migration. tsc+build clean; not visually verified (login-gated).
+
 ## 2026-07-22 — PROD promotion PR #583 OPEN (direct charges + contact-email v2 + wizard fix) — NOT merged
 
 `main`→`production` PR **#583** open (deploys to PROD on merge). Ron chose "promote
