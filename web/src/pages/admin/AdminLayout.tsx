@@ -404,18 +404,23 @@ export default function AdminLayout() {
           <SideLink to={`/admin/${org.slug}/locations`} onNavigate={closeDrawer}>Venues</SideLink>
           <SideLink to={`/admin/${org.slug}/contacts`} onNavigate={closeDrawer}>Contacts</SideLink>
           <SideLink to={`/admin/${org.slug}/contacts/emails`} onNavigate={closeDrawer}>Email history</SideLink>
-          <SideLink to={`/admin/${org.slug}/tools/round-robin`} onNavigate={closeDrawer}>
-            RR estimator
-          </SideLink>
-          <SideLink to={`/admin/${org.slug}/tools/seed-event`} onNavigate={closeDrawer}>
-            Seed test data
-          </SideLink>
-          <SideLink to={`/admin/${org.slug}/tools/test-players`} onNavigate={closeDrawer}>
-            Test players
-          </SideLink>
           <SideLink to={`/admin/${org.slug}/settings/stripe`} onNavigate={closeDrawer}>
             Stripe Connect
           </SideLink>
+          {/* Dev/test tools — platform-admin only (not for org admins). */}
+          {isPlatformAdmin === true && (
+            <>
+              <SideLink to={`/admin/${org.slug}/tools/round-robin`} onNavigate={closeDrawer}>
+                RR estimator
+              </SideLink>
+              <SideLink to={`/admin/${org.slug}/tools/seed-event`} onNavigate={closeDrawer}>
+                Seed test data
+              </SideLink>
+              <SideLink to={`/admin/${org.slug}/tools/test-players`} onNavigate={closeDrawer}>
+                Test players
+              </SideLink>
+            </>
+          )}
           {/* Org deletion is a platform-admin-only destructive action. */}
           {isPlatformAdmin === true && (
             <SideLink to={`/admin/${org.slug}/settings/danger`} onNavigate={closeDrawer}>

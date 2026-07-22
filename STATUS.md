@@ -3,8 +3,54 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
+Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
+
+## 2026-07-22 — Dev/test tools restricted to platform admins (#587)
+
+Ron: RR estimator, Seed test data, Test players, Danger zone should be
+platform-admin-only. Fix (PR #587, closes #586): sidebar links for the 3 tools
+now gated to `isPlatformAdmin === true` (Danger zone already was) + new
+`RequirePlatformAdmin` route guard on the 3 tool routes (bounces org admins to
+the org overview). OrgDangerZonePage already self-guards. Frontend-only; tsc+build
+clean; not visually verified (login-gated).
+
+## 2026-07-22 — Contact email v2 fully on TEST (HTML #585 merged)
+
+#585 (HTML body) merged to main (`a19a016`). The whole contact-email v2 is now
+merged + deployed on TEST: filtering/individual-pick, plain-text OR HTML body
+(sandboxed preview), own one-click unsubscribe, delivery webhook → Email history
+page. Note: the "Deploy edge functions" step pulls supabase-js from esm.sh at
+bundle time — a CDN 522 failed it (outlasted the 3 auto-retries); a manual
+`gh run rerun --failed` succeeded. **Next:** Ron smoke-tests on TEST, then
+`main`→`production` promotion + a SEPARATE prod Resend webhook + its
+`RESEND_WEBHOOK_SECRET` on PROD.
+
+## 2026-07-22 — DIRECT CHARGES LIVE ON PROD (#583 merged main→production)
+
+Promotion PR #583 (`main`→`production`) merged after Ron completed the blocking PROD
+manual steps. **PROD pipeline all green:** migrate (additive contact-broadcast
+tables) + deploy edge functions (direct-charge code) + Cloudflare Pages prod build
+(`production` head `bf8eddd`).
+
+- **Direct charges now LIVE on prod** — the money path Ron asked for: registration/
+  donation money settles on the organizer's connected account, never the platform
+  balance; org = merchant of record + pays the Stripe fee; platform keeps only the
+  application fee.
+- **PROD webhook cutover done by Ron:** added a NEW event destination for
+  **Connected accounts** (with `payment_intent.succeeded` + `.payment_failed`),
+  updated PROD `STRIPE_WEBHOOK_SIGNING_SECRET` to that destination's secret,
+  disabled the original platform-account webhook. `RESEND_WEBHOOK_SECRET` also set
+  (contact-email v2). Merged promptly to close the brief window where the platform
+  webhook was disabled but direct-charge code wasn't yet live.
+- **Also promoted in #583:** contact-email v2 (#573/#576/#578/#580), wizard save
+  fix (#582).
+- **REMAINING — Ron's PROD smoke test (live money, his to run):** one real
+  registration → confirm it flips to **paid** (proves PROD connected-account
+  webhook + secret), funds land on the **connected account**, only the **app fee**
+  on the platform ledger, and the connected account's **statement descriptor**
+  reads right (customers now see the connected account's name, not the platform's).
+  If it does NOT flip → PROD webhook events/secret need a look (same debug as TEST).
 
 ## 2026-07-22 — Contact email: HTML body support (#585)
 
