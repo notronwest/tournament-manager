@@ -45,7 +45,7 @@ Last updated: **2026-07-22**
 - **Caveat to revisit:** Express (platform-created) connected accounts keep
   platform dispute/negative-balance liability under Connect rules; Standard
   (OAuth) accounts — like the Angels' `acct_1Tlc4…` — are fully clean.
-## 2026-07-22 — Contact email v2: recipient filtering + delivery status page (5-PR stack, IN PROGRESS)
+## 2026-07-22 — Contact email v2: recipient filtering + delivery status page (4-PR stack, ALL BUILT — awaiting merge)
 
 Ron asked for (both, together): recipient **filtering** (individual pick / source
 imported-vs-manual / date added / registration status) + a **delivery status
@@ -67,15 +67,25 @@ instead of Resend Broadcast's built-in one).
    recipient timestamps/status. Shared `_shared/unsubscribe.ts`. → **PR #576
    (closes #575) — DONE, in CI. UNVERIFIED (no local Deno run) — smoke-test on
    TEST after merge.**
-3. **[UI filters]** OrgContactsPage: source/date-added/subscribed/registration
-   filters + per-row checkboxes + select-all + live count → pass `playerIds`. — TODO
-4. **[UI status]** Email history / delivery-status page + route/nav (aggregates
-   `contact_broadcast_recipients` timestamps). — TODO
-- **Manual step for Ron:** create a Resend webhook (events: email.delivered/
-  opened/clicked/bounced/complained/delivery_delayed) pointing at
-  `<supabase-url>/functions/v1/resend-webhook`, and set its `whsec_…` as the
-  `RESEND_WEBHOOK_SECRET` Supabase secret (TEST + PROD). Exact URL provided at merge.
-- **Merge order:** #573 → #576 → [UI filters] → [UI status].
+3. **[UI filters]** OrgContactsPage: source/date-added/subscribed filters +
+   per-row checkboxes + select-all + live count → passes explicit `playerIds`.
+   Adds `addedAt` to lib/orgContacts. → **PR #578 (closes #577) — DONE, green.
+   tsc+build clean.**
+4. **[UI status]** Email history page: per-send delivered/opened/clicked/bounced/
+   unsub counts (aggregated from recipient timestamps) + per-recipient drill-down;
+   nav link + `contacts/emails` route; `lib/contactBroadcasts`. → **PR #580
+   (closes #579) — DONE, green. tsc+build clean.**
+- **All 4 green. Merge order: #573 → #576 → #578 → #580** (DB → FN → UIs).
+- **NOT verified** — the functions can't run locally (Deno); the admin UIs are
+  login-gated. Smoke-test on TEST after merge: import, filter+pick, send, watch
+  the status page fill in.
+- **Manual step for Ron (once #576 is on TEST/PROD):** create a Resend webhook —
+  events `email.delivered/opened/clicked/bounced/complained/delivery_delayed` —
+  pointing at `https://<project-ref>.supabase.co/functions/v1/resend-webhook`
+  (TEST ref `mvkhdsauaqqjehxdnbuf`, PROD ref `wducsjqyoksmluwfgjxc`), then set its
+  `whsec_…` signing secret as the `RESEND_WEBHOOK_SECRET` Supabase secret per
+  project. Until that's set, sends/filters/unsubscribe still work; only the
+  delivery *status* counts stay empty.
 
 ## 2026-07-22 — Promoted to production (#571): contact manager + quote split
 
