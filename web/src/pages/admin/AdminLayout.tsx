@@ -403,6 +403,7 @@ export default function AdminLayout() {
           </SideLink>
           <SideLink to={`/admin/${org.slug}/locations`} onNavigate={closeDrawer}>Venues</SideLink>
           <SideLink to={`/admin/${org.slug}/contacts`} onNavigate={closeDrawer}>Contacts</SideLink>
+          <SideLink to={`/admin/${org.slug}/contacts/emails`} onNavigate={closeDrawer}>Email history</SideLink>
           <SideLink to={`/admin/${org.slug}/tools/round-robin`} onNavigate={closeDrawer}>
             RR estimator
           </SideLink>
