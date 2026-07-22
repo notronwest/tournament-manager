@@ -3,8 +3,26 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
+Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
+
+## 2026-07-22 — Promoted to production (#571): contact manager + quote split
+
+- Merged `main`→`production` (`17f797f`), 11 commits. **PROD pipeline all green:**
+  Apply DB migrations (prod) success, Deploy edge functions (prod) success,
+  frontend build success.
+- **Org contact manager LIVE on prod** (#565 DB / #566 fns / #567 UI): import
+  contacts from CSV/XLSX + email the whole org list via Resend Broadcasts
+  (required consent check). Migration additive (new `organization_contacts`
+  table + RLS, nullable `organizations.resend_audience_id`); no destructive ops.
+  Resend secrets already set on prod.
+- **Quote WMPC-cost/PBB-fee split LIVE on prod** (#563) — the flagged quote
+  `a2db1d13…` should now read WMPC cost $1,900 · PickleballBrackets fee $950.
+- **NOT visually verified on the authed admin pages** (contacts + quotes need
+  login) — backend + build all green; recommend a real smoke test on prod:
+  import a small CSV and send yourself a broadcast, and eyeball quote
+  `a2db1d13…`. Offered to log in via secure autofill to verify if wanted.
+- Stash `stash@{0}` still holds the superseded parallel quote impl.
 
 ## 2026-07-20 — Builder board hygiene: #569 reconciled (In Progress → In Review, no dup PR)
 
