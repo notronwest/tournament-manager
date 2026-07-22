@@ -15,21 +15,28 @@ contact email to Resend batch-send** (per-recipient email ids → clean tracking
 filtering; we own the unsubscribe link + `organization_contacts.unsubscribed_at`,
 instead of Resend Broadcast's built-in one).
 
-**Planned stack:**
-1. **[DB]** `contact_broadcasts` (send log + rollups) + `contact_broadcast_recipients`
-   (per-recipient, correlated by `resend_email_id`), RLS org-read/server-write.
-   → **PR #573 (closes #572) — DONE, green.**
-2. **[FN]** rewrite `send-contact-broadcast`: accept filtered subset / explicit
-   player-id picks, batch-send via Resend, log broadcast + recipient rows, own
-   unsubscribe link (signed token → public unsubscribe route sets
-   `unsubscribed_at`). — TODO
-3. **[FN]** `resend-webhook`: verify signing secret, ingest delivered/opened/
-   clicked/bounced/complained/unsubscribed → update recipient status + rollups. — TODO
-4. **[UI]** OrgContactsPage: source/date-added/registration-status filters +
-   per-row checkboxes + select-all-filtered + live recipient count. — TODO
-5. **[UI]** Email history / delivery-status page + route/nav. — TODO
-- Manual step for Ron: add the webhook URL + `RESEND_WEBHOOK_SECRET` in the
-  Resend dashboard (exact values provided when #3 lands).
+**Stack (4 PRs — merged the two functions into one FN PR):**
+1. **[DB]** `contact_broadcasts` + `contact_broadcast_recipients`, RLS
+   org-read/server-write. **Per-recipient EVENT TIMESTAMPS** (delivered_at/
+   opened_at/…/unsubscribed_at) — status counts derive by aggregation (race-free
+   under at-least-once webhook delivery), no rollup columns. → **PR #573 (closes
+   #572) — DONE, green.**
+2. **[FN]** `send-contact-broadcast` rewritten to batch-send + optional
+   `playerIds` subset + logs recipient rows; new public `unsubscribe-contact`
+   (HMAC token signed with service-role key → sets `unsubscribed_at`); new
+   `resend-webhook` (Svix-verified, needs `RESEND_WEBHOOK_SECRET`) → advances
+   recipient timestamps/status. Shared `_shared/unsubscribe.ts`. → **PR #576
+   (closes #575) — DONE, in CI. UNVERIFIED (no local Deno run) — smoke-test on
+   TEST after merge.**
+3. **[UI filters]** OrgContactsPage: source/date-added/subscribed/registration
+   filters + per-row checkboxes + select-all + live count → pass `playerIds`. — TODO
+4. **[UI status]** Email history / delivery-status page + route/nav (aggregates
+   `contact_broadcast_recipients` timestamps). — TODO
+- **Manual step for Ron:** create a Resend webhook (events: email.delivered/
+  opened/clicked/bounced/complained/delivery_delayed) pointing at
+  `<supabase-url>/functions/v1/resend-webhook`, and set its `whsec_…` as the
+  `RESEND_WEBHOOK_SECRET` Supabase secret (TEST + PROD). Exact URL provided at merge.
+- **Merge order:** #573 → #576 → [UI filters] → [UI status].
 
 ## 2026-07-22 — Promoted to production (#571): contact manager + quote split
 
