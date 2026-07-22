@@ -6,6 +6,34 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — PROD promotion PR #583 OPEN (direct charges + contact-email v2 + wizard fix) — NOT merged
+
+`main`→`production` PR **#583** open (deploys to PROD on merge). Ron chose "promote
+everything" — the promotion carries ALL of `main` ahead of `production`, not just
+the Stripe change:
+- **Direct charges** (#574) — verified end-to-end on TEST.
+- **Contact-email v2** (#573/#576/#578/#580) — migration
+  `20260722130000_contact_broadcast_tracking.sql` is **additive** (2 new tables,
+  RLS, no ALTER/DROP on existing) — verified safe. Needs `RESEND_WEBHOOK_SECRET`
+  on PROD.
+- **Wizard save fix** (#582).
+
+**BLOCKING PROD manual steps — do BEFORE merging #583 (money path, needs sign-off):**
+1. **PROD Stripe webhook** = the exact thing that stuck TEST: PROD Stripe endpoint
+   must receive **Connected-account events**, and PROD `STRIPE_WEBHOOK_SIGNING_SECRET`
+   must MATCH that destination's signing secret — else live regs charge but never
+   flip to paid. Do in a low-traffic window (brief in-flight platform-event gap;
+   Stripe retries ~3 days).
+2. **`RESEND_WEBHOOK_SECRET` on PROD** + point Resend webhook at `resend-webhook`
+   (contact-email v2 delivery tracking).
+
+**Post-merge PROD smoke test:** real registration → flips to paid, funds on connected
+account, only app fee on platform ledger; verify each org's connected account
+**statement descriptor** (customers now see the connected account's descriptor, not
+the platform's — WMPC's own account should read "White Mountain Pickleball Club").
+
+**Status: HOLDING for Ron** to set PROD webhook + secret and pick a merge window.
+
 ## 2026-07-22 — Direct charges FULLY GREEN on TEST end-to-end (webhook fixed)
 
 Follow-up to the verify entry below. The webhook was NOT flipping regs to paid:
