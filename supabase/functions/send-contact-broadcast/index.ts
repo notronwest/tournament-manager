@@ -1,22 +1,24 @@
 // supabase/functions/send-contact-broadcast/index.ts
 //
-// Email a club's ENTIRE contact list via Resend Broadcasts. The contact list is
-// computed here as:
-//     imported/manual contacts (organization_contacts)
-//   ∪ the org's registrants      (distinct players in the org's event_registrations)
-// deduped by player, dropping anyone without an email or who has unsubscribed.
+// Email a club's contact list. Recipients = imported/manual contacts
+// (organization_contacts) ∪ the org's registrants (distinct players in the
+// org's event_registrations), deduped by player, dropping anyone without an
+// email or who has unsubscribed. An optional `playerIds` restricts the send to
+// an explicit subset (the UI's filter selection / individual picks).
 //
-// We use a Resend Audience + Broadcast (not a fan-out of individual emails) so
-// Resend owns the unsubscribe link, suppression list, and open/click tracking —
-// which keeps our transactional domain reputation cleaner and handles CAN-SPAM
-// unsubscribe for us. One Audience per org (created lazily; id stored on
-// organizations.resend_audience_id).
+// Delivery uses Resend's BATCH-SEND API (one email id per recipient) rather
+// than a Broadcast, so every recipient is individually trackable and any subset
+// can be targeted. We own the unsubscribe link (a signed token → the public
+// unsubscribe-contact function sets organization_contacts.unsubscribed_at).
 //
-// ORG-STAFF only. Requires an explicit consent flag (the org attests it has
-// permission to email these people).
+// Each send is logged: one `contact_broadcasts` row + one
+// `contact_broadcast_recipients` row per recipient (correlated to Resend by
+// resend_email_id). The resend-webhook function advances delivery status.
 //
-// Body:    { organizationId, subject, body, consent: true }   (body is PLAIN TEXT)
-// Returns: { broadcastId, recipientCount, audienceId, synced, syncFailed }
+// ORG-STAFF only. Requires an explicit consent flag.
+//
+// Body:    { organizationId, subject, body, consent: true, playerIds?: string[] }
+// Returns: { broadcastId, recipientCount, sent }
 //
 // Required secrets (auto-injected): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 // Required secrets (already set):   RESEND_API_KEY, RESEND_FROM_ADDRESS.
@@ -24,6 +26,7 @@
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
+import { makeUnsubToken, unsubscribeUrl } from "../_shared/unsubscribe.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,9 +37,16 @@ const corsHeaders = {
 
 const RESEND = "https://api.resend.com";
 const MAX_RECIPIENTS = 3000;
+const BATCH_SIZE = 100; // Resend /emails/batch caps at 100 per call.
 const ACTIVE_REG_STATUSES = ["paid", "pending_payment"];
 
-type Body = { organizationId?: string; subject?: string; body?: string; consent?: boolean };
+type Body = {
+  organizationId?: string;
+  subject?: string;
+  body?: string;
+  consent?: boolean;
+  playerIds?: string[];
+};
 type Recipient = { playerId: string; email: string; first: string; last: string };
 
 // The remote-imported supabase client is untyped in the Deno runtime.
@@ -51,11 +61,9 @@ Deno.serve(async (req: Request) => {
   try {
     // @ts-expect-error Deno env
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const admin = createClient(
-      SUPABASE_URL,
-      // @ts-expect-error Deno env
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // @ts-expect-error Deno env
+    const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     // @ts-expect-error Deno env
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     // @ts-expect-error Deno env
@@ -72,7 +80,8 @@ Deno.serve(async (req: Request) => {
     const authUserId = userData.user.id;
 
     // ── 2. Input ─────────────────────────────────────────────────────
-    const { organizationId, subject, body, consent } = (await req.json()) as Body;
+    const { organizationId, subject, body, consent, playerIds } =
+      (await req.json()) as Body;
     if (!organizationId) return json({ error: "organizationId is required" }, 400);
     if (!subject || !subject.trim()) return json({ error: "subject is required" }, 400);
     if (!body || !body.trim()) return json({ error: "body is required" }, 400);
@@ -84,94 +93,106 @@ Deno.serve(async (req: Request) => {
     }
     const { data: org, error: orgErr } = await admin
       .from("organizations")
-      .select("id, name, contact_email, resend_audience_id")
+      .select("id, name, contact_email")
       .eq("id", organizationId)
       .is("deleted_at", null)
       .single();
     if (orgErr || !org) return json({ error: "organization_not_found" }, 404);
 
-    // ── 4. Build the recipient set (contacts ∪ registrants) ──────────
-    const recipients = await buildRecipients(admin, organizationId);
+    // ── 4. Build the recipient set (contacts ∪ registrants), then narrow
+    //     to the selected subset if playerIds was provided. Unsubscribed and
+    //     no-email people are already excluded, so a selected-but-unsubscribed
+    //     player is dropped here regardless of what the client sent. ─────
+    let recipients = await buildRecipients(admin, organizationId);
+    if (Array.isArray(playerIds) && playerIds.length > 0) {
+      const wanted = new Set(playerIds);
+      recipients = recipients.filter((r) => wanted.has(r.playerId));
+    }
     if (recipients.length === 0) return json({ error: "no_recipients" }, 400);
     if (recipients.length > MAX_RECIPIENTS) {
       return json({ error: `too_many_recipients (max ${MAX_RECIPIENTS})` }, 400);
     }
 
-    // ── 5. Ensure the org's Resend Audience ──────────────────────────
-    let audienceId: string | null = org.resend_audience_id;
-    if (!audienceId) {
-      const created = await resend(resendApiKey, "POST", "/audiences", {
-        name: `${org.name} — contacts`,
-      });
-      audienceId = (created as { id?: string })?.id ?? null;
-      if (!audienceId) return json({ error: "resend_audience_create_failed" }, 502);
-      const { error: updErr } = await admin
-        .from("organizations")
-        .update({ resend_audience_id: audienceId })
-        .eq("id", org.id);
-      if (updErr) return json({ error: updErr.message }, 500);
+    // ── 5. Log the broadcast (one row per send) ──────────────────────
+    const { data: bc, error: bcErr } = await admin
+      .from("contact_broadcasts")
+      .insert({
+        organization_id: organizationId,
+        subject: subject.trim(),
+        body: body,
+        recipient_count: recipients.length,
+        sent_by: authUserId,
+      })
+      .select("id")
+      .single();
+    if (bcErr || !bc) return json({ error: bcErr?.message ?? "broadcast_log_failed" }, 500);
+    const broadcastId: string = bc.id;
+
+    // ── 6. Batch-send via Resend, then record per-recipient rows ──────
+    let sent = 0;
+    for (let start = 0; start < recipients.length; start += BATCH_SIZE) {
+      const chunk = recipients.slice(start, start + BATCH_SIZE);
+
+      // One email object per recipient, each with its own unsubscribe link.
+      const emails = await Promise.all(
+        chunk.map(async (r) => {
+          const token = await makeUnsubToken(SERVICE_KEY, organizationId, r.playerId, broadcastId);
+          const unsubUrl = unsubscribeUrl(SUPABASE_URL, token);
+          const html = renderEmailHtml({
+            headingLabel: org.name ?? undefined,
+            heading: subject.trim(),
+            bodyHtml: textToHtml(body),
+            footer: `${escapeHtml(org.name ?? "This club")} via bert &amp; erne &mdash; pickleball tournaments<br /><a href="${unsubUrl}" style="color:#6b7280;">Unsubscribe</a>`,
+          });
+          return {
+            from: fromAddress,
+            to: [r.email],
+            subject: subject.trim(),
+            html,
+            ...(org.contact_email ? { reply_to: org.contact_email } : {}),
+            headers: {
+              "List-Unsubscribe": `<${unsubUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+          };
+        }),
+      );
+
+      let ids: (string | null)[] = chunk.map(() => null);
+      try {
+        const resp = (await resend(resendApiKey, "POST", "/emails/batch", emails)) as {
+          data?: { id?: string }[];
+        };
+        const returned = resp?.data ?? [];
+        ids = chunk.map((_, i) => returned[i]?.id ?? null);
+        sent += returned.length;
+      } catch (e) {
+        // Record the recipient rows anyway (status stays 'sent', no id) so the
+        // audit trail survives a partial Resend failure.
+        console.error("resend batch failed", String((e as { message?: string })?.message ?? e));
+      }
+
+      const rows = chunk.map((r, i) => ({
+        broadcast_id: broadcastId,
+        player_id: r.playerId,
+        email: r.email,
+        resend_email_id: ids[i],
+      }));
+      const { error: recErr } = await admin.from("contact_broadcast_recipients").insert(rows);
+      if (recErr) console.error("recipient log failed", recErr.message);
     }
 
-    // ── 6. Sync recipients into the audience (idempotent; dup = ok) ───
-    let synced = 0;
-    let syncFailed = 0;
-    await pool(recipients, 5, async (r) => {
-      try {
-        await resend(resendApiKey, "POST", `/audiences/${audienceId}/contacts`, {
-          email: r.email,
-          first_name: r.first,
-          last_name: r.last,
-          unsubscribed: false,
-        });
-        synced++;
-      } catch {
-        // A pre-existing contact returns a 4xx we treat as success-enough; a
-        // genuine failure just means Resend already has them or will skip them.
-        syncFailed++;
-      }
-    });
-
-    // ── 7. Create + send the broadcast ───────────────────────────────
-    const html = renderEmailHtml({
-      headingLabel: org.name ?? undefined,
-      heading: subject.trim(),
-      bodyHtml: textToHtml(body),
-      // Resend replaces this token with the recipient's one-click unsubscribe URL.
-      footer: `${escapeHtml(org.name ?? "This club")} via bert &amp; erne &mdash; pickleball tournaments<br /><a href="{{{RESEND_UNSUBSCRIBE_URL}}}" style="color:#6b7280;">Unsubscribe</a>`,
-    });
-
-    const broadcast = await resend(resendApiKey, "POST", "/broadcasts", {
-      // NOTE: Resend is mid-rename audience_id → segment_id. audience_id is the
-      // current stable field; revisit if the API version changes.
-      audience_id: audienceId,
-      from: fromAddress,
-      subject: subject.trim(),
-      html,
-      ...(org.contact_email ? { reply_to: org.contact_email } : {}),
-      name: `${org.name} — ${subject.trim()}`.slice(0, 200),
-    });
-    const broadcastId = (broadcast as { id?: string })?.id ?? null;
-    if (!broadcastId) return json({ error: "resend_broadcast_create_failed" }, 502);
-
-    await resend(resendApiKey, "POST", `/broadcasts/${broadcastId}/send`, {});
-
-    return json({
-      broadcastId,
-      audienceId,
-      recipientCount: recipients.length,
-      synced,
-      syncFailed,
-    });
+    return json({ broadcastId, recipientCount: recipients.length, sent });
   } catch (e) {
-    return json({ error: "internal_error", detail: String((e as { message?: string })?.message ?? e) }, 500);
+    return json(
+      { error: "internal_error", detail: String((e as { message?: string })?.message ?? e) },
+      500,
+    );
   }
 });
 
 // Contacts ∪ registrants, deduped by player, email-required, unsubscribed removed.
-async function buildRecipients(
-  admin: Db,
-  organizationId: string,
-): Promise<Recipient[]> {
+async function buildRecipients(admin: Db, organizationId: string): Promise<Recipient[]> {
   const playerIds = new Set<string>();
   const unsubscribed = new Set<string>();
 
@@ -187,7 +208,6 @@ async function buildRecipients(
   }
 
   // (b) registrants — distinct players in the org's event_registrations.
-  //     Two-step (supabase-js has no subqueries): tournaments → events → regs.
   const { data: tourneys } = await admin
     .from("tournaments")
     .select("id")
@@ -216,7 +236,6 @@ async function buildRecipients(
 
   if (playerIds.size === 0) return [];
 
-  // Fetch player contact details for the union.
   const { data: players } = await admin
     .from("players")
     .select("id, email, first_name, last_name")
@@ -225,7 +244,12 @@ async function buildRecipients(
 
   const out: Recipient[] = [];
   const seenEmail = new Set<string>();
-  for (const p of (players ?? []) as { id: string; email: string | null; first_name: string | null; last_name: string | null }[]) {
+  for (const p of (players ?? []) as {
+    id: string;
+    email: string | null;
+    first_name: string | null;
+    last_name: string | null;
+  }[]) {
     const email = (p.email ?? "").trim().toLowerCase();
     if (!email || !email.includes("@")) continue;
     if (seenEmail.has(email)) continue; // one send per address
@@ -240,11 +264,7 @@ async function buildRecipients(
   return out;
 }
 
-async function isOrgStaff(
-  admin: Db,
-  organizationId: string,
-  authUserId: string,
-): Promise<boolean> {
+async function isOrgStaff(admin: Db, organizationId: string, authUserId: string): Promise<boolean> {
   const { data: staffRow } = await admin
     .from("organization_members")
     .select("user_id")
@@ -260,7 +280,7 @@ async function isOrgStaff(
   return !!padmin;
 }
 
-// Minimal Resend REST helper. Throws on non-2xx (callers decide tolerance).
+// Minimal Resend REST helper. Throws on non-2xx.
 async function resend(apiKey: string, method: string, path: string, body: unknown): Promise<unknown> {
   const resp = await fetch(`${RESEND}${path}`, {
     method,
@@ -274,18 +294,6 @@ async function resend(apiKey: string, method: string, path: string, body: unknow
   } catch {
     return {};
   }
-}
-
-// Run `fn` over `items` with at most `concurrency` in flight.
-async function pool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
-  let i = 0;
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (i < items.length) {
-      const idx = i++;
-      await fn(items[idx]);
-    }
-  });
-  await Promise.all(workers);
 }
 
 // Plain text → safe HTML paragraphs (blank line = new <p>, single newline = <br>).
