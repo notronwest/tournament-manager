@@ -45,6 +45,17 @@ Last updated: **2026-07-22**
 - **Caveat to revisit:** Express (platform-created) connected accounts keep
   platform dispute/negative-balance liability under Connect rules; Standard
   (OAuth) accounts — like the Angels' `acct_1Tlc4…` — are fully clean.
+## 2026-07-22 — Contact email v2: MERGED to main → LIVE ON TEST (#573/#576/#578/#580)
+
+All 4 PRs merged (main `7c04965`). **TEST pipeline green:** Apply DB migrations
+success (tracking tables), Deploy edge functions success (send-contact-broadcast
+rewritten + unsubscribe-contact + resend-webhook). Ron set `RESEND_WEBHOOK_SECRET`
+on the TEST Supabase project (from the TEST Resend webhook's signing secret).
+**Next:** smoke-test on `test.bertanderne.com` (import → filter/pick → send to
+self → check unsubscribe one-click → Email history fills in delivered/opened),
+then promote `main`→`production` AND set up a SEPARATE prod Resend webhook +
+`RESEND_WEBHOOK_SECRET` on PROD. Still UNVERIFIED at runtime until the smoke test.
+
 ## 2026-07-22 — Contact email v2: recipient filtering + delivery status page (4-PR stack, ALL BUILT — awaiting merge)
 
 Ron asked for (both, together): recipient **filtering** (individual pick / source
