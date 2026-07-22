@@ -46,6 +46,10 @@ type Body = {
   body?: string;
   consent?: boolean;
   playerIds?: string[];
+  // When true, `body` is raw HTML authored by the org admin — sent as-is inside
+  // the branded layout. When false/omitted, `body` is plain text (escaped, blank
+  // lines → paragraphs).
+  bodyIsHtml?: boolean;
 };
 type Recipient = { playerId: string; email: string; first: string; last: string };
 
@@ -80,7 +84,7 @@ Deno.serve(async (req: Request) => {
     const authUserId = userData.user.id;
 
     // ── 2. Input ─────────────────────────────────────────────────────
-    const { organizationId, subject, body, consent, playerIds } =
+    const { organizationId, subject, body, consent, playerIds, bodyIsHtml } =
       (await req.json()) as Body;
     if (!organizationId) return json({ error: "organizationId is required" }, 400);
     if (!subject || !subject.trim()) return json({ error: "subject is required" }, 400);
@@ -141,7 +145,7 @@ Deno.serve(async (req: Request) => {
           const html = renderEmailHtml({
             headingLabel: org.name ?? undefined,
             heading: subject.trim(),
-            bodyHtml: textToHtml(body),
+            bodyHtml: bodyIsHtml ? body : textToHtml(body),
             footer: `${escapeHtml(org.name ?? "This club")} via bert &amp; erne &mdash; pickleball tournaments<br /><a href="${unsubUrl}" style="color:#6b7280;">Unsubscribe</a>`,
           });
           return {
