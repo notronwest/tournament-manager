@@ -26,12 +26,16 @@ export type OrgContact = {
   state: string | null;
   source: ContactSource;
   unsubscribed: boolean;
+  /** When the contact was added to the list (organization_contacts.created_at).
+   * Null for registrants, who are derived live and have no link row. */
+  addedAt: string | null;
 };
 
 type LinkRow = {
   player_id: string;
   source: string;
   unsubscribed_at: string | null;
+  created_at: string | null;
 };
 
 // Fetch the full contact list for an org. Registrants are derived live, so the
@@ -40,7 +44,7 @@ export async function fetchOrgContacts(orgId: string): Promise<OrgContact[]> {
   // (a) imported/manual links
   const { data: linkData, error: linkErr } = await untyped
     .from("organization_contacts")
-    .select("player_id, source, unsubscribed_at")
+    .select("player_id, source, unsubscribed_at, created_at")
     .eq("organization_id", orgId)
     .is("deleted_at", null);
   if (linkErr) throw new Error(linkErr.message);
@@ -80,6 +84,7 @@ export async function fetchOrgContacts(orgId: string): Promise<OrgContact[]> {
       state: p.state,
       source,
       unsubscribed: !!link?.unsubscribed_at,
+      addedAt: link?.created_at ?? null,
     });
   }
   // Stable sort: last name, then first.
