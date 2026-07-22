@@ -6,6 +6,45 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Stripe Connect: destination → DIRECT charges (PR #574)
+
+- **Why:** Ron saw Pickleball Angels registrations passing through the WMPC/
+  platform Stripe balance (gross on his 1099-K + dispute liability) even though
+  it's pass-through to the organizer. Decision: **direct charges, all orgs** —
+  money never touches the platform balance; organizer is merchant of record and
+  absorbs the Stripe processing fee; refunds still driveable from our platform.
+- **Code (PR #574 → `main`):**
+  - `create-payment-intent` + `create-donation-intent`: create the
+    PaymentIntent **on the connected account** (`{ stripeAccount }`), dropped
+    `transfer_data.destination`, kept `application_fee_amount` (registrations)
+    / none (donations). Both now return `connectedAccountId`. Intent
+    retrieve/update also scoped to the connected account.
+  - Frontend `lib/stripe.ts`: singleton → `getStripeForAccount(id)` caching
+    `loadStripe(pk, { stripeAccount })` per connected account. `CheckoutPage` +
+    `DonatePage` init `<Elements>` with the connected-account-scoped instance
+    (direct-charge secrets are connected-account-scoped).
+  - `stripe-refund`: dropped destination-only `reverse_transfer`, scoped both
+    refund calls to `{ stripeAccount: connected_acct }` (from `refund_compute`),
+    guard when it's missing. `refund_application_fee:false` unchanged.
+  - `stripe-webhook`: handler is account-agnostic (keys off `pi.id`/our rows),
+    so **no logic rewrite** — logs `event.account`; header documents the
+    required Dashboard step.
+  - Docs: `docs/STRIPE_CHARGING.md` (model flip + cutover checklist), `CLAUDE.md`
+    #4 (locked decision now direct).
+- **Frontend typechecks clean** (only pre-existing `xlsx` CDN-dep error,
+  unrelated). No schema migration needed (`payments`/`donations` already store
+  `stripe_connected_account_id`; `refund_compute` returns `connected_acct`).
+- **BLOCKER before it works — Ron's manual Stripe step:** events now fire on the
+  connected account, so the webhook endpoint must **"Listen to events on
+  Connected accounts"** (same signing secret). Do on **TEST** first.
+- **Next:** merging #574 → `main` (→ TEST). Then Ron enables Connect events on
+  the TEST webhook → end-to-end test on a test connected account (register+pay →
+  reg flips paid → refund debits connected acct) → then `main`→`production` PR +
+  enable Connect events on PROD webhook. **Money path — do not promote without
+  sign-off.**
+- **Caveat to revisit:** Express (platform-created) connected accounts keep
+  platform dispute/negative-balance liability under Connect rules; Standard
+  (OAuth) accounts — like the Angels' `acct_1Tlc4…` — are fully clean.
 ## 2026-07-22 — Contact email v2: recipient filtering + delivery status page (5-PR stack, IN PROGRESS)
 
 Ron asked for (both, together): recipient **filtering** (individual pick / source

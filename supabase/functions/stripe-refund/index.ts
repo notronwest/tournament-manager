@@ -17,11 +17,14 @@
 //     'withdrawn', no refund. Either stamps withdrawal_decided_at +
 //     withdrawal_decision.
 //
-// Refund mechanics (Connect destination charges): refund by payment_intent
-// with reverse_transfer:true (debit the organizer) and
-// refund_application_fee:false (platform keeps its fee). Idempotent via an
-// idempotencyKey keyed on the registration id, so a double-submit can never
-// double-refund.
+// Refund mechanics (Connect DIRECT charges): the charge lives on the
+// organizer's connected account, so the refund is created scoped to that
+// account ({ stripeAccount: connected_acct }) — refund_compute returns it.
+// There is NO transfer to reverse (direct charges don't create one), so the
+// destination-charge-only `reverse_transfer` is gone; the refund debits the
+// organizer's balance directly. refund_application_fee:false keeps the
+// platform's fee. Idempotent via an idempotencyKey keyed on the registration
+// id, so a double-submit can never double-refund.
 //
 // Env (all already set): STRIPE_SECRET_KEY, SUPABASE_URL, SUPABASE_ANON_KEY,
 // SUPABASE_SERVICE_ROLE_KEY (auto-injected).
@@ -246,19 +249,25 @@ Deno.serve(async (req: Request) => {
       // Approve + money → Stripe refund first (idempotency-keyed).
       if (decision === "approve" && amount > 0) {
         if (!r.payment_intent) return json({ error: "no_payment_intent" }, 409);
+        // Direct charge: the refund must be created on the connected account.
+        if (!r.connected_acct) return json({ error: "no_connected_account" }, 409);
         try {
           await stripe.refunds.create(
             {
               payment_intent: r.payment_intent,
               amount,
-              reverse_transfer: true,
-              refund_application_fee: false,
+              // No reverse_transfer — direct charges have no transfer; the
+              // refund debits the organizer's balance directly.
+              refund_application_fee: false, // platform keeps its fee
               metadata: {
                 event_registration_id: eventRegistrationId,
                 reason: "organizer_manual",
               },
             },
-            { idempotencyKey: `manual_refund_${eventRegistrationId}` },
+            {
+              stripeAccount: r.connected_acct,
+              idempotencyKey: `manual_refund_${eventRegistrationId}`,
+            },
           );
         } catch (e: any) {
           return json({ error: "refund_failed", detail: String(e?.message ?? e) }, 502);
@@ -354,19 +363,25 @@ Deno.serve(async (req: Request) => {
 
     // Paid + money back → issue the Stripe refund, then flip to refunded.
     if (!r.payment_intent) return json({ error: "manual_required" }, 409);
+    // Direct charge: the refund must be created on the connected account.
+    if (!r.connected_acct) return json({ error: "no_connected_account" }, 409);
     try {
       await stripe.refunds.create(
         {
           payment_intent: r.payment_intent,
           amount: r.refund_cents,
-          reverse_transfer: true, // destination charge: debit the organizer
+          // No reverse_transfer — direct charges have no transfer; the refund
+          // debits the organizer's balance directly.
           refund_application_fee: false, // platform keeps its fee
           metadata: {
             event_registration_id: eventRegistrationId,
             reason: "player_withdraw",
           },
         },
-        { idempotencyKey: `refund_${eventRegistrationId}` },
+        {
+          stripeAccount: r.connected_acct,
+          idempotencyKey: `refund_${eventRegistrationId}`,
+        },
       );
     } catch (e: any) {
       return json({ error: "refund_failed", detail: String(e?.message ?? e) }, 502);

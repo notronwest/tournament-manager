@@ -4,15 +4,25 @@
 // completes the [DECIDE]/TODO parts before deploy. Money path: do not
 // ship without sign-off.
 //
-// Creates a Stripe Connect *destination charge* PaymentIntent for the
-// caller's pending_payment registrations in one tournament, records a
-// pending `payments` row + `payment_line_items`, and returns the
-// client_secret for the browser's Stripe Payment Element to confirm.
+// Creates a Stripe Connect *direct charge* PaymentIntent for the caller's
+// pending_payment registrations in one tournament, records a pending
+// `payments` row + `payment_line_items`, and returns the client_secret (and
+// the organizer's connected account id) for the browser's Stripe Payment
+// Element to confirm.
+//
+// DIRECT charge (not destination): the PaymentIntent is created ON the
+// organizer's connected account (`{ stripeAccount: org.stripe_account_id }`),
+// so the funds settle straight into THEIR balance and never pass through the
+// platform's — the organizer is merchant of record (their 1099-K, their
+// statement descriptor) and pays Stripe's processing fee. The platform's only
+// cut is `application_fee_amount`, pulled to the platform account. Because the
+// intent lives on the connected account, its client_secret is
+// connected-account-scoped: the browser must init Stripe.js with the returned
+// connectedAccountId (see web/src/lib/stripe.ts).
 //
 // The amount is computed SERVER-SIDE (never trusted from the client) via
 // the compute_checkout_total RPC, then optionally reduced by a validated
-// coupon. The platform fee + destination account drive the Connect
-// split.
+// coupon. The platform fee drives the Connect split.
 //
 // Platform fee is read from the platform_settings table (no-code,
 // editable by the site super-admin), not from an env var.
@@ -196,7 +206,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "org_stripe_not_active" }, 409);
     }
 
-    // ── 4. Platform fee (Connect destination charge) ────────────────
+    // ── 4. Platform fee (Connect direct charge) ─────────────────────
     // Per-tournament override wins when set (both columns non-null);
     // otherwise fall back to the platform_settings global default. Both
     // are edited no-code by platform admins (per-tournament in the wizard,
@@ -264,10 +274,18 @@ Deno.serve(async (req: Request) => {
       .limit(1)
       .maybeSingle();
 
+    // Direct charges live on the connected account, so every Stripe call for
+    // this intent (retrieve / update / create) must be scoped to it with the
+    // `{ stripeAccount }` request options. A legacy destination-charge intent
+    // (created on the platform account before this cutover) will 404 under the
+    // connected-account scope → caught below → a fresh direct intent is made.
+    const stripeAcct = { stripeAccount: org.stripe_account_id };
+
     if (priorPayment?.stripe_payment_intent_id) {
       try {
         const existing = await stripe.paymentIntents.retrieve(
           priorPayment.stripe_payment_intent_id,
+          stripeAcct,
         );
         if (REUSABLE_INTENT_STATUSES.has(existing.status)) {
           // Resync amount/fee in case the basket or coupon changed since the
@@ -275,11 +293,15 @@ Deno.serve(async (req: Request) => {
           intent =
             existing.amount !== totalCents ||
             existing.application_fee_amount !== platformFeeCents
-              ? await stripe.paymentIntents.update(existing.id, {
-                  amount: totalCents,
-                  application_fee_amount: platformFeeCents,
-                  metadata,
-                })
+              ? await stripe.paymentIntents.update(
+                  existing.id,
+                  {
+                    amount: totalCents,
+                    application_fee_amount: platformFeeCents,
+                    metadata,
+                  },
+                  stripeAcct,
+                )
               : existing;
         }
       } catch (_err) {
@@ -288,14 +310,16 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!intent) {
-      intent = await stripe.paymentIntents.create({
-        amount: totalCents,
-        currency: "usd",
-        automatic_payment_methods: { enabled: true },
-        application_fee_amount: platformFeeCents,
-        transfer_data: { destination: org.stripe_account_id },
-        metadata,
-      });
+      intent = await stripe.paymentIntents.create(
+        {
+          amount: totalCents,
+          currency: "usd",
+          automatic_payment_methods: { enabled: true },
+          application_fee_amount: platformFeeCents,
+          metadata,
+        },
+        stripeAcct,
+      );
     }
 
     // ── 6. Record the pending payment + line items ──────────────────
@@ -332,7 +356,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    return json({ clientSecret: intent.client_secret, paymentId: payment.id }, 200);
+    // connectedAccountId lets the browser init Stripe.js scoped to the org's
+    // connected account — required to confirm a direct-charge client_secret.
+    return json(
+      {
+        clientSecret: intent.client_secret,
+        paymentId: payment.id,
+        connectedAccountId: org.stripe_account_id,
+      },
+      200,
+    );
   } catch (e) {
     return json({ error: String(e?.message ?? e) }, 500);
   }

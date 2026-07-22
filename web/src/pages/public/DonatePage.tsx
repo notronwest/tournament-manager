@@ -7,7 +7,7 @@ import {
   useStripe,
 } from "@stripe/react-stripe-js";
 import { supabase } from "../../supabase";
-import { stripePromise, stripeConfigured } from "../../lib/stripe";
+import { getStripeForAccount, stripeConfigured } from "../../lib/stripe";
 import { formatUsd } from "../../lib/pricing";
 import {
   ink,
@@ -68,6 +68,15 @@ export default function DonatePage() {
   // Flow state.
   const [phase, setPhase] = useState<Phase>("form");
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // Organizer's connected account — direct-charge secrets are scoped to it, so
+  // Stripe.js must be initialised for THIS account (see lib/stripe.ts).
+  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(
+    null,
+  );
+  const stripeForAccount = useMemo(
+    () => (connectedAccountId ? getStripeForAccount(connectedAccountId) : null),
+    [connectedAccountId],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -135,14 +144,20 @@ export default function DonatePage() {
       },
     );
     setSubmitting(false);
-    const res = data as { clientSecret?: string; error?: string } | null;
+    const res = data as {
+      clientSecret?: string;
+      connectedAccountId?: string;
+      error?: string;
+    } | null;
     const cs = res?.clientSecret;
-    if (fnErr || !cs) {
+    const acct = res?.connectedAccountId;
+    if (fnErr || !cs || !acct) {
       const code = await readEdgeErrorCode(fnErr, data);
       setFormError(donationErrorMessage(code));
       return;
     }
     setClientSecret(cs);
+    setConnectedAccountId(acct);
     setPhase("pay");
   };
 
@@ -365,7 +380,7 @@ export default function DonatePage() {
             Donating <strong>{formatUsd(effectiveCents)}</strong> to {orgName}.
           </div>
           <Elements
-            stripe={stripePromise}
+            stripe={stripeForAccount}
             options={{ clientSecret, appearance: { theme: "stripe" } }}
           >
             <DonationPaymentForm
