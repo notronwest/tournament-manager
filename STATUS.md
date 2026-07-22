@@ -4,7 +4,146 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
-Last updated: **2026-07-15**
+Last updated: **2026-07-22**
+
+## 2026-07-20 — Builder board hygiene: #569 reconciled (In Progress → In Review, no dup PR)
+
+- Single-item Builder run tasked with recovering "orphaned In Progress
+  issue #569" (Phase A(a)) — same false premise as #568: `feat/contacts-edge-functions`
+  already had a valid, open PR **#566** (`Closes #569`, `MERGEABLE`/`CLEAN`,
+  checks green) from the org-contacts build documented below.
+- Re-verified independently: checked out the branch in a scratch worktree,
+  confirmed the diff is edge-functions-only (`import-contacts` +
+  `send-contact-broadcast`, no web/UI changes), and read both functions
+  against #569's AC — dedup-by-email import (cap 5000, org-staff gated,
+  never overwrites a matched player) and broadcast (recipients = contacts
+  ∪ registrants, per-org Resend Audience ensure+sync, explicit consent
+  flag) both match.
+- Per the no-duplicate-PR guard, did **not** open a second PR — moved the
+  card from stale **In Progress** to **In Review** and commented on #569
+  explaining the reconciliation (tagged `<!-- wmpc-builder -->`). Flagged
+  in the comment that #565 (migration) must merge before #566 since
+  `send-contact-broadcast` reads tables/columns #565 creates.
+- **Left untouched (out of scope for this single-item run):** #570
+  (PR #567) shows the identical stale-status pattern — same fix, next pass.
+- No code changed this session; main checkout untouched throughout.
+
+## 2026-07-20 — Builder board hygiene: #568 reconciled (In Progress → In Review, no dup PR)
+
+- Single-item Builder run tasked with recovering "orphaned In Progress
+  issue #568" (Phase A(a)) — but the premise didn't hold: `db/organization-contacts`
+  already had a valid, open PR **#565** (from the org-contacts build documented
+  just below) that `Closes #568`, is `MERGEABLE`, and has all checks green
+  (issue-link check, migration lint, Cloudflare preview build).
+- Re-verified independently: checked out the branch in a scratch worktree,
+  `npm run typecheck` + `npm run build` both clean; diff matches #568's AC
+  (new `organization_contacts` table, RLS via `is_org_member`, nullable
+  `organizations.resend_audience_id`, additive-only migration).
+- Per the no-duplicate-PR guard, did **not** open a second PR — instead moved
+  the board card's status from stale **In Progress** to **In Review** to match
+  reality, and commented on #568 explaining the reconciliation
+  (tagged `<!-- wmpc-builder -->`).
+- **Left untouched (out of scope for this single-item run):** #569 (PR #566)
+  and #570 (PR #567) show the identical stale-status pattern (In Progress with
+  an already-open, valid, linked PR) — same fix, just not done in this run.
+  Next Builder pass (or Ron) should reconcile those two the same way.
+- No code changed this session; main checkout untouched throughout.
+
+## 2026-07-22 — Org contact lists MERGED to main → LIVE on TEST (#565/#566/#567)
+
+Merged all three in order (#565→#566→#567, squash). CI green:
+- **Apply DB migrations (test): success** — `organization_contacts` + `resend_audience_id`
+  now on TEST Supabase.
+- **Deploy edge functions (test): success** — `import-contacts` + `send-contact-broadcast`
+  live on TEST.
+- Cloudflare TEST frontend rebuilds from `main` → Contacts page at
+  `/admin/:orgSlug/contacts`. **NOT promoted to production.**
+- Closed #568/#569/#570; umbrella #564 can close when verified.
+
+**Next / prereqs before it actually sends:**
+1. **Regenerate types from TEST** (`web/src/types/supabase.ts`) now `organization_contacts`
+   is applied, then drop the cast in `lib/orgContacts.ts` (CLI is linked to prod — needs
+   `supabase link` to TEST + the test DB password). Cosmetic; app works via the cast.
+2. **Resend account must have Broadcasts + Audiences enabled** (paid feature) or the send
+   errors. Confirm `audience_id`↔`segment_id` field name against the live API.
+3. **Smoke on `test.bertanderne.com`:** import a CSV + an XLSX (dedup + skipped counts),
+   then email an org whose only contact is your own address first; unsubscribe + re-send
+   to confirm suppression. Then promote main→production when happy.
+
+## 2026-07-20 — Org contact lists: import CSV/XLSX + email all contacts (3 PRs open, #565/#566/#567)
+
+Ron: club owners want to **import contacts** from a `.csv`/`.xls`/`.xlsx` file and
+**email everyone on their contact list** — "contacts and players in the same table."
+
+- **Design tension resolved:** `players` is the shared global table (locked #2, no
+  org column) and registrants live in tournament+fee-scoped `registrations` — neither
+  can hold a plain contact. Ron picked the **tiny link table**: person data stays in
+  `players`; a new `organization_contacts (org_id, player_id, source)` only stores
+  imported/manual people. **The full list = links ∪ registrants, computed at read
+  time** (no backfill, no trigger, never stale). Send via **Resend Broadcasts +
+  Audiences** (one Audience per org; Resend owns unsubscribe/suppression/reputation).
+  Import parses **client-side (SheetJS)** — raw file never uploaded.
+- Built as **3 ordered PRs** (never-bundle rule), all green locally, NOT merged:
+  - **#565 [DB]** `db/organization-contacts` — `organization_contacts` table + RLS
+    (`is_org_member`) + `organizations.resend_audience_id`. Additive only.
+  - **#566 [Functions]** `feat/contacts-edge-functions` — `import-contacts` (dedup
+    players by email, never mutates shared rows, link w/ `source:'import'`, cap 5000)
+    + `send-contact-broadcast` (union recipients, ensure+sync Resend Audience,
+    create+send Broadcast, consent flag, unsubscribe footer). `cancel-tournament`
+    auth pattern; `deno lint` clean.
+  - **#567 [UI]** `feat/org-contacts-page` — `/admin/:orgSlug/contacts` (nav + route):
+    unioned list w/ source pills + search + remove; import panel (SheetJS parse +
+    header auto-map + preview); compose panel (subject/body + emailable count +
+    required permission checkbox + ConfirmModal). `lib/orgContacts.ts` casts the
+    client for `organization_contacts` until types regen (registrationCounts
+    precedent). SheetJS pinned to official CDN `xlsx-0.20.3` (npm's is vuln 0.18.5).
+- **Verify done:** web `typecheck` + `build` pass, new files `eslint` clean (repo's 31
+  pre-existing lint problems unchanged); SheetJS parse + auto-map validated in
+  isolation. **NOT** browser-E2E'd (auth-gated + migration not on TEST yet).
+- **Merge order + prereqs:** merge **#565 → #566 → #567**. After #565 hits TEST,
+  **regenerate `web/src/types/supabase.ts`** and drop the `orgContacts.ts` cast
+  (follow-up). **Resend account must have Broadcasts + Audiences enabled.** Confirm
+  the `audience_id`↔`segment_id` field name against the live API at deploy (flagged
+  in-code). Story: #564. Follow-ups: per-org sender branding/domain; import-time
+  incremental Audience sync; segments/subset sends; manual "add a contact" form.
+
+## 2026-07-16 — Pickleball Angels flyer hosted + promoted to prod (#558/#559/#561)
+
+- Ron's customer couldn't email the 5th-annual Pickleball Angels flyer (embedded/attached image
+  getting blocked/bloated). Fix: host it + give a copy-paste page.
+- Added two static assets under `web/public/email/` (same pattern as `logo@2x.png`):
+  - `pickleball-angels-2026.png` (the flyer, 1080x1350, green version)
+  - `pickleball-angels-flyer.html` — shows the flyer, one-click **Copy flyer for email** button
+    (writes a linked `<img>` referencing the prod URL to the clipboard), paste instructions.
+- **No app/route/DB changes.** #559 → main (TEST verified image/png). Promotion #561 (main→production,
+  merge commit `4dc224c`) → PROD; **LIVE + verified in real Chrome**:
+  - https://pickleballangels.com/email/pickleball-angels-2026.png (image/png, 785,023 bytes)
+  - https://pickleballangels.com/email/pickleball-angels-flyer.html (flyer renders, Copy button → "Copied!")
+- Promotion batch was docs + static assets only (no migrations/functions) — clean.
+
+## 2026-07-15 — Quote: split "WMPC cost" from PickleballBrackets fee (#563)
+
+- Ron flagged quote `a2db1d13…`: "WMPC cost $2,850" was the **all-in** (B&E
+  services + pass-through PBB fee), shown alongside a redundant "PBB fee" + "B&E
+  take". Math was correct ($1,900 + $950 = $2,850) — the *framing* was wrong.
+- **Fix #563** (`fix/quote-wmpc-cost-split-pbb-fee`, closes #562): reframe from
+  WMPC's perspective on ALL quote surfaces — **WMPC cost = all-in − passthrough**
+  ($1,900), **PickleballBrackets fee** shown separately ($950), drop the all-in
+  total. New shared `wmpcServiceCostCents()` helper. Admin editor (live +
+  revision), customer quote (identifies passthrough via the `is_passthrough`
+  catalog flag), contract footer. Removed the redundant "B&E take" admin cell.
+- **Display-only** — stored `subtotal_cents` unchanged; no migration.
+- tsc + build + quotePricing tests (6) pass. **MERGED to main** (`cf22eba`) →
+  deployed to TEST only. **NOT on production** — the flagged quote `a2db1d13…`
+  lives on PROD, so it won't reflect the fix until `main`→`production` is
+  promoted (main is 3 ahead of production).
+- **Heads-up:** the working tree had a **pre-existing parallel implementation**
+  of this same fix (from branch `fix/quote-wmpc-cost-passthrough-split` — adds a
+  `wmpcCostCents` field to the pricing *engine* + a test, vs #563's display-site
+  `wmpcServiceCostCents()` helper). #563 supersedes it. I **stashed** it
+  (`stash@{0}` on this machine) rather than discard — recoverable if the
+  engine-field architecture is preferred instead.
+- **NOT yet eyeballed on the live authed quote page** (needs login/token).
 
 ## 2026-07-15 — Promoted to production (#557)
 
