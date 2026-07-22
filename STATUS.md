@@ -6,6 +6,15 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Dev/test tools restricted to platform admins (#587)
+
+Ron: RR estimator, Seed test data, Test players, Danger zone should be
+platform-admin-only. Fix (PR #587, closes #586): sidebar links for the 3 tools
+now gated to `isPlatformAdmin === true` (Danger zone already was) + new
+`RequirePlatformAdmin` route guard on the 3 tool routes (bounces org admins to
+the org overview). OrgDangerZonePage already self-guards. Frontend-only; tsc+build
+clean; not visually verified (login-gated).
+
 ## 2026-07-22 — Contact email v2 fully on TEST (HTML #585 merged)
 
 #585 (HTML body) merged to main (`a19a016`). The whole contact-email v2 is now
