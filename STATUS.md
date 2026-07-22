@@ -3,8 +3,221 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-Current state: **PROD PROMOTED (#557) — `production` level with `main` (0 behind): registered-players count LIVE on prod (card + header), auth profile-probe fixes (#547/#548), CLAUDE wmpc-meta sync. 2 RPC migrations applied to PROD Supabase (additive, CI success). Verified on bertanderne.com: card "1 player registered", header "Registered · 1 player", env banner correctly hidden on prod. Prior prod promo #541. Fee-override PR B (wizard UI) still pending type regen.**
+Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
+
+## 2026-07-22 — Contact email: HTML body support (#585)
+
+Ron: clubs will want to paste HTML formatting. Built (PR #585, closes #584):
+`send-contact-broadcast` takes optional `bodyIsHtml` → sends body as raw HTML
+inside the branded layout (else plain-text escaped). Compose box gets a
+Plain text / HTML toggle + a sandboxed-iframe preview. Plain text stays default.
+No stored-XSS: the history page (ContactEmailsPage) renders subject only, never
+body. [FN]+[UI], no migration. tsc+build clean; not visually verified (login-gated).
+
+## 2026-07-22 — PROD promotion PR #583 OPEN (direct charges + contact-email v2 + wizard fix) — NOT merged
+
+`main`→`production` PR **#583** open (deploys to PROD on merge). Ron chose "promote
+everything" — the promotion carries ALL of `main` ahead of `production`, not just
+the Stripe change:
+- **Direct charges** (#574) — verified end-to-end on TEST.
+- **Contact-email v2** (#573/#576/#578/#580) — migration
+  `20260722130000_contact_broadcast_tracking.sql` is **additive** (2 new tables,
+  RLS, no ALTER/DROP on existing) — verified safe. Needs `RESEND_WEBHOOK_SECRET`
+  on PROD.
+- **Wizard save fix** (#582).
+
+**BLOCKING PROD manual steps — do BEFORE merging #583 (money path, needs sign-off):**
+1. **PROD Stripe webhook** = the exact thing that stuck TEST: PROD Stripe endpoint
+   must receive **Connected-account events**, and PROD `STRIPE_WEBHOOK_SIGNING_SECRET`
+   must MATCH that destination's signing secret — else live regs charge but never
+   flip to paid. Do in a low-traffic window (brief in-flight platform-event gap;
+   Stripe retries ~3 days).
+2. **`RESEND_WEBHOOK_SECRET` on PROD** + point Resend webhook at `resend-webhook`
+   (contact-email v2 delivery tracking).
+
+**Post-merge PROD smoke test:** real registration → flips to paid, funds on connected
+account, only app fee on platform ledger; verify each org's connected account
+**statement descriptor** (customers now see the connected account's descriptor, not
+the platform's — WMPC's own account should read "White Mountain Pickleball Club").
+
+**Status: HOLDING for Ron** to set PROD webhook + secret and pick a merge window.
+
+## 2026-07-22 — Direct charges FULLY GREEN on TEST end-to-end (webhook fixed)
+
+Follow-up to the verify entry below. The webhook was NOT flipping regs to paid:
+payment succeeded on the connected account but the reg sat unpaid ("Payment
+received… finalizing… refresh" limbo). Ruled out on our side — endpoint live
+(unsigned POST → 400 sig-check), `verify_jwt=false` in config.toml, deployed code
+correct. Root cause was the **Stripe event-destination config / signing secret**
+for Connected-account events (the manual step). Ron fixed it → **resolved**.
+
+- **Full direct-charge path now works end-to-end on TEST**, through the real UI:
+  registration checkout completes a direct charge → webhook flips the reg to paid.
+  Ron's earlier "client_secret does not match" was confirmed to be a **stale cached
+  frontend** (fixed by hard-refresh).
+- **Verified surfaces:** intent created on connected account · connected-account-
+  scoped Stripe.js confirm · connected-account refund path (code) · webhook
+  receiving Connected-account events + flipping regs.
+- **How Ron verifies "funneling correctly":** platform ledger now shows ONLY the
+  app fee per registration (no +$75 charge / −$75 transfer pair like the old
+  destination-charge ledger); donations = $0 platform entries; full charge lands on
+  the connected account (Connect → Accounts → the org). Cleanest view: Connect →
+  Application fees.
+- **NEXT — prod promotion (money path, needs sign-off):** `main`→`production` PR,
+  AND repeat the **Connected-accounts webhook setup on the PROD Stripe account**
+  (event destination set to Connected accounts + `STRIPE_WEBHOOK_SIGNING_SECRET`
+  matching that destination's secret) — otherwise PROD regs hit the same
+  paid-but-stuck-unpaid limbo. Bake into the promotion checklist.
+
+## 2026-07-22 — Direct charges VERIFIED working on TEST (#574 follow-up)
+
+Deployed #574 to TEST and ran end-to-end verification against the live TEST site
+(`tournament-manager-test.pages.dev`, donation flow — anonymous, no login needed).
+
+- **Fix verified at the Stripe level.** Completed a real TEST-mode direct charge
+  programmatically (scoped `window.Stripe(pk,{stripeAccount})` + Stripe synthetic
+  test PM) on the WMPC connected account `acct_1TdCzTBfxtiBn6ne`:
+  `pi_3Tw1W5BfxtiBn6ne0e1ElEG5` → **status `succeeded`**. Intent created on the
+  connected account, confirmed with connected-account scoping — the exact money
+  path we shipped, working.
+- **Diagnosed Ron's "client_secret does not match any PaymentIntent" error:** it's
+  the scoping mismatch. Proved on the live bundle that **unscoped** Stripe.js
+  reproduces his exact error while **scoped** resolves fine. Deployed frontend is
+  CORRECT (`getStripeForAccount` ships as `loadStripe(pk,{stripeAccount})`; both
+  CheckoutPage + DonatePage use it). Conclusion: his error was a **stale cached
+  frontend** (old unscoped bundle hitting the new connected-account intent).
+- **Could NOT complete verification two ways:** (a) the in-app browser can't type
+  into Stripe's cross-origin card iframe (had to confirm via API instead); (b) the
+  `donations` table is RLS-blocked for anon, so I can't read the webhook's row flip.
+- **PENDING Ron (2 checks):** (1) hard-refresh / private window → run a real `4242`
+  UI payment to confirm his browser now gets the fixed bundle; (2) confirm the
+  **webhook** flipped it — Stripe TEST Dashboard → Connected-accounts destination →
+  delivery for `pi_3Tw1W5…` = HTTP 200, and/or admin donations report shows the
+  **$25 "E2E Direct-Charge" donation (id `566c25a5-c1f5-4f41-a5dd-6286270287c8`)**
+  as *succeeded*. If pending → webhook Connected-events setting needs a look.
+- **Then:** `main`→`production` PR + enable Connect events on the PROD webhook.
+  **Money path — do not promote without sign-off.** Left a $25 test donation on TEST.
+
+## 2026-07-22 — Wizard Save button now confirms the save (#582)
+
+Ron: the edit-mode section Save button showed "Saving…" then reverted to "Save"
+with no success signal. Fix (PR #582, closes #581): transient `justSaved` →
+button flips to green "✓ Saved" for 2.5s on a successful `saveCurrentStep`, then
+reverts. Save/error logic unchanged. Covers the main section Save (Basics /
+Pricing / Cancellation / Content / FAQs / Sponsors); the embedded self-saving
+panels (Coupons/Contacts/Payment) have their own buttons — extend there if Ron
+means one of those. tsc+build clean; not visually verified (login-gated).
+
+## 2026-07-22 — Stripe Connect: destination → DIRECT charges (PR #574)
+
+- **Why:** Ron saw Pickleball Angels registrations passing through the WMPC/
+  platform Stripe balance (gross on his 1099-K + dispute liability) even though
+  it's pass-through to the organizer. Decision: **direct charges, all orgs** —
+  money never touches the platform balance; organizer is merchant of record and
+  absorbs the Stripe processing fee; refunds still driveable from our platform.
+- **Code (PR #574 → `main`):**
+  - `create-payment-intent` + `create-donation-intent`: create the
+    PaymentIntent **on the connected account** (`{ stripeAccount }`), dropped
+    `transfer_data.destination`, kept `application_fee_amount` (registrations)
+    / none (donations). Both now return `connectedAccountId`. Intent
+    retrieve/update also scoped to the connected account.
+  - Frontend `lib/stripe.ts`: singleton → `getStripeForAccount(id)` caching
+    `loadStripe(pk, { stripeAccount })` per connected account. `CheckoutPage` +
+    `DonatePage` init `<Elements>` with the connected-account-scoped instance
+    (direct-charge secrets are connected-account-scoped).
+  - `stripe-refund`: dropped destination-only `reverse_transfer`, scoped both
+    refund calls to `{ stripeAccount: connected_acct }` (from `refund_compute`),
+    guard when it's missing. `refund_application_fee:false` unchanged.
+  - `stripe-webhook`: handler is account-agnostic (keys off `pi.id`/our rows),
+    so **no logic rewrite** — logs `event.account`; header documents the
+    required Dashboard step.
+  - Docs: `docs/STRIPE_CHARGING.md` (model flip + cutover checklist), `CLAUDE.md`
+    #4 (locked decision now direct).
+- **Frontend typechecks clean** (only pre-existing `xlsx` CDN-dep error,
+  unrelated). No schema migration needed (`payments`/`donations` already store
+  `stripe_connected_account_id`; `refund_compute` returns `connected_acct`).
+- **BLOCKER before it works — Ron's manual Stripe step:** events now fire on the
+  connected account, so the webhook endpoint must **"Listen to events on
+  Connected accounts"** (same signing secret). Do on **TEST** first.
+- **Next:** merging #574 → `main` (→ TEST). Then Ron enables Connect events on
+  the TEST webhook → end-to-end test on a test connected account (register+pay →
+  reg flips paid → refund debits connected acct) → then `main`→`production` PR +
+  enable Connect events on PROD webhook. **Money path — do not promote without
+  sign-off.**
+- **Caveat to revisit:** Express (platform-created) connected accounts keep
+  platform dispute/negative-balance liability under Connect rules; Standard
+  (OAuth) accounts — like the Angels' `acct_1Tlc4…` — are fully clean.
+## 2026-07-22 — Contact email v2: MERGED to main → LIVE ON TEST (#573/#576/#578/#580)
+
+All 4 PRs merged (main `7c04965`). **TEST pipeline green:** Apply DB migrations
+success (tracking tables), Deploy edge functions success (send-contact-broadcast
+rewritten + unsubscribe-contact + resend-webhook). Ron set `RESEND_WEBHOOK_SECRET`
+on the TEST Supabase project (from the TEST Resend webhook's signing secret).
+**Next:** smoke-test on `test.bertanderne.com` (import → filter/pick → send to
+self → check unsubscribe one-click → Email history fills in delivered/opened),
+then promote `main`→`production` AND set up a SEPARATE prod Resend webhook +
+`RESEND_WEBHOOK_SECRET` on PROD. Still UNVERIFIED at runtime until the smoke test.
+
+## 2026-07-22 — Contact email v2: recipient filtering + delivery status page (4-PR stack, ALL BUILT — awaiting merge)
+
+Ron asked for (both, together): recipient **filtering** (individual pick / source
+imported-vs-manual / date added / registration status) + a **delivery status
+page** (delivered/opened/clicked/bounced/unsubscribed). Decision: **switch all
+contact email to Resend batch-send** (per-recipient email ids → clean tracking +
+filtering; we own the unsubscribe link + `organization_contacts.unsubscribed_at`,
+instead of Resend Broadcast's built-in one).
+
+**Stack (4 PRs — merged the two functions into one FN PR):**
+1. **[DB]** `contact_broadcasts` + `contact_broadcast_recipients`, RLS
+   org-read/server-write. **Per-recipient EVENT TIMESTAMPS** (delivered_at/
+   opened_at/…/unsubscribed_at) — status counts derive by aggregation (race-free
+   under at-least-once webhook delivery), no rollup columns. → **PR #573 (closes
+   #572) — DONE, green.**
+2. **[FN]** `send-contact-broadcast` rewritten to batch-send + optional
+   `playerIds` subset + logs recipient rows; new public `unsubscribe-contact`
+   (HMAC token signed with service-role key → sets `unsubscribed_at`); new
+   `resend-webhook` (Svix-verified, needs `RESEND_WEBHOOK_SECRET`) → advances
+   recipient timestamps/status. Shared `_shared/unsubscribe.ts`. → **PR #576
+   (closes #575) — DONE, in CI. UNVERIFIED (no local Deno run) — smoke-test on
+   TEST after merge.**
+3. **[UI filters]** OrgContactsPage: source/date-added/subscribed filters +
+   per-row checkboxes + select-all + live count → passes explicit `playerIds`.
+   Adds `addedAt` to lib/orgContacts. → **PR #578 (closes #577) — DONE, green.
+   tsc+build clean.**
+4. **[UI status]** Email history page: per-send delivered/opened/clicked/bounced/
+   unsub counts (aggregated from recipient timestamps) + per-recipient drill-down;
+   nav link + `contacts/emails` route; `lib/contactBroadcasts`. → **PR #580
+   (closes #579) — DONE, green. tsc+build clean.**
+- **All 4 green. Merge order: #573 → #576 → #578 → #580** (DB → FN → UIs).
+- **NOT verified** — the functions can't run locally (Deno); the admin UIs are
+  login-gated. Smoke-test on TEST after merge: import, filter+pick, send, watch
+  the status page fill in.
+- **Manual step for Ron (once #576 is on TEST/PROD):** create a Resend webhook —
+  events `email.delivered/opened/clicked/bounced/complained/delivery_delayed` —
+  pointing at `https://<project-ref>.supabase.co/functions/v1/resend-webhook`
+  (TEST ref `mvkhdsauaqqjehxdnbuf`, PROD ref `wducsjqyoksmluwfgjxc`), then set its
+  `whsec_…` signing secret as the `RESEND_WEBHOOK_SECRET` Supabase secret per
+  project. Until that's set, sends/filters/unsubscribe still work; only the
+  delivery *status* counts stay empty.
+
+## 2026-07-22 — Promoted to production (#571): contact manager + quote split
+
+- Merged `main`→`production` (`17f797f`), 11 commits. **PROD pipeline all green:**
+  Apply DB migrations (prod) success, Deploy edge functions (prod) success,
+  frontend build success.
+- **Org contact manager LIVE on prod** (#565 DB / #566 fns / #567 UI): import
+  contacts from CSV/XLSX + email the whole org list via Resend Broadcasts
+  (required consent check). Migration additive (new `organization_contacts`
+  table + RLS, nullable `organizations.resend_audience_id`); no destructive ops.
+  Resend secrets already set on prod.
+- **Quote WMPC-cost/PBB-fee split LIVE on prod** (#563) — the flagged quote
+  `a2db1d13…` should now read WMPC cost $1,900 · PickleballBrackets fee $950.
+- **NOT visually verified on the authed admin pages** (contacts + quotes need
+  login) — backend + build all green; recommend a real smoke test on prod:
+  import a small CSV and send yourself a broadcast, and eyeball quote
+  `a2db1d13…`. Offered to log in via secure autofill to verify if wanted.
+- Stash `stash@{0}` still holds the superseded parallel quote impl.
 
 ## 2026-07-20 — Builder board hygiene: #569 reconciled (In Progress → In Review, no dup PR)
 

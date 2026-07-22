@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -44,7 +45,7 @@ import {
   useElements,
   useStripe,
 } from "@stripe/react-stripe-js";
-import { stripePromise, stripeConfigured } from "../../lib/stripe";
+import { getStripeForAccount, stripeConfigured } from "../../lib/stripe";
 import { trackEvent } from "../../lib/analytics";
 import type { Database } from "../../types/supabase";
 
@@ -108,10 +109,23 @@ export default function CheckoutPage() {
   // its clientSecret and render the Payment Element. creatingIntent
   // covers step 1; finalizing covers the post-confirm webhook poll.
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  // The organizer's connected account id, returned by create-payment-intent.
+  // Direct-charge client secrets are connected-account-scoped, so Stripe.js
+  // must be initialised for THIS account (see lib/stripe.ts) — a plain
+  // platform instance can't confirm the intent.
+  const [connectedAccountId, setConnectedAccountId] = useState<string | null>(
+    null,
+  );
   // The payment row id returned by create-payment-intent. Needed to
   // load the receipt line items from payment_line_items after the
   // webhook confirms.
   const [paymentId, setPaymentId] = useState<string | null>(null);
+  // Stripe.js instance scoped to the organizer's connected account. Memoised
+  // per account id so <Elements> gets a stable promise across re-renders.
+  const stripeForAccount = useMemo(
+    () => (connectedAccountId ? getStripeForAccount(connectedAccountId) : null),
+    [connectedAccountId],
+  );
   const [creatingIntent, setCreatingIntent] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -476,6 +490,9 @@ export default function CheckoutPage() {
     const res = data as {
       clientSecret?: string;
       paymentId?: string;
+      // The organizer's connected account — direct-charge secrets are scoped
+      // to it, so the browser needs it to init Stripe.js.
+      connectedAccountId?: string;
       error?: string;
       // Free registration ($0) — the function confirmed the regs server-side
       // (flipped to paid + fired partner invites). No Stripe step.
@@ -488,17 +505,21 @@ export default function CheckoutPage() {
       return;
     }
     const cs = res?.clientSecret;
-    if (fnErr || !cs) {
+    const acct = res?.connectedAccountId;
+    if (fnErr || !cs || !acct) {
       // On a non-2xx the SDK puts its generic "Edge Function returned a
       // non-2xx status code" in fnErr.message and leaves `data` null — the
       // function's real { error: code } is in fnErr.context. Read it and map
-      // to user-safe copy; never surface the raw SDK/Stripe string.
+      // to user-safe copy; never surface the raw SDK/Stripe string. A 2xx that
+      // somehow lacks the connected account can't be confirmed (direct charge),
+      // so it falls here too.
       const code = await readEdgeErrorCode(fnErr, data);
       setPaymentError(paymentErrorMessage(code));
       setPaymentErrorCode(code);
       return;
     }
     setClientSecret(cs);
+    setConnectedAccountId(acct);
     setPaymentId(res?.paymentId ?? null);
   };
 
@@ -1132,7 +1153,7 @@ export default function CheckoutPage() {
           ) : (
             <div style={{ marginTop: 14 }}>
               <Elements
-                stripe={stripePromise}
+                stripe={stripeForAccount}
                 options={{ clientSecret, appearance: { theme: "stripe" } }}
               >
                 <PaymentSection

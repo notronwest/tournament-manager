@@ -204,3 +204,14 @@ verify_jwt = false
 # service_role; there is no client write path.
 [functions.create-donation-intent]
 verify_jwt = false
+
+# One-click unsubscribe for contact-list emails — reached from an email link or
+# an RFC 8058 List-Unsubscribe-Post. No Supabase JWT; the HMAC token (signed
+# with the service-role key) is the authentication.
+[functions.unsubscribe-contact]
+verify_jwt = false
+
+# Resend calls this endpoint server-to-server with no Supabase JWT; the Svix
+# signature check (RESEND_WEBHOOK_SECRET) inside the function is the auth.
+[functions.resend-webhook]
+verify_jwt = false

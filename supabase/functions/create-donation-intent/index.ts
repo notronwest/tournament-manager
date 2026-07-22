@@ -1,9 +1,15 @@
 // supabase/functions/create-donation-intent/index.ts
 //
-// Charity donations P1 (#377). Creates a Stripe Connect *destination
-// charge* PaymentIntent for an ANONYMOUS public donation to a tournament's
+// Charity donations P1 (#377). Creates a Stripe Connect *direct charge*
+// PaymentIntent for an ANONYMOUS public donation to a tournament's
 // organizer, records a pending `donations` row, and returns the
-// client_secret for the browser's Stripe Payment Element to confirm.
+// client_secret (+ the organizer's connected account id) for the browser's
+// Stripe Payment Element to confirm.
+//
+// DIRECT charge (not destination): the intent is created ON the organizer's
+// connected account, so the donation settles straight into their balance and
+// never touches the platform's. The browser must init Stripe.js with the
+// returned connectedAccountId to confirm the connected-account-scoped secret.
 //
 // Mirrors create-payment-intent, with three deliberate differences:
 //   1. ANONYMOUS — no JWT (verify_jwt = false in config.toml). Anyone can
@@ -128,27 +134,32 @@ Deno.serve(async (req: Request) => {
       return json({ error: "org_stripe_not_active" }, 409);
     }
 
-    // ── 3. Create the PaymentIntent (destination charge, NO platform fee)
-    const intent = await stripe.paymentIntents.create({
-      amount: amountCents,
-      currency: "usd",
-      automatic_payment_methods: { enabled: true },
-      // NO application_fee_amount — 100% to the organizer (minus Stripe's
-      // own processing fee). This is the whole point of the donation flow.
-      transfer_data: { destination: org.stripe_account_id },
-      // Stripe's built-in email receipt — no Resend wiring needed (#377).
-      receipt_email: donorEmail,
-      description: `Donation — ${tournament.id}`,
-      metadata: {
-        // The webhook routes on this. Must be present so a donation intent
-        // is never mistaken for a registration payment (and vice-versa).
-        type: "donation",
-        tournament_id: tournament.id,
-        organization_id: tournament.organization_id,
-        donor_email: donorEmail,
-        base_url: (baseUrl ?? "").replace(/\/+$/, "").slice(0, 200),
+    // ── 3. Create the PaymentIntent (direct charge, NO platform fee) ──
+    // Created ON the organizer's connected account ({ stripeAccount }), so
+    // 100% (minus Stripe's own processing fee, which the connected account
+    // pays) lands in their balance — never the platform's.
+    const intent = await stripe.paymentIntents.create(
+      {
+        amount: amountCents,
+        currency: "usd",
+        automatic_payment_methods: { enabled: true },
+        // NO application_fee_amount — the platform takes nothing on donations
+        // (registration fees still do). This is the whole point of the flow.
+        // Stripe's built-in email receipt — no Resend wiring needed (#377).
+        receipt_email: donorEmail,
+        description: `Donation — ${tournament.id}`,
+        metadata: {
+          // The webhook routes on this. Must be present so a donation intent
+          // is never mistaken for a registration payment (and vice-versa).
+          type: "donation",
+          tournament_id: tournament.id,
+          organization_id: tournament.organization_id,
+          donor_email: donorEmail,
+          base_url: (baseUrl ?? "").replace(/\/+$/, "").slice(0, 200),
+        },
       },
-    });
+      { stripeAccount: org.stripe_account_id },
+    );
 
     // ── 4. Record the pending donation ──────────────────────────────
     // Upsert on the unique stripe_payment_intent_id so a retried call
@@ -173,7 +184,14 @@ Deno.serve(async (req: Request) => {
       .single();
     if (dErr || !donation) return json({ error: "donation_record_failed" }, 500);
 
-    return json({ clientSecret: intent.client_secret, donationId: donation.id }, 200);
+    return json(
+      {
+        clientSecret: intent.client_secret,
+        donationId: donation.id,
+        connectedAccountId: org.stripe_account_id,
+      },
+      200,
+    );
   } catch (e) {
     return json({ error: String(e?.message ?? e) }, 500);
   }
