@@ -6,6 +6,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#571) — `production` level with `main` (0 behind): org CONTACT MANAGER now LIVE on prod (import CSV/XLSX + email-all via Resend, #565/#566/#567) and the quote WMPC-cost/PBB-fee split (#563). PROD pipeline all green: Apply DB migrations (organization_contacts + organizations.resend_audience_id, additive) + Deploy edge functions (import-contacts, send-contact-broadcast) + frontend build. Prior prod promo #557 (registered-players count). Fee-override PR B (wizard UI) still pending type regen.**
 Last updated: **2026-07-22**
 
+## 2026-07-22 — Wizard Save button now confirms the save (#582)
+
+Ron: the edit-mode section Save button showed "Saving…" then reverted to "Save"
+with no success signal. Fix (PR #582, closes #581): transient `justSaved` →
+button flips to green "✓ Saved" for 2.5s on a successful `saveCurrentStep`, then
+reverts. Save/error logic unchanged. Covers the main section Save (Basics /
+Pricing / Cancellation / Content / FAQs / Sponsors); the embedded self-saving
+panels (Coupons/Contacts/Payment) have their own buttons — extend there if Ron
+means one of those. tsc+build clean; not visually verified (login-gated).
+
 ## 2026-07-22 — Stripe Connect: destination → DIRECT charges (PR #574)
 
 - **Why:** Ron saw Pickleball Angels registrations passing through the WMPC/
