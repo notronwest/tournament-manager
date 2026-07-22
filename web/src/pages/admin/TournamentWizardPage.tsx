@@ -174,6 +174,14 @@ export default function TournamentWizardPage() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Brief "✓ Saved" confirmation on the section Save button after a successful
+  // save (the section stays put in edit mode, so the button is the only signal).
+  const [justSaved, setJustSaved] = useState(false);
+  useEffect(() => {
+    if (!justSaved) return;
+    const t = setTimeout(() => setJustSaved(false), 2500);
+    return () => clearTimeout(t);
+  }, [justSaved]);
   const [loadingDraft, setLoadingDraft] = useState(isResume);
   // Soft-required publish warning modal (cancellation policy, Stripe).
   const [showPublishWarning, setShowPublishWarning] = useState(false);
@@ -972,11 +980,19 @@ export default function TournamentWizardPage() {
             // this is a no-op there).
             <button
               type="button"
-              style={btnPrimary(busy)}
-              onClick={() => void saveCurrentStep()}
+              style={{
+                ...btnPrimary(busy),
+                ...(justSaved && !busy ? { background: courtGreen } : {}),
+              }}
+              onClick={async () => {
+                setJustSaved(false);
+                const ok = await saveCurrentStep();
+                if (ok) setJustSaved(true);
+              }}
               disabled={busy}
+              aria-live="polite"
             >
-              {busy ? "Saving…" : "Save"}
+              {busy ? "Saving…" : justSaved ? "✓ Saved" : "Save"}
             </button>
           ) : (
             <button
