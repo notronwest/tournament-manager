@@ -6,6 +6,17 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-23 — Nightly E2E regression triaged + fixed (#590)
+
+Nightly regression (run 30002630063) failed 2/40. Re-ran to separate flaky from
+real: **register.spec 'needs a partner' + issue-09 'backing out' → FLAKY** (passed
+on re-run; shared-TEST-env timing, NOT the direct-charges change). **self-service
+'my tournaments' → REAL, deterministic:** strict-mode 'E2E Self-Service Cup
+resolved to 2 elements' (the shared TEST DB has that tournament name twice).
+Fix (PR #590, closes #589): scope both assertions with `.first()` — the test
+asserts the viewer sees THEIR reg, not global name uniqueness. Test-only. Note:
+duplicate `E2E Self-Service Cup` data exists on the TEST DB (harmless; cleanup TBD).
+
 ## 2026-07-22 — Promoted to production (#588): platform-admin-only tools
 
 Merged `main`→`production` (`1c58299`). **Frontend-only — no migrations/functions**
