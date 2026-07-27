@@ -6,6 +6,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-27 — Promoted editable reply-to + club default to PROD (#596)
+
+Merged #595 to main (→TEST, edge-fn deploy green), then promotion PR #596
+(main→production) admin-merged (only failing check the expected issue-ref gate).
+PROD edge-function deploy green — send-contact-broadcast now live on PROD with
+validated per-send replyTo (precedence override → org default → sender), and the
+contacts compose panel ships the Reply-to field + admin "Save as club default"
+(writes organizations.contact_email). No migrations. Next: none pending — feature
+complete on TEST + PROD.
+
 ## 2026-07-27 — Contact email: editable reply-to + saveable club default (#595)
 
 Follow-up to #592 (Ron: "Both"). PR #595 (closes #594) adds reply-to controls to
