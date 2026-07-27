@@ -50,8 +50,15 @@ type Body = {
   // the branded layout. When false/omitted, `body` is plain text (escaped, blank
   // lines → paragraphs).
   bodyIsHtml?: boolean;
+  // Per-send Reply-To override. When omitted, we fall back to the org's saved
+  // default (organizations.contact_email) and then to the sending admin's email.
+  replyTo?: string;
 };
 type Recipient = { playerId: string; email: string; first: string; last: string };
+
+// Lightweight email shape check — enough to reject obvious garbage in a
+// user-supplied reply-to without pulling in a validation library.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // The remote-imported supabase client is untyped in the Deno runtime.
 // deno-lint-ignore no-explicit-any
@@ -87,12 +94,17 @@ Deno.serve(async (req: Request) => {
     const senderEmail = (userData.user.email ?? "").trim() || null;
 
     // ── 2. Input ─────────────────────────────────────────────────────
-    const { organizationId, subject, body, consent, playerIds, bodyIsHtml } =
+    const { organizationId, subject, body, consent, playerIds, bodyIsHtml, replyTo } =
       (await req.json()) as Body;
     if (!organizationId) return json({ error: "organizationId is required" }, 400);
     if (!subject || !subject.trim()) return json({ error: "subject is required" }, 400);
     if (!body || !body.trim()) return json({ error: "body is required" }, 400);
     if (consent !== true) return json({ error: "consent_required" }, 400);
+    // Per-send reply-to override (optional). Validate its shape if present.
+    const replyToOverride = typeof replyTo === "string" ? replyTo.trim() : "";
+    if (replyToOverride && !EMAIL_RE.test(replyToOverride)) {
+      return json({ error: "invalid_reply_to" }, 400);
+    }
 
     // ── 3. Authorize + load org ──────────────────────────────────────
     if (!(await isOrgStaff(admin, organizationId, authUserId))) {
@@ -106,10 +118,12 @@ Deno.serve(async (req: Request) => {
       .single();
     if (orgErr || !org) return json({ error: "organization_not_found" }, 404);
 
-    // Reply-to: the org's configured contact email if set, otherwise default to
-    // the admin who's sending — so recipient replies reach a real person at the
-    // club rather than our no-reply from-address.
-    const replyTo: string | null = org.contact_email || senderEmail;
+    // Reply-to precedence: this send's explicit override → the org's saved
+    // default (organizations.contact_email) → the admin who's sending. Any of
+    // these puts recipient replies in front of a real person at the club rather
+    // than our no-reply from-address.
+    const effectiveReplyTo: string | null =
+      replyToOverride || org.contact_email || senderEmail;
 
     // ── 4. Build the recipient set (contacts ∪ registrants), then narrow
     //     to the selected subset if playerIds was provided. Unsubscribed and
@@ -161,7 +175,7 @@ Deno.serve(async (req: Request) => {
             to: [r.email],
             subject: subject.trim(),
             html,
-            ...(replyTo ? { reply_to: replyTo } : {}),
+            ...(effectiveReplyTo ? { reply_to: effectiveReplyTo } : {}),
             headers: {
               "List-Unsubscribe": `<${unsubUrl}>`,
               "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
