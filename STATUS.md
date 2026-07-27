@@ -6,6 +6,24 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-27 — Diagnosed: contact-email delivery status stuck at "Sent" (no code change)
+
+Ron: status page for the 5th Annual Pickleball Angels broadcast (104 recipients)
+shows all "Sent", 0 Delivered/Opened/Clicked. Root cause: RESEND_WEBHOOK_SECRET is
+NOT set on EITHER Supabase project (checked `supabase secrets list` — PROD
+wducsjqyoksmluwfgjxc and TEST mvkhdsauaqqjehxdnbuf both have RESEND_API_KEY +
+RESEND_FROM_ADDRESS but no RESEND_WEBHOOK_SECRET). resend-webhook bails at
+`if (!secret) return 500` on every event, so nothing advances past 'sent'. Function
+itself is deployed + correct; code/config fine. Fix (Ron's, dashboard/secret op):
+per env, ensure a Resend webhook endpoint → https://<ref>.supabase.co/functions/v1/
+resend-webhook (subscribe delivered/opened/clicked/bounced/complained) and set that
+endpoint's whsec via `supabase secrets set RESEND_WEBHOOK_SECRET=... --project-ref
+<ref>`. One shared Resend account (same API key digest) → needs separate endpoint+
+secret per env. Caveats told Ron: only future sends fully tracked (retries may
+backfill some delivered); "Sent" in UI ≠ Resend delivered. Awaiting: which env he
+sent from. Offered follow-up: add a "webhook not configured" health hint on the
+status page so this fails loudly instead of silently all-Sent.
+
 ## 2026-07-27 — Promoted editable reply-to + club default to PROD (#596)
 
 Merged #595 to main (→TEST, edge-fn deploy green), then promotion PR #596
