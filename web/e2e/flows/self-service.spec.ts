@@ -8,8 +8,12 @@ test.describe("self-service", () => {
   test("my tournaments lists my registration", async ({ page }) => {
     await loginAs(page, SEED.selfService.viewerEmail);
     await page.goto("/my-tournaments");
-    await expect(page.getByText(SEED.selfService.tournamentName)).toBeVisible();
-    await expect(page.getByText(/pending payment/i)).toBeVisible();
+    // `.first()` on purpose: the test asserts the viewer sees THEIR registration,
+    // not that the name is globally unique. On the shared TEST DB a tournament
+    // name can legitimately appear more than once (seed drift / duplicate data),
+    // which would otherwise trip Playwright strict mode.
+    await expect(page.getByText(SEED.selfService.tournamentName).first()).toBeVisible();
+    await expect(page.getByText(/pending payment/i).first()).toBeVisible();
   });
 
   test("withdraw from an event", async ({ page }) => {

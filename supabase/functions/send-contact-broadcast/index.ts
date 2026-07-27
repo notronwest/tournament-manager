@@ -82,6 +82,9 @@ Deno.serve(async (req: Request) => {
     const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
     if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
     const authUserId = userData.user.id;
+    // The sending admin's email — used as the reply-to default so replies reach
+    // a real person at the club (not our no-reply from-address).
+    const senderEmail = (userData.user.email ?? "").trim() || null;
 
     // ── 2. Input ─────────────────────────────────────────────────────
     const { organizationId, subject, body, consent, playerIds, bodyIsHtml } =
@@ -102,6 +105,11 @@ Deno.serve(async (req: Request) => {
       .is("deleted_at", null)
       .single();
     if (orgErr || !org) return json({ error: "organization_not_found" }, 404);
+
+    // Reply-to: the org's configured contact email if set, otherwise default to
+    // the admin who's sending — so recipient replies reach a real person at the
+    // club rather than our no-reply from-address.
+    const replyTo: string | null = org.contact_email || senderEmail;
 
     // ── 4. Build the recipient set (contacts ∪ registrants), then narrow
     //     to the selected subset if playerIds was provided. Unsubscribed and
@@ -153,7 +161,7 @@ Deno.serve(async (req: Request) => {
             to: [r.email],
             subject: subject.trim(),
             html,
-            ...(org.contact_email ? { reply_to: org.contact_email } : {}),
+            ...(replyTo ? { reply_to: replyTo } : {}),
             headers: {
               "List-Unsubscribe": `<${unsubUrl}>`,
               "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
