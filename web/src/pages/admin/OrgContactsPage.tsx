@@ -5,6 +5,7 @@ import {
   type CSSProperties,
 } from "react";
 import { supabase } from "../../supabase";
+import { useAuth } from "../../auth/AuthProvider";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
@@ -44,6 +45,10 @@ import {
 
 type Panel = "none" | "import" | "compose";
 
+// Lightweight email shape check for the reply-to field (mirrors the edge
+// function's server-side guard).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 type ImportResult = {
   added: number;
   matchedExisting: number;
@@ -53,7 +58,14 @@ type ImportResult = {
 };
 
 export default function OrgContactsPage() {
-  const { org } = useCurrentOrg();
+  const { org, role } = useCurrentOrg();
+  const { user } = useAuth();
+  // The club's saved default reply-to. Normally organizations.contact_email;
+  // `savedReplyTo` holds a value saved from the compose panel this session so it
+  // reflects immediately without refetching the org.
+  const [savedReplyTo, setSavedReplyTo] = useState<string | null>(null);
+  const replyToDefault = savedReplyTo ?? org?.contact_email ?? null;
+  const canEditDefault = role === "owner" || role === "admin";
   const [contacts, setContacts] = useState<OrgContact[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("none");
@@ -211,6 +223,10 @@ export default function OrgContactsPage() {
           orgId={org.id}
           recipientIds={recipientIds}
           selectionActive={selected.size > 0}
+          orgDefaultReplyTo={replyToDefault}
+          senderEmail={user?.email ?? ""}
+          canEditDefault={canEditDefault}
+          onDefaultSaved={setSavedReplyTo}
           onClose={() => setPanel("none")}
           onSent={(n) => {
             setActionMsg(`Your message is being sent to ${n} contact${n === 1 ? "" : "s"}.`);
@@ -589,12 +605,20 @@ function ComposePanel({
   orgId,
   recipientIds,
   selectionActive,
+  orgDefaultReplyTo,
+  senderEmail,
+  canEditDefault,
+  onDefaultSaved,
   onClose,
   onSent,
 }: {
   orgId: string;
   recipientIds: string[];
   selectionActive: boolean;
+  orgDefaultReplyTo: string | null;
+  senderEmail: string;
+  canEditDefault: boolean;
+  onDefaultSaved: (v: string | null) => void;
   onClose: () => void;
   onSent: (n: number) => void;
 }) {
@@ -606,16 +630,59 @@ function ComposePanel({
   const [consent, setConsent] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reply-to for this send: the club's saved default if it has one, otherwise
+  // the sending admin's own email. Editable per send.
+  const [replyTo, setReplyTo] = useState((orgDefaultReplyTo || senderEmail).trim());
+  const [savingDefault, setSavingDefault] = useState(false);
+  const [savedDefault, setSavedDefault] = useState(false);
 
-  const canSend = subject.trim().length > 0 && body.trim().length > 0 && consent && recipientCount > 0;
+  const replyToTrimmed = replyTo.trim();
+  const replyToValid = replyToTrimmed.length === 0 || EMAIL_RE.test(replyToTrimmed);
+  // Only offer "save as club default" to admins, and only when the value is a
+  // valid address that differs from what's already saved.
+  const canSaveDefault =
+    canEditDefault && replyToValid && replyToTrimmed.length > 0 &&
+    replyToTrimmed !== (orgDefaultReplyTo ?? "").trim();
+
+  const canSend =
+    subject.trim().length > 0 && body.trim().length > 0 && consent &&
+    recipientCount > 0 && replyToValid;
+
+  const saveAsDefault = async () => {
+    setSavingDefault(true);
+    setError(null);
+    try {
+      const { error: upErr } = await supabase
+        .from("organizations")
+        .update({ contact_email: replyToTrimmed })
+        .eq("id", orgId);
+      if (upErr) {
+        setError(upErr.message);
+        return;
+      }
+      onDefaultSaved(replyToTrimmed);
+      setSavedDefault(true);
+    } finally {
+      setSavingDefault(false);
+    }
+  };
 
   const send = async () => {
     setError(null);
     try {
       const { data, error: fnErr } = await supabase.functions.invoke("send-contact-broadcast", {
         // Always pass the explicit recipient list so the send matches exactly
-        // what's shown (filters + individual picks, or all emailable).
-        body: { organizationId: orgId, subject: subject.trim(), body, consent: true, playerIds: recipientIds, bodyIsHtml },
+        // what's shown (filters + individual picks, or all emailable). `replyTo`
+        // omitted when blank → the function falls back to org default → sender.
+        body: {
+          organizationId: orgId,
+          subject: subject.trim(),
+          body,
+          consent: true,
+          playerIds: recipientIds,
+          bodyIsHtml,
+          ...(replyToTrimmed ? { replyTo: replyToTrimmed } : {}),
+        },
       });
       if (fnErr) {
         setError(await readFnError(fnErr));
@@ -717,6 +784,53 @@ function ComposePanel({
           )}
         </div>
       )}
+
+      <label style={fieldLabel}>Reply-to address</label>
+      <input
+        type="email"
+        value={replyTo}
+        onChange={(e) => { setReplyTo(e.target.value); setSavedDefault(false); }}
+        placeholder={senderEmail || "replies@yourclub.com"}
+        style={{
+          ...inputStyle,
+          marginBottom: 6,
+          ...(replyToValid ? null : { borderColor: "#c0392b" }),
+        }}
+      />
+      <p style={{ fontSize: 12, color: inkSoft, margin: "0 0 6px", lineHeight: 1.5 }}>
+        Where recipient replies go.{" "}
+        {orgDefaultReplyTo
+          ? "Prefilled with this club's default — edit to override just this send."
+          : "Defaults to your email — edit to override just this send."}
+      </p>
+      {!replyToValid && (
+        <p style={{ fontSize: 12, color: "#c0392b", margin: "0 0 6px" }} role="alert">
+          Enter a valid email address (or leave blank to use the club default).
+        </p>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+        {canEditDefault && (
+          <button
+            type="button"
+            onClick={saveAsDefault}
+            disabled={!canSaveDefault || savingDefault}
+            style={{
+              ...ctaSecondaryStyle,
+              padding: "5px 12px",
+              fontSize: 12,
+              opacity: canSaveDefault && !savingDefault ? 1 : 0.5,
+              cursor: canSaveDefault && !savingDefault ? "pointer" : "default",
+            }}
+          >
+            {savingDefault ? "Saving…" : "Save as club default"}
+          </button>
+        )}
+        {savedDefault && (
+          <span style={{ fontSize: 12, color: courtGreen, fontWeight: 600 }}>
+            ✓ Saved as club default
+          </span>
+        )}
+      </div>
 
       <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: inkSoft, marginBottom: 14, cursor: "pointer" }}>
         <input
