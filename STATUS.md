@@ -6,6 +6,26 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-27 — Update: Pickleball Angels broadcast never reached Resend (send-time failure)
+
+Continuing the "stuck at Sent" diag. Ron fixed the missing RESEND_WEBHOOK_SECRET on
+PROD. Then checked Resend → Emails (last 15 days): searching "Angels" returns NO
+results → the broadcast batch never reached Resend. So the send failed at the
+`resend POST /emails/batch` call (resend() throws on !resp.ok; send-contact-broadcast
+catches it, logs `resend batch failed …`, and still inserts the 104 recipient rows
+with null resend_email_id — which is why the status page shows all "Sent"). Net:
+the 104 recipients NEVER received it → re-send is a clean do-over (no duplicate),
+but the send-time failure must be fixed first. Leading hypothesis: broadcast's
+RESEND_FROM_ADDRESS (prod) is not a verified Resend sending domain (either
+onboarding@resend.dev sandbox — only sends to own verified addr — or an unverified
+custom domain → 403). Auth emails deliver because Supabase Auth uses its own
+configured sender, separate from RESEND_FROM_ADDRESS. Next: Ron to grab the exact
+`resend batch failed` line from prod Edge Functions → send-contact-broadcast → Logs
+(~11:13 AM), and/or verify the sending domain in Resend → Domains; then set/confirm
+RESEND_FROM_ADDRESS to a verified address and re-send (will now track via the new
+webhook secret). Old broadcast row (null-id, untracked) still on the status page —
+optional cleanup via prod SQL editor (hard delete, cascades to recipients).
+
 ## 2026-07-27 — Diagnosed: contact-email delivery status stuck at "Sent" (no code change)
 
 Ron: status page for the 5th Annual Pickleball Angels broadcast (104 recipients)
