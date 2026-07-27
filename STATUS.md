@@ -6,6 +6,19 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-27 — Contact email: editable reply-to + saveable club default (#595)
+
+Follow-up to #592 (Ron: "Both"). PR #595 (closes #594) adds reply-to controls to
+the contact-broadcast compose panel (OrgContactsPage): a Reply-to field prefilled
+with the club default (organizations.contact_email) or the sending admin's email,
+editable per send. Owners/admins get "Save as club default" (direct org update;
+RLS 'orgs update by admins' gates to admins — staff can override per-send but not
+persist). Client + server email validation. Edge function send-contact-broadcast
+now takes optional replyTo with precedence: per-send override → org default →
+sender. Verified typecheck/build/lint + clean dev-server console; compose panel is
+auth-gated so interactive click-through pending on the PR preview (own env scope).
+Next: Ron to validate on the #595 preview signed-in, then merge → TEST, promote.
+
 ## 2026-07-27 — Promoted contact-email reply-to default to PROD (#593)
 
 Merged #592 to main (→TEST), then promotion PR #593 (main→production) admin-merged
