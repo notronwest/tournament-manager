@@ -6,6 +6,15 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-22**
 
+## 2026-07-23 — Contact email reply-to defaults to org admin (#592)
+
+Ron: contact-broadcast emails should carry a Reply-To defaulting to the org
+admin. Fix (PR #592, closes #591): in send-contact-broadcast, reply_to =
+org.contact_email || sending-admin's email (userData.user.email; sender is
+org-staff-gated). Before, reply-to was only set when organizations.contact_email
+was configured. Edge-function only; no migration/UI. Offered: org-owner-specific
+or an editable compose field as follow-ups.
+
 ## 2026-07-23 — Nightly E2E regression triaged + fixed (#590)
 
 Nightly regression (run 30002630063) failed 2/40. Re-ran to separate flaky from
