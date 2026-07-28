@@ -6,6 +6,26 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-28**
 
+## 2026-07-28 — ROOT CAUSE found: RESEND_FROM_ADDRESS malformed for Resend batch
+
+With #598 live on PROD, Ron re-sent → the UI now shows the verbatim reason:
+`resend POST /emails/batch → 422 validation_error: "Invalid `from` field. The email
+address needs to follow the email@example.com or Name <email@example.com> format."`
+
+- **Not** domain/verification, test-mode, or a batch field — it's the **`from` value
+  format**. Resend's `/emails/batch` validates `from` more strictly than `/emails`
+  (which the other transactional fns use, so they've been fine). Most likely cause:
+  the brand display name **"bert & erne"** is **unquoted** — the `&` trips strict
+  RFC-5322 parsing. Fix: quote it → `"Bert & Erne" <mailbox@verified-domain>` (or a
+  bare `mailbox@…`).
+- **Fix (Ron, secret op — no redeploy; secrets read at runtime):**
+  `supabase secrets set RESEND_FROM_ADDRESS='"Bert & Erne" <no-reply@bertanderne.com>'
+  --project-ref wducsjqyoksmluwfgjxc` (mirror to TEST `mvkhds…`), then re-send. Confirm
+  the mailbox is on the verified Resend domain.
+- **Optional follow-up:** add a defensive from-normalizer in send-contact-broadcast
+  (auto-quote a display name with specials) so a slightly-off secret can't recur.
+  Pending Ron's call. Also still open: RESEND_WEBHOOK_SECRET on TEST (delivery tracking).
+
 ## 2026-07-28 — Promoted #598 to production (PR #599)
 
 Merged #598 → main (TEST), then promoted `main`→`production` (PR #599, merge commit).
