@@ -6,6 +6,19 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-28**
 
+## 2026-07-28 — Promoted #598 to production (PR #599)
+
+Merged #598 → main (TEST), then promoted `main`→`production` (PR #599, merge commit).
+Batch: **5 commits, 1 code + 4 docs, NO migrations.** Only `send-contact-broadcast`
+changed → **PROD edge-functions deploy: success** (run 30404878737). PROD == main.
+- The surface-Resend-error fix is now LIVE on PROD.
+- **Next (Ron):** re-send a small contact broadcast on `bertanderne.com` (ideally to
+  just your own address) — the compose UI will now print Resend's **verbatim** rejection
+  reason instead of a false "Sent." That pins the real "email never arrives" cause
+  (unverified sending domain / sandbox `onboarding@resend.dev` / test-mode API key /
+  a field `/emails/batch` rejects). Then apply the matching fix (dashboard config, or a
+  quick code PR if it's a batch-field issue). Still open: RESEND_WEBHOOK_SECRET on TEST.
+
 ## 2026-07-28 — Contact-email diagnosis: batch REJECTED by Resend + fix to surface it (PR #598)
 
 Ron: "still can't get emails sent — think I'm missing secrets between Supabase and Resend."
