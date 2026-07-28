@@ -4,7 +4,36 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
-Last updated: **2026-07-22**
+Last updated: **2026-07-28**
+
+## 2026-07-28 — Contact-email diagnosis: batch REJECTED by Resend + fix to surface it (PR #598)
+
+Ron: "still can't get emails sent — think I'm missing secrets between Supabase and Resend."
+Diagnosed; it's **not a missing prod secret**.
+
+- **Secret matrix (both projects, one shared Resend account):** PROD `wducs…` has
+  RESEND_API_KEY + RESEND_FROM_ADDRESS + RESEND_WEBHOOK_SECRET (all set). TEST
+  `mvkhds…` has API_KEY + FROM_ADDRESS but **no RESEND_WEBHOOK_SECRET** (tracking-only
+  gap; doesn't block sending). Unsub token is signed with the auto-injected
+  service-role key — no extra secret needed.
+- **Ground truth (Ron ran the SQL on PROD):** newest `contact_broadcasts` = the
+  07-27 Angels send, **104 recipient_rows, 0 with a resend_email_id** → the function
+  ran but **Resend rejected the whole `/emails/batch` call**; nothing was sent.
+- **Root bug:** `send-contact-broadcast` *swallowed* that rejection — logged it, still
+  wrote recipient rows, returned 200 → UI shows everyone "Sent" while nothing left,
+  and the reason was invisible (Edge Function logs came up empty too).
+- **Fix — PR [#598]** (`fix/contact-broadcast-surface-resend-error`, closes #597):
+  a rejected batch writes no recipient rows; if nothing is accepted the broadcast row
+  is deleted and the fn returns **502 with Resend's verbatim message** (compose UI
+  already surfaces a returned `{error}` via readFnError). Partial failures keep sent
+  rows + report `failed`. `deno lint` clean; required CI green. **Not merged.**
+- **Next:** merge #598 → TEST, then have Ron send a 1-address test on
+  `test.bertanderne.com` → the UI will now print the exact Resend reason. Then fix the
+  Resend-side cause (verbatim error will say which): most likely **from-address is an
+  unverified domain / sandbox `onboarding@resend.dev`**, a **test-mode API key**, OR a
+  **field `/emails/batch` rejects** (watch for `headers`/List-Unsubscribe — batch is
+  stricter than `/emails`; if that's it, it's a code fix, not config). Promote to PROD
+  after. Also still open: set RESEND_WEBHOOK_SECRET on TEST for delivery tracking.
 
 ## 2026-07-27 — Update: Pickleball Angels broadcast never reached Resend (send-time failure)
 
