@@ -156,6 +156,10 @@ Deno.serve(async (req: Request) => {
 
     // ── 6. Batch-send via Resend, then record per-recipient rows ──────
     let sent = 0;
+    // First Resend rejection, surfaced to the caller so a failed send stops
+    // masquerading as a successful one (the usual cause is an unverified
+    // sending domain or a test-mode API key — both come back verbatim here).
+    let firstError: string | null = null;
     for (let start = 0; start < recipients.length; start += BATCH_SIZE) {
       const chunk = recipients.slice(start, start + BATCH_SIZE);
 
@@ -184,7 +188,7 @@ Deno.serve(async (req: Request) => {
         }),
       );
 
-      let ids: (string | null)[] = chunk.map(() => null);
+      let ids: (string | null)[];
       try {
         const resp = (await resend(resendApiKey, "POST", "/emails/batch", emails)) as {
           data?: { id?: string }[];
@@ -193,9 +197,11 @@ Deno.serve(async (req: Request) => {
         ids = chunk.map((_, i) => returned[i]?.id ?? null);
         sent += returned.length;
       } catch (e) {
-        // Record the recipient rows anyway (status stays 'sent', no id) so the
-        // audit trail survives a partial Resend failure.
-        console.error("resend batch failed", String((e as { message?: string })?.message ?? e));
+        // Resend rejected this batch — nothing was sent for it. Remember the
+        // reason and DON'T write recipient rows (they'd read as "sent" forever).
+        if (!firstError) firstError = String((e as { message?: string })?.message ?? e);
+        console.error("resend batch failed", firstError);
+        continue;
       }
 
       const rows = chunk.map((r, i) => ({
@@ -208,7 +214,28 @@ Deno.serve(async (req: Request) => {
       if (recErr) console.error("recipient log failed", recErr.message);
     }
 
-    return json({ broadcastId, recipientCount: recipients.length, sent });
+    // ── 7. Nothing accepted → surface the error, don't log a phantom send ─
+    if (sent === 0) {
+      // Remove the broadcast row (cascades to any recipient rows) so it doesn't
+      // show up on the status page as if it went out.
+      await admin.from("contact_broadcasts").delete().eq("id", broadcastId);
+      return json(
+        {
+          error: `Resend rejected the send — no emails went out. ${firstError ?? ""}`.trim(),
+          detail: firstError,
+        },
+        502,
+      );
+    }
+
+    // Partial failure: some batches sent, some didn't. Report both so the
+    // sender knows coverage was incomplete (the sent rows are already logged).
+    return json({
+      broadcastId,
+      recipientCount: recipients.length,
+      sent,
+      ...(firstError ? { failed: recipients.length - sent, detail: firstError } : {}),
+    });
   } catch (e) {
     return json(
       { error: "internal_error", detail: String((e as { message?: string })?.message ?? e) },
