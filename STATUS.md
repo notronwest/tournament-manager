@@ -4,7 +4,84 @@ Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
-Last updated: **2026-07-22**
+Last updated: **2026-07-28**
+
+## 2026-07-28 — Contact-email diagnosis: batch REJECTED by Resend + fix to surface it (PR #598)
+
+Ron: "still can't get emails sent — think I'm missing secrets between Supabase and Resend."
+Diagnosed; it's **not a missing prod secret**.
+
+- **Secret matrix (both projects, one shared Resend account):** PROD `wducs…` has
+  RESEND_API_KEY + RESEND_FROM_ADDRESS + RESEND_WEBHOOK_SECRET (all set). TEST
+  `mvkhds…` has API_KEY + FROM_ADDRESS but **no RESEND_WEBHOOK_SECRET** (tracking-only
+  gap; doesn't block sending). Unsub token is signed with the auto-injected
+  service-role key — no extra secret needed.
+- **Ground truth (Ron ran the SQL on PROD):** newest `contact_broadcasts` = the
+  07-27 Angels send, **104 recipient_rows, 0 with a resend_email_id** → the function
+  ran but **Resend rejected the whole `/emails/batch` call**; nothing was sent.
+- **Root bug:** `send-contact-broadcast` *swallowed* that rejection — logged it, still
+  wrote recipient rows, returned 200 → UI shows everyone "Sent" while nothing left,
+  and the reason was invisible (Edge Function logs came up empty too).
+- **Fix — PR [#598]** (`fix/contact-broadcast-surface-resend-error`, closes #597):
+  a rejected batch writes no recipient rows; if nothing is accepted the broadcast row
+  is deleted and the fn returns **502 with Resend's verbatim message** (compose UI
+  already surfaces a returned `{error}` via readFnError). Partial failures keep sent
+  rows + report `failed`. `deno lint` clean; required CI green. **Not merged.**
+- **Next:** merge #598 → TEST, then have Ron send a 1-address test on
+  `test.bertanderne.com` → the UI will now print the exact Resend reason. Then fix the
+  Resend-side cause (verbatim error will say which): most likely **from-address is an
+  unverified domain / sandbox `onboarding@resend.dev`**, a **test-mode API key**, OR a
+  **field `/emails/batch` rejects** (watch for `headers`/List-Unsubscribe — batch is
+  stricter than `/emails`; if that's it, it's a code fix, not config). Promote to PROD
+  after. Also still open: set RESEND_WEBHOOK_SECRET on TEST for delivery tracking.
+
+## 2026-07-27 — Update: Pickleball Angels broadcast never reached Resend (send-time failure)
+
+Continuing the "stuck at Sent" diag. Ron fixed the missing RESEND_WEBHOOK_SECRET on
+PROD. Then checked Resend → Emails (last 15 days): searching "Angels" returns NO
+results → the broadcast batch never reached Resend. So the send failed at the
+`resend POST /emails/batch` call (resend() throws on !resp.ok; send-contact-broadcast
+catches it, logs `resend batch failed …`, and still inserts the 104 recipient rows
+with null resend_email_id — which is why the status page shows all "Sent"). Net:
+the 104 recipients NEVER received it → re-send is a clean do-over (no duplicate),
+but the send-time failure must be fixed first. Leading hypothesis: broadcast's
+RESEND_FROM_ADDRESS (prod) is not a verified Resend sending domain (either
+onboarding@resend.dev sandbox — only sends to own verified addr — or an unverified
+custom domain → 403). Auth emails deliver because Supabase Auth uses its own
+configured sender, separate from RESEND_FROM_ADDRESS. Next: Ron to grab the exact
+`resend batch failed` line from prod Edge Functions → send-contact-broadcast → Logs
+(~11:13 AM), and/or verify the sending domain in Resend → Domains; then set/confirm
+RESEND_FROM_ADDRESS to a verified address and re-send (will now track via the new
+webhook secret). Old broadcast row (null-id, untracked) still on the status page —
+optional cleanup via prod SQL editor (hard delete, cascades to recipients).
+
+## 2026-07-27 — Diagnosed: contact-email delivery status stuck at "Sent" (no code change)
+
+Ron: status page for the 5th Annual Pickleball Angels broadcast (104 recipients)
+shows all "Sent", 0 Delivered/Opened/Clicked. Root cause: RESEND_WEBHOOK_SECRET is
+NOT set on EITHER Supabase project (checked `supabase secrets list` — PROD
+wducsjqyoksmluwfgjxc and TEST mvkhdsauaqqjehxdnbuf both have RESEND_API_KEY +
+RESEND_FROM_ADDRESS but no RESEND_WEBHOOK_SECRET). resend-webhook bails at
+`if (!secret) return 500` on every event, so nothing advances past 'sent'. Function
+itself is deployed + correct; code/config fine. Fix (Ron's, dashboard/secret op):
+per env, ensure a Resend webhook endpoint → https://<ref>.supabase.co/functions/v1/
+resend-webhook (subscribe delivered/opened/clicked/bounced/complained) and set that
+endpoint's whsec via `supabase secrets set RESEND_WEBHOOK_SECRET=... --project-ref
+<ref>`. One shared Resend account (same API key digest) → needs separate endpoint+
+secret per env. Caveats told Ron: only future sends fully tracked (retries may
+backfill some delivered); "Sent" in UI ≠ Resend delivered. Awaiting: which env he
+sent from. Offered follow-up: add a "webhook not configured" health hint on the
+status page so this fails loudly instead of silently all-Sent.
+
+## 2026-07-27 — Promoted editable reply-to + club default to PROD (#596)
+
+Merged #595 to main (→TEST, edge-fn deploy green), then promotion PR #596
+(main→production) admin-merged (only failing check the expected issue-ref gate).
+PROD edge-function deploy green — send-contact-broadcast now live on PROD with
+validated per-send replyTo (precedence override → org default → sender), and the
+contacts compose panel ships the Reply-to field + admin "Save as club default"
+(writes organizations.contact_email). No migrations. Next: none pending — feature
+complete on TEST + PROD.
 
 ## 2026-07-27 — Contact email: editable reply-to + saveable club default (#595)
 
