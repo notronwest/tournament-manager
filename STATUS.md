@@ -3,6 +3,16 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Promoted Contacts-nav fix to PROD (#608)
+
+Merged #607 to main (→TEST) then promotion PR #608 (main→production) admin-merged
+(only failing check the expected issue-ref gate). Frontend-only — Cloudflare
+rebuilds the production branch; no edge-fn/migration deploys. Contacts nav no
+longer double-highlights with Email history on both TEST and PROD. Next: none
+pending. (Separately, noted the misspelled reply-to is a stored
+organizations.contact_email value, fixable via compose panel "Save as club
+default" — data fix, not code; Ron to correct.)
+
 ## 2026-07-29 — Fix: Contacts nav no longer active on Email history (#607)
 
 Ron spotted both "Contacts" and "Email history" highlighted in the admin sidebar
