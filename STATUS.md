@@ -3,6 +3,96 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Pending partner invites + resend tool — PR #612 (in review)
+
+Ron: partners added/selected during registration may not be getting invite emails;
+wants a tool to pick un-registered invitees and resend. Investigated (Explore map):
+CONFIRMED — the primary register flow (PublicTournamentPage) inserts the
+partner_invites row but DEFERS the invite email to payment time
+(create-payment-intent free / stripe-webhook paid). So partners get no email when
+the inviter never checks out, changes partner after paying, or the deferred send
+hits a swallowed Resend/config error. Some deferral is by-design (don't email a
+partner until the inviter commits); the real gaps are change-partner-after-pay
+(no re-trigger) and swallowed errors.
+
+Built the resend tool (PR #612, closes #611, frontend-only): a "Pending partner
+invites" panel on the tournament Attendees page listing every pending (un-accepted)
+invite with invitee name+email, inviter, event, invited date, inviter payment
+status; per-row + bulk Resend. lib/partnerInvites.ts (fetchPendingPartnerInvites +
+resendPartnerInvite). Resend invokes the EXISTING send-partner-invite (no
+idempotency guard → cleanly resends; same call RegisterPage makes) — no schema
+change, no new edge function; reads RLS-scoped to org. Verified typecheck/lint/
+build/clean load; Attendees auth-gated so interactive check on the PR preview.
+Decisions: location=Attendees panel; show all un-accepted w/ inviter status.
+Follow-ups noted (not built): fix change-partner-after-pay re-send + stop
+swallowing deferred-send errors; send-partner-invite uses stale invitee_email.
+NEXT: Ron reviews #612 preview → merge → TEST → promote. (PR #610 Contacts epic
+still open/awaiting review too.)
+
+## 2026-07-29 — Built Contacts redesign epic — PR #610 (in review; has migration)
+
+Built the approved one-PR epic (closes #609). PR #610 on branch
+feat/contacts-crud-and-admin-registration:
+1. Split screens: Contacts = management only (no primed "email all"); new Email
+   page with Compose | History tabs (old ContactEmailsPage → renamed EmailHistory,
+   embedded as History tab; old /contacts/emails redirects to it). Sidebar now
+   Contacts + Email.
+2. Contact CRUD in lib/orgContacts.ts: createOrgContact (match player by email or
+   create + manual link), updateContactPerson (edits shared players row, never
+   auth_user_id), existing soft-delete. Add panel + edit modal + form.
+3. Admin "Register for event": NEW migration 20260729180000_manual_payments.sql
+   (kind comp|offline, amount_cents, method, note, recorded_by; SELECT org members,
+   no client write) + NEW service_role edge function admin-register-contact
+   (org-staff gated; validates event-in-org, skips already-registered, inserts paid
+   event_registration + manual_payments per event; comp=$0/fee 0, offline=per-event
+   amount+method+note). UI: per-contact Register modal (tournament→events→comp/offline).
+   lib/adminRegister.ts for picker data + the invoke.
+
+Backend (migration + function) built by a subagent to isolated supabase/ files;
+frontend by main session. Verified typecheck/lint/build + clean dev load; admin
+screens auth-gated so interactive check is on the PR preview. CI green, mergeable.
+Deferred fast-follows: admin subscribe/unsubscribe toggle; comp/offline tags on
+AttendeesPage. NEXT: Ron to review on the #610 preview (signed in — its own env
+scope, NOT TEST), then merge → TEST (migration applies on merge) → promote to PROD.
+Do NOT auto-merge without Ron's review given size + migration + money-adjacency.
+
+## 2026-07-29 — Scoped Contacts redesign epic (CRUD + admin event registration) — build pending approval
+
+Ron: Contacts screen does too much (landing shows a primed "Email all"). Redesign
+into 3 parts, decided via Q&A, shipping as ONE combined PR:
+1. Split screens — Contacts = management only (no send button); new Email page with
+   Compose | History tabs (Compose carries recipient filters; History = current
+   ContactEmailsPage). Redirect old /contacts/emails → /email history. Sidebar:
+   Contacts + Email.
+2. Contact CRUD — add/edit/delete a single contact. NB a contact = a shared global
+   `players` row + an organization_contacts link (person data lives in players).
+   Add = find-or-create player by email + manual link (client; RLS allows org
+   members). Edit = players fields (shared-record caveat; don't touch auth_user_id).
+   Delete = existing soft-delete. Plus admin subscribe/unsubscribe toggle.
+3. Admin "Register for event" w/ comp or offline payment — NEW manual_payments table
+   (kind comp|offline, amount_cents, method cash|check|venmo|other, note, recorded_by;
+   2 enums; SELECT org members, NO client write) + NEW service_role edge function
+   admin-register-contact (validates staff+event-in-org, inserts event_registrations
+   status=paid + manual_payments atomically). Offline = amount+method+note; comp = $0.
+   v1 individual-per-event; doubles stays in EventConsolePage. Regen types after migration.
+
+Key findings (2 Explore maps): a contact already IS a players row; org staff can
+already write event_registrations directly (EventConsolePage add-team writes paid/$0
+today = undocumented comp); NO comp/offline/payment_method concept exists anywhere;
+payments table is Stripe-only + server-write-only (CLAUDE.md rule). Migration is the
+one irreversible piece (TEST on merge, PROD on promote). Next: awaiting Ron's green
+light, then build the single PR (migration + function + UI) and verify.
+
+## 2026-07-29 — Promoted Contacts-nav fix to PROD (#608)
+
+Merged #607 to main (→TEST) then promotion PR #608 (main→production) admin-merged
+(only failing check the expected issue-ref gate). Frontend-only — Cloudflare
+rebuilds the production branch; no edge-fn/migration deploys. Contacts nav no
+longer double-highlights with Email history on both TEST and PROD. Next: none
+pending. (Separately, noted the misspelled reply-to is a stored
+organizations.contact_email value, fixable via compose panel "Save as club
+default" — data fix, not code; Ron to correct.)
+
 ## 2026-07-29 — Fix: Contacts nav no longer active on Email history (#607)
 
 Ron spotted both "Contacts" and "Email history" highlighted in the admin sidebar

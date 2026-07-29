@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import LoginPage from "./auth/LoginPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { RequireProfile } from "./auth/RequireProfile";
@@ -31,7 +31,7 @@ import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
 import ContractPage from "./pages/admin/quotes/ContractPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
 import OrgContactsPage from "./pages/admin/OrgContactsPage";
-import ContactEmailsPage from "./pages/admin/ContactEmailsPage";
+import EmailPage from "./pages/admin/EmailPage";
 import OrgDangerZonePage from "./pages/admin/OrgDangerZonePage";
 import StripeOauthCallbackPage from "./pages/admin/StripeOauthCallbackPage";
 import TournamentFormPage from "./pages/admin/TournamentFormPage";
@@ -95,6 +95,13 @@ function RootRoute() {
   }
   // canonical host, or a custom host with no mapping → normal home.
   return <HomePage />;
+}
+
+// The Email-history page moved from /admin/:orgSlug/contacts/emails to the
+// Email page's History tab. Preserve old links.
+function EmailHistoryRedirect() {
+  const { orgSlug } = useParams();
+  return <Navigate to={`/admin/${orgSlug}/email?tab=history`} replace />;
 }
 
 export default function App() {
@@ -381,7 +388,9 @@ export default function App() {
         />
         <Route path="locations" element={<LocationsPage />} />
         <Route path="contacts" element={<OrgContactsPage />} />
-        <Route path="contacts/emails" element={<ContactEmailsPage />} />
+        <Route path="email" element={<EmailPage />} />
+        {/* Back-compat: the old Email-history URL now lives under the Email page. */}
+        <Route path="contacts/emails" element={<EmailHistoryRedirect />} />
         <Route path="tournaments" element={<TournamentsListPage />} />
         <Route
           path="tournaments/new"
