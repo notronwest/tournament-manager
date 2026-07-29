@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import PendingPartnerInvitesPanel from "./PendingPartnerInvitesPanel";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -470,6 +471,8 @@ export default function AttendeesPage() {
           </div>
         </div>
       </div>
+
+      <PendingPartnerInvitesPanel tournamentId={tournament.id} />
 
       {view === "players" ? (
         <ByPlayerView
