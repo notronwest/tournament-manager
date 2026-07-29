@@ -1,19 +1,23 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { supabase } from "../../supabase";
-import { useAuth } from "../../auth/AuthProvider";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   fetchOrgContacts,
+  createOrgContact,
+  updateContactPerson,
   removeOrgContact,
   type OrgContact,
   type ContactSource,
+  type ContactInput,
 } from "../../lib/orgContacts";
+import {
+  fetchOrgTournamentsWithEvents,
+  adminRegisterContact,
+  type PickerTournament,
+  type ManualPaymentMethod,
+  type RegisterKind,
+} from "../../lib/adminRegister";
 import {
   parseContactsFile,
   autoMap,
@@ -21,6 +25,14 @@ import {
   type ContactField,
   type ParsedFile,
 } from "../../lib/parseContactsFile";
+import {
+  displayHeading,
+  thStyle,
+  tdStyle,
+  fieldLabel,
+  unsubPill,
+  readFnError,
+} from "./contactsUi";
 import {
   ink,
   inkSoft,
@@ -32,7 +44,6 @@ import {
   courtGreen,
   bodyFontStack,
   headingFontStack,
-  displayFontStack,
   panelStyle,
   panelMutedStyle,
   ctaPrimaryStyle,
@@ -43,11 +54,7 @@ import {
   statusPanelStyle,
 } from "../../lib/publicTheme";
 
-type Panel = "none" | "import" | "compose";
-
-// Lightweight email shape check for the reply-to field (mirrors the edge
-// function's server-side guard).
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+type Panel = "none" | "import" | "add";
 
 type ImportResult = {
   added: number;
@@ -57,24 +64,23 @@ type ImportResult = {
   total: number;
 };
 
+// Contacts = management surface only (list + search + CRUD + register-for-event).
+// Sending email lives on the separate Email page.
 export default function OrgContactsPage() {
-  const { org, role } = useCurrentOrg();
-  const { user } = useAuth();
-  // The club's saved default reply-to. Normally organizations.contact_email;
-  // `savedReplyTo` holds a value saved from the compose panel this session so it
-  // reflects immediately without refetching the org.
-  const [savedReplyTo, setSavedReplyTo] = useState<string | null>(null);
-  const replyToDefault = savedReplyTo ?? org?.contact_email ?? null;
-  const canEditDefault = role === "owner" || role === "admin";
+  const { org } = useCurrentOrg();
   const [contacts, setContacts] = useState<OrgContact[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("none");
   const [search, setSearch] = useState("");
-  const [removeTarget, setRemoveTarget] = useState<OrgContact | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<"all" | ContactSource>("all");
+  const [subscribedOnly, setSubscribedOnly] = useState(false);
+  const [addedSince, setAddedSince] = useState("");
   const [actionMsg, setActionMsg] = useState<string | null>(null);
-  // Bump to force a refetch (e.g. after an import) without a named loader
-  // callback (which the react-hooks set-state-in-effect rule flags).
   const [reloadKey, setReloadKey] = useState(0);
+
+  const [editTarget, setEditTarget] = useState<OrgContact | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<OrgContact | null>(null);
+  const [registerTarget, setRegisterTarget] = useState<OrgContact | null>(null);
 
   useEffect(() => {
     if (!org) return;
@@ -96,105 +102,41 @@ export default function OrgContactsPage() {
     };
   }, [org, reloadKey]);
 
-  // Recipient filters + individual selection.
-  const [sourceFilter, setSourceFilter] = useState<"all" | ContactSource>("all");
-  const [subscribedOnly, setSubscribedOnly] = useState(true);
-  const [addedSince, setAddedSince] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const reload = () => setReloadKey((k) => k + 1);
 
-  const emailable = useMemo(
-    () => (contacts ?? []).filter((c) => c.email && !c.unsubscribed),
-    [contacts],
-  );
-  const emailableIds = useMemo(
-    () => new Set(emailable.map((c) => c.playerId)),
-    [emailable],
-  );
-
-  // Rows shown = search + source + date-added + subscription filters.
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (contacts ?? []).filter((c) => {
-      if (
-        q &&
-        !`${c.firstName} ${c.lastName} ${c.email ?? ""} ${c.city ?? ""}`
-          .toLowerCase()
-          .includes(q)
-      )
-        return false;
+      if (q && !`${c.firstName} ${c.lastName} ${c.email ?? ""} ${c.city ?? ""}`.toLowerCase().includes(q)) return false;
       if (sourceFilter !== "all" && c.source !== sourceFilter) return false;
       if (subscribedOnly && c.unsubscribed) return false;
       if (addedSince) {
-        // Registrants have no "added" date; a date floor excludes them.
         if (!c.addedAt || c.addedAt.slice(0, 10) < addedSince) return false;
       }
       return true;
     });
   }, [contacts, search, sourceFilter, subscribedOnly, addedSince]);
 
-  const visibleEmailable = useMemo(
-    () => visible.filter((c) => emailableIds.has(c.playerId)),
-    [visible, emailableIds],
-  );
-  const allVisibleSelected =
-    visibleEmailable.length > 0 &&
-    visibleEmailable.every((c) => selected.has(c.playerId));
-
-  // Recipients the send targets: the checked emailable, or ALL emailable when
-  // nothing is checked (so "email everyone" still works with no fuss).
-  const recipientIds = useMemo(() => {
-    if (selected.size > 0)
-      return emailable.filter((c) => selected.has(c.playerId)).map((c) => c.playerId);
-    return emailable.map((c) => c.playerId);
-  }, [selected, emailable]);
-
-  function toggleAllVisible() {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) visibleEmailable.forEach((c) => next.delete(c.playerId));
-      else visibleEmailable.forEach((c) => next.add(c.playerId));
-      return next;
-    });
-  }
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   const hasActiveFilter =
-    sourceFilter !== "all" || !subscribedOnly || addedSince !== "" || search.trim() !== "";
+    sourceFilter !== "all" || subscribedOnly || addedSince !== "" || search.trim() !== "";
 
   if (!org) return null;
 
   return (
     <div style={{ fontFamily: bodyFontStack, color: ink }}>
-      <h1 style={{ ...displayHeading }}>Contacts</h1>
+      <h1 style={displayHeading}>Contacts</h1>
       <p style={{ color: inkSoft, fontSize: 15, margin: "0 0 20px", maxWidth: 620, lineHeight: 1.55 }}>
-        Everyone in your club's contact list — your registrants plus anyone you've
-        imported. Import a spreadsheet of contacts, or email the whole list at once.
+        Manage your club's contact list — your tournament registrants plus anyone you add
+        or import. Add a contact, edit their details, or register them for an event.
       </p>
 
       {/* Action bar */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-        <button
-          style={ctaPrimaryStyle}
-          onClick={() => setPanel(panel === "import" ? "none" : "import")}
-        >
-          Import contacts
+        <button style={ctaPrimaryStyle} onClick={() => setPanel(panel === "add" ? "none" : "add")}>
+          Add contact
         </button>
-        <button
-          style={recipientIds.length > 0 ? ctaSecondaryStyle : { ...ctaSecondaryStyle, opacity: 0.5, cursor: "not-allowed" }}
-          disabled={recipientIds.length === 0}
-          onClick={() => setPanel(panel === "compose" ? "none" : "compose")}
-          title={recipientIds.length === 0 ? "No contacts with an email address selected" : undefined}
-        >
-          {selected.size > 0
-            ? `Email ${recipientIds.length} selected`
-            : `Email all contacts (${recipientIds.length})`}
+        <button style={ctaSecondaryStyle} onClick={() => setPanel(panel === "import" ? "none" : "import")}>
+          Import contacts
         </button>
       </div>
 
@@ -204,38 +146,30 @@ export default function OrgContactsPage() {
         </div>
       )}
 
-      {panel === "import" && org && (
+      {panel === "add" && (
+        <AddContactPanel
+          onClose={() => setPanel("none")}
+          onSaved={async (input) => {
+            await createOrgContact(org.id, input);
+            setActionMsg(`Added ${input.firstName} ${input.lastName}.`.trim());
+            setPanel("none");
+            reload();
+          }}
+        />
+      )}
+
+      {panel === "import" && (
         <ImportPanel
           orgId={org.id}
           onClose={() => setPanel("none")}
           onImported={(r) => {
-            setActionMsg(
-              `Imported ${r.added} new · ${r.matchedExisting} matched existing · ${r.skipped} skipped.`,
-            );
+            setActionMsg(`Imported ${r.added} new · ${r.matchedExisting} matched existing · ${r.skipped} skipped.`);
             setPanel("none");
-            setReloadKey((k) => k + 1);
+            reload();
           }}
         />
       )}
 
-      {panel === "compose" && org && (
-        <ComposePanel
-          orgId={org.id}
-          recipientIds={recipientIds}
-          selectionActive={selected.size > 0}
-          orgDefaultReplyTo={replyToDefault}
-          senderEmail={user?.email ?? ""}
-          canEditDefault={canEditDefault}
-          onDefaultSaved={setSavedReplyTo}
-          onClose={() => setPanel("none")}
-          onSent={(n) => {
-            setActionMsg(`Your message is being sent to ${n} contact${n === 1 ? "" : "s"}.`);
-            setPanel("none");
-          }}
-        />
-      )}
-
-      {/* Contacts list */}
       {loadError && (
         <div style={{ ...statusPanelStyle("danger"), marginBottom: 16 }} role="alert">
           {loadError}
@@ -245,18 +179,9 @@ export default function OrgContactsPage() {
       {contacts === null ? (
         <div style={{ color: inkMuted }}>Loading…</div>
       ) : contacts.length === 0 ? (
-        <div
-          style={{
-            border: `1px dashed ${rule}`,
-            borderRadius: 10,
-            padding: 28,
-            textAlign: "center",
-            color: inkMuted,
-            background: cream,
-          }}
-        >
-          No contacts yet. Import a CSV or spreadsheet to get started — your
-          tournament registrants will show up here automatically too.
+        <div style={{ border: `1px dashed ${rule}`, borderRadius: 10, padding: 28, textAlign: "center", color: inkMuted, background: cream }}>
+          No contacts yet. Add one or import a CSV/spreadsheet — your tournament registrants
+          will show up here automatically too.
         </div>
       ) : (
         <>
@@ -275,20 +200,10 @@ export default function OrgContactsPage() {
             </select>
             <label style={{ fontSize: 13, color: inkSoft, display: "flex", gap: 6, alignItems: "center" }}>
               Added since
-              <input
-                type="date"
-                value={addedSince}
-                onChange={(e) => setAddedSince(e.target.value)}
-                style={{ ...inputStyle, maxWidth: 160 }}
-              />
+              <input type="date" value={addedSince} onChange={(e) => setAddedSince(e.target.value)} style={{ ...inputStyle, maxWidth: 160 }} />
             </label>
             <label style={{ fontSize: 13, color: inkSoft, display: "flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={subscribedOnly}
-                onChange={(e) => setSubscribedOnly(e.target.checked)}
-                style={{ width: 15, height: 15 }}
-              />
+              <input type="checkbox" checked={subscribedOnly} onChange={(e) => setSubscribedOnly(e.target.checked)} style={{ width: 15, height: 15 }} />
               Subscribed only
             </label>
             <input
@@ -300,95 +215,49 @@ export default function OrgContactsPage() {
             />
           </div>
 
-          {/* Count + selection summary */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 13, color: inkMuted }}>
-              {visible.length} shown · {emailable.length} emailable
-              {selected.size > 0 && ` · ${selected.size} selected`}
-            </div>
-            {selected.size > 0 && (
-              <button style={ghostButtonStyle} onClick={() => setSelected(new Set())}>
-                Clear selection
-              </button>
-            )}
+          <div style={{ fontSize: 13, color: inkMuted, marginBottom: 10 }}>
+            {visible.length} of {contacts.length} shown
           </div>
 
           <div style={{ overflowX: "auto", border: `1px solid ${rule}`, borderRadius: 10 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 680 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 720 }}>
               <thead>
                 <tr style={{ background: cream }}>
-                  <th style={{ ...thStyle, width: 36, textAlign: "center" }}>
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={toggleAllVisible}
-                      disabled={visibleEmailable.length === 0}
-                      title="Select all shown emailable"
-                      style={{ width: 15, height: 15 }}
-                    />
-                  </th>
                   <th style={thStyle}>Name</th>
                   <th style={thStyle}>Email</th>
                   <th style={thStyle}>Phone</th>
                   <th style={thStyle}>City</th>
                   <th style={thStyle}>Source</th>
-                  <th style={{ ...thStyle, width: 90 }}></th>
+                  <th style={{ ...thStyle, width: 220 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((c) => {
-                  const canPick = emailableIds.has(c.playerId);
-                  return (
-                    <tr
-                      key={c.playerId}
-                      style={{
-                        borderTop: `1px solid ${ruleSoft}`,
-                        background: selected.has(c.playerId) ? "#f4f9ff" : undefined,
-                      }}
-                    >
-                      <td style={{ ...tdStyle, textAlign: "center" }}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(c.playerId)}
-                          disabled={!canPick}
-                          onChange={() => toggleOne(c.playerId)}
-                          title={canPick ? undefined : "No email / unsubscribed — can't be emailed"}
-                          style={{ width: 15, height: 15 }}
-                        />
-                      </td>
-                      <td style={tdStyle}>
-                        {c.firstName} {c.lastName}
-                      </td>
-                      <td style={{ ...tdStyle, color: c.email ? ink : inkMuted }}>
-                        {c.email ?? "—"}
-                        {c.unsubscribed && (
-                          <span style={unsubPill} title="Unsubscribed — excluded from emails">
-                            unsubscribed
-                          </span>
-                        )}
-                      </td>
-                      <td style={tdStyle}>{c.phone ?? "—"}</td>
-                      <td style={tdStyle}>{c.city ?? "—"}</td>
-                      <td style={tdStyle}>
-                        <SourcePill source={c.source} />
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        {c.source === "registrant" ? (
-                          <span style={{ color: inkMuted, fontSize: 12 }} title="Registrants are managed via their registration">
-                            —
-                          </span>
-                        ) : (
-                          <button style={ghostButtonStyle} onClick={() => setRemoveTarget(c)}>
-                            Remove
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {visible.map((c) => (
+                  <tr key={c.playerId} style={{ borderTop: `1px solid ${ruleSoft}` }}>
+                    <td style={tdStyle}>{c.firstName} {c.lastName}</td>
+                    <td style={{ ...tdStyle, color: c.email ? ink : inkMuted }}>
+                      {c.email ?? "—"}
+                      {c.unsubscribed && (
+                        <span style={unsubPill} title="Unsubscribed — excluded from emails">unsubscribed</span>
+                      )}
+                    </td>
+                    <td style={tdStyle}>{c.phone ?? "—"}</td>
+                    <td style={tdStyle}>{c.city ?? "—"}</td>
+                    <td style={tdStyle}><SourcePill source={c.source} /></td>
+                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button style={rowBtn} onClick={() => setRegisterTarget(c)}>Register</button>
+                      <button style={rowBtn} onClick={() => setEditTarget(c)}>Edit</button>
+                      {c.source === "registrant" ? (
+                        <span style={{ color: inkMuted, fontSize: 12, marginLeft: 8 }} title="Registrants are managed via their registration">—</span>
+                      ) : (
+                        <button style={rowBtn} onClick={() => setRemoveTarget(c)}>Remove</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
                 {visible.length === 0 && (
                   <tr>
-                    <td style={{ ...tdStyle, color: inkMuted }} colSpan={7}>
+                    <td style={{ ...tdStyle, color: inkMuted }} colSpan={6}>
                       No contacts match {hasActiveFilter ? "these filters" : "your search"}.
                     </td>
                   </tr>
@@ -399,14 +268,54 @@ export default function OrgContactsPage() {
         </>
       )}
 
+      {editTarget && (
+        <ContactFormModal
+          title="Edit contact"
+          initial={{
+            firstName: editTarget.firstName,
+            lastName: editTarget.lastName,
+            email: editTarget.email,
+            phone: editTarget.phone,
+            city: editTarget.city,
+            state: editTarget.state,
+          }}
+          note="Edits this person's details wherever they appear — they're a shared record across your tournaments."
+          onClose={() => setEditTarget(null)}
+          onSave={async (input) => {
+            await updateContactPerson(editTarget.playerId, input);
+            setContacts((prev) =>
+              (prev ?? []).map((c) =>
+                c.playerId === editTarget.playerId
+                  ? { ...c, firstName: input.firstName, lastName: input.lastName, email: input.email, phone: input.phone, city: input.city, state: input.state }
+                  : c,
+              ),
+            );
+            setEditTarget(null);
+            setActionMsg("Contact updated.");
+          }}
+        />
+      )}
+
+      {registerTarget && (
+        <RegisterForEventModal
+          orgId={org.id}
+          contact={registerTarget}
+          onClose={() => setRegisterTarget(null)}
+          onDone={(msg) => {
+            setRegisterTarget(null);
+            setActionMsg(msg);
+            reload();
+          }}
+        />
+      )}
+
       {removeTarget && (
         <ConfirmModal
           title="Remove contact?"
           body={
             <>
               Remove <strong>{removeTarget.firstName} {removeTarget.lastName}</strong> from
-              this club's contact list? This doesn't delete the player — it just takes
-              them off your list.
+              this club's contact list? This doesn't delete the player — it just takes them off your list.
             </>
           }
           confirmLabel="Remove"
@@ -425,7 +334,335 @@ export default function OrgContactsPage() {
   );
 }
 
-// ── Import panel ──────────────────────────────────────────────────────
+// ── Add contact panel ─────────────────────────────────────────────────
+function AddContactPanel({
+  onClose,
+  onSaved,
+}: {
+  onClose: () => void;
+  onSaved: (input: ContactInput) => Promise<void>;
+}) {
+  return (
+    <div style={{ ...panelStyle, marginBottom: 20 }}>
+      <PanelHeader title="Add contact" onClose={onClose} />
+      <ContactFormFields submitLabel="Add contact" onCancel={onClose} onSave={onSaved} />
+    </div>
+  );
+}
+
+// ── Contact form (add + edit) ─────────────────────────────────────────
+function ContactFormModal({
+  title,
+  initial,
+  note,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  initial: ContactInput;
+  note?: string;
+  onClose: () => void;
+  onSave: (input: ContactInput) => Promise<void>;
+}) {
+  return (
+    <ModalShell title={title} onClose={onClose}>
+      {note && <p style={{ fontSize: 12.5, color: inkSoft, margin: "0 0 14px", lineHeight: 1.5 }}>{note}</p>}
+      <ContactFormFields submitLabel="Save changes" initial={initial} onCancel={onClose} onSave={onSave} />
+    </ModalShell>
+  );
+}
+
+function ContactFormFields({
+  initial,
+  submitLabel,
+  onCancel,
+  onSave,
+}: {
+  initial?: ContactInput;
+  submitLabel: string;
+  onCancel: () => void;
+  onSave: (input: ContactInput) => Promise<void>;
+}) {
+  const [firstName, setFirstName] = useState(initial?.firstName ?? "");
+  const [lastName, setLastName] = useState(initial?.lastName ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
+  const [phone, setPhone] = useState(initial?.phone ?? "");
+  const [city, setCity] = useState(initial?.city ?? "");
+  const [stateField, setStateField] = useState(initial?.state ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSave = (firstName.trim().length > 0 || lastName.trim().length > 0) && !saving;
+
+  const submit = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        firstName,
+        lastName,
+        email: email || null,
+        phone: phone || null,
+        city: city || null,
+        state: stateField || null,
+      });
+    } catch (e) {
+      setError((e as { message?: string })?.message ?? "Couldn't save the contact.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <Field label="First name">
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} style={inputStyle} />
+        </Field>
+        <Field label="Last name">
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} style={inputStyle} />
+        </Field>
+      </div>
+      <Field label="Email">
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...inputStyle, marginBottom: 12 }} />
+      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 90px", gap: 12, marginBottom: 4 }}>
+        <Field label="Phone">
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
+        </Field>
+        <Field label="City">
+          <input value={city} onChange={(e) => setCity(e.target.value)} style={inputStyle} />
+        </Field>
+        <Field label="State">
+          <input value={stateField} onChange={(e) => setStateField(e.target.value)} maxLength={2} style={inputStyle} />
+        </Field>
+      </div>
+
+      <p style={{ fontSize: 12, color: inkMuted, margin: "8px 0 12px" }}>A first or last name is required. Everything else is optional.</p>
+
+      {error && (
+        <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }} role="alert">{error}</div>
+      )}
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button style={canSave ? ctaPrimaryStyle : ctaPrimaryDisabledStyle} disabled={!canSave} onClick={submit}>
+          {saving ? "Saving…" : submitLabel}
+        </button>
+        <button style={ctaSecondaryStyle} onClick={onCancel} disabled={saving}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Register a contact for an event (comp / offline) ──────────────────
+function RegisterForEventModal({
+  orgId,
+  contact,
+  onClose,
+  onDone,
+}: {
+  orgId: string;
+  contact: OrgContact;
+  onClose: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [tournaments, setTournaments] = useState<PickerTournament[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [tournamentId, setTournamentId] = useState<string>("");
+  const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
+  const [kind, setKind] = useState<RegisterKind>("comp");
+  const [method, setMethod] = useState<ManualPaymentMethod>("cash");
+  const [note, setNote] = useState("");
+  // Per-event offline amount, in dollars (string), keyed by event id.
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchOrgTournamentsWithEvents(orgId);
+        if (cancelled) return;
+        setTournaments(data);
+        if (data.length > 0) setTournamentId(data[0].id);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError((e as { message?: string })?.message ?? "Could not load tournaments.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  const tournament = useMemo(
+    () => (tournaments ?? []).find((t) => t.id === tournamentId) ?? null,
+    [tournaments, tournamentId],
+  );
+
+  function toggleEvent(eventId: string, feeCents: number) {
+    setSelectedEvents((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+    // Default the offline amount to the event's fee the first time it's picked.
+    setAmounts((prev) => (prev[eventId] === undefined ? { ...prev, [eventId]: (feeCents / 100).toFixed(2) } : prev));
+  }
+
+  const chosen = useMemo(
+    () => (tournament?.events ?? []).filter((e) => selectedEvents.has(e.id)),
+    [tournament, selectedEvents],
+  );
+
+  const offlineAmountsValid =
+    kind === "comp" ||
+    chosen.every((e) => {
+      const v = Number(amounts[e.id]);
+      return Number.isFinite(v) && v >= 0;
+    });
+
+  const canSubmit = chosen.length > 0 && offlineAmountsValid && !submitting;
+
+  const submit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await adminRegisterContact({
+        organizationId: orgId,
+        playerId: contact.playerId,
+        registrations: chosen.map((e) => ({
+          eventId: e.id,
+          amountCents: kind === "offline" ? Math.round(Number(amounts[e.id]) * 100) : 0,
+        })),
+        kind,
+        ...(kind === "offline" ? { method, note: note.trim() || undefined } : {}),
+      });
+      const parts: string[] = [];
+      if (res.registered > 0) {
+        parts.push(`Registered ${contact.firstName} for ${res.registered} event${res.registered === 1 ? "" : "s"} (${kind === "comp" ? "comped" : "offline payment"}).`);
+      }
+      const already = res.skipped.filter((s) => s.reason === "already_registered").length;
+      if (already > 0) parts.push(`${already} already registered — skipped.`);
+      const otherSkips = res.skipped.filter((s) => s.reason !== "already_registered").length;
+      if (otherSkips > 0) parts.push(`${otherSkips} could not be registered.`);
+      if (res.registered === 0 && already === 0 && otherSkips === 0) parts.push("Nothing to register.");
+      onDone(parts.join(" "));
+    } catch (e) {
+      setError((e as { message?: string })?.message ?? "Registration failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <ModalShell title={`Register ${contact.firstName} ${contact.lastName}`.trim()} onClose={onClose}>
+      {loadError && <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }}>{loadError}</div>}
+
+      {tournaments === null ? (
+        <div style={{ color: inkMuted }}>Loading tournaments…</div>
+      ) : tournaments.length === 0 ? (
+        <div style={{ color: inkMuted, fontSize: 14 }}>This club has no tournaments yet. Create one first.</div>
+      ) : (
+        <>
+          <Field label="Tournament">
+            <select
+              value={tournamentId}
+              onChange={(e) => { setTournamentId(e.target.value); setSelectedEvents(new Set()); }}
+              style={{ ...inputStyle, marginBottom: 14 }}
+            >
+              {tournaments.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </Field>
+
+          <div style={{ ...fieldLabel }}>Events</div>
+          {tournament && tournament.events.length === 0 ? (
+            <div style={{ color: inkMuted, fontSize: 13, marginBottom: 14 }}>This tournament has no events yet.</div>
+          ) : (
+            <div style={{ border: `1px solid ${rule}`, borderRadius: 8, marginBottom: 14, maxHeight: 220, overflowY: "auto" }}>
+              {(tournament?.events ?? []).map((e) => (
+                <label
+                  key={e.id}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderTop: `1px solid ${ruleSoft}`, fontSize: 14, cursor: "pointer" }}
+                >
+                  <input type="checkbox" checked={selectedEvents.has(e.id)} onChange={() => toggleEvent(e.id, e.feeCents)} style={{ width: 15, height: 15 }} />
+                  <span style={{ flex: 1 }}>{e.name}</span>
+                  <span style={{ color: inkMuted, fontSize: 13 }}>{e.feeCents > 0 ? `$${(e.feeCents / 100).toFixed(2)}` : "Free"}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {/* Payment treatment */}
+          <div style={{ ...fieldLabel }}>Payment</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+            <label style={radioRow}>
+              <input type="radio" name="kind" checked={kind === "comp"} onChange={() => setKind("comp")} />
+              <span><strong>Comp</strong> — waive the fee (register at $0)</span>
+            </label>
+            <label style={radioRow}>
+              <input type="radio" name="kind" checked={kind === "offline"} onChange={() => setKind("offline")} />
+              <span><strong>Record offline payment</strong> — collected outside the app</span>
+            </label>
+          </div>
+
+          {kind === "offline" && (
+            <div style={{ ...panelMutedStyle, marginBottom: 14 }}>
+              {chosen.length === 0 ? (
+                <div style={{ color: inkMuted, fontSize: 13 }}>Pick one or more events above to enter amounts.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                  {chosen.map((e) => (
+                    <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ flex: 1, fontSize: 13 }}>{e.name}</span>
+                      <span style={{ color: inkMuted }}>$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={amounts[e.id] ?? ""}
+                        onChange={(ev) => setAmounts((prev) => ({ ...prev, [e.id]: ev.target.value }))}
+                        style={{ ...inputStyle, maxWidth: 110 }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 12 }}>
+                <Field label="Method">
+                  <select value={method} onChange={(e) => setMethod(e.target.value as ManualPaymentMethod)} style={inputStyle}>
+                    <option value="cash">Cash</option>
+                    <option value="check">Check</option>
+                    <option value="venmo">Venmo</option>
+                    <option value="other">Other</option>
+                  </select>
+                </Field>
+                <Field label="Note (optional)">
+                  <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. paid at the desk" style={inputStyle} />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {error && <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }} role="alert">{error}</div>}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={canSubmit ? ctaPrimaryStyle : ctaPrimaryDisabledStyle} disabled={!canSubmit} onClick={submit}>
+              {submitting ? "Registering…" : `Register for ${chosen.length || "…"} event${chosen.length === 1 ? "" : "s"}`}
+            </button>
+            <button style={ctaSecondaryStyle} onClick={onClose} disabled={submitting}>Cancel</button>
+          </div>
+        </>
+      )}
+    </ModalShell>
+  );
+}
+
+// ── Import panel (bulk CSV/XLSX) ──────────────────────────────────────
 function ImportPanel({
   orgId,
   onClose,
@@ -437,12 +674,7 @@ function ImportPanel({
 }) {
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<Record<ContactField, number>>({
-    first_name: -1,
-    last_name: -1,
-    email: -1,
-    phone: -1,
-    city: -1,
-    state: -1,
+    first_name: -1, last_name: -1, email: -1, phone: -1, city: -1, state: -1,
   });
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -468,7 +700,6 @@ function ImportPanel({
     }
   };
 
-  // Rows usable = those with a non-empty first or last name once mapped.
   const readyCount = useMemo(() => {
     if (!parsed) return 0;
     const fi = mapping.first_name;
@@ -530,39 +761,29 @@ function ImportPanel({
       {parsing && <div style={{ color: inkMuted, fontSize: 13 }}>Reading file…</div>}
 
       {error && (
-        <div style={{ ...statusPanelStyle("danger"), margin: "8px 0" }} role="alert">
-          {error}
-        </div>
+        <div style={{ ...statusPanelStyle("danger"), margin: "8px 0" }} role="alert">{error}</div>
       )}
 
       {parsed && (
         <div style={{ ...panelMutedStyle, marginTop: 8 }}>
           <div style={{ fontSize: 13, color: inkSoft, marginBottom: 12 }}>
-            Found <strong>{parsed.rows.length}</strong> row{parsed.rows.length === 1 ? "" : "s"}.
-            Match your columns to contact fields:
+            Found <strong>{parsed.rows.length}</strong> row{parsed.rows.length === 1 ? "" : "s"}. Match your columns to contact fields:
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
             {CONTACT_FIELDS.map((f) => (
-              <label
-                key={f.key}
-                style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}
-              >
+              <label key={f.key} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
                 <span style={{ width: 96, color: inkSoft, flexShrink: 0 }}>
                   {f.label}
                   {f.required && <span style={{ color: courtGreen }}> *</span>}
                 </span>
                 <select
                   value={mapping[f.key]}
-                  onChange={(e) =>
-                    setMapping((m) => ({ ...m, [f.key]: Number(e.target.value) }))
-                  }
+                  onChange={(e) => setMapping((m) => ({ ...m, [f.key]: Number(e.target.value) }))}
                   style={{ ...inputStyle, maxWidth: 280 }}
                 >
                   <option value={-1}>— not imported —</option>
                   {parsed.headers.map((h, i) => (
-                    <option key={i} value={i}>
-                      {h || `Column ${i + 1}`}
-                    </option>
+                    <option key={i} value={i}>{h || `Column ${i + 1}`}</option>
                   ))}
                 </select>
               </label>
@@ -571,9 +792,7 @@ function ImportPanel({
 
           <div style={{ fontSize: 13, color: inkSoft, margin: "14px 0 12px" }}>
             {readyCount} ready
-            {parsed.rows.length - readyCount > 0 && (
-              <> · {parsed.rows.length - readyCount} skipped (no name)</>
-            )}
+            {parsed.rows.length - readyCount > 0 && <> · {parsed.rows.length - readyCount} skipped (no name)</>}
           </div>
 
           {!nameMapped && (
@@ -590,9 +809,7 @@ function ImportPanel({
             >
               {importing ? "Importing…" : `Import ${readyCount} contact${readyCount === 1 ? "" : "s"}`}
             </button>
-            <button style={ctaSecondaryStyle} onClick={onClose} disabled={importing}>
-              Cancel
-            </button>
+            <button style={ctaSecondaryStyle} onClick={onClose} disabled={importing}>Cancel</button>
           </div>
         </div>
       )}
@@ -600,293 +817,39 @@ function ImportPanel({
   );
 }
 
-// ── Compose / email panel ─────────────────────────────────────────────
-function ComposePanel({
-  orgId,
-  recipientIds,
-  selectionActive,
-  orgDefaultReplyTo,
-  senderEmail,
-  canEditDefault,
-  onDefaultSaved,
-  onClose,
-  onSent,
-}: {
-  orgId: string;
-  recipientIds: string[];
-  selectionActive: boolean;
-  orgDefaultReplyTo: string | null;
-  senderEmail: string;
-  canEditDefault: boolean;
-  onDefaultSaved: (v: string | null) => void;
-  onClose: () => void;
-  onSent: (n: number) => void;
-}) {
-  const recipientCount = recipientIds.length;
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [bodyIsHtml, setBodyIsHtml] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [consent, setConsent] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Reply-to for this send: the club's saved default if it has one, otherwise
-  // the sending admin's own email. Editable per send.
-  const [replyTo, setReplyTo] = useState((orgDefaultReplyTo || senderEmail).trim());
-  const [savingDefault, setSavingDefault] = useState(false);
-  const [savedDefault, setSavedDefault] = useState(false);
-
-  const replyToTrimmed = replyTo.trim();
-  const replyToValid = replyToTrimmed.length === 0 || EMAIL_RE.test(replyToTrimmed);
-  // Only offer "save as club default" to admins, and only when the value is a
-  // valid address that differs from what's already saved.
-  const canSaveDefault =
-    canEditDefault && replyToValid && replyToTrimmed.length > 0 &&
-    replyToTrimmed !== (orgDefaultReplyTo ?? "").trim();
-
-  const canSend =
-    subject.trim().length > 0 && body.trim().length > 0 && consent &&
-    recipientCount > 0 && replyToValid;
-
-  const saveAsDefault = async () => {
-    setSavingDefault(true);
-    setError(null);
-    try {
-      const { error: upErr } = await supabase
-        .from("organizations")
-        .update({ contact_email: replyToTrimmed })
-        .eq("id", orgId);
-      if (upErr) {
-        setError(upErr.message);
-        return;
-      }
-      onDefaultSaved(replyToTrimmed);
-      setSavedDefault(true);
-    } finally {
-      setSavingDefault(false);
-    }
-  };
-
-  const send = async () => {
-    setError(null);
-    try {
-      const { data, error: fnErr } = await supabase.functions.invoke("send-contact-broadcast", {
-        // Always pass the explicit recipient list so the send matches exactly
-        // what's shown (filters + individual picks, or all emailable). `replyTo`
-        // omitted when blank → the function falls back to org default → sender.
-        body: {
-          organizationId: orgId,
-          subject: subject.trim(),
-          body,
-          consent: true,
-          playerIds: recipientIds,
-          bodyIsHtml,
-          ...(replyToTrimmed ? { replyTo: replyToTrimmed } : {}),
-        },
-      });
-      if (fnErr) {
-        setError(await readFnError(fnErr));
-        return;
-      }
-      const n = (data as { recipientCount?: number })?.recipientCount ?? recipientCount;
-      onSent(n);
-    } catch (e) {
-      setError((e as { message?: string })?.message ?? "Send failed.");
-    }
-  };
-
+// ── small shared bits ─────────────────────────────────────────────────
+function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
-    <div style={{ ...panelStyle, marginBottom: 20 }}>
-      <PanelHeader title={selectionActive ? "Email selected contacts" : "Email all contacts"} onClose={onClose} />
-      <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 14px", lineHeight: 1.55 }}>
-        This goes to <strong>{recipientCount}</strong> {selectionActive ? "selected " : ""}contact{recipientCount === 1 ? "" : "s"} with
-        an email address (unsubscribed contacts are skipped). Recipients get a one-click
-        unsubscribe link automatically.
-      </p>
-
-      <label style={fieldLabel}>Subject</label>
-      <input
-        type="text"
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        placeholder="e.g. Summer league sign-ups are open"
-        style={{ ...inputStyle, marginBottom: 14 }}
-        maxLength={200}
-      />
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <label style={{ ...fieldLabel, marginBottom: 0 }}>Message</label>
-        <div style={{ display: "flex", gap: 4 }} role="tablist" aria-label="Message format">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!bodyIsHtml}
-            onClick={() => { setBodyIsHtml(false); setShowPreview(false); }}
-            style={modeBtnStyle(!bodyIsHtml)}
-          >
-            Plain text
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={bodyIsHtml}
-            onClick={() => setBodyIsHtml(true)}
-            style={modeBtnStyle(bodyIsHtml)}
-          >
-            HTML
-          </button>
-        </div>
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(20,24,31,0.45)",
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "40px 16px", zIndex: 1000, overflowY: "auto",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ ...panelStyle, width: "100%", maxWidth: 520, margin: 0, fontFamily: bodyFontStack, color: ink }}
+      >
+        <PanelHeader title={title} onClose={onClose} />
+        {children}
       </div>
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder={
-          bodyIsHtml
-            ? "Paste your HTML here — e.g. <h2>Big news</h2><p>…</p>. It's sent inside the club's branded header, footer, and unsubscribe link."
-            : "Write your message… Blank lines start a new paragraph."
-        }
-        rows={bodyIsHtml ? 12 : 8}
-        spellCheck={!bodyIsHtml}
-        style={{
-          ...inputStyle,
-          marginBottom: bodyIsHtml ? 8 : 14,
-          resize: "vertical",
-          fontFamily: bodyIsHtml ? "ui-monospace, SFMono-Regular, Menlo, monospace" : bodyFontStack,
-          fontSize: bodyIsHtml ? 12.5 : undefined,
-        }}
-      />
-      {bodyIsHtml && (
-        <div style={{ marginBottom: 14 }}>
-          <button
-            type="button"
-            onClick={() => setShowPreview((p) => !p)}
-            disabled={!body.trim()}
-            style={{ ...ctaSecondaryStyle, padding: "5px 12px", fontSize: 12, opacity: body.trim() ? 1 : 0.5 }}
-          >
-            {showPreview ? "Hide preview" : "Show preview"}
-          </button>
-          {showPreview && body.trim() && (
-            <iframe
-              title="Email preview"
-              // Sandboxed with no allow-* so scripts can't run — renders the
-              // admin's HTML safely without executing it in our app.
-              sandbox=""
-              srcDoc={body}
-              style={{
-                width: "100%",
-                height: 340,
-                marginTop: 10,
-                border: `1px solid ${rule}`,
-                borderRadius: 6,
-                background: "#fff",
-              }}
-            />
-          )}
-        </div>
-      )}
-
-      <label style={fieldLabel}>Reply-to address</label>
-      <input
-        type="email"
-        value={replyTo}
-        onChange={(e) => { setReplyTo(e.target.value); setSavedDefault(false); }}
-        placeholder={senderEmail || "replies@yourclub.com"}
-        style={{
-          ...inputStyle,
-          marginBottom: 6,
-          ...(replyToValid ? null : { borderColor: "#c0392b" }),
-        }}
-      />
-      <p style={{ fontSize: 12, color: inkSoft, margin: "0 0 6px", lineHeight: 1.5 }}>
-        Where recipient replies go.{" "}
-        {orgDefaultReplyTo
-          ? "Prefilled with this club's default — edit to override just this send."
-          : "Defaults to your email — edit to override just this send."}
-      </p>
-      {!replyToValid && (
-        <p style={{ fontSize: 12, color: "#c0392b", margin: "0 0 6px" }} role="alert">
-          Enter a valid email address (or leave blank to use the club default).
-        </p>
-      )}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-        {canEditDefault && (
-          <button
-            type="button"
-            onClick={saveAsDefault}
-            disabled={!canSaveDefault || savingDefault}
-            style={{
-              ...ctaSecondaryStyle,
-              padding: "5px 12px",
-              fontSize: 12,
-              opacity: canSaveDefault && !savingDefault ? 1 : 0.5,
-              cursor: canSaveDefault && !savingDefault ? "pointer" : "default",
-            }}
-          >
-            {savingDefault ? "Saving…" : "Save as club default"}
-          </button>
-        )}
-        {savedDefault && (
-          <span style={{ fontSize: 12, color: courtGreen, fontWeight: 600 }}>
-            ✓ Saved as club default
-          </span>
-        )}
-      </div>
-
-      <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: inkSoft, marginBottom: 14, cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={consent}
-          onChange={(e) => setConsent(e.target.checked)}
-          style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0 }}
-        />
-        <span>
-          I have permission to email these contacts. They are members, registrants, or
-          people who opted in to hear from this club.
-        </span>
-      </label>
-
-      {error && (
-        <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }} role="alert">
-          {error}
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          style={canSend ? ctaPrimaryStyle : ctaPrimaryDisabledStyle}
-          disabled={!canSend}
-          onClick={() => setConfirming(true)}
-        >
-          Send
-        </button>
-        <button style={ctaSecondaryStyle} onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-
-      {confirming && (
-        <ConfirmModal
-          title="Send this email?"
-          destructive={false}
-          body={
-            <>
-              Send “{subject.trim()}” to <strong>{recipientCount}</strong> contact
-              {recipientCount === 1 ? "" : "s"}? This can't be unsent.
-            </>
-          }
-          confirmLabel="Send now"
-          onCancel={() => setConfirming(false)}
-          onConfirm={async () => {
-            await send();
-            setConfirming(false);
-          }}
-        />
-      )}
     </div>
   );
 }
 
-// ── small shared bits ─────────────────────────────────────────────────
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label style={{ display: "block" }}>
+      <span style={fieldLabel}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function PanelHeader({ title, onClose }: { title: string; onClose: () => void }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -908,97 +871,18 @@ function SourcePill({ source }: { source: ContactSource }) {
   };
   const s = map[source];
   return (
-    <span
-      style={{
-        display: "inline-block",
-        background: s.bg,
-        color: s.fg,
-        fontSize: 11,
-        fontWeight: 600,
-        padding: "2px 8px",
-        borderRadius: 999,
-      }}
-    >
+    <span style={{ display: "inline-block", background: s.bg, color: s.fg, fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999 }}>
       {s.label}
     </span>
   );
-}
-
-// Unwrap a supabase FunctionsError — the edge function's JSON body is on
-// err.context as a Response (same idiom as CreateOrganizationPage).
-async function readFnError(err: unknown): Promise<string> {
-  const ctx = (err as { context?: Response })?.context;
-  if (ctx && typeof ctx.json === "function") {
-    try {
-      const b = (await ctx.json()) as { error?: string };
-      if (b?.error) return b.error;
-    } catch {
-      /* fall through */
-    }
-  }
-  return (err as { message?: string })?.message ?? "Something went wrong.";
 }
 
 function at(row: string[], idx: number): string {
   return idx >= 0 ? (row[idx] ?? "").trim() : "";
 }
 
-const displayHeading: CSSProperties = {
-  fontFamily: displayFontStack,
-  fontSize: "clamp(24px, 3.5vw, 32px)",
-  lineHeight: 1.1,
-  margin: "0 0 6px",
-};
+const rowBtn: CSSProperties = { ...ghostButtonStyle, fontSize: 13, marginLeft: 8 };
 
-const thStyle: CSSProperties = {
-  textAlign: "left",
-  padding: "10px 12px",
-  fontSize: 11,
-  color: inkMuted,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  fontWeight: 600,
-  fontFamily: headingFontStack,
-  whiteSpace: "nowrap",
-};
-
-const tdStyle: CSSProperties = {
-  padding: "10px 12px",
-  verticalAlign: "middle",
-};
-
-const fieldLabel: CSSProperties = {
-  display: "block",
-  fontSize: 12,
-  fontWeight: 600,
-  color: inkSoft,
-  textTransform: "uppercase",
-  letterSpacing: "0.04em",
-  marginBottom: 6,
-};
-
-// Segmented Plain-text / HTML toggle button.
-function modeBtnStyle(active: boolean): CSSProperties {
-  return {
-    padding: "4px 11px",
-    fontSize: 12,
-    fontWeight: 600,
-    borderRadius: 5,
-    cursor: "pointer",
-    fontFamily: bodyFontStack,
-    border: `1px solid ${active ? ink : rule}`,
-    background: active ? ink : "transparent",
-    color: active ? "#ffffff" : inkSoft,
-  };
-}
-
-const unsubPill: CSSProperties = {
-  display: "inline-block",
-  marginLeft: 8,
-  background: "#fdeae6",
-  color: "#9c2412",
-  fontSize: 10,
-  fontWeight: 600,
-  padding: "1px 6px",
-  borderRadius: 999,
+const radioRow: CSSProperties = {
+  display: "flex", gap: 10, alignItems: "center", fontSize: 14, color: ink, cursor: "pointer",
 };

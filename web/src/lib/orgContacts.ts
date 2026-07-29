@@ -110,6 +110,101 @@ export async function removeOrgContact(
   if (error) throw new Error(error.message);
 }
 
+// Person fields an admin can create/edit for a contact. These live on the shared
+// global `players` row, so editing one updates the person everywhere they appear.
+export type ContactInput = {
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+};
+
+// Normalize a blank string to null (email/phone/city/state are optional).
+function orNull(v: string | null | undefined): string | null {
+  const t = (v ?? "").trim();
+  return t.length > 0 ? t : null;
+}
+
+// Add a single contact. Mirrors the bulk importer's matching rule: if an email
+// is given and an existing (non-deleted) player already has it, reuse that
+// player (do NOT overwrite their fields); otherwise create a new player. Then
+// upsert a `manual` link, restoring it if it was previously soft-deleted.
+// Returns the player id the contact resolved to.
+export async function createOrgContact(
+  orgId: string,
+  input: ContactInput,
+): Promise<string> {
+  const email = orNull(input.email);
+  let playerId: string | null = null;
+
+  if (email) {
+    // citext column → case-insensitive match; take the earliest existing row.
+    const { data: existing, error: lookupErr } = await supabase
+      .from("players")
+      .select("id")
+      .eq("email", email)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (lookupErr) throw new Error(lookupErr.message);
+    playerId = existing?.[0]?.id ?? null;
+  }
+
+  if (!playerId) {
+    const { data: inserted, error: insErr } = await supabase
+      .from("players")
+      .insert({
+        first_name: input.firstName.trim(),
+        last_name: input.lastName.trim(),
+        email,
+        phone: orNull(input.phone),
+        city: orNull(input.city),
+        state: orNull(input.state),
+      })
+      .select("id")
+      .single();
+    if (insErr) throw new Error(insErr.message);
+    playerId = inserted.id;
+  }
+
+  const { error: linkErr } = await untyped
+    .from("organization_contacts")
+    .upsert(
+      {
+        organization_id: orgId,
+        player_id: playerId,
+        source: "manual",
+        deleted_at: null,
+      },
+      { onConflict: "organization_id,player_id" },
+    );
+  if (linkErr) throw new Error(linkErr.message);
+  return playerId;
+}
+
+// Edit a contact's person fields. NOTE: `players` is a shared global record, so
+// this updates the person across every org/tournament they appear in. We never
+// touch auth_user_id here — editing contact info can't hijack an account.
+export async function updateContactPerson(
+  playerId: string,
+  input: ContactInput,
+): Promise<void> {
+  const { error } = await supabase
+    .from("players")
+    .update({
+      first_name: input.firstName.trim(),
+      last_name: input.lastName.trim(),
+      email: orNull(input.email),
+      phone: orNull(input.phone),
+      city: orNull(input.city),
+      state: orNull(input.state),
+    })
+    .eq("id", playerId);
+  if (error) throw new Error(error.message);
+}
+
 async function fetchRegistrantPlayerIds(orgId: string): Promise<Set<string>> {
   const ids = new Set<string>();
   const { data: tourneys } = await supabase

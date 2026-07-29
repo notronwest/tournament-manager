@@ -403,7 +403,7 @@ export default function AdminLayout() {
           </SideLink>
           <SideLink to={`/admin/${org.slug}/locations`} onNavigate={closeDrawer}>Venues</SideLink>
           <SideLink to={`/admin/${org.slug}/contacts`} end onNavigate={closeDrawer}>Contacts</SideLink>
-          <SideLink to={`/admin/${org.slug}/contacts/emails`} onNavigate={closeDrawer}>Email history</SideLink>
+          <SideLink to={`/admin/${org.slug}/email`} onNavigate={closeDrawer}>Email</SideLink>
           <SideLink to={`/admin/${org.slug}/settings/stripe`} onNavigate={closeDrawer}>
             Stripe Connect
           </SideLink>
