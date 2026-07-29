@@ -21,7 +21,7 @@ const SITE_URL = "https://bertanderne.com";
 
 export type EmailLayoutParams = {
   headingLabel?: string;  // small all-caps eyebrow above the h1 (plain text)
-  heading: string;        // h1 text (plain text — escaped by this function)
+  heading?: string;       // h1 text (plain text — escaped); omitted entirely when absent
   bodyHtml: string;       // content HTML before the CTA button (callers escape values)
   ctaLabel?: string;      // button text (plain text — escaped)
   ctaUrl?: string;        // button href (html-attribute escaped)
@@ -47,6 +47,10 @@ export function renderEmailHtml(p: EmailLayoutParams): string {
           </tr>
         </table>`
       : "";
+
+  const headingHtml = p.heading
+    ? `<h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#14181f;line-height:1.2;">${escapeHtml(p.heading)}</h1>`
+    : "";
 
   const postBody = p.postBodyHtml ?? "";
 
@@ -99,7 +103,7 @@ export function renderEmailHtml(p: EmailLayoutParams): string {
           <tr>
             <td class="email-body" style="background-color:#ffffff;border:1px solid #e3dec8;border-radius:12px;padding:40px 40px 36px;">
               ${eyebrow}
-              <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#14181f;line-height:1.2;">${escapeHtml(p.heading)}</h1>
+              ${headingHtml}
               ${p.bodyHtml}
               ${cta}
               ${postBody}
