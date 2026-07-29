@@ -1,5 +1,4 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
   fetchBroadcasts,
@@ -19,14 +18,14 @@ import {
   courtRed,
   bodyFontStack,
   headingFontStack,
-  displayFontStack,
   statusPanelStyle,
-  breadcrumbLinkStyle,
 } from "../../lib/publicTheme";
 
 // Email history / delivery status for a club's contact-list emails. Counts are
 // aggregated from per-recipient event timestamps (see lib/contactBroadcasts).
-export default function ContactEmailsPage() {
+// Rendered as the "History" tab of the Email page — the page supplies the
+// heading/tab chrome, so this component is just the loader + list.
+export function EmailHistory() {
   const { org } = useCurrentOrg();
   const [broadcasts, setBroadcasts] = useState<BroadcastSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -56,15 +55,6 @@ export default function ContactEmailsPage() {
 
   return (
     <div style={{ fontFamily: bodyFontStack, color: ink }}>
-      <Link to={`/admin/${org.slug}/contacts`} style={{ ...breadcrumbLinkStyle, display: "inline-block", marginBottom: 8 }}>
-        ← Contacts
-      </Link>
-      <h1 style={displayHeading}>Email history</h1>
-      <p style={{ color: inkSoft, fontSize: 15, margin: "0 0 20px", maxWidth: 620, lineHeight: 1.55 }}>
-        Every email you've sent to your contact list, with delivery status —
-        delivered, opened, clicked, bounced, and unsubscribes.
-      </p>
-
       {loadError && (
         <div style={{ ...statusPanelStyle("danger"), marginBottom: 16 }} role="alert">
           {loadError}
@@ -84,7 +74,7 @@ export default function ContactEmailsPage() {
             background: cream,
           }}
         >
-          No emails sent yet. Head to <Link to={`/admin/${org.slug}/contacts`} style={breadcrumbLinkStyle}>Contacts</Link> to send your first one.
+          No emails sent yet. Switch to the <strong>Compose</strong> tab to send your first one.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -264,12 +254,6 @@ function fmtDateTime(iso: string | null): string {
   });
 }
 
-const displayHeading: CSSProperties = {
-  fontFamily: displayFontStack,
-  fontSize: 26,
-  margin: "0 0 6px",
-  color: ink,
-};
 const thStyle: CSSProperties = {
   textAlign: "left",
   padding: "8px 12px",
