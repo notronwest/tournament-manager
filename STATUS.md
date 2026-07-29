@@ -3,6 +3,16 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Promoted broadcast header cleanup to PROD (#605)
+
+Merged #604 to main (→TEST, edge-fn deploy green), then promotion PR #605
+(main→production) admin-merged (only failing check the expected issue-ref gate).
+PROD edge-function deploy green — contact-broadcast emails now omit the org-name
+eyebrow + subject <h1> in the body on both TEST and PROD. Confirmed production
+already had the #601 normalizeFrom From-quoting fix (via #602) before promoting.
+No migrations. Next: none pending on this — Angels re-send remains available
+(From-quoting + webhook secret + header cleanup all live).
+
 ## 2026-07-29 — Contact broadcast: drop org-name eyebrow + subject from email header (#604)
 
 Ron: "Take the WMPC and the subject out of the header." The broadcast body was
