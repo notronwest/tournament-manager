@@ -6,6 +6,28 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-28**
 
+## 2026-07-28 — Decision: no per-club sender identity; harden From quoting (PR #601)
+
+Discussed making the broadcast From per-club (multi-tenant). **Decision (Ron): don't** —
+send all contact broadcasts as **"Bert & Erne"** for now. Reasoning: From-*address* is
+locked to the verified domain (low value + misleading fake mailboxes); From-*name* per
+club was declined too. Reply-to stays per-club (`organizations.contact_email` + per-send
+override). Deferred (documented, not built): per-org `email_from_*`, sender-identity UI,
+per-club custom domains (white-label v2).
+
+- **Immediate unblock (Ron's op, no code):** the send was 422-ing because
+  `RESEND_FROM_ADDRESS` has an unquoted display name (`bert & erne`). Fix:
+  `supabase secrets set RESEND_FROM_ADDRESS='"Bert & Erne" <tournaments@bertanderne.com>'`
+  on PROD `wducs…` **and** TEST `mvkhds…` (read at runtime, no redeploy), then re-send.
+- **Hardening shipped — PR [#601]** (`fix/contact-broadcast-normalize-from`, closes #600):
+  `send-contact-broadcast` now `normalizeFrom()`s the secret — always-quotes a
+  `Name <email>` display name (bare `email@domain` untouched) so an unquoted `&` can't
+  422 the batch again. Edge-function only; no schema/UI/behavior change when the secret is
+  already well-formed. `deno lint` clean; normalizeFrom unit-checked (all pass); required
+  CI green. **Not merged.**
+- **Next:** merge #601 → TEST → promote to PROD (edge-fn only, no migration). Ron: fix the
+  secret + re-send to confirm delivery. Still open: RESEND_WEBHOOK_SECRET on TEST (tracking).
+
 ## 2026-07-28 — ROOT CAUSE found: RESEND_FROM_ADDRESS malformed for Resend batch
 
 With #598 live on PROD, Ron re-sent → the UI now shows the verbatim reason:
