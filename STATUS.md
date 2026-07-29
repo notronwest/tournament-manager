@@ -3,6 +3,20 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Promoted Contacts epic (#610) + partner-invite resend (#612) to PROD (#613)
+
+Merged both to main (→TEST): #610 TEST migration + edge-fn deploys green, #612
+frontend. Then promotion PR #613 (main→production) admin-merged (only failing check
+the expected issue-ref gate; unique-versions migration-lint passed). PROD deploys
+green — manual_payments migration APPLIED to PROD and admin-register-contact edge
+function DEPLOYED to PROD; Cloudflare frontend auto-deploys both. Now live on TEST
++ PROD: Contacts management/email split + contact CRUD + admin comp/offline event
+registration; and the "Pending partner invites" resend panel on Attendees.
+Deferred follow-ups (not built): admin subscribe/unsubscribe toggle; comp/offline
+tags on AttendeesPage; partner-invite root-cause fixes (change-partner-after-pay
+re-send + stop swallowing deferred-send errors); send-partner-invite uses stale
+invitee_email. Next: none pending unless Ron wants the follow-ups.
+
 ## 2026-07-29 — Pending partner invites + resend tool — PR #612 (in review)
 
 Ron: partners added/selected during registration may not be getting invite emails;
