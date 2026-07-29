@@ -3,6 +3,32 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Pending partner invites + resend tool — PR #612 (in review)
+
+Ron: partners added/selected during registration may not be getting invite emails;
+wants a tool to pick un-registered invitees and resend. Investigated (Explore map):
+CONFIRMED — the primary register flow (PublicTournamentPage) inserts the
+partner_invites row but DEFERS the invite email to payment time
+(create-payment-intent free / stripe-webhook paid). So partners get no email when
+the inviter never checks out, changes partner after paying, or the deferred send
+hits a swallowed Resend/config error. Some deferral is by-design (don't email a
+partner until the inviter commits); the real gaps are change-partner-after-pay
+(no re-trigger) and swallowed errors.
+
+Built the resend tool (PR #612, closes #611, frontend-only): a "Pending partner
+invites" panel on the tournament Attendees page listing every pending (un-accepted)
+invite with invitee name+email, inviter, event, invited date, inviter payment
+status; per-row + bulk Resend. lib/partnerInvites.ts (fetchPendingPartnerInvites +
+resendPartnerInvite). Resend invokes the EXISTING send-partner-invite (no
+idempotency guard → cleanly resends; same call RegisterPage makes) — no schema
+change, no new edge function; reads RLS-scoped to org. Verified typecheck/lint/
+build/clean load; Attendees auth-gated so interactive check on the PR preview.
+Decisions: location=Attendees panel; show all un-accepted w/ inviter status.
+Follow-ups noted (not built): fix change-partner-after-pay re-send + stop
+swallowing deferred-send errors; send-partner-invite uses stale invitee_email.
+NEXT: Ron reviews #612 preview → merge → TEST → promote. (PR #610 Contacts epic
+still open/awaiting review too.)
+
 ## 2026-07-29 — Built Contacts redesign epic — PR #610 (in review; has migration)
 
 Built the approved one-PR epic (closes #609). PR #610 on branch
