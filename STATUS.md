@@ -3,8 +3,51 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Contact broadcast: drop org-name eyebrow + subject from email header (#604)
+
+Ron: "Take the WMPC and the subject out of the header." The broadcast body was
+repeating the club name (eyebrow) and subject (<h1>) at the top of the card even
+though the branded logo band + the email Subject line already carry them. PR #604
+(closes #603): made `heading` optional in _shared/email-layout.ts (omit <h1> when
+absent; eyebrow was already conditional) and stopped passing headingLabel/heading
+from send-contact-broadcast. Backward compatible — the 6 other callers still pass
+heading. Footer club attribution + Unsubscribe and the email Subject line untouched.
+Verified by rendering the actual layout via a node harness + 375px screenshot: no
+h1, no eyebrow, logo band + footer intact, body opens immediately. Edge-function
+only; no migration. Next: Ron to review preview / merge → TEST, then promote.
+
+## 2026-07-29 — Builder: recovered stranded card #600 → PR #601 merged
+
+Single-item recovery run for issue #600 ("Harden contact-broadcast From:
+always-quote display name for Resend batch" — the fix for the "&" in
+"bert & erne" 422ing Resend's `/emails/batch`, per the 2026-07-27 entries
+below). Card was stuck in "In Progress" but a prior run had already built +
+pushed the fix and opened **PR #601** (`fix/contact-broadcast-normalize-from`,
+closes #600) — just never moved the card. Verified the diff (`normalizeFrom()`
+in `send-contact-broadcast/index.ts`) against the issue's acceptance criteria —
+matched, PR CI green, no review comments. No duplicate PR opened; moved the
+card to In Review. Ron merged #601 during this same session (`648c5de`) —
+edge function now deployed on merge. Board note: the project card for #600
+is still showing "In Review" even though the issue is closed/merged — no
+automation moved it to Done; needs a manual nudge next time someone's in the
+board. Next: re-send the Pickleball Angels broadcast now that both #598
+(surface Resend errors) and #601 (quote the From header) are live.
+
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-28**
+
+## 2026-07-29 — Promoted #601 to production (PR #602) + secret fixed
+
+Ron set `RESEND_FROM_ADDRESS='"Bert & Erne" <tournaments@bertanderne.com>'` (quoted) on
+PROD. Merged #601 → main (TEST), then promoted `main`→`production` (PR #602, merge).
+Batch: **4 commits, 1 code + 3 docs, NO migrations.** Only `send-contact-broadcast`
+changed → **PROD edge-functions deploy: success** (run 30452430473). PROD == main.
+- The always-quote From hardening + the corrected secret are both LIVE on PROD → the
+  original 422 cause is resolved two ways.
+- **Next (Ron):** re-send a contact broadcast on `bertanderne.com` and confirm it
+  delivers — recipient rows should now carry a `resend_email_id` (vs the old 104/0). If
+  it still fails, the fix already surfaces Resend's verbatim reason in the compose UI.
+- Still open (optional): RESEND_WEBHOOK_SECRET on TEST for delivery tracking there.
 
 ## 2026-07-28 — Decision: no per-club sender identity; harden From quoting (PR #601)
 
