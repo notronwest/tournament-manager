@@ -78,10 +78,15 @@ Deno.serve(async (req: Request) => {
     // @ts-expect-error Deno env
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     // @ts-expect-error Deno env
-    const fromAddress = Deno.env.get("RESEND_FROM_ADDRESS");
-    if (!resendApiKey || !fromAddress) {
+    const rawFrom = Deno.env.get("RESEND_FROM_ADDRESS");
+    if (!resendApiKey || !rawFrom) {
       return json({ error: "server_misconfigured" }, 500);
     }
+    // Resend's /emails/batch validates `from` more strictly than /emails: an
+    // UNQUOTED display name with a special char (e.g. the "&" in "bert & erne")
+    // is rejected with a 422. Normalize to always-quote the display name so a
+    // slightly-off RESEND_FROM_ADDRESS can't silently fail the whole send.
+    const fromAddress = normalizeFrom(rawFrom);
 
     // ── 1. Authenticate ──────────────────────────────────────────────
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -331,6 +336,20 @@ async function isOrgStaff(admin: Db, organizationId: string, authUserId: string)
     .eq("user_id", authUserId)
     .maybeSingle();
   return !!padmin;
+}
+
+// Make a `from` value safe for Resend's /emails/batch validator. A bare
+// `email@domain` is left as-is; a `Display Name <email@domain>` is re-emitted
+// with the display name ALWAYS quoted (stray quotes/newlines stripped), which
+// is valid regardless of special characters in the name. Unparseable input is
+// returned trimmed (Resend will still reject it — surfaced by the send loop).
+function normalizeFrom(raw: string): string {
+  const s = raw.trim().replace(/[\r\n]+/g, " ");
+  const m = s.match(/^(.*?)\s*<\s*([^<>]+?)\s*>\s*$/);
+  if (!m) return s; // bare address or unknown shape → leave as-is
+  const name = m[1].trim().replace(/"/g, "").trim();
+  const email = m[2].trim();
+  return name ? `"${name}" <${email}>` : email;
 }
 
 // Minimal Resend REST helper. Throws on non-2xx.
