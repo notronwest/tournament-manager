@@ -3,6 +3,17 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Fix: Contacts nav no longer active on Email history (#607)
+
+Ron spotted both "Contacts" and "Email history" highlighted in the admin sidebar
+while on Email history. Cause: Email history is at /contacts/emails (child of the
+Contacts path), so the Contacts NavLink matched it as a parent. PR #607 (closes
+#606): pass `end` to the Contacts SideLink so it's active only on the exact
+/contacts path. Scoped precisely — Contacts is the only nav item with a sibling
+entry under its path; Tournaments et al. stay non-end to keep highlighting on
+their sub-pages. Typecheck + clean dev-server load; sidebar auth-gated so visual
+confirm is on the PR preview. Frontend only. Next: Ron to merge → TEST → promote.
+
 ## 2026-07-29 — Promoted broadcast header cleanup to PROD (#605)
 
 Merged #604 to main (→TEST, edge-fn deploy green), then promotion PR #605
