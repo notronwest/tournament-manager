@@ -133,7 +133,7 @@ Deno.serve(async (req: Request) => {
       //     nor its tournament may be soft-deleted.
       const { data: event, error: eventErr } = await admin
         .from("events")
-        .select("id, event_fee_cents, deleted_at, tournaments!inner(id, organization_id, deleted_at)")
+        .select("id, event_fee_cents, format, deleted_at, tournaments!inner(id, organization_id, deleted_at)")
         .eq("id", eventId)
         .maybeSingle();
       if (eventErr) {
@@ -186,7 +186,10 @@ Deno.serve(async (req: Request) => {
           // and keeps the reg consistent with its manual_payments row).
           event_fee_cents: kind === "comp" ? 0 : (reg.amountCents ?? 0),
           status: "paid",
-          partner_status: "solo",
+          // Doubles → the player still needs a partner, so mark them 'seeking'
+          // (shows in the "Looking for a partner" / pairing workflow). Singles
+          // has no partner, so 'solo'.
+          partner_status: event.format === "doubles" ? "seeking" : "solo",
           registered_at: new Date().toISOString(),
         })
         .select("id")
