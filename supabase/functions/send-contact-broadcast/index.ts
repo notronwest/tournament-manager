@@ -174,8 +174,9 @@ Deno.serve(async (req: Request) => {
           const token = await makeUnsubToken(SERVICE_KEY, organizationId, r.playerId, broadcastId);
           const unsubUrl = unsubscribeUrl(SUPABASE_URL, token);
           const html = renderEmailHtml({
-            headingLabel: org.name ?? undefined,
-            heading: subject.trim(),
+            // No org-name eyebrow or subject heading in the body — the subject
+            // already rides in the email's Subject line; the body starts with
+            // the sender's own content under the branded logo band.
             bodyHtml: bodyIsHtml ? body : textToHtml(body),
             footer: `${escapeHtml(org.name ?? "This club")} via bert &amp; erne &mdash; pickleball tournaments<br /><a href="${unsubUrl}" style="color:#6b7280;">Unsubscribe</a>`,
           });
