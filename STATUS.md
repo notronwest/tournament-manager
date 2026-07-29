@@ -3,6 +3,19 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Contact broadcast: drop org-name eyebrow + subject from email header (#604)
+
+Ron: "Take the WMPC and the subject out of the header." The broadcast body was
+repeating the club name (eyebrow) and subject (<h1>) at the top of the card even
+though the branded logo band + the email Subject line already carry them. PR #604
+(closes #603): made `heading` optional in _shared/email-layout.ts (omit <h1> when
+absent; eyebrow was already conditional) and stopped passing headingLabel/heading
+from send-contact-broadcast. Backward compatible — the 6 other callers still pass
+heading. Footer club attribution + Unsubscribe and the email Subject line untouched.
+Verified by rendering the actual layout via a node harness + 375px screenshot: no
+h1, no eyebrow, logo band + footer intact, body opens immediately. Edge-function
+only; no migration. Next: Ron to review preview / merge → TEST, then promote.
+
 ## 2026-07-29 — Builder: recovered stranded card #600 → PR #601 merged
 
 Single-item recovery run for issue #600 ("Harden contact-broadcast From:
