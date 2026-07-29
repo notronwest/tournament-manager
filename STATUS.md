@@ -3,6 +3,23 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Builder: recovered stranded card #600 → PR #601 merged
+
+Single-item recovery run for issue #600 ("Harden contact-broadcast From:
+always-quote display name for Resend batch" — the fix for the "&" in
+"bert & erne" 422ing Resend's `/emails/batch`, per the 2026-07-27 entries
+below). Card was stuck in "In Progress" but a prior run had already built +
+pushed the fix and opened **PR #601** (`fix/contact-broadcast-normalize-from`,
+closes #600) — just never moved the card. Verified the diff (`normalizeFrom()`
+in `send-contact-broadcast/index.ts`) against the issue's acceptance criteria —
+matched, PR CI green, no review comments. No duplicate PR opened; moved the
+card to In Review. Ron merged #601 during this same session (`648c5de`) —
+edge function now deployed on merge. Board note: the project card for #600
+is still showing "In Review" even though the issue is closed/merged — no
+automation moved it to Done; needs a manual nudge next time someone's in the
+board. Next: re-send the Pickleball Angels broadcast now that both #598
+(surface Resend errors) and #601 (quote the From header) are live.
+
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-28**
 
