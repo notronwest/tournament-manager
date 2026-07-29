@@ -3,6 +3,33 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Built Contacts redesign epic — PR #610 (in review; has migration)
+
+Built the approved one-PR epic (closes #609). PR #610 on branch
+feat/contacts-crud-and-admin-registration:
+1. Split screens: Contacts = management only (no primed "email all"); new Email
+   page with Compose | History tabs (old ContactEmailsPage → renamed EmailHistory,
+   embedded as History tab; old /contacts/emails redirects to it). Sidebar now
+   Contacts + Email.
+2. Contact CRUD in lib/orgContacts.ts: createOrgContact (match player by email or
+   create + manual link), updateContactPerson (edits shared players row, never
+   auth_user_id), existing soft-delete. Add panel + edit modal + form.
+3. Admin "Register for event": NEW migration 20260729180000_manual_payments.sql
+   (kind comp|offline, amount_cents, method, note, recorded_by; SELECT org members,
+   no client write) + NEW service_role edge function admin-register-contact
+   (org-staff gated; validates event-in-org, skips already-registered, inserts paid
+   event_registration + manual_payments per event; comp=$0/fee 0, offline=per-event
+   amount+method+note). UI: per-contact Register modal (tournament→events→comp/offline).
+   lib/adminRegister.ts for picker data + the invoke.
+
+Backend (migration + function) built by a subagent to isolated supabase/ files;
+frontend by main session. Verified typecheck/lint/build + clean dev load; admin
+screens auth-gated so interactive check is on the PR preview. CI green, mergeable.
+Deferred fast-follows: admin subscribe/unsubscribe toggle; comp/offline tags on
+AttendeesPage. NEXT: Ron to review on the #610 preview (signed in — its own env
+scope, NOT TEST), then merge → TEST (migration applies on merge) → promote to PROD.
+Do NOT auto-merge without Ron's review given size + migration + money-adjacency.
+
 ## 2026-07-29 — Scoped Contacts redesign epic (CRUD + admin event registration) — build pending approval
 
 Ron: Contacts screen does too much (landing shows a primed "Email all"). Redesign
