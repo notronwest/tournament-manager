@@ -3,6 +3,20 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Fix: admin doubles registration marks 'seeking' partner — PR #615
+
+Ron: admin-registered contact for a (doubles) bracket doesn't show up / should be
+registered as "needing a partner". Root cause: admin-register-contact inserted
+partner_status='solo' for every event, so doubles registrations never appeared in
+the "Looking for a partner" / pairing workflow. PR #615 (closes #614): fetch event
+format, set partner_status='seeking' for doubles ('solo' for singles). Edge-fn
+only, no migration; fixes FUTURE registrations. Existing record fix (Timterragni@
+yahoo.com) handed to Ron as prod SQL-editor statements (can't write prod DB from
+here): a SELECT to confirm the reg exists + diagnose "don't show up" (registered-
+but-solo vs never-saved), then an UPDATE of doubles solo→seeking. If SELECT is
+empty the reg didn't save = deeper bug to chase. NEXT: Ron runs the SQL + pastes
+result; decide merge/promote of #615.
+
 ## 2026-07-29 — Promoted Contacts epic (#610) + partner-invite resend (#612) to PROD (#613)
 
 Merged both to main (→TEST): #610 TEST migration + edge-fn deploys green, #612
