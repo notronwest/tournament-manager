@@ -3,6 +3,33 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — Scoped Contacts redesign epic (CRUD + admin event registration) — build pending approval
+
+Ron: Contacts screen does too much (landing shows a primed "Email all"). Redesign
+into 3 parts, decided via Q&A, shipping as ONE combined PR:
+1. Split screens — Contacts = management only (no send button); new Email page with
+   Compose | History tabs (Compose carries recipient filters; History = current
+   ContactEmailsPage). Redirect old /contacts/emails → /email history. Sidebar:
+   Contacts + Email.
+2. Contact CRUD — add/edit/delete a single contact. NB a contact = a shared global
+   `players` row + an organization_contacts link (person data lives in players).
+   Add = find-or-create player by email + manual link (client; RLS allows org
+   members). Edit = players fields (shared-record caveat; don't touch auth_user_id).
+   Delete = existing soft-delete. Plus admin subscribe/unsubscribe toggle.
+3. Admin "Register for event" w/ comp or offline payment — NEW manual_payments table
+   (kind comp|offline, amount_cents, method cash|check|venmo|other, note, recorded_by;
+   2 enums; SELECT org members, NO client write) + NEW service_role edge function
+   admin-register-contact (validates staff+event-in-org, inserts event_registrations
+   status=paid + manual_payments atomically). Offline = amount+method+note; comp = $0.
+   v1 individual-per-event; doubles stays in EventConsolePage. Regen types after migration.
+
+Key findings (2 Explore maps): a contact already IS a players row; org staff can
+already write event_registrations directly (EventConsolePage add-team writes paid/$0
+today = undocumented comp); NO comp/offline/payment_method concept exists anywhere;
+payments table is Stripe-only + server-write-only (CLAUDE.md rule). Migration is the
+one irreversible piece (TEST on merge, PROD on promote). Next: awaiting Ron's green
+light, then build the single PR (migration + function + UI) and verify.
+
 ## 2026-07-29 — Promoted Contacts-nav fix to PROD (#608)
 
 Merged #607 to main (→TEST) then promotion PR #608 (main→production) admin-merged
