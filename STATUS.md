@@ -23,6 +23,19 @@ board. Next: re-send the Pickleball Angels broadcast now that both #598
 Current state: **PROD PROMOTED (#583) — DIRECT CHARGES now LIVE on prod: registration/donation money settles on the organizer's CONNECTED account (org = merchant of record, pays Stripe fee), platform keeps only the application fee — money no longer passes through the platform balance. Also shipped in #583: contact-email v2 (recipient filtering + Resend delivery tracking, #573/#576/#578/#580) and the wizard save-button fix (#582). PROD pipeline all green (migrate + edge functions + frontend). PROD Stripe webhook cut over to Connected-account events + matching signing secret; RESEND_WEBHOOK_SECRET set. REMAINING: Ron to run one real PROD registration smoke test (confirm flips to paid + funds on connected acct + only app fee on platform ledger + statement descriptor).**
 Last updated: **2026-07-28**
 
+## 2026-07-29 — Promoted #601 to production (PR #602) + secret fixed
+
+Ron set `RESEND_FROM_ADDRESS='"Bert & Erne" <tournaments@bertanderne.com>'` (quoted) on
+PROD. Merged #601 → main (TEST), then promoted `main`→`production` (PR #602, merge).
+Batch: **4 commits, 1 code + 3 docs, NO migrations.** Only `send-contact-broadcast`
+changed → **PROD edge-functions deploy: success** (run 30452430473). PROD == main.
+- The always-quote From hardening + the corrected secret are both LIVE on PROD → the
+  original 422 cause is resolved two ways.
+- **Next (Ron):** re-send a contact broadcast on `bertanderne.com` and confirm it
+  delivers — recipient rows should now carry a `resend_email_id` (vs the old 104/0). If
+  it still fails, the fix already surfaces Resend's verbatim reason in the compose UI.
+- Still open (optional): RESEND_WEBHOOK_SECRET on TEST for delivery tracking there.
+
 ## 2026-07-28 — Decision: no per-club sender identity; harden From quoting (PR #601)
 
 Discussed making the broadcast From per-club (multi-tenant). **Decision (Ron): don't** —
