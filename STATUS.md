@@ -3,6 +3,31 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Attendee-onboarding epic PROMOTED to production (PR #633)
+
+Merged all 5 epic PRs to main in order (#622→#624→#626→#628→#630), closed superseded
+#615, then promoted `main`→`production` (#633). **PROD: migration apply success +
+edge-functions deploy success.** PROD == main. LIVE on bertanderne.com:
+- Register-with-balance (invoice), the branded magic-link/welcome onboarding
+  (`admin-onboard-player`), the "Leave a balance" + Send-login-link + Resend-welcome UI.
+
+**Caught + fixed a latent deploy bug mid-promotion (#632):** the CI edge-functions
+workflow runs `supabase functions deploy` (ALL functions) applying config.toml, and
+unlisted functions default to **verify_jwt=true**. `send-welcome-email` (email-confirmed
+pg_net trigger + admin-onboard-player, no auth) and `sweep-stale-pending-regs` (scheduled,
+no auth) had **no config entry** — so any redeploy would 401 their no-auth callers
+(likely already silently broken; my epic touched both files → would have shipped broken).
+Added `[functions.send-welcome-email] verify_jwt=false` + `[functions.sweep-stale-pending-regs]
+verify_jwt=false`. Deployed to PROD in this promotion. **Worth an eyeball:** confirm a
+normal signup now actually receives its welcome email on prod, and that the stale-pending
+sweep runs (both were suspect before this fix).
+
+**Verify on prod:** register-with-balance → player pays own balance; send-login-link
+onboards an orphan (account created+linked, branded email, lands logged in); resend-welcome.
+**Watch:** login-link creates accounts `email_confirm:true` → new attendee also gets the
+auto welcome email alongside the login link (one-line change to suppress if unwanted).
+Board note: #627–#631 were created via REST during a GraphQL rate-limit; add to board later.
+
 ## 2026-08-03 — Attendee-onboarding epic COMPLETE (built): F2/F3 (magic link + welcome) (#628/#630)
 
 Feature 2/3 built on top of Feature 1. All 5 epic PRs open + CI green, **NOT merged**.
