@@ -3,6 +3,18 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Promoted "Log in as any attendee" to production (PR #620)
+
+Merged #617 → #619 → main (TEST), then promoted `main`→`production` (PR #620, merge).
+Batch: **5 commits, 2 code + 3 docs, NO migrations.** One NEW edge function
+(`admin-impersonate`) → **PROD edge-functions deploy: success** (run 30854788592). PROD
+== main. Real-user impersonation (platform-admin only, audited) is LIVE on prod.
+- **Next (Ron):** eyeball on bertanderne.com — `/admin/attendees` "Log in as" a real
+  attendee → lands as them, Switch back restores; no-account attendee disabled.
+- **New asks queued (next session):** (1) admin-register a player leaving a **balance**
+  they pay themselves; (2) send a player a **magic link** (likely in the email tool);
+  (3) send a player the **welcome email**. Not started.
+
 ## 2026-07-29 — "Log in as" any attendee: real-user impersonation (PRs #617/#619)
 
 Ron: extend the test-players "sign in as" tool to work for **all attendees**. The old
