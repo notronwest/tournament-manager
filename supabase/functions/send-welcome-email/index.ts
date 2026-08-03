@@ -30,9 +30,9 @@ Deno.serve(async (req: Request) => {
     return ok({ skipped: "not POST" });
   }
 
-  let body: { userId?: string };
+  let body: { userId?: string; force?: boolean };
   try {
-    body = (await req.json()) as { userId?: string };
+    body = (await req.json()) as { userId?: string; force?: boolean };
   } catch {
     return ok({ skipped: "invalid JSON" });
   }
@@ -41,6 +41,9 @@ Deno.serve(async (req: Request) => {
   if (!userId) {
     return ok({ skipped: "missing userId" });
   }
+  // force = an admin deliberately re-sending (admin-onboard-player). It skips the
+  // welcomed_at idempotency guard; the confirmed-email guard still applies.
+  const force = body.force === true;
 
   // @ts-expect-error Deno global
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -75,9 +78,10 @@ Deno.serve(async (req: Request) => {
     return ok({ skipped: "email not confirmed" });
   }
 
-  // Idempotency: check raw_app_meta_data for a prior send.
+  // Idempotency: check raw_app_meta_data for a prior send. An admin-forced
+  // re-send bypasses this (the trigger-driven first send still honors it).
   const meta = (user.app_metadata ?? {}) as Record<string, unknown>;
-  if (meta["welcomed_at"]) {
+  if (meta["welcomed_at"] && !force) {
     return ok({ skipped: "already welcomed" });
   }
 
