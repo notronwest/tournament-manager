@@ -6,20 +6,21 @@ import {
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../supabase";
 import { useCurrentOrg } from "../../../hooks/useCurrentOrg";
+import { impersonatePlayer } from "../../../lib/impersonation";
 import type { Database } from "../../../types/supabase";
 
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 
-// Constants must match the edge function. If the function ever
-// changes the password or domain, update here too.
-const TEST_PASSWORD = "testpass123";
+// Test players still live on the @example.test email domain (the seed
+// function owns their creation). "Sign in as" now goes through the shared
+// impersonation helper — the same server-minted-session path used for real
+// attendees — so it no longer depends on a shared test password.
 const TEST_EMAIL_DOMAIN = "example.test";
-
-// Where we stash the admin's session before signing in as a test
-// player, so the SiteHeader can restore it via setSession when the
-// admin clicks "Switch back."
-const IMPERSONATION_KEY = "tm:admin-session";
+// The seed function still sets this password on every test account, so it's
+// shown here for anyone who wants to log in manually. The "Sign in as" button
+// no longer uses it (it mints a session server-side).
+const TEST_PASSWORD = "testpass123";
 
 // Dev-only admin tool that lets an organizer "sign in as" any of
 // 20 well-known test players to test the public registration flow.
@@ -144,38 +145,14 @@ export default function TestPlayersPage() {
   };
 
   const onSignInAs = async (player: Player) => {
-    if (!player.email) return;
     setSigningInAs(player.id);
     setError(null);
 
-    // Stash the current admin session so the impersonation banner
-    // can restore it later. We grab tokens directly instead of
-    // calling getUser/getSession-and-stringify because we need both
-    // the access AND refresh tokens for setSession to work.
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (sessionData.session) {
-      try {
-        sessionStorage.setItem(
-          IMPERSONATION_KEY,
-          JSON.stringify({
-            access_token: sessionData.session.access_token,
-            refresh_token: sessionData.session.refresh_token,
-            email: sessionData.session.user.email,
-          }),
-        );
-      } catch {
-        // sessionStorage is rarely unavailable but if it is we just
-        // can't auto-restore — admin can sign back in manually.
-      }
-    }
-
-    const { error: signErr } = await supabase.auth.signInWithPassword({
-      email: player.email,
-      password: TEST_PASSWORD,
-    });
-    if (signErr) {
-      setError(`Sign-in failed: ${signErr.message}`);
-      sessionStorage.removeItem(IMPERSONATION_KEY);
+    // Shared impersonation path (stash admin session → mint + verify a
+    // server session for the target). Same mechanism as real attendees.
+    const err = await impersonatePlayer(player.id);
+    if (err) {
+      setError(`Sign-in failed: ${err}`);
       setSigningInAs(null);
       return;
     }

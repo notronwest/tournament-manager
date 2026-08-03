@@ -6,29 +6,9 @@ import { useAuth } from "../auth/AuthProvider";
 // ERNE with a court-yellow ampersand, transparent background so it
 // drops onto the dark navbar (or any ink surface) without a panel.
 import logoUrl from "../assets/bert-and-erne-brush-mark.svg";
-
-// sessionStorage key the test-players tool writes to before signing
-// in as a test user. Same constant used here for the "Switch back"
-// detection — keep in sync with TestPlayersPage.
-const IMPERSONATION_KEY = "tm:admin-session";
-
-type StashedSession = {
-  access_token: string;
-  refresh_token: string;
-  email: string | null | undefined;
-};
-
-function readStashedSession(): StashedSession | null {
-  try {
-    const raw = sessionStorage.getItem(IMPERSONATION_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as StashedSession;
-    if (!parsed?.access_token || !parsed?.refresh_token) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
+// Impersonation ("log in as") stash — the key + reader are shared with the
+// admin tools that start an impersonation. This header owns "Switch back".
+import { IMPERSONATION_KEY, readStashedSession } from "../lib/impersonation";
 
 // Global top banner. Rendered once at the App level so every page
 // gets the same identity controls — Sign in / Profile / Admin /
