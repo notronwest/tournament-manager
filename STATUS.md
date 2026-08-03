@@ -3,6 +3,37 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Attendee-onboarding epic: Feature 1 (register-with-balance) built (#622/#624/#626)
+
+New asks: (1) register a player leaving a **balance** they pay themselves, (2) send a
+**magic link**, (3) send the **welcome email**. Explored + planned (plan approved). Key
+finding: all three are gated by attendees having **no auth account** (`auth_user_id` null,
+no auto-link on signup — a client-side email-match claim links orphans). Decisions:
+branded admin-triggered magic link; onboarding provisions+links no-account attendees;
+gating = org-staff-of-attendee or platform admin; audited.
+
+**Feature 1 (register-with-balance) — 3 PRs open, CI green, NOT merged (merge in order):**
+- **#622 [DB]** `db/admin-invoiced-registrations` (closes #621) — `event_registrations.admin_invoiced_at`.
+- **#624 [Functions]** `feat/admin-register-invoice` (closes #623) — `admin-register-contact`
+  gains `kind:'invoice'` (pending_payment, fee from event, admin_invoiced_at, no
+  manual_payments); `sweep-stale-pending-regs` excludes `admin_invoiced_at`. **Supersedes
+  the open #615** (folds in doubles→'seeking'; close #615 on merge).
+- **#626 [UI]** `feat/register-invoice-ui` (closes #625) — third "Leave a balance" radio in
+  the register modal. typecheck/build/lint ✓, deno lint ✓.
+- After #622 on TEST, regen types (admin_invoiced_at).
+
+**Feature 2/3 (magic link + welcome) — IN PROGRESS, paused.** Plan: new `admin-onboard-player`
+fn (`login_link` provisions+links orphan + emails branded magic link to
+`/auth/confirm?token_hash=…`; `welcome` re-sends via a new `force` param on
+`send-welcome-email`) + UI buttons on PlayerDetailPage/OrgContacts. Not started in code.
+
+**Prod incident noted (mefeszchak@comcast.net):** woman saw the pickleballangels Register
+tab with NO register buttons. Diagnosed from screenshot: eligibility gate, not a bug — every
+event is rating-restricted and she has no self-rating (messages only render for a
+logged-in profile → she WAS signed in). Not in "Contacts" because contacts = imports ∪
+registrants and she self-signed-up without registering. Gave Ron SQL to check
+auth.users/players/regs by her email (prior/duplicate account? unconfirmed?). Awaiting output.
+
 ## 2026-08-03 — Promoted "Log in as any attendee" to production (PR #620)
 
 Merged #617 → #619 → main (TEST), then promoted `main`→`production` (PR #620, merge).
