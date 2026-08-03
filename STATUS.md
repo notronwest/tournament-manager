@@ -3,6 +3,30 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Attendee-onboarding epic COMPLETE (built): F2/F3 (magic link + welcome) (#628/#630)
+
+Feature 2/3 built on top of Feature 1. All 5 epic PRs open + CI green, **NOT merged**.
+- **#628 [Functions]** `feat/admin-onboard-player` (closes #627) — new `admin-onboard-player`
+  (gated: platform admin OR org-staff who owns the attendee; audited). `login_link`:
+  provisions+links an auth account for orphans (`createUser email_confirm:true` → link
+  `players.auth_user_id`), mints magic-link via `generateLink`, emails a BRANDED
+  `/auth/confirm?token_hash=…&type=magiclink&next=…` link (no Supabase email), lands on
+  `?next` (default /my-tournaments). `welcome`: re-sends welcome (confirmed account) via a
+  new `force` param added to `send-welcome-email`. No migration (reuses audit_log). deno lint ✓.
+- **#630 [UI]** `feat/onboard-player-ui` (closes #629) — new `lib/onboardPlayer.ts`
+  (sendLoginLink/resendWelcome); PlayerDetailPage gets "Send login link" (works for
+  no-account → provisions) + "Resend welcome" (gated); OrgContacts per-contact "Login link".
+  typecheck/build ✓, touched files lint clean.
+
+**Full epic merge order:** F1 **#622→#624→#626** (#624 supersedes/closes #615), then F2/3
+**#628→#630**. **GitHub GraphQL was rate-limited** late-session → issues/PRs #627–#630 created
+via REST (`gh api`); board-add for those may be pending (add later).
+**Verify on TEST** (see PR bodies): register-with-balance → player pays own balance;
+send-login-link onboards an orphan (account created+linked, branded email, lands logged in);
+resend-welcome; non-authorized → 403; audit rows. **Build-time watch:** confirm
+`generateLink('magiclink')` on the `email_confirm:true` new user works + that the auto
+welcome-trigger email isn't unwanted alongside the login link.
+
 ## 2026-08-03 — Attendee-onboarding epic: Feature 1 (register-with-balance) built (#622/#624/#626)
 
 New asks: (1) register a player leaving a **balance** they pay themselves, (2) send a
