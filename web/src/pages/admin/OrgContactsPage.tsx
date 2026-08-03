@@ -542,7 +542,8 @@ function RegisterForEventModal({
       });
       const parts: string[] = [];
       if (res.registered > 0) {
-        parts.push(`Registered ${contact.firstName} for ${res.registered} event${res.registered === 1 ? "" : "s"} (${kind === "comp" ? "comped" : "offline payment"}).`);
+        const treatment = kind === "comp" ? "comped" : kind === "invoice" ? "balance due — they pay online" : "offline payment";
+        parts.push(`Registered ${contact.firstName} for ${res.registered} event${res.registered === 1 ? "" : "s"} (${treatment}).`);
       }
       const already = res.skipped.filter((s) => s.reason === "already_registered").length;
       if (already > 0) parts.push(`${already} already registered — skipped.`);
@@ -608,7 +609,25 @@ function RegisterForEventModal({
               <input type="radio" name="kind" checked={kind === "offline"} onChange={() => setKind("offline")} />
               <span><strong>Record offline payment</strong> — collected outside the app</span>
             </label>
+            <label style={radioRow}>
+              <input type="radio" name="kind" checked={kind === "invoice"} onChange={() => setKind("invoice")} />
+              <span><strong>Leave a balance</strong> — they log in and pay online themselves</span>
+            </label>
           </div>
+
+          {kind === "invoice" && (
+            <div style={{ ...panelMutedStyle, marginBottom: 14, fontSize: 13, color: inkSoft }}>
+              {chosen.length === 0 ? (
+                <span style={{ color: inkMuted }}>Pick one or more events above — they'll owe the standard fee.</span>
+              ) : (
+                <>
+                  Registers {contact.firstName} as <strong>unpaid</strong>. They'll owe{" "}
+                  <strong>${(chosen.reduce((s, e) => s + e.feeCents, 0) / 100).toFixed(2)}</strong>{" "}
+                  and can pay online after logging in (send them a login link from their player page).
+                </>
+              )}
+            </div>
+          )}
 
           {kind === "offline" && (
             <div style={{ ...panelMutedStyle, marginBottom: 14 }}>
