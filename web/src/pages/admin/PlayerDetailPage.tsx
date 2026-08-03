@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import { impersonatePlayer } from "../../lib/impersonation";
+import { sendLoginLink, resendWelcome } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   ink,
@@ -155,6 +156,41 @@ export default function PlayerDetailPage() {
     navigate("/my-tournaments");
   };
 
+  // Onboarding: email the player a login link, or re-send the welcome email.
+  const [onboardBusy, setOnboardBusy] = useState<"login" | "welcome" | null>(null);
+  const [onboardMsg, setOnboardMsg] = useState<string | null>(null);
+  const [onboardErr, setOnboardErr] = useState<string | null>(null);
+
+  const onSendLoginLink = async () => {
+    if (!player || onboardBusy) return;
+    setOnboardBusy("login");
+    setOnboardMsg(null);
+    setOnboardErr(null);
+    const res = await sendLoginLink(player.id);
+    if (res.ok) {
+      setOnboardMsg(
+        res.createdAccount
+          ? "Account created and a login link emailed to them."
+          : "Login link emailed to them.",
+      );
+      if (res.createdAccount) void load(); // refresh linked-account status
+    } else {
+      setOnboardErr(res.error);
+    }
+    setOnboardBusy(null);
+  };
+
+  const onResendWelcome = async () => {
+    if (!player?.auth_user_id || onboardBusy) return;
+    setOnboardBusy("welcome");
+    setOnboardMsg(null);
+    setOnboardErr(null);
+    const res = await resendWelcome(player.id);
+    if (res.ok) setOnboardMsg("Welcome email sent.");
+    else setOnboardErr(res.error);
+    setOnboardBusy(null);
+  };
+
   const load = useCallback(async () => {
     if (!playerId) return;
     setLoading(true);
@@ -233,29 +269,77 @@ export default function PlayerDetailPage() {
           </p>
 
           <div style={{ margin: "0 0 24px" }}>
-            <button
-              type="button"
-              onClick={onLoginAs}
-              disabled={!player.auth_user_id || signingIn}
-              title={
-                player.auth_user_id
-                  ? "Open the app signed in as this attendee"
-                  : "No account yet — this attendee hasn't signed up"
-              }
-              style={{
-                ...ctaSecondaryStyle,
-                fontSize: 13,
-                padding: "8px 14px",
-                opacity: player.auth_user_id ? (signingIn ? 0.7 : 1) : 0.5,
-                cursor: player.auth_user_id && !signingIn ? "pointer" : "not-allowed",
-              }}
-            >
-              {signingIn ? "Signing in…" : "Log in as this attendee"}
-            </button>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={onLoginAs}
+                disabled={!player.auth_user_id || signingIn}
+                title={
+                  player.auth_user_id
+                    ? "Open the app signed in as this attendee"
+                    : "No account yet — this attendee hasn't signed up"
+                }
+                style={{
+                  ...ctaSecondaryStyle,
+                  fontSize: 13,
+                  padding: "8px 14px",
+                  opacity: player.auth_user_id ? (signingIn ? 0.7 : 1) : 0.5,
+                  cursor: player.auth_user_id && !signingIn ? "pointer" : "not-allowed",
+                }}
+              >
+                {signingIn ? "Signing in…" : "Log in as this attendee"}
+              </button>
+              {/* Send login link — works even with no account (it provisions one). */}
+              <button
+                type="button"
+                onClick={onSendLoginLink}
+                disabled={onboardBusy !== null}
+                title="Email this attendee a one-tap magic login link"
+                style={{
+                  ...ctaSecondaryStyle,
+                  fontSize: 13,
+                  padding: "8px 14px",
+                  opacity: onboardBusy === "login" ? 0.7 : 1,
+                  cursor: onboardBusy ? "not-allowed" : "pointer",
+                }}
+              >
+                {onboardBusy === "login" ? "Sending…" : "Send login link"}
+              </button>
+              {/* Resend welcome — only meaningful once they have a linked account. */}
+              <button
+                type="button"
+                onClick={onResendWelcome}
+                disabled={!player.auth_user_id || onboardBusy !== null}
+                title={
+                  player.auth_user_id
+                    ? "Re-send the welcome email"
+                    : "No account yet — send a login link first"
+                }
+                style={{
+                  ...ctaSecondaryStyle,
+                  fontSize: 13,
+                  padding: "8px 14px",
+                  opacity: player.auth_user_id ? (onboardBusy === "welcome" ? 0.7 : 1) : 0.5,
+                  cursor: player.auth_user_id && !onboardBusy ? "pointer" : "not-allowed",
+                }}
+              >
+                {onboardBusy === "welcome" ? "Sending…" : "Resend welcome"}
+              </button>
+            </div>
             {!player.auth_user_id && (
-              <span style={{ marginLeft: 10, fontSize: 12, color: inkMuted }}>
-                This attendee hasn't signed up yet.
-              </span>
+              <div style={{ marginTop: 8, fontSize: 12, color: inkMuted }}>
+                Hasn't signed up yet — "Send login link" will create + link an account for them.
+              </div>
+            )}
+            {onboardMsg && (
+              <div style={{ ...statusPanelStyle("success"), marginTop: 10 }} role="status">
+                {onboardMsg}
+              </div>
+            )}
+            {onboardErr && (
+              <div style={{ ...statusPanelStyle("danger"), marginTop: 10 }} role="alert">
+                {onboardErr}
+              </div>
             )}
             {impersonateError && (
               <div style={{ ...statusPanelStyle("danger"), marginTop: 10 }} role="alert">

@@ -69,12 +69,15 @@ export async function fetchOrgTournamentsWithEvents(
 }
 
 export type ManualPaymentMethod = "cash" | "check" | "venmo" | "other";
-export type RegisterKind = "comp" | "offline";
+// comp = waive to $0 (paid); offline = payment collected outside the app (paid);
+// invoice = leave a balance the player pays online themselves (pending_payment).
+export type RegisterKind = "comp" | "offline" | "invoice";
 
 export type AdminRegisterPayload = {
   organizationId: string;
   playerId: string;
-  // amountCents is used only when kind === "offline"; ignored (forced 0) for comp.
+  // amountCents is used only when kind === "offline"; ignored for comp/invoice
+  // (comp forces $0; invoice bills the event's standard fee at checkout).
   registrations: { eventId: string; amountCents: number }[];
   kind: RegisterKind;
   method?: ManualPaymentMethod;

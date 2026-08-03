@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { sendLoginLink } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   fetchOrgContacts,
@@ -76,7 +77,26 @@ export default function OrgContactsPage() {
   const [subscribedOnly, setSubscribedOnly] = useState(false);
   const [addedSince, setAddedSince] = useState("");
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [actionErr, setActionErr] = useState<string | null>(null);
+  const [loginBusy, setLoginBusy] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  const onSendLoginLink = async (c: OrgContact) => {
+    if (!org || loginBusy) return;
+    setLoginBusy(c.playerId);
+    setActionMsg(null);
+    setActionErr(null);
+    const res = await sendLoginLink(c.playerId, { organizationId: org.id });
+    if (res.ok) {
+      setActionMsg(
+        `${res.createdAccount ? "Account created and login link" : "Login link"} emailed to ${c.firstName} ${c.lastName}.`,
+      );
+      if (res.createdAccount) setReloadKey((k) => k + 1);
+    } else {
+      setActionErr(`Couldn't send a login link to ${c.firstName}: ${res.error}`);
+    }
+    setLoginBusy(null);
+  };
 
   const [editTarget, setEditTarget] = useState<OrgContact | null>(null);
   const [removeTarget, setRemoveTarget] = useState<OrgContact | null>(null);
@@ -143,6 +163,11 @@ export default function OrgContactsPage() {
       {actionMsg && (
         <div style={{ ...statusPanelStyle("success"), marginBottom: 16 }} role="status">
           {actionMsg}
+        </div>
+      )}
+      {actionErr && (
+        <div style={{ ...statusPanelStyle("danger"), marginBottom: 16 }} role="alert">
+          {actionErr}
         </div>
       )}
 
@@ -246,6 +271,16 @@ export default function OrgContactsPage() {
                     <td style={tdStyle}><SourcePill source={c.source} /></td>
                     <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                       <button style={rowBtn} onClick={() => setRegisterTarget(c)}>Register</button>
+                      {c.email && (
+                        <button
+                          style={rowBtn}
+                          disabled={loginBusy !== null}
+                          onClick={() => onSendLoginLink(c)}
+                          title="Email this person a magic login link (creates + links an account if needed)"
+                        >
+                          {loginBusy === c.playerId ? "Sending…" : "Login link"}
+                        </button>
+                      )}
                       <button style={rowBtn} onClick={() => setEditTarget(c)}>Edit</button>
                       {c.source === "registrant" ? (
                         <span style={{ color: inkMuted, fontSize: 12, marginLeft: 8 }} title="Registrants are managed via their registration">—</span>
@@ -542,7 +577,8 @@ function RegisterForEventModal({
       });
       const parts: string[] = [];
       if (res.registered > 0) {
-        parts.push(`Registered ${contact.firstName} for ${res.registered} event${res.registered === 1 ? "" : "s"} (${kind === "comp" ? "comped" : "offline payment"}).`);
+        const treatment = kind === "comp" ? "comped" : kind === "invoice" ? "balance due — they pay online" : "offline payment";
+        parts.push(`Registered ${contact.firstName} for ${res.registered} event${res.registered === 1 ? "" : "s"} (${treatment}).`);
       }
       const already = res.skipped.filter((s) => s.reason === "already_registered").length;
       if (already > 0) parts.push(`${already} already registered — skipped.`);
@@ -608,7 +644,25 @@ function RegisterForEventModal({
               <input type="radio" name="kind" checked={kind === "offline"} onChange={() => setKind("offline")} />
               <span><strong>Record offline payment</strong> — collected outside the app</span>
             </label>
+            <label style={radioRow}>
+              <input type="radio" name="kind" checked={kind === "invoice"} onChange={() => setKind("invoice")} />
+              <span><strong>Leave a balance</strong> — they log in and pay online themselves</span>
+            </label>
           </div>
+
+          {kind === "invoice" && (
+            <div style={{ ...panelMutedStyle, marginBottom: 14, fontSize: 13, color: inkSoft }}>
+              {chosen.length === 0 ? (
+                <span style={{ color: inkMuted }}>Pick one or more events above — they'll owe the standard fee.</span>
+              ) : (
+                <>
+                  Registers {contact.firstName} as <strong>unpaid</strong>. They'll owe{" "}
+                  <strong>${(chosen.reduce((s, e) => s + e.feeCents, 0) / 100).toFixed(2)}</strong>{" "}
+                  and can pay online after logging in (send them a login link from their player page).
+                </>
+              )}
+            </div>
+          )}
 
           {kind === "offline" && (
             <div style={{ ...panelMutedStyle, marginBottom: 14 }}>

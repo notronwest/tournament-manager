@@ -215,3 +215,16 @@ verify_jwt = false
 # signature check (RESEND_WEBHOOK_SECRET) inside the function is the auth.
 [functions.resend-webhook]
 verify_jwt = false
+
+# The email-confirmed Postgres trigger (pg_net) and admin-onboard-player call
+# this server-to-server with NO Supabase JWT (headers carry only Content-Type).
+# The function self-validates (userId → confirmed user, welcomed_at guard), so
+# it must deploy without JWT verification or those no-auth calls 401 at the gateway.
+[functions.send-welcome-email]
+verify_jwt = false
+
+# Invoked on a schedule (cron hitting the function URL) with no Supabase JWT; it
+# only soft-cancels stale pending_payment regs via service_role. Must deploy
+# without JWT verification so the scheduled, unauthenticated call reaches it.
+[functions.sweep-stale-pending-regs]
+verify_jwt = false
