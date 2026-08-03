@@ -1,14 +1,19 @@
 // supabase/functions/admin-register-contact/index.ts
 //
 // Register a player (contact) into one or more of an org's events WITHOUT
-// going through Stripe checkout — the admin either comps the entry ($0
-// waived) or has already collected payment offline (cash/check/venmo/other).
+// going through Stripe checkout. Three treatments:
+//   - 'comp'    — waive the fee ($0), mark paid.
+//   - 'offline' — payment already collected (cash/check/venmo/other), mark paid.
+//   - 'invoice' — leave a BALANCE: create a pending_payment row the player pays
+//                 online themselves. No manual_payments row; marked
+//                 admin_invoiced_at so the stale-pending sweep never deletes it.
 //
-// For each requested event we create a `paid` event_registrations row (solo)
-// and record a matching `manual_payments` row so the non-Stripe payment is
-// auditable. Events not belonging to the org, and players already actively
-// registered for an event, are skipped (never duplicated) rather than failing
-// the whole request.
+// For comp/offline we create a `paid` event_registrations row and record a
+// matching `manual_payments` row so the non-Stripe payment is auditable. For
+// invoice we create a `pending_payment` row and nothing else. Doubles events
+// register the player as 'seeking' a partner (singles → 'solo'). Events not in
+// the org, and players already actively registered, are skipped (never
+// duplicated) rather than failing the whole request.
 //
 // ORG-STAFF only. All DB work uses the service-role client (bypasses RLS);
 // manual_payments has no client write policy by design.
@@ -35,7 +40,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type Kind = "comp" | "offline";
+type Kind = "comp" | "offline" | "invoice";
 type Method = "cash" | "check" | "venmo" | "other";
 const VALID_METHODS: Method[] = ["cash", "check", "venmo", "other"];
 
@@ -79,8 +84,8 @@ Deno.serve(async (req: Request) => {
     if (!Array.isArray(registrations) || registrations.length === 0) {
       return json({ error: "registrations must be a non-empty array" }, 400);
     }
-    if (kind !== "comp" && kind !== "offline") {
-      return json({ error: "kind must be 'comp' or 'offline'" }, 400);
+    if (kind !== "comp" && kind !== "offline" && kind !== "invoice") {
+      return json({ error: "kind must be 'comp', 'offline', or 'invoice'" }, 400);
     }
     if (kind === "offline") {
       if (!method || !VALID_METHODS.includes(method)) {
@@ -99,8 +104,8 @@ Deno.serve(async (req: Request) => {
         }
       }
     }
-    // Normalize per-kind: comp waives to $0 with no method.
-    const effectiveMethod: Method | null = kind === "comp" ? null : method!;
+    // Only offline records a payment method; comp/invoice have none.
+    const effectiveMethod: Method | null = kind === "offline" ? method! : null;
 
     // ── 3. Authorize ─────────────────────────────────────────────────
     if (!(await isOrgStaff(admin, organizationId, authUserId))) {
@@ -133,7 +138,7 @@ Deno.serve(async (req: Request) => {
       //     nor its tournament may be soft-deleted.
       const { data: event, error: eventErr } = await admin
         .from("events")
-        .select("id, event_fee_cents, deleted_at, tournaments!inner(id, organization_id, deleted_at)")
+        .select("id, event_fee_cents, format, deleted_at, tournaments!inner(id, organization_id, deleted_at)")
         .eq("id", eventId)
         .maybeSingle();
       if (eventErr) {
@@ -174,20 +179,33 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      // (c) Create the paid registration. A race on the active-unique index
-      //     surfaces here as an insert error → skip rather than fail the batch.
+      // (c) Create the registration. Invoice = pending_payment (player pays
+      //     online, fee snapshotted from the event) + admin_invoiced_at so the
+      //     sweep never deletes it. Comp/offline = paid (fee $0 / collected).
+      //     A race on the active-unique index surfaces here as an insert error
+      //     → skip rather than fail the batch.
+      const isInvoice = kind === "invoice";
+      const now = new Date().toISOString();
       const { data: newReg, error: insertErr } = await admin
         .from("event_registrations")
         .insert({
           event_id: eventId,
           player_id: playerId,
-          // Snapshot the amount actually owed: $0 for a comp, the collected
-          // amount for an offline payment (matches the EventConsolePage comp path
-          // and keeps the reg consistent with its manual_payments row).
-          event_fee_cents: kind === "comp" ? 0 : (reg.amountCents ?? 0),
-          status: "paid",
-          partner_status: "solo",
-          registered_at: new Date().toISOString(),
+          // Amount owed: $0 comp, collected amount offline, the event's fee for
+          // an invoice (checkout recomputes the payable total from tiers).
+          event_fee_cents:
+            kind === "comp"
+              ? 0
+              : isInvoice
+                ? (event.event_fee_cents ?? 0)
+                : (reg.amountCents ?? 0),
+          status: isInvoice ? "pending_payment" : "paid",
+          // Doubles → the player still needs a partner, so mark them 'seeking'
+          // (shows in the "Looking for a partner" / pairing workflow); singles
+          // has no partner, so 'solo'.
+          partner_status: event.format === "doubles" ? "seeking" : "solo",
+          registered_at: now,
+          admin_invoiced_at: isInvoice ? now : null,
         })
         .select("id")
         .single();
@@ -197,23 +215,26 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
-      // (d) Record the manual payment tied to that registration.
-      const { error: payErr } = await admin.from("manual_payments").insert({
-        organization_id: organizationId,
-        event_registration_id: newReg.id,
-        player_id: playerId,
-        kind,
-        amount_cents: kind === "comp" ? 0 : (reg.amountCents ?? 0),
-        method: effectiveMethod,
-        note: note ?? null,
-        recorded_by: authUserId,
-      });
-      if (payErr) {
-        // The registration exists but we couldn't log the payment — surface it
-        // rather than silently counting a payment we never recorded.
-        errors.push(`event ${eventId}: manual_payment insert failed: ${payErr.message}`);
-        skipped.push({ eventId, reason: "manual_payment_failed" });
-        continue;
+      // (d) Comp/offline record a manual_payments row; an invoice has no
+      //     payment yet (the player pays online later), so nothing to record.
+      if (!isInvoice) {
+        const { error: payErr } = await admin.from("manual_payments").insert({
+          organization_id: organizationId,
+          event_registration_id: newReg.id,
+          player_id: playerId,
+          kind,
+          amount_cents: kind === "comp" ? 0 : (reg.amountCents ?? 0),
+          method: effectiveMethod,
+          note: note ?? null,
+          recorded_by: authUserId,
+        });
+        if (payErr) {
+          // The registration exists but we couldn't log the payment — surface it
+          // rather than silently counting a payment we never recorded.
+          errors.push(`event ${eventId}: manual_payment insert failed: ${payErr.message}`);
+          skipped.push({ eventId, reason: "manual_payment_failed" });
+          continue;
+        }
       }
 
       registered += 1;
