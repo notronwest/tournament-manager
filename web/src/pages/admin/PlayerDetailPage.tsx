@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
+import { impersonatePlayer } from "../../lib/impersonation";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   ink,
@@ -136,6 +137,23 @@ export default function PlayerDetailPage() {
   const [account, setAccount] = useState<Account | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const navigate = useNavigate();
+  // "Log in as" — platform-admin impersonation (edge function enforces authz).
+  const [signingIn, setSigningIn] = useState(false);
+  const [impersonateError, setImpersonateError] = useState<string | null>(null);
+
+  const onLoginAs = async () => {
+    if (!player?.auth_user_id || signingIn) return;
+    setSigningIn(true);
+    setImpersonateError(null);
+    const err = await impersonatePlayer(player.id);
+    if (err) {
+      setImpersonateError(err);
+      setSigningIn(false);
+      return;
+    }
+    navigate("/my-tournaments");
+  };
 
   const load = useCallback(async () => {
     if (!playerId) return;
@@ -213,6 +231,38 @@ export default function PlayerDetailPage() {
               <span style={{ color: inkMuted }}>no account</span>
             )}
           </p>
+
+          <div style={{ margin: "0 0 24px" }}>
+            <button
+              type="button"
+              onClick={onLoginAs}
+              disabled={!player.auth_user_id || signingIn}
+              title={
+                player.auth_user_id
+                  ? "Open the app signed in as this attendee"
+                  : "No account yet — this attendee hasn't signed up"
+              }
+              style={{
+                ...ctaSecondaryStyle,
+                fontSize: 13,
+                padding: "8px 14px",
+                opacity: player.auth_user_id ? (signingIn ? 0.7 : 1) : 0.5,
+                cursor: player.auth_user_id && !signingIn ? "pointer" : "not-allowed",
+              }}
+            >
+              {signingIn ? "Signing in…" : "Log in as this attendee"}
+            </button>
+            {!player.auth_user_id && (
+              <span style={{ marginLeft: 10, fontSize: 12, color: inkMuted }}>
+                This attendee hasn't signed up yet.
+              </span>
+            )}
+            {impersonateError && (
+              <div style={{ ...statusPanelStyle("danger"), marginTop: 10 }} role="alert">
+                {impersonateError}
+              </div>
+            )}
+          </div>
 
           {/* key by player id so a navigation to a different player
               remounts these and their local form state resets cleanly

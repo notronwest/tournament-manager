@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
+import { impersonatePlayer } from "../../lib/impersonation";
 import {
   ink,
   inkSoft,
@@ -38,6 +39,24 @@ export default function SiteAttendeesPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  // Impersonation ("Log in as") — platform-admin only; the edge function
+  // enforces that. Only players with a linked auth account are eligible.
+  const [signingIn, setSigningIn] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const onLoginAs = async (p: Player) => {
+    if (!p.auth_user_id || signingIn) return;
+    setSigningIn(p.id);
+    setActionError(null);
+    const err = await impersonatePlayer(p.id);
+    if (err) {
+      setActionError(`Couldn't log in as ${p.first_name} ${p.last_name}: ${err}`);
+      setSigningIn(null);
+      return;
+    }
+    navigate("/my-tournaments");
+  };
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300);
@@ -117,6 +136,12 @@ export default function SiteAttendeesPage() {
         Site-wide — every player across all organizations.
       </p>
 
+      {actionError && (
+        <div style={{ ...statusPanelStyle("danger"), marginBottom: 16 }} role="alert">
+          {actionError}
+        </div>
+      )}
+
       <div
         style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}
       >
@@ -195,7 +220,20 @@ export default function SiteAttendeesPage() {
                         <span style={noAccountBadgeStyle}>no account</span>
                       )}
                     </td>
-                    <td style={{ ...tdStyle, textAlign: "right" }}>
+                    <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => onLoginAs(p)}
+                        disabled={!p.auth_user_id || signingIn === p.id}
+                        title={
+                          p.auth_user_id
+                            ? `Log in as ${p.first_name} ${p.last_name}`
+                            : "No account yet — this attendee hasn't signed up"
+                        }
+                        style={loginAsBtnStyle(!p.auth_user_id, signingIn === p.id)}
+                      >
+                        {signingIn === p.id ? "…" : "Log in as"}
+                      </button>
                       <Link
                         to={`/admin/players/${p.id}`}
                         style={manageLinkStyle}
@@ -290,6 +328,23 @@ const manageLinkStyle = {
   whiteSpace: "nowrap" as const,
   fontFamily: bodyFontStack,
 };
+
+function loginAsBtnStyle(disabled: boolean, busy: boolean) {
+  return {
+    marginRight: 12,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontFamily: bodyFontStack,
+    fontWeight: 500,
+    color: disabled ? inkMuted : courtBlue,
+    background: "#fff",
+    border: `1px solid ${disabled ? rule : courtBlue}`,
+    borderRadius: 6,
+    cursor: disabled || busy ? "not-allowed" : "pointer",
+    opacity: busy ? 0.7 : 1,
+    whiteSpace: "nowrap" as const,
+  };
+}
 
 function paginationBtnStyle(disabled: boolean) {
   return {

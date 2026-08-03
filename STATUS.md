@@ -3,6 +3,58 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — "Log in as" any attendee: real-user impersonation (PRs #617/#619)
+
+Ron: extend the test-players "sign in as" tool to work for **all attendees**. The old
+mechanism (client `signInWithPassword` with a shared hardcoded `testpass123`) only works
+for the 20 seeded `@example.test` accounts — real attendees have unknown passwords and
+many have no auth account at all. **Decisions (Ron): platform-admins only; attendees with
+no account are NOT impersonatable (disabled + reason, no auto-provisioning).** Built as
+2 PRs (both CI green, NOT merged):
+- **#617 [Functions]** `feat/admin-impersonate-fn` (closes #616) — new `admin-impersonate`
+  edge function: **platform-admin gated** (JWT→`platform_admins`), mints a single-use
+  magic-link token via `generateLink` (no email sent), returns `hashed_token`; `no_account`
+  error when `auth_user_id` null; **audited** to `audit_log`. `deno lint` clean.
+- **#619 [UI]** `feat/impersonate-ui` (closes #618) — new `lib/impersonation.ts`
+  (`impersonatePlayer()` = stash admin session → invoke fn → `verifyOtp({token_hash})`);
+  "Log in as" on **SiteAttendeesPage** (per row) + **PlayerDetailPage** (disabled + reason
+  when no account); `SiteHeader` "Switch back" reused as-is; **TestPlayersPage now uses the
+  shared path**, dropping the hardcoded-password sign-in. typecheck+build ✓, touched files
+  lint clean.
+- **Mechanism:** server-minted session (standard Supabase impersonation), not passwords.
+  Impersonation authority lives ONLY in the platform-admin-gated function.
+- **Merge order: #617 → #619**, then promote. **Verify on TEST** (platform admin): Log in
+  as a real attendee w/ account → lands on `/my-tournaments`, "Switch back" restores admin;
+  no-account attendee disabled; non-admin call → 401/403; audit_log row written.
+
+## 2026-07-29 — Fix: admin doubles registration marks 'seeking' partner — PR #615
+
+Ron: admin-registered contact for a (doubles) bracket doesn't show up / should be
+registered as "needing a partner". Root cause: admin-register-contact inserted
+partner_status='solo' for every event, so doubles registrations never appeared in
+the "Looking for a partner" / pairing workflow. PR #615 (closes #614): fetch event
+format, set partner_status='seeking' for doubles ('solo' for singles). Edge-fn
+only, no migration; fixes FUTURE registrations. Existing record fix (Timterragni@
+yahoo.com) handed to Ron as prod SQL-editor statements (can't write prod DB from
+here): a SELECT to confirm the reg exists + diagnose "don't show up" (registered-
+but-solo vs never-saved), then an UPDATE of doubles solo→seeking. If SELECT is
+empty the reg didn't save = deeper bug to chase. NEXT: Ron runs the SQL + pastes
+result; decide merge/promote of #615.
+
+## 2026-07-29 — Promoted Contacts epic (#610) + partner-invite resend (#612) to PROD (#613)
+
+Merged both to main (→TEST): #610 TEST migration + edge-fn deploys green, #612
+frontend. Then promotion PR #613 (main→production) admin-merged (only failing check
+the expected issue-ref gate; unique-versions migration-lint passed). PROD deploys
+green — manual_payments migration APPLIED to PROD and admin-register-contact edge
+function DEPLOYED to PROD; Cloudflare frontend auto-deploys both. Now live on TEST
++ PROD: Contacts management/email split + contact CRUD + admin comp/offline event
+registration; and the "Pending partner invites" resend panel on Attendees.
+Deferred follow-ups (not built): admin subscribe/unsubscribe toggle; comp/offline
+tags on AttendeesPage; partner-invite root-cause fixes (change-partner-after-pay
+re-send + stop swallowing deferred-send errors); send-partner-invite uses stale
+invitee_email. Next: none pending unless Ron wants the follow-ups.
+
 ## 2026-07-29 — Pending partner invites + resend tool — PR #612 (in review)
 
 Ron: partners added/selected during registration may not be getting invite emails;
