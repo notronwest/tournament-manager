@@ -3,6 +3,30 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-07-29 — "Log in as" any attendee: real-user impersonation (PRs #617/#619)
+
+Ron: extend the test-players "sign in as" tool to work for **all attendees**. The old
+mechanism (client `signInWithPassword` with a shared hardcoded `testpass123`) only works
+for the 20 seeded `@example.test` accounts — real attendees have unknown passwords and
+many have no auth account at all. **Decisions (Ron): platform-admins only; attendees with
+no account are NOT impersonatable (disabled + reason, no auto-provisioning).** Built as
+2 PRs (both CI green, NOT merged):
+- **#617 [Functions]** `feat/admin-impersonate-fn` (closes #616) — new `admin-impersonate`
+  edge function: **platform-admin gated** (JWT→`platform_admins`), mints a single-use
+  magic-link token via `generateLink` (no email sent), returns `hashed_token`; `no_account`
+  error when `auth_user_id` null; **audited** to `audit_log`. `deno lint` clean.
+- **#619 [UI]** `feat/impersonate-ui` (closes #618) — new `lib/impersonation.ts`
+  (`impersonatePlayer()` = stash admin session → invoke fn → `verifyOtp({token_hash})`);
+  "Log in as" on **SiteAttendeesPage** (per row) + **PlayerDetailPage** (disabled + reason
+  when no account); `SiteHeader` "Switch back" reused as-is; **TestPlayersPage now uses the
+  shared path**, dropping the hardcoded-password sign-in. typecheck+build ✓, touched files
+  lint clean.
+- **Mechanism:** server-minted session (standard Supabase impersonation), not passwords.
+  Impersonation authority lives ONLY in the platform-admin-gated function.
+- **Merge order: #617 → #619**, then promote. **Verify on TEST** (platform admin): Log in
+  as a real attendee w/ account → lands on `/my-tournaments`, "Switch back" restores admin;
+  no-account attendee disabled; non-admin call → 401/403; audit_log row written.
+
 ## 2026-07-29 — Fix: admin doubles registration marks 'seeking' partner — PR #615
 
 Ron: admin-registered contact for a (doubles) bracket doesn't show up / should be
