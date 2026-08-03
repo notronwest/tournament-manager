@@ -69,6 +69,9 @@ Deno.serve(async (req: Request) => {
     .select("id, event_id, player_id")
     .eq("status", "pending_payment")
     .is("deleted_at", null)
+    // Admin-created invoices (register-but-leave-a-balance) are intentional and
+    // persist until the player pays online — never sweep them.
+    .is("admin_invoiced_at", null)
     .lt("updated_at", cutoff);
   if (selErr) return jsonResp({ error: selErr.message }, 500);
   const targetRegs = regs ?? [];
