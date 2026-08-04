@@ -3,6 +3,17 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Merge-duplicate-players #638 merged to TEST (deploys green)
+
+Merged #638 to main. TEST: migration APPLY success (merge_players +
+merge_players_preview created — SQL valid on first real run) + edge-fn deploy
+success (admin-merge-players ACTIVE on TEST project mvkhdsauaqqjehxdnbuf). Feature
+LIVE on TEST. NEXT: Ron dry-runs the read-only preview on the two Corey Schwartz
+records via the TEST UI (test.bertanderne.com → a Corey's player page → "Merge
+duplicate…" → pick other Corey → preview; nothing committed), decides which is the
+winner, then does ONE real merge on TEST; verify the merged record; THEN promote to
+production. NOT yet promoted. Preview is read-only/safe.
+
 ## 2026-08-03 — Built MERGE DUPLICATE PLAYERS — PR #638 (in review; migration + test-on-TEST-first)
 
 Built the approved feature (closes #637) on branch feat/merge-duplicate-players.
