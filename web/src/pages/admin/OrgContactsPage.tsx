@@ -507,7 +507,10 @@ function RegisterForEventModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tournamentId, setTournamentId] = useState<string>("");
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
-  const [kind, setKind] = useState<RegisterKind>("comp");
+  // Default to "Leave a balance" (they owe the fee) — NOT comp — so an admin who
+  // clicks through without changing the payment option doesn't accidentally
+  // register someone for free.
+  const [kind, setKind] = useState<RegisterKind>("invoice");
   const [method, setMethod] = useState<ManualPaymentMethod>("cash");
   const [note, setNote] = useState("");
   // Per-event offline amount, in dollars (string), keyed by event id.
