@@ -3,6 +3,17 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — mefeszchak FIXED — now a $75 invoiced balance (confirmed 7500)
+
+Ron ran the UPDATE (status='pending_payment', admin_invoiced_at=now() on reg
+ee5b703f…). compute_checkout_total now returns total_cents:7500 with a proper
+tier:'first' $75 line item for her Womens 2.75-3.25 event. DONE — she owes $75,
+pays online after logging in (Ron to send her a login link from her player page).
+Open items: (1) PR #635 (register-modal tier-price DISPLAY fix) ready to merge →
+TEST → prod; (2) offered to flip the Contacts register modal's default off 'Comp'
+(kind defaults to comp → accidental free regs) — awaiting Ron's yes. NEXT: Ron's
+call on #635 merge + the Comp-default change.
+
 ## 2026-08-03 — mefeszchak: NO manual_payments row → simpler fix (UPDATE only)
 
 manual_payments SELECT for her reg (ee5b703f…) returned ZERO rows. So she was NOT
