@@ -19,6 +19,8 @@ import {
   type ManualPaymentMethod,
   type RegisterKind,
 } from "../../lib/adminRegister";
+import { computeLineItems, priceTiers, formatUsd } from "../../lib/pricing";
+import { pickActivePricingTier } from "../../lib/pricingTiers";
 import {
   parseContactsFile,
   autoMap,
@@ -505,7 +507,10 @@ function RegisterForEventModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tournamentId, setTournamentId] = useState<string>("");
   const [selectedEvents, setSelectedEvents] = useState<Set<string>>(new Set());
-  const [kind, setKind] = useState<RegisterKind>("comp");
+  // Default to "Leave a balance" (they owe the fee) — NOT comp — so an admin who
+  // clicks through without changing the payment option doesn't accidentally
+  // register someone for free.
+  const [kind, setKind] = useState<RegisterKind>("invoice");
   const [method, setMethod] = useState<ManualPaymentMethod>("cash");
   const [note, setNote] = useState("");
   // Per-event offline amount, in dollars (string), keyed by event id.
@@ -536,6 +541,22 @@ function RegisterForEventModal({
     [tournaments, tournamentId],
   );
 
+  // Active pricing tier → the first/additional rates the modal prices against,
+  // matching public checkout (compute_checkout_total). For a tier-priced
+  // tournament events have event_fee_cents=0 and the real fee comes from here.
+  const rates = useMemo(() => {
+    const tier = pickActivePricingTier(tournament?.tiers ?? []);
+    return {
+      firstEventFeeCents: tier?.first_event_fee_cents ?? 0,
+      additionalEventFeeCents: tier?.additional_event_fee_cents ?? 0,
+    };
+  }, [tournament]);
+
+  // A single event's standalone (first-event) price — its override if set, else
+  // the tier's first-event fee. Used for per-row labels and offline prefill.
+  const eventStandalonePrice = (feeCents: number) =>
+    priceTiers({ id: "", event_fee_cents: feeCents }, rates).fullPrice;
+
   function toggleEvent(eventId: string, feeCents: number) {
     setSelectedEvents((prev) => {
       const next = new Set(prev);
@@ -543,13 +564,29 @@ function RegisterForEventModal({
       else next.add(eventId);
       return next;
     });
-    // Default the offline amount to the event's fee the first time it's picked.
-    setAmounts((prev) => (prev[eventId] === undefined ? { ...prev, [eventId]: (feeCents / 100).toFixed(2) } : prev));
+    // Default the offline amount to the event's real fee (tier-aware) on first pick.
+    setAmounts((prev) =>
+      prev[eventId] === undefined
+        ? { ...prev, [eventId]: (eventStandalonePrice(feeCents) / 100).toFixed(2) }
+        : prev,
+    );
   }
 
   const chosen = useMemo(
     () => (tournament?.events ?? []).filter((e) => selectedEvents.has(e.id)),
     [tournament, selectedEvents],
+  );
+
+  // Real amount owed for the "Leave a balance" invoice — the tier-based total
+  // (first-event rate for the priciest pick, additional-event rate for the rest,
+  // per-event overrides respected). Same algorithm as checkout.
+  const invoiceTotalCents = useMemo(
+    () =>
+      computeLineItems(
+        chosen.map((e) => ({ id: e.id, event_fee_cents: e.feeCents })),
+        rates,
+      ).totalCents,
+    [chosen, rates],
   );
 
   const offlineAmountsValid =
@@ -627,7 +664,9 @@ function RegisterForEventModal({
                 >
                   <input type="checkbox" checked={selectedEvents.has(e.id)} onChange={() => toggleEvent(e.id, e.feeCents)} style={{ width: 15, height: 15 }} />
                   <span style={{ flex: 1 }}>{e.name}</span>
-                  <span style={{ color: inkMuted, fontSize: 13 }}>{e.feeCents > 0 ? `$${(e.feeCents / 100).toFixed(2)}` : "Free"}</span>
+                  <span style={{ color: inkMuted, fontSize: 13 }}>
+                    {eventStandalonePrice(e.feeCents) > 0 ? formatUsd(eventStandalonePrice(e.feeCents)) : "Free"}
+                  </span>
                 </label>
               ))}
             </div>
@@ -657,7 +696,7 @@ function RegisterForEventModal({
               ) : (
                 <>
                   Registers {contact.firstName} as <strong>unpaid</strong>. They'll owe{" "}
-                  <strong>${(chosen.reduce((s, e) => s + e.feeCents, 0) / 100).toFixed(2)}</strong>{" "}
+                  <strong>{formatUsd(invoiceTotalCents)}</strong>{" "}
                   and can pay online after logging in (send them a login link from their player page).
                 </>
               )}

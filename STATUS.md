@@ -3,6 +3,114 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — mefeszchak FIXED — now a $75 invoiced balance (confirmed 7500)
+
+Ron ran the UPDATE (status='pending_payment', admin_invoiced_at=now() on reg
+ee5b703f…). compute_checkout_total now returns total_cents:7500 with a proper
+tier:'first' $75 line item for her Womens 2.75-3.25 event. DONE — she owes $75,
+pays online after logging in (Ron to send her a login link from her player page).
+Open items: (1) PR #635 (register-modal tier-price DISPLAY fix) ready to merge →
+TEST → prod; (2) offered to flip the Contacts register modal's default off 'Comp'
+(kind defaults to comp → accidental free regs) — awaiting Ron's yes. NEXT: Ron's
+call on #635 merge + the Comp-default change.
+
+## 2026-08-03 — mefeszchak: NO manual_payments row → simpler fix (UPDATE only)
+
+manual_payments SELECT for her reg (ee5b703f…) returned ZERO rows. So she was NOT
+registered via the Contacts comp/offline flow (those always insert a manual_payments
+row). status='paid' + no manual_payments + no admin_invoiced_at ⇒ most likely added
+via the Event Console bracket "Add" (marks paid/$0, no payment record) OR the
+manual_payments insert failed during her admin-register. Fix simplified: NO delete
+needed — just UPDATE her reg status='pending_payment', admin_invoiced_at=now()
+(scoped to reg_id ee5b703f-b63b-45eb-925f-91456ab97fa7), then compute_checkout_total
+(player 65361080…, tournament 0f383de1…) should return 7500. Gave Ron that SQL;
+awaiting the 7500 confirmation. NOTE the Comp-default footgun still stands for the
+CONTACTS modal (defaults kind='comp' → accidental free regs), separate from how she
+specifically got in. PR #635 (tier-price display fix) still open/ready to merge.
+
+## 2026-08-03 — RESOLVED: mefeszchak registered as PAID (comp/offline), not invoiced
+
+Her reg SELECT: status='paid', admin_invoiced_at=null, event/tournament = Womens
+2.75-3.25 (doubles) / 5th Annual Pickleball Angels, event_override=0, snapshot=0,
+reg_id ee5b703f-b63b-45eb-925f-91456ab97fa7, player 65361080-f5d2-4719-9d7e-
+cf58281b8349, tournament 0f383de1-616a-4119-ae8d-0ec14721eb19. So her $0 is NOT
+the tier-display bug and NOT a save failure — she was registered as **Comp or
+Offline (marked paid)**, not "Leave a balance" (invoice → pending_payment +
+admin_invoiced_at, which she lacks). compute_checkout_total=0 because it only
+prices pending_payment regs. To give her a $75 online balance: convert paid→
+invoice. Gave Ron scoped prod SQL: (1) SELECT manual_payments for her reg (confirm
+comp vs offline before deleting), (2) UPDATE her reg status='pending_payment',
+admin_invoiced_at=now() (admin_invoiced_at REQUIRED so sweep won't delete), (3)
+DELETE the manual_payments row, (4) re-run compute_checkout_total → expect 7500.
+Flagged: if manual_payments is kind='offline' with a real amount, someone recorded
+actual money — confirm before flipping her to "owes $75". PR #635 (modal tier-price
+DISPLAY fix) is separate + still valid/open. NEXT: Ron runs the SQL; merge #635.
+
+## 2026-08-03 — CORRECTION: mefeszchak compute_checkout_total returned $0, not $75
+
+Overturns the prior entry's "Mary Ellen already owes $75; display-only" conclusion.
+Ron ran compute_checkout_total(player, tournament) → {line_items: [], total_cents: 0}.
+Empty line_items = the function found NO pending_payment reg to price for that
+(player, tournament) pair. So she is NOT at a hidden $75. Possible causes: (a) the
+tournament subquery's `limit 1` matched the WRONG "angel" tournament; (b) her reg
+isn't status='pending_payment' (register flow issue); (c) the reg never saved
+(possible duplicate-player, per the earlier mefeszchak diag). The generic
+"snapshot ignored, checkout recomputes $75" claim is still true IN GENERAL, but
+only if a pending_payment reg actually exists for the right tournament — which is
+now in doubt for her specifically. Gave Ron two diagnostic SELECTs (public-
+qualified, prod project): (1) ALL her event_registrations across tournaments
+(reg_id, tournament, status, admin_invoiced_at, snapshots); (2) list tournaments
+matching '%angel%' (check for duplicate). AWAITING his paste to determine: wrong-
+tournament vs wrong-status vs never-saved. PR #635 (modal tier-price display fix)
+still valid + open, unaffected by this. NEXT: read Ron's SELECT output, diagnose,
+then decide any data fix + whether there's a register-flow save bug.
+
+## 2026-08-03 — Fix: admin register modal shows real tier price (not $0) — PR #635
+
+Ron: "Leave a balance" invoice shows $0.00 owed (events show "Free"), should be the
+tournament price ($75); asked to fix Mary Ellen Feszchak's balance to $75. Pulled
+latest (local was stale → reset to origin, which has the onboarding/invoice epic
+live on prod). Explore map (definitive): this is DISPLAY-ONLY. Tournaments are
+tier-priced (tournament_pricing_tiers first/additional-event fees); events with
+event_fee_cents=0 mean "use tiers". The invoiced reg's event_fee_cents snapshot is
+NEVER read at checkout — create-payment-intent recomputes live via
+compute_checkout_total (reads events.event_fee_cents override + active tier), so an
+invoiced $0-snapshot reg in a $75 tier STILL charges $75. => Mary Ellen already owes
+$75; NO data fix needed (updating the reg snapshot wouldn't change the charge anyway).
+The only bug: the modal summed event_fee_cents (=0) for display. PR #635 (closes
+#634, frontend-only): fetchOrgTournamentsWithEvents also loads tournament_pricing_
+tiers; modal prices with the SAME helpers as checkout (pickActivePricingTier +
+computeLineItems) — invoice total, per-row price, offline prefill now show the real
+tier price. Verified typecheck/lint/build/clean load; auth-gated so interactive on
+PR preview. #615 (older doubles-seeking fix) already closed — superseded by #624.
+NEXT: gave Ron confirming SQL for Mary Ellen (public-qualified; right project =
+tournament-manager prod); merge #635 → TEST → promote.
+
+## 2026-08-03 — Attendee-onboarding epic PROMOTED to production (PR #633)
+
+Merged all 5 epic PRs to main in order (#622→#624→#626→#628→#630), closed superseded
+#615, then promoted `main`→`production` (#633). **PROD: migration apply success +
+edge-functions deploy success.** PROD == main. LIVE on bertanderne.com:
+- Register-with-balance (invoice), the branded magic-link/welcome onboarding
+  (`admin-onboard-player`), the "Leave a balance" + Send-login-link + Resend-welcome UI.
+
+**Caught + fixed a latent deploy bug mid-promotion (#632):** the CI edge-functions
+workflow runs `supabase functions deploy` (ALL functions) applying config.toml, and
+unlisted functions default to **verify_jwt=true**. `send-welcome-email` (email-confirmed
+pg_net trigger + admin-onboard-player, no auth) and `sweep-stale-pending-regs` (scheduled,
+no auth) had **no config entry** — so any redeploy would 401 their no-auth callers
+(likely already silently broken; my epic touched both files → would have shipped broken).
+Added `[functions.send-welcome-email] verify_jwt=false` + `[functions.sweep-stale-pending-regs]
+verify_jwt=false`. Deployed to PROD in this promotion. **Worth an eyeball:** confirm a
+normal signup now actually receives its welcome email on prod, and that the stale-pending
+sweep runs (both were suspect before this fix).
+
+**Verify on prod:** register-with-balance → player pays own balance; send-login-link
+onboards an orphan (account created+linked, branded email, lands logged in); resend-welcome.
+**Watch:** login-link creates accounts `email_confirm:true` → new attendee also gets the
+auto welcome email alongside the login link (one-line change to suppress if unwanted).
+Board note: #627–#631 were created via REST during a GraphQL rate-limit; add to board later.
+
 ## 2026-08-03 — Attendee-onboarding epic COMPLETE (built): F2/F3 (magic link + welcome) (#628/#630)
 
 Feature 2/3 built on top of Feature 1. All 5 epic PRs open + CI green, **NOT merged**.
