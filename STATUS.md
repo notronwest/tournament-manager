@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — RESOLVED: mefeszchak registered as PAID (comp/offline), not invoiced
+
+Her reg SELECT: status='paid', admin_invoiced_at=null, event/tournament = Womens
+2.75-3.25 (doubles) / 5th Annual Pickleball Angels, event_override=0, snapshot=0,
+reg_id ee5b703f-b63b-45eb-925f-91456ab97fa7, player 65361080-f5d2-4719-9d7e-
+cf58281b8349, tournament 0f383de1-616a-4119-ae8d-0ec14721eb19. So her $0 is NOT
+the tier-display bug and NOT a save failure — she was registered as **Comp or
+Offline (marked paid)**, not "Leave a balance" (invoice → pending_payment +
+admin_invoiced_at, which she lacks). compute_checkout_total=0 because it only
+prices pending_payment regs. To give her a $75 online balance: convert paid→
+invoice. Gave Ron scoped prod SQL: (1) SELECT manual_payments for her reg (confirm
+comp vs offline before deleting), (2) UPDATE her reg status='pending_payment',
+admin_invoiced_at=now() (admin_invoiced_at REQUIRED so sweep won't delete), (3)
+DELETE the manual_payments row, (4) re-run compute_checkout_total → expect 7500.
+Flagged: if manual_payments is kind='offline' with a real amount, someone recorded
+actual money — confirm before flipping her to "owes $75". PR #635 (modal tier-price
+DISPLAY fix) is separate + still valid/open. NEXT: Ron runs the SQL; merge #635.
+
 ## 2026-08-03 — CORRECTION: mefeszchak compute_checkout_total returned $0, not $75
 
 Overturns the prior entry's "Mary Ellen already owes $75; display-only" conclusion.
