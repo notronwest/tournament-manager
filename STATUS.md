@@ -3,6 +3,30 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Built MERGE DUPLICATE PLAYERS — PR #638 (in review; migration + test-on-TEST-first)
+
+Built the approved feature (closes #637) on branch feat/merge-duplicate-players.
+- Migration 20260803180000_merge_players.sql: merge_players(winner,loser) SECURITY
+  DEFINER atomic + merge_players_preview(winner,loser) read-only; granted service_role
+  ONLY. Re-points all 9 player-FK tables; collisions handled (event_regs active-unique
+  → keep winner/drop+unpair loser dup; registrations FULL unique; org_contacts PK;
+  partner_invites self-invite delete; winner+loser-partners → break pairing; auth_user_id
+  UNIQUE → null loser's, move to winner iff winner had none; blank-field backfill; soft-
+  delete loser). Verified check_paired_roles_sides trigger only fires when partner link
+  is SET (not on our null/re-point) → safe.
+- Edge fn admin-merge-players: platform-admin gated, preview/commit, audited.
+- UI (subagent): lib/mergePlayers.ts + components/MergePlayerModal.tsx (PlayerPicker →
+  live preview of moves+all conflicts → destructive ConfirmModal) + PlayerDetailPage
+  "Merge duplicate…" button (page already platform-admin gated). winner=current player,
+  loser=picked. Reviewed both files — contract matches, wiring correct.
+Verified typecheck/lint/build; CI green (check + unique-versions). Auth+platform-admin
+gated so no local interactive test; migration first runs on TEST.
+IMPORTANT: do NOT auto-promote to PROD. Plan: merge #638 → TEST, then Ron+me dry-run
+preview (read-only, safe) + a REAL merge on the two Corey Schwartz records on TEST,
+verify, THEN promote. Known limitation: a pre-existing match referencing a dropped
+duplicate event_reg keeps pointing at the soft-deleted row (rare; not rewritten).
+NEXT: Ron's call — merge #638 to TEST + test the Coreys there.
+
 ## 2026-08-03 — Scoped MERGE DUPLICATE PLAYERS feature — build pending green light
 
 Ron wants to merge duplicate player records (e.g. two Corey Schwartz): keep one
