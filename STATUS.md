@@ -3,6 +3,20 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — mefeszchak: NO manual_payments row → simpler fix (UPDATE only)
+
+manual_payments SELECT for her reg (ee5b703f…) returned ZERO rows. So she was NOT
+registered via the Contacts comp/offline flow (those always insert a manual_payments
+row). status='paid' + no manual_payments + no admin_invoiced_at ⇒ most likely added
+via the Event Console bracket "Add" (marks paid/$0, no payment record) OR the
+manual_payments insert failed during her admin-register. Fix simplified: NO delete
+needed — just UPDATE her reg status='pending_payment', admin_invoiced_at=now()
+(scoped to reg_id ee5b703f-b63b-45eb-925f-91456ab97fa7), then compute_checkout_total
+(player 65361080…, tournament 0f383de1…) should return 7500. Gave Ron that SQL;
+awaiting the 7500 confirmation. NOTE the Comp-default footgun still stands for the
+CONTACTS modal (defaults kind='comp' → accidental free regs), separate from how she
+specifically got in. PR #635 (tier-price display fix) still open/ready to merge.
+
 ## 2026-08-03 — RESOLVED: mefeszchak registered as PAID (comp/offline), not invoiced
 
 Her reg SELECT: status='paid', admin_invoiced_at=null, event/tournament = Womens
