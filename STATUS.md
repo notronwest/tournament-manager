@@ -3,6 +3,17 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Promoted register-modal fixes to PROD (#635/#636)
+
+Added the Comp-default fix into #635 (modal now defaults kind='invoice'/"Leave a
+balance" instead of 'comp' → no more accidental free registrations), merged #635 to
+main (→TEST), then promotion PR #636 (main→production) admin-merged (only failing
+check the expected issue-ref gate). Frontend-only — Cloudflare rebuilds prod, no
+migration/edge-fn deploys. LIVE on TEST + PROD: register modal shows the real tier
+price (e.g. $75) for tier-priced tournaments (same math as checkout) AND defaults to
+"Leave a balance" so admins don't accidentally comp people. mefeszchak already fixed
+(separate SQL, $75 balance). NEXT: none pending.
+
 ## 2026-08-03 — mefeszchak FIXED — now a $75 invoiced balance (confirmed 7500)
 
 Ron ran the UPDATE (status='pending_payment', admin_invoiced_at=now() on reg
