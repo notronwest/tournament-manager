@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import type { PricingTier } from "./pricingTiers";
 
 // Data + call for the admin "register a contact for an event" flow. An org admin
 // picks a tournament + event(s) and either comps the entry (waives the fee) or
@@ -19,6 +20,10 @@ export type PickerTournament = {
   name: string;
   startsAt: string | null;
   events: PickerEvent[];
+  // The tournament's pricing tiers, so the modal can show the real amount owed
+  // for a tier-priced tournament (where event_fee_cents is 0 and the price comes
+  // from the active tier — same math as public checkout / compute_checkout_total).
+  tiers: PricingTier[];
 };
 
 // The org's non-deleted tournaments and their non-deleted events, for the picker.
@@ -60,11 +65,28 @@ export async function fetchOrgTournamentsWithEvents(
     byTournament.set(e.tournament_id, list);
   }
 
+  // Pricing tiers per tournament (first/additional-event fees by date window).
+  const { data: tierRows, error: tierErr } = await supabase
+    .from("tournament_pricing_tiers")
+    .select("*")
+    .in(
+      "tournament_id",
+      tournaments.map((t) => t.id),
+    );
+  if (tierErr) throw new Error(tierErr.message);
+  const tiersByTournament = new Map<string, PricingTier[]>();
+  for (const row of tierRows ?? []) {
+    const list = tiersByTournament.get(row.tournament_id) ?? [];
+    list.push(row as PricingTier);
+    tiersByTournament.set(row.tournament_id, list);
+  }
+
   return tournaments.map((t) => ({
     id: t.id,
     name: t.name,
     startsAt: t.starts_at,
     events: byTournament.get(t.id) ?? [],
+    tiers: tiersByTournament.get(t.id) ?? [],
   }));
 }
 
