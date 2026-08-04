@@ -3,6 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Fix: admin register modal shows real tier price (not $0) — PR #635
+
+Ron: "Leave a balance" invoice shows $0.00 owed (events show "Free"), should be the
+tournament price ($75); asked to fix Mary Ellen Feszchak's balance to $75. Pulled
+latest (local was stale → reset to origin, which has the onboarding/invoice epic
+live on prod). Explore map (definitive): this is DISPLAY-ONLY. Tournaments are
+tier-priced (tournament_pricing_tiers first/additional-event fees); events with
+event_fee_cents=0 mean "use tiers". The invoiced reg's event_fee_cents snapshot is
+NEVER read at checkout — create-payment-intent recomputes live via
+compute_checkout_total (reads events.event_fee_cents override + active tier), so an
+invoiced $0-snapshot reg in a $75 tier STILL charges $75. => Mary Ellen already owes
+$75; NO data fix needed (updating the reg snapshot wouldn't change the charge anyway).
+The only bug: the modal summed event_fee_cents (=0) for display. PR #635 (closes
+#634, frontend-only): fetchOrgTournamentsWithEvents also loads tournament_pricing_
+tiers; modal prices with the SAME helpers as checkout (pickActivePricingTier +
+computeLineItems) — invoice total, per-row price, offline prefill now show the real
+tier price. Verified typecheck/lint/build/clean load; auth-gated so interactive on
+PR preview. #615 (older doubles-seeking fix) already closed — superseded by #624.
+NEXT: gave Ron confirming SQL for Mary Ellen (public-qualified; right project =
+tournament-manager prod); merge #635 → TEST → promote.
+
 ## 2026-08-03 — Attendee-onboarding epic PROMOTED to production (PR #633)
 
 Merged all 5 epic PRs to main in order (#622→#624→#626→#628→#630), closed superseded
