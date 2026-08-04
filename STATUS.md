@@ -3,6 +3,25 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — CORRECTION: mefeszchak compute_checkout_total returned $0, not $75
+
+Overturns the prior entry's "Mary Ellen already owes $75; display-only" conclusion.
+Ron ran compute_checkout_total(player, tournament) → {line_items: [], total_cents: 0}.
+Empty line_items = the function found NO pending_payment reg to price for that
+(player, tournament) pair. So she is NOT at a hidden $75. Possible causes: (a) the
+tournament subquery's `limit 1` matched the WRONG "angel" tournament; (b) her reg
+isn't status='pending_payment' (register flow issue); (c) the reg never saved
+(possible duplicate-player, per the earlier mefeszchak diag). The generic
+"snapshot ignored, checkout recomputes $75" claim is still true IN GENERAL, but
+only if a pending_payment reg actually exists for the right tournament — which is
+now in doubt for her specifically. Gave Ron two diagnostic SELECTs (public-
+qualified, prod project): (1) ALL her event_registrations across tournaments
+(reg_id, tournament, status, admin_invoiced_at, snapshots); (2) list tournaments
+matching '%angel%' (check for duplicate). AWAITING his paste to determine: wrong-
+tournament vs wrong-status vs never-saved. PR #635 (modal tier-price display fix)
+still valid + open, unaffected by this. NEXT: read Ron's SELECT output, diagnose,
+then decide any data fix + whether there's a register-flow save bug.
+
 ## 2026-08-03 — Fix: admin register modal shows real tier price (not $0) — PR #635
 
 Ron: "Leave a balance" invoice shows $0.00 owed (events show "Free"), should be the
