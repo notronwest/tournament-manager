@@ -3,6 +3,36 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Scoped MERGE DUPLICATE PLAYERS feature — build pending green light
+
+Ron wants to merge duplicate player records (e.g. two Corey Schwartz): keep one
+(WINNER), move all the loser's data to it, soft-delete loser. Explore-mapped every
+players FK (10 cols / 9 tables: player_ratings, registrations, event_registrations,
+partner_invites[inviter+invitee], payments, manual_payments, tournament_change_
+requests, organization_contacts[PK part], contact_broadcast_recipients) + collisions.
+Decisions locked (Q&A): (1) PLATFORM-ADMIN only (players are global/cross-org); UI on
+player detail + attendees. (2) If BOTH have auth accounts → proceed: keep winner's
+login, DETACH loser's (null loser.auth_user_id always). Defaults: same-event double
+reg → keep winner's, discard loser's dup; backfill winner BLANK fields from loser
+(never overwrite); loser soft-deleted + audited; PREVIEW-first.
+
+Key schema traps to code around (from map): auth_user_id is UNIQUE and NOT freed by
+soft-delete → must null loser's; current_player_id() ignores deleted_at → stranding
+risk unless auth re-pointed; registrations unique is FULL (counts soft-deleted) vs
+event_registrations PARTIAL(active) — different collision rules; org_contacts PK
+ignores deleted_at; partner_invites CHECK inviter<>invitee → delete self-invites
+between the two; winner+loser-as-partners breaks active-unique + self-FK +
+check_paired_roles_sides trigger (hardest case → break pairing, partner→seeking);
+matches/payment_line_items ride on event_registration row ids (on delete set null).
+
+Build plan (ONE PR): migration merge_players(winner,loser) SECURITY DEFINER (atomic
+re-point + collision handling + soft-delete + auth detach + backfill) +
+merge_players_preview(winner,loser) read-only; edge fn admin-merge-players
+(platform-admin gated, audited, preview/commit); UI "Merge duplicate…" on
+PlayerDetailPage (PlayerPicker → preview → confirm). Precedents: admin-get-player
+(reader), accept_partner_invite (transactional re-point pattern), platform_admins gate.
+NEXT: awaiting Ron's green light, then build migration+fn first, then UI.
+
 ## 2026-08-03 — Promoted register-modal fixes to PROD (#635/#636)
 
 Added the Comp-default fix into #635 (modal now defaults kind='invoice'/"Leave a
