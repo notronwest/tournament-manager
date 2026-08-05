@@ -3,6 +3,17 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Promoted TEST batch to PRODUCTION (#647)
+
+"lets get all of these to production": promotion PR #647 (main→production) admin-merged
+(only failing check the expected issue-ref gate; unique-versions passed). PROD deploys
+GREEN: merge_players/merge_players_preview migration APPLIED + edge functions
+(admin-merge-players, admin-unregistered-users) DEPLOYED; Cloudflare rebuilds frontend.
+LIVE on PROD now: #638 merge-duplicate-players (preview-first, confirm-gated, platform-
+admin-only — deploying it merges nothing), #640 signed-up-not-registered, #642 cache-
+headers, #644 need-help button (+#646 single-?). PROD == main. NEXT: new ask — CC
+tournaments@bertanderne.com on Need-help submissions (in progress).
+
 ## 2026-08-04 — Merged #642 + #644 to TEST (queue clear)
 
 "merge it all to test": merged #642 (Cloudflare _headers stale-index fix) and #644
