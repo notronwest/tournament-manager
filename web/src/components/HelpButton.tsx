@@ -184,11 +184,13 @@ function MessageForm({ tournamentId, context, compact }: { tournamentId: string;
     setStatus("sending");
     setError(null);
     try {
-      const body: Record<string, string> = {
+      const body = {
         tournamentId,
         senderName: name.trim(),
         senderEmail: email.trim(),
         message: context ? `[Help request — ${context}]\n\n${message.trim()}` : message.trim(),
+        // Flags this as a Need-help submission → the function CCs the platform inbox.
+        helpRequest: true,
       };
       const { error: fnErr } = await supabase.functions.invoke("submit-contact-form", { body });
       if (fnErr) {
