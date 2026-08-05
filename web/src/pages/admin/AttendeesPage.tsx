@@ -3,6 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import PendingPartnerInvitesPanel from "./PendingPartnerInvitesPanel";
+import {
+  RegistrationEditorModal,
+  type EditableRegistration,
+} from "../../components/RegistrationEditorModal";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -180,6 +184,8 @@ export default function AttendeesPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [view, setView] = useState<ViewMode>("players");
+  const [editing, setEditing] = useState<EditableRegistration | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!org || !tournamentSlug) return;
@@ -328,7 +334,7 @@ export default function AttendeesPage() {
     return () => {
       cancelled = true;
     };
-  }, [org, tournamentSlug]);
+  }, [org, tournamentSlug, reloadKey]);
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -481,7 +487,15 @@ export default function AttendeesPage() {
           seekers={seekers}
         />
       ) : (
-        <ByEventView eventGroups={eventGroups} />
+        <ByEventView eventGroups={eventGroups} onEdit={setEditing} />
+      )}
+
+      {editing && (
+        <RegistrationEditorModal
+          reg={editing}
+          onClose={() => setEditing(null)}
+          onChanged={() => setReloadKey((k) => k + 1)}
+        />
       )}
     </div>
   );
@@ -709,7 +723,13 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
 
 // --- By Event view (new for issue #21) ---
 
-function ByEventView({ eventGroups }: { eventGroups: EventGroup[] }) {
+function ByEventView({
+  eventGroups,
+  onEdit,
+}: {
+  eventGroups: EventGroup[];
+  onEdit: (reg: EditableRegistration) => void;
+}) {
   if (eventGroups.length === 0) {
     return (
       <div
@@ -731,18 +751,44 @@ function ByEventView({ eventGroups }: { eventGroups: EventGroup[] }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
       {eventGroups.map((g) => (
-        <EventRosterSection key={g.event.id} group={g} />
+        <EventRosterSection key={g.event.id} group={g} onEdit={onEdit} />
       ))}
     </div>
   );
 }
 
-function EventRosterSection({ group }: { group: EventGroup }) {
+function EventRosterSection({
+  group,
+  onEdit,
+}: {
+  group: EventGroup;
+  onEdit: (reg: EditableRegistration) => void;
+}) {
   const { event, regs } = group;
 
   // Build teams: walk regs in their already-sorted order and group
   // confirmed pairs into a single visual unit. Each reg is processed once.
   const regById = new Map<string, RegData>(regs.map((r) => [r.id, r]));
+
+  // Flatten a reg into the editor-modal shape, resolving its partner's name
+  // from the sibling reg (if any) so the modal header reads correctly.
+  const toEditable = (reg: RegData): EditableRegistration => {
+    const partner = reg.partner_registration_id
+      ? (regById.get(reg.partner_registration_id) ?? null)
+      : null;
+    return {
+      regId: reg.id,
+      eventId: event.id,
+      eventName: event.name,
+      format: event.format,
+      playerName: playerFullName(reg.player),
+      status: reg.status,
+      partnerStatus: reg.partner_status,
+      partnerRegId: reg.partner_registration_id,
+      partnerName: partner ? playerFullName(partner.player) : null,
+      eventFeeCents: reg.event_fee_cents,
+    };
+  };
   const seen = new Set<string>();
   const teams: Array<{ primary: RegData; partner: RegData | null }> = [];
 
@@ -857,6 +903,7 @@ function EventRosterSection({ group }: { group: EventGroup }) {
               <th style={thStyle}>Contact</th>
               <th style={thStyle}>Payment</th>
               <th style={thStyle}>Status</th>
+              <th style={{ ...thStyle, width: 60, textAlign: "right" }} />
             </tr>
           </thead>
           <tbody>
@@ -867,12 +914,15 @@ function EventRosterSection({ group }: { group: EventGroup }) {
                   primary={team.primary}
                   partner={team.partner}
                   stripe={i % 2 === 0}
+                  onEditPrimary={() => onEdit(toEditable(team.primary))}
+                  onEditPartner={() => onEdit(toEditable(team.partner!))}
                 />
               ) : (
                 <SingleEntryRow
                   key={team.primary.id}
                   reg={team.primary}
                   stripe={i % 2 === 0}
+                  onEdit={() => onEdit(toEditable(team.primary))}
                 />
               ),
             )}
@@ -888,10 +938,14 @@ function ConfirmedPairRows({
   primary,
   partner,
   stripe,
+  onEditPrimary,
+  onEditPartner,
 }: {
   primary: RegData;
   partner: RegData;
   stripe: boolean;
+  onEditPrimary: () => void;
+  onEditPartner: () => void;
 }) {
   const rowBg = stripe ? "#fff" : bg;
   const confirmedBadge = (
@@ -934,6 +988,11 @@ function ConfirmedPairRows({
           {paymentBadge(primary.status)}
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>{confirmedBadge}</td>
+        <td style={{ ...tdStyle, paddingBottom: 3, textAlign: "right" }}>
+          <button style={editBtnStyle} onClick={onEditPrimary}>
+            Edit
+          </button>
+        </td>
       </tr>
       <tr style={{ background: rowBg, borderBottom: `1px solid ${rule}` }}>
         <td style={{ ...tdStyle, fontWeight: 500, paddingTop: 3 }}>
@@ -958,6 +1017,11 @@ function ConfirmedPairRows({
           {paymentBadge(partner.status)}
         </td>
         <td style={{ ...tdStyle, paddingTop: 3 }} />
+        <td style={{ ...tdStyle, paddingTop: 3, textAlign: "right" }}>
+          <button style={editBtnStyle} onClick={onEditPartner}>
+            Edit
+          </button>
+        </td>
       </tr>
     </>
   );
@@ -966,9 +1030,11 @@ function ConfirmedPairRows({
 function SingleEntryRow({
   reg,
   stripe,
+  onEdit,
 }: {
   reg: RegData;
   stripe: boolean;
+  onEdit: () => void;
 }) {
   return (
     <tr
@@ -985,6 +1051,11 @@ function SingleEntryRow({
       </td>
       <td style={tdStyle}>{paymentBadge(reg.status)}</td>
       <td style={tdStyle}>{partnerBadge(reg.partner_status)}</td>
+      <td style={{ ...tdStyle, textAlign: "right" }}>
+        <button style={editBtnStyle} onClick={onEdit}>
+          Edit
+        </button>
+      </td>
     </tr>
   );
 }
@@ -1014,4 +1085,16 @@ const thStyle: CSSProperties = {
 
 const tdStyle: CSSProperties = {
   padding: "10px 12px",
+};
+
+const editBtnStyle: CSSProperties = {
+  padding: "4px 12px",
+  background: "#fff",
+  color: courtBlue,
+  border: `1px solid ${courtBlue}`,
+  borderRadius: 6,
+  fontSize: 12,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontFamily: bodyFontStack,
 };
