@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { supabase } from "../supabase";
+import { isHelpPresent, subscribeHelpPresent } from "../lib/helpPresence";
 
 // Categories surfaced in the dropdown.
 const CATEGORIES = [
@@ -47,12 +48,19 @@ export default function FeedbackWidget() {
   }, []);
 
   // Let the mobile header (which has no FAB) open the panel via a window event.
+  // The Need-help panel fires the same event for its "Send feedback" link.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const open = () => setState({ phase: "open" });
     window.addEventListener("wmpc:open-feedback", open);
     return () => window.removeEventListener("wmpc:open-feedback", open);
   }, []);
+
+  // Hide our own floating launcher when a "Need help?" button is on the page —
+  // feedback is reachable from inside that panel instead (avoids two overlapping
+  // floating buttons). The panel itself still opens via the event above.
+  const [helpPresent, setHelpPresentState] = useState(isHelpPresent());
+  useEffect(() => subscribeHelpPresent(() => setHelpPresentState(isHelpPresent())), []);
 
   // Close on outside click.
   useEffect(() => {
@@ -141,7 +149,7 @@ export default function FeedbackWidget() {
       {/* Floating launcher button — desktop only. On mobile the entry point is
           a "Feedback" item in the SiteHeader hamburger dropdown, which dispatches
           the `wmpc:open-feedback` event the effect above listens for. */}
-      {!isOpen && !isMobile && (
+      {!isOpen && !isMobile && !helpPresent && (
         <button
           onClick={openPanel}
           aria-label="Send feedback"
