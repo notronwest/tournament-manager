@@ -3,6 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Promoted #649 + #651 to PROD (#652); building manage-registration for TEST (overnight, autonomous)
+
+Promotion PR #652 (main→production) admin-merged. PROD migration (quote-response
+trigger) + edge-fn deploys GREEN. LIVE on PROD: Need-help CC (tournaments@bertanderne.com)
++ customer-quote-response email to ron@. PROD == main.
+
+Ron (going to bed): "get the manage registration code up and running on test ...
+without any interruptions." Building the admin REGISTRATION EDITOR autonomously →
+TEST. Design (from earlier Explore map): a shared editor reachable from Attendees
+(per-reg Edit) + Contacts (per-contact Registrations list → edit). Actions, all
+conservative/proven patterns (org-staff RLS allows event_registrations writes;
+MONEY stays out): reassign player (update player_id via PlayerPicker/
+persistPlayerSelection — EventConsole pattern); manage partner (pair/unpair =
+partner_registration_id + partner_status, PairingBoard pattern; add new partner =
+create reg EventConsole doubles style paid/$0 + pair); withdraw (status→withdrawn/
+cancelled + unpair partner, NO refund — refunds stay in the existing withdrawal
+queue/stripe-refund). Mind check_paired_roles_sides trigger (fires only when
+partner_registration_id set to distinct non-null; needs opposite sides on
+is_paired_roles events → surface error if conflict). NEXT: build lib/registrations.ts
++ RegistrationEditorModal + wire Attendees/Contacts, verify, PR, merge to TEST.
+
 ## 2026-08-04 — Need-help CC (#649) + quote-response notify (#651) on TEST
 
 Two follow-ups merged to TEST (both after the big batch went to PROD via #647):
