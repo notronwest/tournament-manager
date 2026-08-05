@@ -1,0 +1,21 @@
+# Cloudflare Pages response headers.
+#
+# The problem this solves: without an explicit cache policy, a browser can keep
+# a stale index.html after a new deploy. That old HTML references the previous
+# build's content-hashed bundle (e.g. index-ABC123.js), which no longer exists
+# once a new deploy lands — so Cloudflare serves the SPA fallback (index.html,
+# text/html) for that .js request. The browser rejects it ("Expected a
+# JavaScript module … responded with MIME type text/html") and the page renders
+# blank until a hard refresh.
+#
+# Fix: the HTML entry (and every SPA-fallback route, which also serves
+# index.html) must revalidate on each load so a new deploy is picked up
+# immediately. Vite's content-hashed assets under /assets/ are immutable — their
+# filename changes every build — so they're safe to cache forever. The more
+# specific /assets/* rule is declared last so it wins for asset paths.
+
+/*
+  Cache-Control: no-cache
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
