@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Fix stale-index.html blank page (looked like TEST Google-auth bug) — PR #642
+
+Ron: "issues using google auth on test" — screenshot showed a blank page + console
+"Failed to load module script … MIME type text/html" for index-TvqS_HZj.js, plus the
+Supabase redirect-URL list (which is CORRECT for TEST: *.bertanderne.com covers
+test.bertanderne.com; pages.dev test URL present). Diagnosed: NOT an auth bug. Loaded
+test.bertanderne.com fresh in-browser → renders fine, zero console errors → TEST
+deploy healthy. Root cause = stale cached index.html referencing the prior build's
+hashed bundle (replaced by the #640 rebuild) → old .js 404s → SPA fallback returns
+index.html (text/html) → module MIME error → blank. No service worker. Immediate fix
+for Ron: hard refresh (Cmd+Shift+R). Preventive fix PR #642 (closes #641, config-only):
+web/public/_headers — /* no-cache (HTML revalidates, new deploys picked up instantly)
++ /assets/* immutable (Vite-hashed). Ships in dist/ like _redirects. typecheck N/A;
+build confirms _headers in dist. CI green, mergeable. NOTE: if Google auth STILL fails
+after hard refresh, check Supabase Site URL + Google Cloud authorized redirect URI
+(supabase /auth/v1/callback) — but redirect allowlist itself looked fine. NEXT: merge
+#642; promote #640? build Need-help button; test #638 Coreys; reg editor.
+
 ## 2026-08-04 — Merged 'signed up not registered' tool (#640) to TEST
 
 Merged #640 to main (→TEST): edge fn admin-unregistered-users ACTIVE on TEST
