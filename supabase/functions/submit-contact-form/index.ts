@@ -37,12 +37,19 @@ const MAX_NAME = 120;
 const MAX_EMAIL = 200;
 const MAX_MESSAGE = 5000;
 
+// The bert & erne platform inbox — CC'd on "Need help?" submissions so the
+// platform can see who's getting stuck registering (and help even when the org
+// hasn't set up a contact yet).
+const HELP_CC = "tournaments@bertanderne.com";
+
 type Body = {
   tournamentId: string;
   senderName: string;
   senderEmail: string;
   message: string;
   targetContactId?: string;
+  // Set by the "Need help?" widget — CC the platform inbox on these.
+  helpRequest?: boolean;
 };
 
 // @ts-expect-error Deno global in edge runtime
@@ -67,6 +74,7 @@ Deno.serve(async (req: Request) => {
   const senderEmail = (body.senderEmail || "").trim();
   const message = (body.message || "").trim();
   const targetContactId = (body.targetContactId || "").trim() || null;
+  const helpRequest = body.helpRequest === true;
 
   if (!tournamentId || !senderName || !senderEmail || !message) {
     return jsonResp(
@@ -205,7 +213,9 @@ Deno.serve(async (req: Request) => {
   // No recipient configured → the message is logged for the organizer,
   // but there's no one to email. Succeed quietly; they'll see it once
   // an admin queue exists, and the org just needs to flag a contact.
-  if (recipients.length === 0) {
+  // Exception: a "Need help?" submission still goes to the platform inbox
+  // (HELP_CC) even when the org has no contact, so it isn't lost.
+  if (recipients.length === 0 && !helpRequest) {
     return jsonResp({ ok: true, emailed: 0 });
   }
 
@@ -230,6 +240,11 @@ Deno.serve(async (req: Request) => {
     message,
   });
 
+  // Help requests always reach the platform inbox: as the sole recipient when
+  // the org has no contact, or CC'd alongside the org's contacts.
+  const toList = recipients.length > 0 ? recipients : [HELP_CC];
+  const cc = helpRequest && recipients.length > 0 ? [HELP_CC] : undefined;
+
   const resendResp = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -238,7 +253,8 @@ Deno.serve(async (req: Request) => {
     },
     body: JSON.stringify({
       from: fromAddress,
-      to: recipients,
+      to: toList,
+      ...(cc ? { cc } : {}),
       reply_to: senderEmail,
       subject,
       html,
