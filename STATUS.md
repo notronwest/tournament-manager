@@ -3,6 +3,30 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Manage-registration editor SHIPPED to TEST (#654) [overnight autonomous]
+
+Built + verified + merged to TEST autonomously (Ron asleep). PR #654 (closes #653),
+frontend only — Cloudflare rebuilds TEST, no migration/edge-fn. Shared "Manage
+registration" modal reachable from Attendees (per-reg Edit) + Contacts (per-contact
+"Registrations" → list → Edit). Actions: reassign player (PlayerPicker →
+persistPlayerSelection → update player_id); partner (assign existing event registrant
+or add new $0 comp reg + pair; change; remove/unpair — PairingBoard patterns);
+withdraw (paid→withdrawn else cancelled + unpair partner). All direct org-staff
+event_registrations writes (mirrors EventConsole/PairingBoard). MONEY-SAFE (reviewed
+lib/registrations.ts personally): NO payments/refund writes; withdraw explicitly
+issues no refund (modal note; refunds stay in the withdrawal queue); partner-add is
+the $0 comp insert. Paired-roles check_paired_roles_sides trigger error surfaced
+verbatim. Verified typecheck/lint/build clean. Built by subagent; I reviewed the
+money-adjacent writes + verified + shipped. NOTE (had to fix): the feature-PR body's
+"Closes #NUM" lost the shell var → issue-ref check failed; fixed via gh pr edit to
+"Closes #653" → passed.
+
+VERIFY on TEST (Ron): Attendees → a reg → Edit → reassign / partner / withdraw;
+Contacts → a contact → Registrations → Edit. Minor known items (subagent flagged):
+withdraw button shows even for already-terminal regs (harmless); modal closes on each
+successful mutation then host refetches. NEXT: Ron reviews on TEST → promote to PROD.
+Everything else already on PROD through #652.
+
 ## 2026-08-04 — Promoted #649 + #651 to PROD (#652); building manage-registration for TEST (overnight, autonomous)
 
 Promotion PR #652 (main→production) admin-merged. PROD migration (quote-response
