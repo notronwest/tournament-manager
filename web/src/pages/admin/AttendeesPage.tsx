@@ -7,6 +7,7 @@ import {
   RegistrationEditorModal,
   type EditableRegistration,
 } from "../../components/RegistrationEditorModal";
+import { PlayerRegistrationsModal } from "../../components/PlayerRegistrationsModal";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -185,6 +186,7 @@ export default function AttendeesPage() {
   const [filter, setFilter] = useState("");
   const [view, setView] = useState<ViewMode>("players");
   const [editing, setEditing] = useState<EditableRegistration | null>(null);
+  const [managing, setManaging] = useState<Player | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
@@ -485,6 +487,7 @@ export default function AttendeesPage() {
           visible={visible}
           rows={rows}
           seekers={seekers}
+          onManage={setManaging}
         />
       ) : (
         <ByEventView eventGroups={eventGroups} onEdit={setEditing} />
@@ -494,6 +497,16 @@ export default function AttendeesPage() {
         <RegistrationEditorModal
           reg={editing}
           onClose={() => setEditing(null)}
+          onChanged={() => setReloadKey((k) => k + 1)}
+        />
+      )}
+
+      {managing && org && (
+        <PlayerRegistrationsModal
+          orgId={org.id}
+          playerId={managing.id}
+          playerName={playerFullName(managing)}
+          onClose={() => setManaging(null)}
           onChanged={() => setReloadKey((k) => k + 1)}
         />
       )}
@@ -507,9 +520,10 @@ type ByPlayerViewProps = {
   visible: Row[];
   rows: Row[];
   seekers: { player: Player; events: EventForPlayer[] }[];
+  onManage: (p: Player) => void;
 };
 
-function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
+function ByPlayerView({ visible, rows, seekers, onManage }: ByPlayerViewProps) {
   return (
     <>
       {/* F2: Partner seekers section */}
@@ -666,6 +680,7 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
               <th style={thStyle}>Email</th>
               <th style={thStyle}>Phone</th>
               <th style={thStyle}>Events</th>
+              <th style={{ ...thStyle, textAlign: "right" }}></th>
             </tr>
           </thead>
           <tbody>
@@ -711,6 +726,14 @@ function ByPlayerView({ visible, rows, seekers }: ByPlayerViewProps) {
                       </span>
                     ))}
                   </div>
+                </td>
+                <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                  <button
+                    onClick={() => onManage(row.player)}
+                    style={{ fontSize: 12, fontWeight: 600, color: courtBlue, background: "none", border: `1px solid ${rule}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}
+                  >
+                    Manage
+                  </button>
                 </td>
               </tr>
             ))}
