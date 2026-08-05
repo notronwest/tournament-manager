@@ -3,6 +3,16 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Merged #642 + #644 to TEST (queue clear)
+
+"merge it all to test": merged #642 (Cloudflare _headers stale-index fix) and #644
+(Need-help button + feedback merge) to main → TEST. Both frontend-only (no migration/
+edge-fn); Cloudflare rebuilds TEST. NO open PRs now. On TEST but NOT yet promoted to
+PROD: #638 (merge-players — needs Corey dry-run first), #640 (unregistered-users),
+#642, #644. NEXT: Ron — (1) dry-run #638 merge-players preview on the two Coreys on
+TEST, then promote; (2) promote the batch (#640/#642/#644) to production when ready;
+(3) design the admin registration editor (already mapped).
+
 ## 2026-08-04 — Built "Need help?" button (merged w/ feedback) — PR #644
 
 Ron: build the Need-help button (chosen earlier). Mockup'd it live on the real
