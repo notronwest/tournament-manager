@@ -3,6 +3,21 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-05 — Fix "can't find edit registration": per-player Manage in By-Player view (#656) → TEST
+
+Ron on TEST: "I don't see an edit registration." Cause: the reg Edit only lived in the
+Attendees BY-EVENT view (onEdit passed only to ByEventView) + Contacts; the DEFAULT
+By-Player view had no per-reg action. Fixed (#656, closes #655, frontend-only → TEST):
+per-player "Manage" button in the By-Player table → opens the player's registrations
+list → Edit each. Extracted the list modal to shared components/PlayerRegistrationsModal
+(orgId, playerId, playerName), now used by BOTH the Attendees Manage button and the
+Contacts "Registrations" action (deleted the local ContactRegistrationsModal — DRY).
+Verified typecheck/lint/build. Merged to TEST.
+
+Registration editor now reachable from: Attendees By-Player → Manage, Attendees
+By-Event → Edit (per reg row), Contacts → Registrations. NEXT: Ron re-check on TEST
+(hard-refresh) → then promote the manage-registration set (#654 + #656) to PROD.
+
 ## 2026-08-04 — Manage-registration editor SHIPPED to TEST (#654) [overnight autonomous]
 
 Built + verified + merged to TEST autonomously (Ron asleep). PR #654 (closes #653),
