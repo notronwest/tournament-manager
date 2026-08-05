@@ -3,6 +3,25 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Need-help CC (#649) + quote-response notify (#651) on TEST
+
+Two follow-ups merged to TEST (both after the big batch went to PROD via #647):
+- #649: Need-help submissions now CC tournaments@bertanderne.com (submit-contact-form
+  gains helpRequest flag → CCs platform inbox; if org has no contact, help msg still
+  goes TO the platform inbox). Regular contact form unchanged. On TEST.
+- #651: email ron@whitemountainpickleball.com when a customer responds to a quote.
+  Migration on_quote_customer_revision (AFTER INSERT on quote_revisions WHEN
+  created_by='customer') → pg_net → new edge fn notify-quote-response (verify_jwt=false)
+  which loads quote+customer+revision and emails a summary + admin-editor link. Mirrors
+  the welcome-email trigger. Admin saves don't fire it. TEST migration+fn deploy GREEN
+  (notify-quote-response ACTIVE on TEST).
+
+NOTE to verify on TEST: (a) submit a customer quote response → confirm ron@ gets the
+email (trigger relies on app.settings.supabase_url, set for welcome-email); (b)
+editor link defaults to prod bertanderne.com — set SITE_URL secret on TEST project
+for correct TEST links if desired. NEXT: Ron test #649/#651 on TEST, then promote to
+PROD. Both are TEST-only right now (PROD has everything through #647).
+
 ## 2026-08-04 — Promoted TEST batch to PRODUCTION (#647)
 
 "lets get all of these to production": promotion PR #647 (main→production) admin-merged
