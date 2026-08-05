@@ -3,6 +3,36 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-03 — Built 'signed up but not registered' site-admin tool — PR #640
+
+Ron: platform-admin tool to see people who made an account + logged in but never
+registered (outside any org). Decision: definition = account + auth.users.
+last_sign_in_at set + zero non-deleted event_registrations. Built (closes #639,
+frontend + edge fn, no migration): edge fn admin-unregistered-users (platform-admin
+gated, service_role — needs auth.users last_sign_in_at, listUsers paginated) +
+lib/unregisteredUsers.ts + SiteUnregisteredPage (/admin/unregistered, search, mailto,
+player links) + Site Admin dashboard card. Verified typecheck/lint/build/clean load.
+CI green, mergeable. NOT merged.
+
+Also (Ron, same msg): "people have trouble registering but don't reach out — ideas
+to make asking for help easier." Brainstormed; Ron picked to build the **"Need help?"
+button** (persistent help button on register/checkout → organizer contact + message
+box, reuses submit-contact-form) — build AFTER #640. (mefeszchak silent-exit is the
+motivating case.)
+
+PARKED / pending:
+- #638 merge-duplicate-players: LIVE on TEST, awaiting Ron's read-only preview dry-run
+  on the two Coreys + one real test merge before promoting to PROD.
+- Admin registration editor (reassign player / assign-change partner / withdraw /
+  everything): Explore-mapped (EventConsole edit = direct client writes repointing
+  player_id only; PairingBoard pair/unpair; withdraw_self is self-only → admin
+  withdraw needs a new path; org-staff RLS allows most edits client-side EXCEPT
+  money → stripe-refund/admin-register-contact; no per-player-across-org reg fetch
+  exists). Design + decisions still to present; NOT started in code.
+
+NEXT: Ron — merge #640? test #638 on the Coreys? then build the Need-help button +
+the registration editor.
+
 ## 2026-08-03 — Merge-duplicate-players #638 merged to TEST (deploys green)
 
 Merged #638 to main. TEST: migration APPLY success (merge_players +
