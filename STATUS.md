@@ -3,6 +3,15 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Merged 'signed up not registered' tool (#640) to TEST
+
+Merged #640 to main (→TEST): edge fn admin-unregistered-users ACTIVE on TEST
+(project mvkhdsauaqqjehxdnbuf), Cloudflare rebuilding frontend. "Signed up, not
+registered" page live on TEST (Site Admin card + /admin/unregistered), platform-
+admin only. NOT yet promoted to PROD (Ron said "merge 640" = to TEST). NEXT: Ron —
+promote #640 to prod? Still pending: build the Need-help button; test #638
+merge-players on the Coreys (TEST) then promote; design the admin registration editor.
+
 ## 2026-08-03 — Built 'signed up but not registered' site-admin tool — PR #640
 
 Ron: platform-admin tool to see people who made an account + logged in but never
