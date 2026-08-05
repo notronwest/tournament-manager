@@ -3,14 +3,7 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { sendLoginLink } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import {
-  RegistrationEditorModal,
-  type EditableRegistration,
-} from "../../components/RegistrationEditorModal";
-import {
-  fetchPlayerRegistrations,
-  type PlayerReg,
-} from "../../lib/registrations";
+import { PlayerRegistrationsModal } from "../../components/PlayerRegistrationsModal";
 import {
   fetchOrgContacts,
   createOrgContact,
@@ -357,9 +350,10 @@ export default function OrgContactsPage() {
       )}
 
       {regsTarget && (
-        <ContactRegistrationsModal
+        <PlayerRegistrationsModal
           orgId={org.id}
-          contact={regsTarget}
+          playerId={regsTarget.playerId}
+          playerName={`${regsTarget.firstName} ${regsTarget.lastName}`.trim()}
           onClose={() => setRegsTarget(null)}
           onChanged={reload}
         />
@@ -775,115 +769,6 @@ function RegisterForEventModal({
 }
 
 // ── A contact's registrations (list → per-reg editor) ─────────────────
-function ContactRegistrationsModal({
-  orgId,
-  contact,
-  onClose,
-  onChanged,
-}: {
-  orgId: string;
-  contact: OrgContact;
-  onClose: () => void;
-  onChanged: () => void;
-}) {
-  const [regs, setRegs] = useState<PlayerReg[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [editing, setEditing] = useState<EditableRegistration | null>(null);
-  const contactName = `${contact.firstName} ${contact.lastName}`.trim();
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await fetchPlayerRegistrations(orgId, contact.playerId);
-        if (cancelled) return;
-        setRegs(data);
-        setLoadError(null);
-      } catch (e) {
-        if (cancelled) return;
-        setLoadError((e as { message?: string })?.message ?? "Could not load registrations.");
-        setRegs([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId, contact.playerId, reloadKey]);
-
-  const toEditable = (r: PlayerReg): EditableRegistration => ({
-    regId: r.regId,
-    eventId: r.eventId,
-    eventName: r.eventName,
-    format: r.format,
-    playerName: contactName,
-    status: r.status,
-    partnerStatus: r.partnerStatus,
-    partnerRegId: r.partnerRegId,
-    partnerName: r.partnerName,
-    eventFeeCents: r.eventFeeCents,
-    tournamentName: r.tournamentName,
-  });
-
-  return (
-    <>
-      <ModalShell title={`${contactName} — registrations`} onClose={onClose}>
-        {loadError && (
-          <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }} role="alert">
-            {loadError}
-          </div>
-        )}
-        {regs === null ? (
-          <div style={{ color: inkMuted }}>Loading…</div>
-        ) : regs.length === 0 ? (
-          <div style={{ color: inkMuted, fontSize: 14 }}>
-            {contactName} isn't registered for any events in this club yet.
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {regs.map((r) => (
-              <div
-                key={r.regId}
-                style={{
-                  ...panelMutedStyle,
-                  padding: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>
-                    {r.eventName}
-                  </div>
-                  <div style={{ fontSize: 12, color: inkSoft, marginTop: 2 }}>
-                    {r.tournamentName}
-                    {r.partnerName ? ` · partner: ${r.partnerName}` : ""}
-                  </div>
-                </div>
-                <button style={rowBtn} onClick={() => setEditing(toEditable(r))}>
-                  Edit
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </ModalShell>
-
-      {editing && (
-        <RegistrationEditorModal
-          reg={editing}
-          onClose={() => setEditing(null)}
-          onChanged={() => {
-            setReloadKey((k) => k + 1);
-            onChanged();
-          }}
-        />
-      )}
-    </>
-  );
-}
-
 // ── Import panel (bulk CSV/XLSX) ──────────────────────────────────────
 function ImportPanel({
   orgId,
