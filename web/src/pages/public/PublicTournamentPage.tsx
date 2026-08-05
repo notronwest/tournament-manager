@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import HelpButton from "../../components/HelpButton";
 import {
   emptySelection,
   persistPlayerSelection,
@@ -633,6 +634,9 @@ export default function PublicTournamentPage({
   const regStatus = deriveRegistrationStatus(tournament, tiers);
   return (
   <>
+    {tournament && (
+      <HelpButton tournamentId={tournament.id} tournamentName={tournament.name} context="tournament page" />
+    )}
     {/* #98: translucent scrim — always in the DOM so the CSS opacity
         transition fires on both open and close. pointer-events:none
         when inactive so it never intercepts normal page clicks.

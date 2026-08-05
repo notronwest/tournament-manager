@@ -10,6 +10,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
+import HelpButton from "../../components/HelpButton";
 import {
   computeLineItems,
   formatUsd,
@@ -790,6 +791,9 @@ export default function CheckoutPage() {
 
   return (
     <Shell wide>
+      {tournament && (
+        <HelpButton tournamentId={tournament.id} tournamentName={tournament.name} context="checkout" />
+      )}
       <Link to={`/t/${orgSlug}/${tournamentSlug}`} style={backLinkStyle}>
         ← Back to {tournament?.name}
       </Link>

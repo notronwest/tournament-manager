@@ -19,6 +19,7 @@ import AdminLayout from "./pages/admin/AdminLayout";
 import AttendeesPage from "./pages/admin/AttendeesPage";
 import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
 import SiteAdminPage from "./pages/admin/SiteAdminPage";
+import SiteUnregisteredPage from "./pages/admin/SiteUnregisteredPage";
 import PlayerDetailPage from "./pages/admin/PlayerDetailPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
@@ -328,6 +329,17 @@ export default function App() {
         element={
           <RequireAuth>
             <SiteAttendeesPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only: accounts that logged in but never registered.
+          Before the :orgSlug catch-all so "unregistered" isn't a slug. */}
+      <Route
+        path="/admin/unregistered"
+        element={
+          <RequireAuth>
+            <SiteUnregisteredPage />
           </RequireAuth>
         }
       />

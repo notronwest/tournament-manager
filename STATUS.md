@@ -3,6 +3,170 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Merged #642 + #644 to TEST (queue clear)
+
+"merge it all to test": merged #642 (Cloudflare _headers stale-index fix) and #644
+(Need-help button + feedback merge) to main → TEST. Both frontend-only (no migration/
+edge-fn); Cloudflare rebuilds TEST. NO open PRs now. On TEST but NOT yet promoted to
+PROD: #638 (merge-players — needs Corey dry-run first), #640 (unregistered-users),
+#642, #644. NEXT: Ron — (1) dry-run #638 merge-players preview on the two Coreys on
+TEST, then promote; (2) promote the batch (#640/#642/#644) to production when ready;
+(3) design the admin registration editor (already mapped).
+
+## 2026-08-04 — Built "Need help?" button (merged w/ feedback) — PR #644
+
+Ron: build the Need-help button (chosen earlier). Mockup'd it live on the real
+Pickleball Angels page (per mockup rule — real route, not an inline widget), Ron
+picked: content=Both (organizer contacts + message form), placement=everywhere.
+Then Ron: merge with Feedback, no overlapping floating buttons. Built (closes #643,
+PR #644, frontend only, reuses submit-contact-form + submit-feedback):
+- components/HelpButton.tsx: floating "Need help?" + panel (loads tournament_contacts
+  → contacts block when set; message form → submit-contact-form with tournament +
+  step context; footer "Send feedback →" fires wmpc:open-feedback). Mobile bottom-sheet.
+- lib/helpPresence.ts: tiny store; HelpButton sets present on mount.
+- FeedbackWidget.tsx: hides its standalone launcher when helpPresent (feedback lives
+  in the Need-help panel there); still shows elsewhere; panel still opens via event.
+- Rendered on PublicTournamentPage + CheckoutPage (guarded by tournament). Legacy
+  RegisterPage skipped (PublicTournamentPage covers inline register).
+Verified live on real page desktop+390px: one button, message form, feedback link
+opens real feedback panel. typecheck/lint/build clean. CI green, mergeable. NOTE:
+had a Vite HMR stale-module hiccup after deleting the mockup file (build was fine);
+restart cleared it. NEXT: merge #644? Still queued: promote #640/#642; test #638
+Coreys; registration editor.
+
+## 2026-08-04 — Fix stale-index.html blank page (looked like TEST Google-auth bug) — PR #642
+
+Ron: "issues using google auth on test" — screenshot showed a blank page + console
+"Failed to load module script … MIME type text/html" for index-TvqS_HZj.js, plus the
+Supabase redirect-URL list (which is CORRECT for TEST: *.bertanderne.com covers
+test.bertanderne.com; pages.dev test URL present). Diagnosed: NOT an auth bug. Loaded
+test.bertanderne.com fresh in-browser → renders fine, zero console errors → TEST
+deploy healthy. Root cause = stale cached index.html referencing the prior build's
+hashed bundle (replaced by the #640 rebuild) → old .js 404s → SPA fallback returns
+index.html (text/html) → module MIME error → blank. No service worker. Immediate fix
+for Ron: hard refresh (Cmd+Shift+R). Preventive fix PR #642 (closes #641, config-only):
+web/public/_headers — /* no-cache (HTML revalidates, new deploys picked up instantly)
++ /assets/* immutable (Vite-hashed). Ships in dist/ like _redirects. typecheck N/A;
+build confirms _headers in dist. CI green, mergeable. NOTE: if Google auth STILL fails
+after hard refresh, check Supabase Site URL + Google Cloud authorized redirect URI
+(supabase /auth/v1/callback) — but redirect allowlist itself looked fine. NEXT: merge
+#642; promote #640? build Need-help button; test #638 Coreys; reg editor.
+
+## 2026-08-04 — Merged 'signed up not registered' tool (#640) to TEST
+
+Merged #640 to main (→TEST): edge fn admin-unregistered-users ACTIVE on TEST
+(project mvkhdsauaqqjehxdnbuf), Cloudflare rebuilding frontend. "Signed up, not
+registered" page live on TEST (Site Admin card + /admin/unregistered), platform-
+admin only. NOT yet promoted to PROD (Ron said "merge 640" = to TEST). NEXT: Ron —
+promote #640 to prod? Still pending: build the Need-help button; test #638
+merge-players on the Coreys (TEST) then promote; design the admin registration editor.
+
+## 2026-08-03 — Built 'signed up but not registered' site-admin tool — PR #640
+
+Ron: platform-admin tool to see people who made an account + logged in but never
+registered (outside any org). Decision: definition = account + auth.users.
+last_sign_in_at set + zero non-deleted event_registrations. Built (closes #639,
+frontend + edge fn, no migration): edge fn admin-unregistered-users (platform-admin
+gated, service_role — needs auth.users last_sign_in_at, listUsers paginated) +
+lib/unregisteredUsers.ts + SiteUnregisteredPage (/admin/unregistered, search, mailto,
+player links) + Site Admin dashboard card. Verified typecheck/lint/build/clean load.
+CI green, mergeable. NOT merged.
+
+Also (Ron, same msg): "people have trouble registering but don't reach out — ideas
+to make asking for help easier." Brainstormed; Ron picked to build the **"Need help?"
+button** (persistent help button on register/checkout → organizer contact + message
+box, reuses submit-contact-form) — build AFTER #640. (mefeszchak silent-exit is the
+motivating case.)
+
+PARKED / pending:
+- #638 merge-duplicate-players: LIVE on TEST, awaiting Ron's read-only preview dry-run
+  on the two Coreys + one real test merge before promoting to PROD.
+- Admin registration editor (reassign player / assign-change partner / withdraw /
+  everything): Explore-mapped (EventConsole edit = direct client writes repointing
+  player_id only; PairingBoard pair/unpair; withdraw_self is self-only → admin
+  withdraw needs a new path; org-staff RLS allows most edits client-side EXCEPT
+  money → stripe-refund/admin-register-contact; no per-player-across-org reg fetch
+  exists). Design + decisions still to present; NOT started in code.
+
+NEXT: Ron — merge #640? test #638 on the Coreys? then build the Need-help button +
+the registration editor.
+
+## 2026-08-03 — Merge-duplicate-players #638 merged to TEST (deploys green)
+
+Merged #638 to main. TEST: migration APPLY success (merge_players +
+merge_players_preview created — SQL valid on first real run) + edge-fn deploy
+success (admin-merge-players ACTIVE on TEST project mvkhdsauaqqjehxdnbuf). Feature
+LIVE on TEST. NEXT: Ron dry-runs the read-only preview on the two Corey Schwartz
+records via the TEST UI (test.bertanderne.com → a Corey's player page → "Merge
+duplicate…" → pick other Corey → preview; nothing committed), decides which is the
+winner, then does ONE real merge on TEST; verify the merged record; THEN promote to
+production. NOT yet promoted. Preview is read-only/safe.
+
+## 2026-08-03 — Built MERGE DUPLICATE PLAYERS — PR #638 (in review; migration + test-on-TEST-first)
+
+Built the approved feature (closes #637) on branch feat/merge-duplicate-players.
+- Migration 20260803180000_merge_players.sql: merge_players(winner,loser) SECURITY
+  DEFINER atomic + merge_players_preview(winner,loser) read-only; granted service_role
+  ONLY. Re-points all 9 player-FK tables; collisions handled (event_regs active-unique
+  → keep winner/drop+unpair loser dup; registrations FULL unique; org_contacts PK;
+  partner_invites self-invite delete; winner+loser-partners → break pairing; auth_user_id
+  UNIQUE → null loser's, move to winner iff winner had none; blank-field backfill; soft-
+  delete loser). Verified check_paired_roles_sides trigger only fires when partner link
+  is SET (not on our null/re-point) → safe.
+- Edge fn admin-merge-players: platform-admin gated, preview/commit, audited.
+- UI (subagent): lib/mergePlayers.ts + components/MergePlayerModal.tsx (PlayerPicker →
+  live preview of moves+all conflicts → destructive ConfirmModal) + PlayerDetailPage
+  "Merge duplicate…" button (page already platform-admin gated). winner=current player,
+  loser=picked. Reviewed both files — contract matches, wiring correct.
+Verified typecheck/lint/build; CI green (check + unique-versions). Auth+platform-admin
+gated so no local interactive test; migration first runs on TEST.
+IMPORTANT: do NOT auto-promote to PROD. Plan: merge #638 → TEST, then Ron+me dry-run
+preview (read-only, safe) + a REAL merge on the two Corey Schwartz records on TEST,
+verify, THEN promote. Known limitation: a pre-existing match referencing a dropped
+duplicate event_reg keeps pointing at the soft-deleted row (rare; not rewritten).
+NEXT: Ron's call — merge #638 to TEST + test the Coreys there.
+
+## 2026-08-03 — Scoped MERGE DUPLICATE PLAYERS feature — build pending green light
+
+Ron wants to merge duplicate player records (e.g. two Corey Schwartz): keep one
+(WINNER), move all the loser's data to it, soft-delete loser. Explore-mapped every
+players FK (10 cols / 9 tables: player_ratings, registrations, event_registrations,
+partner_invites[inviter+invitee], payments, manual_payments, tournament_change_
+requests, organization_contacts[PK part], contact_broadcast_recipients) + collisions.
+Decisions locked (Q&A): (1) PLATFORM-ADMIN only (players are global/cross-org); UI on
+player detail + attendees. (2) If BOTH have auth accounts → proceed: keep winner's
+login, DETACH loser's (null loser.auth_user_id always). Defaults: same-event double
+reg → keep winner's, discard loser's dup; backfill winner BLANK fields from loser
+(never overwrite); loser soft-deleted + audited; PREVIEW-first.
+
+Key schema traps to code around (from map): auth_user_id is UNIQUE and NOT freed by
+soft-delete → must null loser's; current_player_id() ignores deleted_at → stranding
+risk unless auth re-pointed; registrations unique is FULL (counts soft-deleted) vs
+event_registrations PARTIAL(active) — different collision rules; org_contacts PK
+ignores deleted_at; partner_invites CHECK inviter<>invitee → delete self-invites
+between the two; winner+loser-as-partners breaks active-unique + self-FK +
+check_paired_roles_sides trigger (hardest case → break pairing, partner→seeking);
+matches/payment_line_items ride on event_registration row ids (on delete set null).
+
+Build plan (ONE PR): migration merge_players(winner,loser) SECURITY DEFINER (atomic
+re-point + collision handling + soft-delete + auth detach + backfill) +
+merge_players_preview(winner,loser) read-only; edge fn admin-merge-players
+(platform-admin gated, audited, preview/commit); UI "Merge duplicate…" on
+PlayerDetailPage (PlayerPicker → preview → confirm). Precedents: admin-get-player
+(reader), accept_partner_invite (transactional re-point pattern), platform_admins gate.
+NEXT: awaiting Ron's green light, then build migration+fn first, then UI.
+
+## 2026-08-03 — Promoted register-modal fixes to PROD (#635/#636)
+
+Added the Comp-default fix into #635 (modal now defaults kind='invoice'/"Leave a
+balance" instead of 'comp' → no more accidental free registrations), merged #635 to
+main (→TEST), then promotion PR #636 (main→production) admin-merged (only failing
+check the expected issue-ref gate). Frontend-only — Cloudflare rebuilds prod, no
+migration/edge-fn deploys. LIVE on TEST + PROD: register modal shows the real tier
+price (e.g. $75) for tier-priced tournaments (same math as checkout) AND defaults to
+"Leave a balance" so admins don't accidentally comp people. mefeszchak already fixed
+(separate SQL, $75 balance). NEXT: none pending.
+
 ## 2026-08-03 — mefeszchak FIXED — now a $75 invoiced balance (confirmed 7500)
 
 Ron ran the UPDATE (status='pending_payment', admin_invoiced_at=now() on reg
