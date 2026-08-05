@@ -4,6 +4,14 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { sendLoginLink } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
+  RegistrationEditorModal,
+  type EditableRegistration,
+} from "../../components/RegistrationEditorModal";
+import {
+  fetchPlayerRegistrations,
+  type PlayerReg,
+} from "../../lib/registrations";
+import {
   fetchOrgContacts,
   createOrgContact,
   updateContactPerson,
@@ -103,6 +111,7 @@ export default function OrgContactsPage() {
   const [editTarget, setEditTarget] = useState<OrgContact | null>(null);
   const [removeTarget, setRemoveTarget] = useState<OrgContact | null>(null);
   const [registerTarget, setRegisterTarget] = useState<OrgContact | null>(null);
+  const [regsTarget, setRegsTarget] = useState<OrgContact | null>(null);
 
   useEffect(() => {
     if (!org) return;
@@ -273,6 +282,7 @@ export default function OrgContactsPage() {
                     <td style={tdStyle}><SourcePill source={c.source} /></td>
                     <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                       <button style={rowBtn} onClick={() => setRegisterTarget(c)}>Register</button>
+                      <button style={rowBtn} onClick={() => setRegsTarget(c)}>Registrations</button>
                       {c.email && (
                         <button
                           style={rowBtn}
@@ -343,6 +353,15 @@ export default function OrgContactsPage() {
             setActionMsg(msg);
             reload();
           }}
+        />
+      )}
+
+      {regsTarget && (
+        <ContactRegistrationsModal
+          orgId={org.id}
+          contact={regsTarget}
+          onClose={() => setRegsTarget(null)}
+          onChanged={reload}
         />
       )}
 
@@ -752,6 +771,116 @@ function RegisterForEventModal({
         </>
       )}
     </ModalShell>
+  );
+}
+
+// ── A contact's registrations (list → per-reg editor) ─────────────────
+function ContactRegistrationsModal({
+  orgId,
+  contact,
+  onClose,
+  onChanged,
+}: {
+  orgId: string;
+  contact: OrgContact;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [regs, setRegs] = useState<PlayerReg[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState<EditableRegistration | null>(null);
+  const contactName = `${contact.firstName} ${contact.lastName}`.trim();
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchPlayerRegistrations(orgId, contact.playerId);
+        if (cancelled) return;
+        setRegs(data);
+        setLoadError(null);
+      } catch (e) {
+        if (cancelled) return;
+        setLoadError((e as { message?: string })?.message ?? "Could not load registrations.");
+        setRegs([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId, contact.playerId, reloadKey]);
+
+  const toEditable = (r: PlayerReg): EditableRegistration => ({
+    regId: r.regId,
+    eventId: r.eventId,
+    eventName: r.eventName,
+    format: r.format,
+    playerName: contactName,
+    status: r.status,
+    partnerStatus: r.partnerStatus,
+    partnerRegId: r.partnerRegId,
+    partnerName: r.partnerName,
+    eventFeeCents: r.eventFeeCents,
+    tournamentName: r.tournamentName,
+  });
+
+  return (
+    <>
+      <ModalShell title={`${contactName} — registrations`} onClose={onClose}>
+        {loadError && (
+          <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }} role="alert">
+            {loadError}
+          </div>
+        )}
+        {regs === null ? (
+          <div style={{ color: inkMuted }}>Loading…</div>
+        ) : regs.length === 0 ? (
+          <div style={{ color: inkMuted, fontSize: 14 }}>
+            {contactName} isn't registered for any events in this club yet.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {regs.map((r) => (
+              <div
+                key={r.regId}
+                style={{
+                  ...panelMutedStyle,
+                  padding: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: ink }}>
+                    {r.eventName}
+                  </div>
+                  <div style={{ fontSize: 12, color: inkSoft, marginTop: 2 }}>
+                    {r.tournamentName}
+                    {r.partnerName ? ` · partner: ${r.partnerName}` : ""}
+                  </div>
+                </div>
+                <button style={rowBtn} onClick={() => setEditing(toEditable(r))}>
+                  Edit
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </ModalShell>
+
+      {editing && (
+        <RegistrationEditorModal
+          reg={editing}
+          onClose={() => setEditing(null)}
+          onChanged={() => {
+            setReloadKey((k) => k + 1);
+            onChanged();
+          }}
+        />
+      )}
+    </>
   );
 }
 
