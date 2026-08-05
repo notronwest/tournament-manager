@@ -3,6 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-04 — Built "Need help?" button (merged w/ feedback) — PR #644
+
+Ron: build the Need-help button (chosen earlier). Mockup'd it live on the real
+Pickleball Angels page (per mockup rule — real route, not an inline widget), Ron
+picked: content=Both (organizer contacts + message form), placement=everywhere.
+Then Ron: merge with Feedback, no overlapping floating buttons. Built (closes #643,
+PR #644, frontend only, reuses submit-contact-form + submit-feedback):
+- components/HelpButton.tsx: floating "Need help?" + panel (loads tournament_contacts
+  → contacts block when set; message form → submit-contact-form with tournament +
+  step context; footer "Send feedback →" fires wmpc:open-feedback). Mobile bottom-sheet.
+- lib/helpPresence.ts: tiny store; HelpButton sets present on mount.
+- FeedbackWidget.tsx: hides its standalone launcher when helpPresent (feedback lives
+  in the Need-help panel there); still shows elsewhere; panel still opens via event.
+- Rendered on PublicTournamentPage + CheckoutPage (guarded by tournament). Legacy
+  RegisterPage skipped (PublicTournamentPage covers inline register).
+Verified live on real page desktop+390px: one button, message form, feedback link
+opens real feedback panel. typecheck/lint/build clean. CI green, mergeable. NOTE:
+had a Vite HMR stale-module hiccup after deleting the mockup file (build was fine);
+restart cleared it. NEXT: merge #644? Still queued: promote #640/#642; test #638
+Coreys; registration editor.
+
 ## 2026-08-04 — Fix stale-index.html blank page (looked like TEST Google-auth bug) — PR #642
 
 Ron: "issues using google auth on test" — screenshot showed a blank page + console
