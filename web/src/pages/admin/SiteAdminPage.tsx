@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Users, Building2, Settings2, FileText, ChevronRight } from "lucide-react";
+import { Users, UserX, Building2, Settings2, FileText, ChevronRight } from "lucide-react";
 import { supabase } from "../../supabase";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import {
@@ -98,6 +98,12 @@ export default function SiteAdminPage() {
           title="All players"
           meta={`${fmtCount(playerCount)} player${playerCount === 1 ? "" : "s"}`}
           body="Search every player; manage profiles, ratings, login email, password, and profile image."
+        />
+        <Card
+          to="/admin/unregistered"
+          icon={<UserX size={20} />}
+          title="Signed up, not registered"
+          body="People who created an account and logged in, but never registered for anything — reach out to them."
         />
         <Card
           to="/admin/new-org"
