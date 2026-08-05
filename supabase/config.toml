@@ -223,6 +223,10 @@ verify_jwt = false
 [functions.send-welcome-email]
 verify_jwt = false
 
+# Called by the on_quote_customer_revision DB trigger via pg_net (no JWT).
+[functions.notify-quote-response]
+verify_jwt = false
+
 # Invoked on a schedule (cron hitting the function URL) with no Supabase JWT; it
 # only soft-cancels stale pending_payment regs via service_role. Must deploy
 # without JWT verification so the scheduled, unauthenticated call reaches it.
