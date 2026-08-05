@@ -62,7 +62,7 @@ export default function HelpButton({
         aria-expanded={open}
         aria-label="Need help?"
       >
-        <span style={{ fontSize: 15, lineHeight: 1 }}>{open ? "×" : "?"}</span>
+        {open && <span style={{ fontSize: 15, lineHeight: 1 }}>×</span>}
         Need help?
       </button>
 
