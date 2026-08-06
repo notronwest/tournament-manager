@@ -3,6 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Person-page unification: Stage 1 SHIPPED (#668); Stage 2 (security) design open
+
+Stage 1 DONE → TEST (#668, closes #667): PlayerDetailPage's Tournament-history rows
+each got a **Manage** action → shared RegistrationEditorModal (reassign/partner/
+withdraw), page reloads on change. admin-get-player now additively returns eventId/
+partnerRegId/eventFeeCents. Edits are RLS-gated client writes (no authz change).
+
+Stage 2 (open person page to ORG admins) — KEY ARCHITECTURAL FINDING from the map:
+`/admin/players/:playerId` has **NO org context** (global platform-admin page); and
+all 3 edge fns (admin-get-player, admin-update-player, admin-impersonate) hard-gate
+on `platform_admins` ONLY. There's no orgs-for-player RPC. "Player in org" =
+event_registrations→events→tournaments→org OR organization_contacts row. Proposed
+approach (awaiting Ron's OK before building the security change): pass an **org scope
+via ?org=<slug>** from the org-scoped entry points (Contacts/Attendees); admin-get-
+player/admin-update-player accept optional orgSlug → if caller is platform admin,
+full view; if org admin, require orgSlug + verify has_org_role AND player-belongs-to-
+org, and scope profile/history to that org; keep merge + impersonate buttons + their
+edge-fn gates platform-admin-only. Route guard: drop RequirePlatformAdmin gate on the
+page (page self-gates by fetch result). NEXT: confirm approach → build Stage 2 as a
+review PR (don't merge until Ron reviews) → Stage 3 reroute Attendees.
+
 ## 2026-08-06 — Contacts 'Manage' → unified person page (#666, closes #665) → TEST
 
 Ron: managing a registered person should go to ONE place (edit · merge · sign in as
