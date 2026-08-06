@@ -3,6 +3,15 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — PROMOTED #677 → production (frontend-only, clean)
+
+Ron: "push to production." Delta was frontend-only (#677 + STATUS; NO migrations, NO
+edge-fn changes). Merged promotion PR #678 (main→production, --merge --admin). PROD
+**Cloudflare frontend build success** — reg-editor pending-invite context + one-click
+Pair is LIVE on production. No edge-fn/migration steps to watch this time (nothing
+changed there), so none of last promotion's runner-cancel risk applied. PROD now ==
+main. Nothing outstanding.
+
 ## 2026-08-06 — Reg editor: surface pending partner invites + one-click pair (#677) → TEST
 
 Ron hit a mutual-invite deadlock (River invited Adam, Adam invited River, neither
