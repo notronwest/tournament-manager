@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { Database } from "../types/supabase";
 import {
   PlayerPicker,
@@ -14,6 +14,10 @@ import {
   unpairRegistration,
   createPartnerRegistration,
   fetchEventRegistrants,
+  fetchRegPartnerContext,
+  pairAndResolveInvites,
+  type RegPartnerContext,
+  type InviteContact,
 } from "../lib/registrations";
 import {
   ink,
@@ -87,9 +91,45 @@ export function RegistrationEditorModal({
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
 
+  // Pending-invite context, so the admin can SEE who this player invited / who
+  // invited them — the missing piece when two people invite each other.
+  const [partnerCtx, setPartnerCtx] = useState<RegPartnerContext | null>(null);
+  const [pairingId, setPairingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isDoubles) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ctx = await fetchRegPartnerContext(reg.eventId, reg.playerId);
+        if (!cancelled) setPartnerCtx(ctx);
+      } catch {
+        // Non-fatal — the editor still works without the invite context.
+        if (!cancelled) setPartnerCtx({ invited: [], invitedBy: [] });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isDoubles, reg.eventId, reg.playerId]);
+
   const done = async () => {
     await onChanged();
     onClose();
+  };
+
+  const onPairWith = async (c: InviteContact) => {
+    if (!c.regId) return;
+    setError(null);
+    setPairingId(c.inviteId);
+    try {
+      await pairAndResolveInvites(reg.regId, c.regId, reg.eventId, reg.playerId, c.playerId);
+      await done();
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setPairingId(null);
+    }
   };
 
   const onReassign = async () => {
@@ -245,6 +285,12 @@ export function RegistrationEditorModal({
           {/* Partner (doubles only) */}
           {isDoubles && (
             <Section title="Partner">
+              <PendingInviteContext
+                ctx={partnerCtx}
+                playerName={reg.playerName}
+                pairingId={pairingId}
+                onPairWith={onPairWith}
+              />
               {hasPartner ? (
                 <div style={{ ...panelMutedStyle }}>
                   <div style={{ fontSize: 13, color: inkSoft, marginBottom: 10 }}>
@@ -360,6 +406,91 @@ export function RegistrationEditorModal({
 function errMsg(e: unknown): string {
   return (e as { message?: string })?.message ?? "Something went wrong.";
 }
+
+// Shows who this player invited / who invited them while a partner invite is
+// still pending — the context the admin otherwise has to remember from the
+// roster. Calls out the "invited each other, nobody accepted" case and offers a
+// one-click pair when the other person is registered.
+function PendingInviteContext({
+  ctx,
+  playerName,
+  pairingId,
+  onPairWith,
+}: {
+  ctx: RegPartnerContext | null;
+  playerName: string;
+  pairingId: string | null;
+  onPairWith: (c: InviteContact) => void;
+}) {
+  if (!ctx) return null;
+  const invitedByIds = new Set(ctx.invitedBy.map((c) => c.playerId));
+  const mutual = ctx.invited.filter((c) => invitedByIds.has(c.playerId));
+  const mutualIds = new Set(mutual.map((c) => c.playerId));
+  const invitedOnly = ctx.invited.filter((c) => !mutualIds.has(c.playerId));
+  const invitedByOnly = ctx.invitedBy.filter((c) => !mutualIds.has(c.playerId));
+  if (mutual.length + invitedOnly.length + invitedByOnly.length === 0) return null;
+
+  const firstName = playerName.split(/\s+/)[0] || playerName;
+
+  const pairAction = (c: InviteContact) =>
+    c.regId ? (
+      <button
+        onClick={() => onPairWith(c)}
+        disabled={pairingId !== null}
+        style={pairingId !== null ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+      >
+        {pairingId === c.inviteId ? "Pairing…" : "Pair them"}
+      </button>
+    ) : (
+      <span style={{ fontSize: 12, color: inkMuted }}>not registered yet</span>
+    );
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {mutual.map((c) => (
+        <div key={c.inviteId} style={{ ...statusPanelStyle("warn"), marginBottom: 8 }}>
+          <div style={{ fontSize: 13, color: ink, marginBottom: 8, lineHeight: 1.5 }}>
+            <strong>{firstName}</strong> and <strong>{c.name}</strong> invited each
+            other — neither accepted yet. Pairing them confirms the team and clears
+            both invites.
+          </div>
+          {pairAction(c)}
+        </div>
+      ))}
+      {(invitedOnly.length > 0 || invitedByOnly.length > 0) && (
+        <div style={{ ...panelMutedStyle, marginBottom: 8, display: "flex", flexDirection: "column", gap: 10 }}>
+          {invitedOnly.map((c) => (
+            <div key={c.inviteId} style={inviteRow}>
+              <div style={{ fontSize: 13, color: inkSoft }}>
+                Invited <strong style={{ color: ink }}>{c.name}</strong>
+                {c.email ? <span style={{ color: inkMuted }}> · {c.email}</span> : null}{" "}
+                — <em>pending</em>
+              </div>
+              {pairAction(c)}
+            </div>
+          ))}
+          {invitedByOnly.map((c) => (
+            <div key={c.inviteId} style={inviteRow}>
+              <div style={{ fontSize: 13, color: inkSoft }}>
+                <strong style={{ color: ink }}>{c.name}</strong> invited them —{" "}
+                <em>pending</em>
+              </div>
+              {pairAction(c)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const inviteRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap",
+};
 
 function Section({
   title,
