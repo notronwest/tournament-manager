@@ -21,6 +21,7 @@ import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
 import SiteAdminPage from "./pages/admin/SiteAdminPage";
 import SiteUnregisteredPage from "./pages/admin/SiteUnregisteredPage";
 import PlayerDetailPage from "./pages/admin/PlayerDetailPage";
+import MergeAccountsPage from "./pages/admin/MergeAccountsPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
@@ -65,6 +66,7 @@ import AuthConfirmPage from "./pages/public/AuthConfirmPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
+import SeedScenariosPage from "./pages/admin/tools/SeedScenariosPage";
 import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
 import TournamentContactsPage from "./pages/admin/TournamentContactsPage";
 import TournamentCouponsPage from "./pages/admin/TournamentCouponsPage";
@@ -344,6 +346,20 @@ export default function App() {
         }
       />
 
+      {/* Platform-admin-only "Merge accounts" wizard. Site-wide (not
+          org-scoped). Defined before the :orgSlug catch-all so
+          "merge-accounts" isn't treated as a slug. */}
+      <Route
+        path="/admin/merge-accounts"
+        element={
+          <RequireAuth>
+            <RequirePlatformAdmin>
+              <MergeAccountsPage />
+            </RequirePlatformAdmin>
+          </RequireAuth>
+        }
+      />
+
       {/* Platform-admin-only single-player detail / management page.
           Defined before the :orgSlug catch-all so "players" isn't
           treated as a slug. The page double-gates on usePlatformAdmin. */}
@@ -387,6 +403,14 @@ export default function App() {
           element={
             <RequirePlatformAdmin>
               <SeedEventPage />
+            </RequirePlatformAdmin>
+          }
+        />
+        <Route
+          path="tools/seed-scenarios"
+          element={
+            <RequirePlatformAdmin>
+              <SeedScenariosPage />
             </RequirePlatformAdmin>
           }
         />

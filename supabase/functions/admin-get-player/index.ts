@@ -15,6 +15,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolvePlayerAccess } from "../_shared/playerOrgAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -23,7 +24,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-type Body = { playerId: string };
+type Body = { playerId: string; orgSlug?: string };
 
 // @ts-expect-error Deno global in edge runtime
 Deno.serve(async (req: Request) => {
@@ -57,15 +58,6 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
-  const { data: padmin } = await admin
-    .from("platform_admins")
-    .select("user_id")
-    .eq("user_id", callerUser.id)
-    .maybeSingle();
-  if (!padmin) {
-    return jsonResp({ error: "Not a platform admin" }, 403);
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -74,6 +66,14 @@ Deno.serve(async (req: Request) => {
   }
   const playerId = (body.playerId || "").trim();
   if (!playerId) return jsonResp({ error: "playerId is required." }, 400);
+  const orgSlug = (body.orgSlug || "").trim() || null;
+
+  // Platform admin → full cross-org view. Org member (of the named org, where
+  // the player belongs) → a view scoped to that org. Anyone else → denied.
+  const access = await resolvePlayerAccess(admin, callerUser.id, playerId, orgSlug);
+  if (!access) {
+    return jsonResp({ error: "Not authorized to view this player." }, 403);
+  }
 
   // ── Profile ─────────────────────────────────────────────────────
   const { data: player, error: playerErr } = await admin
@@ -96,7 +96,8 @@ Deno.serve(async (req: Request) => {
     emailConfirmedAt: string | null;
     lastSignInAt: string | null;
   } | null = null;
-  if (player.auth_user_id) {
+  // Login email + sign-in status are account internals — platform admins only.
+  if (access.scope === "platform" && player.auth_user_id) {
     const { data: au } = await admin.auth.admin.getUserById(
       player.auth_user_id,
     );
@@ -119,6 +120,7 @@ Deno.serve(async (req: Request) => {
       partner_status,
       registered_at,
       partner_registration_id,
+      event_fee_cents,
       events (
         id,
         name,
@@ -169,7 +171,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const history = (regs ?? []).map((r: Record<string, unknown>) => {
+  const historyAll = (regs ?? []).map((r: Record<string, unknown>) => {
     const ev = r.events as Record<string, unknown> | null;
     const t = ev?.tournaments as Record<string, unknown> | null;
     const org = t?.organizations as { name: string; slug: string } | null;
@@ -179,6 +181,10 @@ Deno.serve(async (req: Request) => {
       status: r.status as string,
       partnerStatus: r.partner_status as string,
       registeredAt: r.registered_at as string,
+      // Fields the registration editor needs to edit this reg in place.
+      eventId: (ev?.id as string) ?? null,
+      partnerRegId,
+      eventFeeCents: (r.event_fee_cents as number) ?? 0,
       partnerName: partnerRegId
         ? partnerNameById.get(partnerRegId) ?? null
         : null,
@@ -202,6 +208,13 @@ Deno.serve(async (req: Request) => {
     };
   });
 
+  // Org-scoped callers only see this player's registrations within THEIR org;
+  // platform admins see the full cross-org history.
+  const history =
+    access.scope === "org"
+      ? historyAll.filter((h) => h.tournament?.orgSlug === access.orgSlug)
+      : historyAll;
+
   // Public review URL for the avatar (the bucket is public-read). Admins
   // need to SEE the image to decide whether to hide it — so we return it
   // regardless of avatar_hidden.
@@ -212,7 +225,7 @@ Deno.serve(async (req: Request) => {
         .join("/")}`
     : null;
 
-  return jsonResp({ ok: true, player, account, history, avatarUrl });
+  return jsonResp({ ok: true, scope: access.scope, player, account, history, avatarUrl });
 });
 
 function jsonResp(body: unknown, status = 200): Response {

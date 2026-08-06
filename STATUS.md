@@ -3,6 +3,234 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — All Players (site admin) can add a player (#674) → TEST
+
+The site-admin All Players page (SiteAttendeesPage, /admin/attendees) was read-only.
+Added an 'Add player' panel (first/last/email/phone) like Contacts' add: creates a
+global players record (no org link, no account) and navigates to the new player's
+page. Dedupes on email (surfaces the existing player instead of a duplicate, same
+rule as createOrgContact). Platform-admin only; client-side insert, no edge fn/
+migration. typecheck/build/lint green; not browser-verified (auth-gated).
+
+## 2026-08-06 — Person-page unification COMPLETE on TEST (Stages 2 + 3 merged)
+
+Ron said "merge both" → merged Stage 2 (#670, security) and Stage 3 (#672). **Edge-fn
+deploy for #670 CONFIRMED GREEN** (the no-local-Deno risk cleared — admin-get-player,
+admin-update-player, _shared/playerOrgAccess.ts typechecked + deployed to TEST). Stage
+3 (#672, closes #671): Attendees By-Player 'Manage' now navigates to
+/admin/players/<id>?org=<slug> (org-scoped person page) instead of the inline modal;
+By-Event per-reg 'Edit' unchanged. So BOTH Contacts + Attendees now route "manage a
+person" to the one unified page. Full unification (all 3 stages: #668 reg-editing,
+#670 org-admin access, #672 attendees reroute) live on TEST.
+
+NEXT: Ron TEST click-throughs (as a platform admin AND, to exercise Stage 2, as a
+non-platform org admin if one exists) — verify org admins see only their org's slice
+and can't reach merge/impersonate/account. Then a PROD promotion bundle is due — a lot
+has stacked on TEST this session: manage-registration editor (#654/#656/#658), merge
+field-picker + wizard (#660/#664), Contacts Manage (#666), and person-page unification
+(#668/#670/#672). Consider promoting main→production in one batch once verified.
+
+## 2026-08-06 — Person-page unification Stage 2 built → DRAFT review PR #670 (security; NOT merged)
+
+Stage 2 (open person page to org admins, scoped) implemented per locked design and
+opened as a **draft PR #670 for Ron to review before merge** (closes #669). No
+migration. New `_shared/playerOrgAccess.ts` = single authz source for admin-get-
+player + admin-update-player: platform admin → full; org member of `?org=<slug>`
+WHERE player belongs to that org (contact row OR reg in its tournaments, walked
+EXPLICITLY org→tournaments→events→regs = fail-closed, no nested-filter ambiguity) →
+scoped (profile + that org's regs only; account internals withheld; profile-only
+writes — server 403s org callers sending loginEmail/passwordAction/avatarHidden).
+Merge + impersonate unchanged (platform-only). Frontend: PlayerDetailPage reads
+?org, loads for all (403→error), hides impersonate/merge/account/image for org
+scope, threads orgSlug into profile save; OrgContactsPage 'Manage' links all org
+members to /admin/players/<id>?org=<slug> (retired inline edit modal). Frontend
+typecheck/build/lint green. ⚠️ Edge fns NOT locally typechecked (no Deno) — watch
+the deploy after merge. NEXT: Ron reviews #670 (esp. playerOrgAccess.ts authz) →
+merge → Stage 3 reroute Attendees By-Player 'Manage' → /admin/players/<id>?org=<slug>.
+
+## 2026-08-06 — Person-page unification: Stage 1 SHIPPED (#668); Stage 2 (security) design open
+
+Stage 1 DONE → TEST (#668, closes #667): PlayerDetailPage's Tournament-history rows
+each got a **Manage** action → shared RegistrationEditorModal (reassign/partner/
+withdraw), page reloads on change. admin-get-player now additively returns eventId/
+partnerRegId/eventFeeCents. Edits are RLS-gated client writes (no authz change).
+
+Stage 2 (open person page to ORG admins) — KEY ARCHITECTURAL FINDING from the map:
+`/admin/players/:playerId` has **NO org context** (global platform-admin page); and
+all 3 edge fns (admin-get-player, admin-update-player, admin-impersonate) hard-gate
+on `platform_admins` ONLY. There's no orgs-for-player RPC. "Player in org" =
+event_registrations→events→tournaments→org OR organization_contacts row. Proposed
+approach (awaiting Ron's OK before building the security change): pass an **org scope
+via ?org=<slug>** from the org-scoped entry points (Contacts/Attendees); admin-get-
+player/admin-update-player accept optional orgSlug → if caller is platform admin,
+full view; if org admin, require orgSlug + verify has_org_role AND player-belongs-to-
+org, and scope profile/history to that org; keep merge + impersonate buttons + their
+edge-fn gates platform-admin-only. Route guard: drop RequirePlatformAdmin gate on the
+page (page self-gates by fetch result). NEXT: confirm approach → build Stage 2 as a
+review PR (don't merge until Ron reviews) → Stage 3 reroute Attendees.
+
+## 2026-08-06 — Contacts 'Manage' → unified person page (#666, closes #665) → TEST
+
+Ron: managing a registered person should go to ONE place (edit · merge · sign in as
+· history). The org Contacts row's Edit (inline ContactFormModal) now becomes a
+**Manage** link to `/admin/players/<id>` (PlayerDetailPage — already has profile
+edit via admin-update-player, merge→wizard, impersonate/"sign in as", send-login,
+reg history). Access nuance: PlayerDetailPage is RequirePlatformAdmin while Contacts
+is org-member-reachable, so the Manage link shows only for platform admins;
+non-platform org admins keep the inline edit modal. Other row actions unchanged.
+typecheck/build/lint green; not browser-verified (auth-gated).
+
+DECISIONS RESOLVED (2026-08-06) — full 'one place' unification approved, staged epic:
+Ron said YES to both (1) open the person page to ORG admins for their org's players,
+and (2) route Attendees 'Manage' there too (add reg editing first). Security boundary
+locked: **Merge + Sign-in-as (impersonate) stay PLATFORM-ADMIN ONLY** (cross-org
+privileges — a player often belongs to many orgs); org admins get profile edit,
+registrations (view+edit), and send-login for THEIR org's players only.
+
+PLAN (3 stages, each its own PR):
+- Stage 1 (frontend, low-risk): add per-registration editing (RegistrationEditorModal)
+  to PlayerDetailPage so nothing's lost when Attendees points here.
+- Stage 2 (SECURITY — show Ron the diff before merge): relax admin-get-player /
+  admin-update-player to allow an org admin acting on a player who belongs to their
+  org (event_registrations→events→tournaments→org OR organization_contacts); flip the
+  /admin/players/:playerId route off RequirePlatformAdmin; HIDE merge + impersonate
+  for non-platform admins; scope reg view/edit to the org admin's org.
+- Stage 3 (frontend): reroute Attendees By-Player 'Manage' → /admin/players/:id.
+Explore agent mapping the edge-fn authz + reg-data shapes in flight; build Stage 1 next.
+
+## 2026-08-06 — Merge-accounts WIZARD shipped to TEST (#664, closes #663)
+
+Rebuilt merge to Ron's mockup: standalone platform-admin two-step wizard at
+`/admin/merge-accounts` (site-wide, ordered before the `:orgSlug` catch-all).
+Step 1 search-picks Source (removed) + Destination (kept) with preview cards;
+Step 2 is a Source·Destination·**Merged** comparison table — per-field radio drives
+a live green Merged column, grouped General + Registrations, defaults Destination
+with blank→Source fallback, required names never blanked. Reuses #660's enriched
+`admin-merge-players` backend UNCHANGED (winner=Destination, loser=Source) — no
+edge-fn/migration change. `MergePlayerModal` deleted; PlayerDetailPage's "Merge
+duplicate…" now links to the wizard with `?destination=<id>`. typecheck/build/lint
+green; table scrolls in its own container at 390px. NOT browser-verified
+(platform-admin gated) — eyeball on TEST. NEXT: Ron click-through on TEST; then
+promote merge (#660+#664) + manage-registration set (#654+#656+#658) to PROD.
+
+## 2026-08-06 — manage-reg E2E VERIFIED GREEN in CI · merge field-picker shipped · merge wizard next
+
+**#1 (editing works) — PROVEN.** Discovered the nightly regression workflow is NOT
+inert (secrets ARE wired; it runs + passes). Dispatched it on demand against main and
+got **50 passed** incl. all 7 manage-registration tests. Took 3 harness fixes (editor
+itself never needed one): (a) #661 seed selected non-existent `organization_members.id`
+(composite PK, no id) → aborted seed; (b) #662 the lazy `db()` wasn't invoked at the
+multi-line `await db\n .from(` sites (single-line sed missed them) → `db.from is not a
+function`. Both slipped past `npm run typecheck` because **e2e/ isn't in tsconfig** —
+worth wiring an e2e typecheck to CI (follow-up). Manage-registration editor set
+(#654+#656+#658) is TEST-green and ready to promote to PROD.
+
+**#2 merge tool — v1 shipped, now being redesigned.** Shipped #660 (field-by-field
+picker + both records' registrations) — done entirely in the `admin-merge-players` edge
+fn (service-role enriches preview with both full profiles + registrations; commit applies
+whitelisted field overrides) + lib + `MergePlayerModal`, NO migration/RPC change. Then
+Ron sent a mockup of the target UX and chose: **standalone two-step wizard** (Step 1 pick
+Source + Destination; Step 2 a 3-column Source·Destination·**Merged** live comparison
+table, radio per field), **Destination wins, blank Destination falls back to Source**.
+The #660 backend already supports all of this (winner=Destination, loser=Source). NEXT:
+build `MergeAccountsPage` standalone wizard, wire `/admin/merge-accounts` (platform-admin),
+retire `MergePlayerModal`, point PlayerDetailPage's "Merge duplicate…" at the new page
+(?destination=<id>). Can't browser-verify (platform-admin gated) — rely on typecheck/build
++ the click-through on TEST.
+
+## 2026-08-05 — Harden + E2E the manage-registration editor (#658, closes #657) → TEST
+
+Ron hit a duplicate-key error reassigning a reg to an already-registered player, and
+asked to (a) run through ALL edit scenarios with full E2E coverage and (b) be able to
+seed a test tournament with every scenario + tear it down — before exposing the editor
+publicly ("a bit of a rats nest").
+
+**Bug fix** — reassigning onto a player already active (pending/paid) in the same event
+violated `event_registrations_event_id_player_id_active_uidx`. `reassignRegistrationPlayer`
+now pre-checks via `activeRegForPlayerInEvent` (predicate matches the index exactly:
+status in pending_payment/paid) and throws a friendly message; also guards self-reassign
+and self-as-own-partner. Editor dialog got `aria-labelledby` for E2E targeting.
+
+**Seed + E2E** — `e2e/seed.ts`: grant the E2E organizer org membership (admin surfaces
+need it; the older public/self-service flows didn't) + a new `e2e-manage-reg` tournament
+with one event per scenario, reset each run. `e2e/flows/manage-registration.spec.ts`:
+7 desktop tests driving Attendees By-Player → Manage → Edit and asserting DB state via
+service-role — reassign-ok, reassign-collision (blocked), assign-partner existing (reuse)
++ new (comp $0), remove-partner, withdraw paid→withdrawn, withdraw pending→cancelled.
+
+**Manual tool** — platform-admin `tools/seed-scenarios` page seeds an equivalent
+throwaway tournament (`reg-scenarios-test`, `@scenario.test` players) + tear-down, so
+Ron can exercise every scenario by hand on TEST.
+
+Verified typecheck/build/lint + `playwright --list` (7 tests). **NOT run E2E end-to-end**
+— needs a deployed build of the branch + the E2E secrets (which gate the currently-inert
+nightly regression workflow). Money-safe: no edit path touches payments/refunds.
+
+NEXT: Ron exercises scenarios on TEST via the Seed-scenarios tool (Admin → Tools → Seed
+scenarios → Seed → Open Attendees). To make the E2E actually run in CI, wire
+`E2E_SUPABASE_URL` / `E2E_BASE_URL` / `E2E_SUPABASE_SERVICE_ROLE_KEY` secrets (regression.yml).
+Then promote the manage-registration set (#654 + #656 + #658) to PROD.
+
+## 2026-08-05 — Fix "can't find edit registration": per-player Manage in By-Player view (#656) → TEST
+
+Ron on TEST: "I don't see an edit registration." Cause: the reg Edit only lived in the
+Attendees BY-EVENT view (onEdit passed only to ByEventView) + Contacts; the DEFAULT
+By-Player view had no per-reg action. Fixed (#656, closes #655, frontend-only → TEST):
+per-player "Manage" button in the By-Player table → opens the player's registrations
+list → Edit each. Extracted the list modal to shared components/PlayerRegistrationsModal
+(orgId, playerId, playerName), now used by BOTH the Attendees Manage button and the
+Contacts "Registrations" action (deleted the local ContactRegistrationsModal — DRY).
+Verified typecheck/lint/build. Merged to TEST.
+
+Registration editor now reachable from: Attendees By-Player → Manage, Attendees
+By-Event → Edit (per reg row), Contacts → Registrations. NEXT: Ron re-check on TEST
+(hard-refresh) → then promote the manage-registration set (#654 + #656) to PROD.
+
+## 2026-08-04 — Manage-registration editor SHIPPED to TEST (#654) [overnight autonomous]
+
+Built + verified + merged to TEST autonomously (Ron asleep). PR #654 (closes #653),
+frontend only — Cloudflare rebuilds TEST, no migration/edge-fn. Shared "Manage
+registration" modal reachable from Attendees (per-reg Edit) + Contacts (per-contact
+"Registrations" → list → Edit). Actions: reassign player (PlayerPicker →
+persistPlayerSelection → update player_id); partner (assign existing event registrant
+or add new $0 comp reg + pair; change; remove/unpair — PairingBoard patterns);
+withdraw (paid→withdrawn else cancelled + unpair partner). All direct org-staff
+event_registrations writes (mirrors EventConsole/PairingBoard). MONEY-SAFE (reviewed
+lib/registrations.ts personally): NO payments/refund writes; withdraw explicitly
+issues no refund (modal note; refunds stay in the withdrawal queue); partner-add is
+the $0 comp insert. Paired-roles check_paired_roles_sides trigger error surfaced
+verbatim. Verified typecheck/lint/build clean. Built by subagent; I reviewed the
+money-adjacent writes + verified + shipped. NOTE (had to fix): the feature-PR body's
+"Closes #NUM" lost the shell var → issue-ref check failed; fixed via gh pr edit to
+"Closes #653" → passed.
+
+VERIFY on TEST (Ron): Attendees → a reg → Edit → reassign / partner / withdraw;
+Contacts → a contact → Registrations → Edit. Minor known items (subagent flagged):
+withdraw button shows even for already-terminal regs (harmless); modal closes on each
+successful mutation then host refetches. NEXT: Ron reviews on TEST → promote to PROD.
+Everything else already on PROD through #652.
+
+## 2026-08-04 — Promoted #649 + #651 to PROD (#652); building manage-registration for TEST (overnight, autonomous)
+
+Promotion PR #652 (main→production) admin-merged. PROD migration (quote-response
+trigger) + edge-fn deploys GREEN. LIVE on PROD: Need-help CC (tournaments@bertanderne.com)
++ customer-quote-response email to ron@. PROD == main.
+
+Ron (going to bed): "get the manage registration code up and running on test ...
+without any interruptions." Building the admin REGISTRATION EDITOR autonomously →
+TEST. Design (from earlier Explore map): a shared editor reachable from Attendees
+(per-reg Edit) + Contacts (per-contact Registrations list → edit). Actions, all
+conservative/proven patterns (org-staff RLS allows event_registrations writes;
+MONEY stays out): reassign player (update player_id via PlayerPicker/
+persistPlayerSelection — EventConsole pattern); manage partner (pair/unpair =
+partner_registration_id + partner_status, PairingBoard pattern; add new partner =
+create reg EventConsole doubles style paid/$0 + pair); withdraw (status→withdrawn/
+cancelled + unpair partner, NO refund — refunds stay in the existing withdrawal
+queue/stripe-refund). Mind check_paired_roles_sides trigger (fires only when
+partner_registration_id set to distinct non-null; needs opposite sides on
+is_paired_roles events → surface error if conflict). NEXT: build lib/registrations.ts
++ RegistrationEditorModal + wire Attendees/Contacts, verify, PR, merge to TEST.
+
 ## 2026-08-04 — Need-help CC (#649) + quote-response notify (#651) on TEST
 
 Two follow-ups merged to TEST (both after the big batch went to PROD via #647):

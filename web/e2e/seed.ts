@@ -86,6 +86,39 @@ async function ensurePlayer(email: string, firstName: string, lastName: string):
   return (ok(player, `players upsert ${email}`) as { id: string }).id;
 }
 
+// Read a player's auth_user_id (organization_members.user_id references
+// auth.users, but ensurePlayer only hands back the players.id).
+async function authUserIdFor(email: string): Promise<string> {
+  const res = await db
+    .from("players")
+    .select("auth_user_id")
+    .eq("email", email)
+    .is("deleted_at", null)
+    .limit(1);
+  const row = (res.data ?? [])[0] as { auth_user_id: string | null } | undefined;
+  if (!row?.auth_user_id) throw new Error(`seed: no auth_user_id for ${email}`);
+  return row.auth_user_id;
+}
+
+// Make an auth user an org member (idempotent). The admin attendees surfaces
+// (unlike the public/self-service flows) require membership — without this the
+// organizer can't load /admin/<org>/…/attendees.
+async function ensureOrgMember(orgId: string, userId: string, role: string): Promise<void> {
+  // organization_members has a composite PK (organization_id, user_id) and no
+  // surrogate `id` column — select an actual column.
+  const found = await db
+    .from("organization_members")
+    .select("user_id")
+    .match({ organization_id: orgId, user_id: userId })
+    .limit(1);
+  if (found.error) throw new Error(`seed: org member select — ${found.error.message}`);
+  if (found.data && found.data.length) return;
+  const ins = await db
+    .from("organization_members")
+    .insert({ organization_id: orgId, user_id: userId, role });
+  if (ins.error) throw new Error(`seed: org member insert — ${ins.error.message}`);
+}
+
 async function main() {
   // 1. Org (organizations.slug is unique → upsert is fine)
   const org = ok(
@@ -129,6 +162,10 @@ async function main() {
   await ensurePlayer("e2e-organizer@wmpc.test", "Olive", "Organizer");
   const playerId = await ensurePlayer("e2e-player@wmpc.test", "Pam", "Player");
   const partnerId = await ensurePlayer("e2e-partner@wmpc.test", "Pat", "Partner");
+
+  // Olive owns the org so the admin attendees surfaces (manage-registration
+  // specs) load for her. Public/self-service flows don't need this.
+  await ensureOrgMember(org.id, await authUserIdFor("e2e-organizer@wmpc.test"), "owner");
 
   // 5. Cancel-flow fixture (#9): a pending reg for Pam WITH a picked partner
   //    (Pat) — cancelling then pops the "drop your partner" confirm step.
@@ -321,6 +358,82 @@ async function main() {
     { event_id: selfE, player_id: monaId, status: "pending_payment", partner_status: "solo", event_fee_cents: 0 },
     { event_id: selfE, player_id: willId, status: "pending_payment", partner_status: "solo", event_fee_cents: 0 },
   ]);
+
+  // 9. Manage-registration fixtures — one tournament, one event per edit
+  //    scenario, each pre-seeded to an exact starting state. The organizer
+  //    (Olive, an org owner via ensureOrgMember above) opens the admin
+  //    Attendees page and drives the "Manage registration" editor. Every event
+  //    is reset each run so the mutating specs (reassign / withdraw / pair)
+  //    start clean and deterministic. Each scenario uses uniquely-named players
+  //    so the By-Player filter box narrows to exactly one row.
+  const mrT = await mkTournament("e2e-manage-reg", "E2E Manage-Registration Cup");
+  const singlesEvent = async (tid: string, name: string) =>
+    selectOrInsert(
+      "events",
+      { tournament_id: tid, name },
+      { tournament_id: tid, name, format: "singles", gender: "mixed" },
+      `event ${name}`,
+    );
+  const insertReg = async (
+    eventId: string,
+    pid: string,
+    status: string,
+    partnerStatus = "solo",
+  ): Promise<string> =>
+    (ok(
+      await db
+        .from("event_registrations")
+        .insert({ event_id: eventId, player_id: pid, status, partner_status: partnerStatus, event_fee_cents: 0 })
+        .select("id")
+        .single(),
+      `mr reg ${pid}`,
+    ) as { id: string }).id;
+
+  // (1) Reassign — happy path: Ray is registered; Nora exists but isn't in the
+  //     event, so the reg can be moved to her.
+  const mrReassign = await doublesEvent(mrT, "MR Reassign Happy");
+  await resetEvent(mrReassign);
+  await insertReg(mrReassign, await ensurePlayer("mr-ray@wmpc.test", "Ray", "Reassign"), "paid");
+  await ensurePlayer("mr-nora@wmpc.test", "Nora", "NotInEvent");
+
+  // (2) Reassign — collision: Cal and Dara are both active in the event, so
+  //     moving Cal's reg onto Dara must be blocked by the active-unique guard.
+  const mrCollision = await doublesEvent(mrT, "MR Reassign Collision");
+  await resetEvent(mrCollision);
+  await insertReg(mrCollision, await ensurePlayer("mr-cal@wmpc.test", "Cal", "Collide"), "paid");
+  await insertReg(mrCollision, await ensurePlayer("mr-dara@wmpc.test", "Dara", "Duplicate"), "paid");
+
+  // (3) Assign partner — existing: Eddie is already registered (seeking), so
+  //     assigning him as Perry's partner reuses his reg (no new reg created).
+  const mrPartnerExisting = await doublesEvent(mrT, "MR Partner Existing");
+  await resetEvent(mrPartnerExisting);
+  await insertReg(mrPartnerExisting, await ensurePlayer("mr-perry@wmpc.test", "Perry", "Primary"), "paid", "seeking");
+  await insertReg(mrPartnerExisting, await ensurePlayer("mr-eddie@wmpc.test", "Eddie", "Existing"), "paid", "seeking");
+
+  // (4) Assign partner — new: Nate is seeking; Cody exists but has no reg here,
+  //     so assigning him comp-creates a $0 reg and pairs the two.
+  const mrPartnerNew = await doublesEvent(mrT, "MR Partner New");
+  await resetEvent(mrPartnerNew);
+  await insertReg(mrPartnerNew, await ensurePlayer("mr-nate@wmpc.test", "Nate", "NeedsPartner"), "paid", "seeking");
+  await ensurePlayer("mr-cody@wmpc.test", "Cody", "Comp");
+
+  // (5) Remove partner: Tom + Tina are a confirmed team.
+  const mrRemove = await doublesEvent(mrT, "MR Remove Partner");
+  await resetEvent(mrRemove);
+  const tomReg = await insertReg(mrRemove, await ensurePlayer("mr-tom@wmpc.test", "Tom", "Team"), "paid", "confirmed");
+  const tinaReg = await insertReg(mrRemove, await ensurePlayer("mr-tina@wmpc.test", "Tina", "Team"), "paid", "confirmed");
+  await db.from("event_registrations").update({ partner_registration_id: tinaReg }).eq("id", tomReg);
+  await db.from("event_registrations").update({ partner_registration_id: tomReg }).eq("id", tinaReg);
+
+  // (6) Withdraw — paid: Wade's paid reg becomes 'withdrawn'.
+  const mrWithdrawPaid = await singlesEvent(mrT, "MR Withdraw Paid");
+  await resetEvent(mrWithdrawPaid);
+  await insertReg(mrWithdrawPaid, await ensurePlayer("mr-wade@wmpc.test", "Wade", "Paid"), "paid");
+
+  // (7) Withdraw — pending: Pete's unpaid reg becomes 'cancelled'.
+  const mrWithdrawPending = await singlesEvent(mrT, "MR Withdraw Pending");
+  await resetEvent(mrWithdrawPending);
+  await insertReg(mrWithdrawPending, await ensurePlayer("mr-pete@wmpc.test", "Pete", "Pending"), "pending_payment");
 
   console.log("seed: e2e-test fixture ready");
 }
