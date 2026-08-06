@@ -3,6 +3,22 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — PROMOTED main → production (#675) — frontend live, edge-fn deploy queued
+
+Ron: "Push main to production." Merged promotion PR #675 (main→production, --merge
+--admin). Batch (NO migrations): manage-registration editor (#654/#656/#658), merge
+field-picker + wizard (#660/#664), person-page unification (#666/#668/#670/#672),
+All Players add (#674). PROD **frontend deployed green** (Cloudflare
+tournament-manager). **Edge-fn deploy (run 31118196280) STUCK QUEUED** ~7min on a
+GitHub runner backlog at handoff — the 4 changed fns (_shared/playerOrgAccess.ts,
+admin-get-player, admin-update-player, admin-merge-players) had NOT deployed to PROD
+yet. Transient: new frontend + old edge fns → merge-wizard preview enrichment +
+person-page per-reg Manage + org-admin access look degraded/inert on PROD until the
+deploy lands (no data risk; platform-admin basic flows fine). SELF-RESOLVES on deploy.
+NEXT: confirm run 31118196280 completes green (backgrounded watch will notify); if it
+stays stuck, re-run the "Deploy edge functions" workflow for production. Then PROD is
+fully consistent.
+
 ## 2026-08-06 — All Players (site admin) can add a player (#674) → TEST
 
 The site-admin All Players page (SiteAttendeesPage, /admin/attendees) was read-only.
