@@ -104,9 +104,11 @@ async function authUserIdFor(email: string): Promise<string> {
 // (unlike the public/self-service flows) require membership — without this the
 // organizer can't load /admin/<org>/…/attendees.
 async function ensureOrgMember(orgId: string, userId: string, role: string): Promise<void> {
+  // organization_members has a composite PK (organization_id, user_id) and no
+  // surrogate `id` column — select an actual column.
   const found = await db
     .from("organization_members")
-    .select("id")
+    .select("user_id")
     .match({ organization_id: orgId, user_id: userId })
     .limit(1);
   if (found.error) throw new Error(`seed: org member select — ${found.error.message}`);
