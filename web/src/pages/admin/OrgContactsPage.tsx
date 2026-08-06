@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
+import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import { sendLoginLink } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { PlayerRegistrationsModal } from "../../components/PlayerRegistrationsModal";
@@ -72,6 +74,7 @@ type ImportResult = {
 // Sending email lives on the separate Email page.
 export default function OrgContactsPage() {
   const { org } = useCurrentOrg();
+  const isPlatformAdmin = usePlatformAdmin();
   const [contacts, setContacts] = useState<OrgContact[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("none");
@@ -286,7 +289,21 @@ export default function OrgContactsPage() {
                           {loginBusy === c.playerId ? "Sending…" : "Login link"}
                         </button>
                       )}
-                      <button style={rowBtn} onClick={() => setEditTarget(c)}>Edit</button>
+                      {/* Managing a person routes to the unified admin page
+                          (edit · merge · sign in as · history). That page is
+                          platform-admin only; org-admins keep the inline edit
+                          modal since they can't reach it. */}
+                      {isPlatformAdmin === true ? (
+                        <Link
+                          to={`/admin/players/${c.playerId}`}
+                          style={{ ...rowBtn, textDecoration: "none", display: "inline-block" }}
+                          title="Open this person's admin page — edit, merge, sign in as, history"
+                        >
+                          Manage
+                        </Link>
+                      ) : (
+                        <button style={rowBtn} onClick={() => setEditTarget(c)}>Edit</button>
+                      )}
                       {c.source === "registrant" ? (
                         <span style={{ color: inkMuted, fontSize: 12, marginLeft: 8 }} title="Registrants are managed via their registration">—</span>
                       ) : (
