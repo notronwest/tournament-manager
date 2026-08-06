@@ -62,6 +62,7 @@ export function PlayerRegistrationsModal({
     eventId: r.eventId,
     eventName: r.eventName,
     format: r.format,
+    playerId,
     playerName,
     status: r.status,
     partnerStatus: r.partnerStatus,

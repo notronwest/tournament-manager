@@ -53,6 +53,7 @@ export type EditableRegistration = {
   eventId: string;
   eventName: string;
   format: EventFormat;
+  playerId: string;
   playerName: string;
   status: RegistrationStatus;
   partnerStatus: PartnerStatus;
@@ -104,7 +105,11 @@ export function RegistrationEditorModal({
         setError(res.error ?? "Could not resolve that player.");
         return;
       }
-      await reassignRegistrationPlayer(reg.regId, res.player.id);
+      if (res.player.id === reg.playerId) {
+        setError("This registration is already for that player.");
+        return;
+      }
+      await reassignRegistrationPlayer(reg.regId, res.player.id, reg.eventId);
       await done();
     } catch (e) {
       setError(errMsg(e));
@@ -141,6 +146,10 @@ export function RegistrationEditorModal({
         return;
       }
       const playerId = res.player.id;
+      if (playerId === reg.playerId) {
+        setError("A player can't be their own partner — pick someone else.");
+        return;
+      }
       // Reuse an existing active reg for this player in this event if one
       // exists; otherwise comp-create a new reg for them.
       const registrants = await fetchEventRegistrants(reg.eventId);
@@ -167,6 +176,7 @@ export function RegistrationEditorModal({
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby="reg-editor-title"
         onClick={onClose}
         style={overlay}
       >
@@ -174,7 +184,7 @@ export function RegistrationEditorModal({
           {/* Header */}
           <div style={headerRow}>
             <div style={{ minWidth: 0 }}>
-              <h2 style={headingStyle}>Manage registration</h2>
+              <h2 id="reg-editor-title" style={headingStyle}>Manage registration</h2>
               <div style={{ fontSize: 15, fontWeight: 600, color: ink, marginTop: 6 }}>
                 {reg.playerName}
               </div>

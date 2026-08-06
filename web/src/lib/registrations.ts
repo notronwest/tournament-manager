@@ -151,13 +151,52 @@ export async function fetchPlayerRegistrations(
   return out;
 }
 
+// Statuses that occupy the active-unique index
+// event_registrations_event_id_player_id_active_uidx (event_id, player_id)
+// where deleted_at is null and status in ('pending_payment','paid'). A second
+// active reg for the same (event, player) collides on this index.
+const ACTIVE_UNIQUE_STATUSES = "(pending_payment,paid)";
+
+// Does this player already hold an ACTIVE registration for this event (one that
+// would collide on the unique index)? Returns the colliding reg id, or null.
+// `excludeRegId` skips the reg being edited itself.
+export async function activeRegForPlayerInEvent(
+  eventId: string,
+  playerId: string,
+  excludeRegId?: string,
+): Promise<string | null> {
+  let q = supabase
+    .from("event_registrations")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("player_id", playerId)
+    .is("deleted_at", null)
+    .filter("status", "in", ACTIVE_UNIQUE_STATUSES);
+  if (excludeRegId) q = q.neq("id", excludeRegId);
+  const { data, error } = await q.limit(1);
+  if (error) throw new Error(error.message);
+  return data?.[0]?.id ?? null;
+}
+
 // Re-point a registration at a different player. The caller resolves/creates
 // the player (persistPlayerSelection) first and passes the resulting id.
-// Mirrors EventConsolePage.saveEdit's `update({ player_id }).eq("id", regId)`.
+// Mirrors EventConsolePage.saveEdit's `update({ player_id }).eq("id", regId)`,
+// but first guards the active-unique collision (the raw DB error is opaque):
+// re-pointing to a player who's already registered for this event would violate
+// event_registrations_event_id_player_id_active_uidx.
 export async function reassignRegistrationPlayer(
   regId: string,
   newPlayerId: string,
+  eventId: string,
 ): Promise<void> {
+  const clash = await activeRegForPlayerInEvent(eventId, newPlayerId, regId);
+  if (clash) {
+    throw new Error(
+      "That player is already registered for this event, so this registration " +
+        "can't be moved to them. Withdraw one of the two, or use Merge duplicate " +
+        "players if they're the same person.",
+    );
+  }
   const { error } = await supabase
     .from("event_registrations")
     .update({ player_id: newPlayerId })
