@@ -804,6 +804,7 @@ function EventRosterSection({
       eventId: event.id,
       eventName: event.name,
       format: event.format,
+      playerId: reg.player_id,
       playerName: playerFullName(reg.player),
       status: reg.status,
       partnerStatus: reg.partner_status,

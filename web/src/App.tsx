@@ -65,6 +65,7 @@ import AuthConfirmPage from "./pages/public/AuthConfirmPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
+import SeedScenariosPage from "./pages/admin/tools/SeedScenariosPage";
 import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
 import TournamentContactsPage from "./pages/admin/TournamentContactsPage";
 import TournamentCouponsPage from "./pages/admin/TournamentCouponsPage";
@@ -387,6 +388,14 @@ export default function App() {
           element={
             <RequirePlatformAdmin>
               <SeedEventPage />
+            </RequirePlatformAdmin>
+          }
+        />
+        <Route
+          path="tools/seed-scenarios"
+          element={
+            <RequirePlatformAdmin>
+              <SeedScenariosPage />
             </RequirePlatformAdmin>
           }
         />

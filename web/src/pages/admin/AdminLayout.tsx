@@ -416,6 +416,9 @@ export default function AdminLayout() {
               <SideLink to={`/admin/${org.slug}/tools/seed-event`} onNavigate={closeDrawer}>
                 Seed test data
               </SideLink>
+              <SideLink to={`/admin/${org.slug}/tools/seed-scenarios`} onNavigate={closeDrawer}>
+                Seed scenarios
+              </SideLink>
               <SideLink to={`/admin/${org.slug}/tools/test-players`} onNavigate={closeDrawer}>
                 Test players
               </SideLink>
