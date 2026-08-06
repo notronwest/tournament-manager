@@ -6,6 +6,10 @@ import { impersonatePlayer } from "../../lib/impersonation";
 import { sendLoginLink, resendWelcome } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
+  RegistrationEditorModal,
+  type EditableRegistration,
+} from "../../components/RegistrationEditorModal";
+import {
   ink,
   inkSoft,
   inkMuted,
@@ -61,6 +65,9 @@ type HistoryRow = {
   status: string;
   partnerStatus: string;
   registeredAt: string;
+  eventId: string | null;
+  partnerRegId: string | null;
+  eventFeeCents: number;
   partnerName: string | null;
   event: { name: string; format: string; gender: string } | null;
   tournament: {
@@ -142,6 +149,28 @@ export default function PlayerDetailPage() {
   // "Log in as" — platform-admin impersonation (edge function enforces authz).
   const [signingIn, setSigningIn] = useState(false);
   const [impersonateError, setImpersonateError] = useState<string | null>(null);
+
+  // Registration editor — manage a single reg (reassign / partner / withdraw)
+  // in place. Writes are direct client UPDATEs gated by org-staff RLS, so this
+  // only succeeds for regs the caller may edit.
+  const [editingReg, setEditingReg] = useState<EditableRegistration | null>(null);
+  const openRegEditor = (h: HistoryRow) => {
+    if (!player || !h.eventId) return;
+    setEditingReg({
+      regId: h.regId,
+      eventId: h.eventId,
+      eventName: h.event?.name ?? "(event)",
+      format: (h.event?.format ?? "doubles") as EditableRegistration["format"],
+      playerId: player.id,
+      playerName: `${player.first_name} ${player.last_name}`.trim(),
+      status: h.status as EditableRegistration["status"],
+      partnerStatus: h.partnerStatus as EditableRegistration["partnerStatus"],
+      partnerRegId: h.partnerRegId,
+      partnerName: h.partnerName,
+      eventFeeCents: h.eventFeeCents,
+      tournamentName: h.tournament?.name,
+    });
+  };
 
   const onLoginAs = async () => {
     if (!player?.auth_user_id || signingIn) return;
@@ -378,7 +407,15 @@ export default function PlayerDetailPage() {
             account={account}
             onChanged={load}
           />
-          <HistorySection history={history} />
+          <HistorySection history={history} onManage={openRegEditor} />
+
+          {editingReg && (
+            <RegistrationEditorModal
+              reg={editingReg}
+              onClose={() => setEditingReg(null)}
+              onChanged={load}
+            />
+          )}
         </>
       )}
     </main>
@@ -890,7 +927,13 @@ function ImageSection({
 
 // ─── Tournament history ───────────────────────────────────────────────────────
 
-function HistorySection({ history }: { history: HistoryRow[] }) {
+function HistorySection({
+  history,
+  onManage,
+}: {
+  history: HistoryRow[];
+  onManage: (h: HistoryRow) => void;
+}) {
   return (
     <Section title={`Tournament history (${history.length})`}>
       {history.length === 0 ? (
@@ -898,7 +941,7 @@ function HistorySection({ history }: { history: HistoryRow[] }) {
           No registrations yet.
         </p>
       ) : (
-        <div style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: "hidden" }}>
+        <div style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: bg, borderBottom: `1px solid ${rule}` }}>
@@ -907,6 +950,7 @@ function HistorySection({ history }: { history: HistoryRow[] }) {
                 <th style={thStyle}>Partner</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Date</th>
+                <th style={thStyle}></th>
               </tr>
             </thead>
             <tbody>
@@ -945,6 +989,19 @@ function HistorySection({ history }: { history: HistoryRow[] }) {
                     </span>
                   </td>
                   <td style={tdStyle}>{fmtDate(h.registeredAt)}</td>
+                  <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                    {h.eventId ? (
+                      <button
+                        style={manageRegBtn}
+                        onClick={() => onManage(h)}
+                        title="Reassign player, manage partner, or withdraw"
+                      >
+                        Manage
+                      </button>
+                    ) : (
+                      <span style={{ color: inkMuted }}>—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1015,6 +1072,12 @@ const tdStyle = {
   padding: "10px 14px",
   verticalAlign: "top" as const,
   color: ink,
+};
+
+const manageRegBtn = {
+  ...ctaSecondaryStyle,
+  fontSize: 12,
+  padding: "5px 12px",
 };
 
 function statusPillStyle(status: string) {
