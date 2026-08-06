@@ -14,12 +14,23 @@ is org-member-reachable, so the Manage link shows only for platform admins;
 non-platform org admins keep the inline edit modal. Other row actions unchanged.
 typecheck/build/lint green; not browser-verified (auth-gated).
 
-OPEN DECISIONS for full 'one place' unification (raised to Ron, not yet built):
-(1) open the person page to ORG admins for their org's players — needs
-admin-get-player/admin-update-player/impersonation to accept org-admin scope (a
-security change); (2) route Attendees By-Player 'Manage' there too — but first add
-registration editing to PlayerDetailPage (today it's in PlayerRegistrationsModal)
-so nothing's lost. NEXT: Ron's call on (1)+(2); TEST click-through.
+DECISIONS RESOLVED (2026-08-06) — full 'one place' unification approved, staged epic:
+Ron said YES to both (1) open the person page to ORG admins for their org's players,
+and (2) route Attendees 'Manage' there too (add reg editing first). Security boundary
+locked: **Merge + Sign-in-as (impersonate) stay PLATFORM-ADMIN ONLY** (cross-org
+privileges — a player often belongs to many orgs); org admins get profile edit,
+registrations (view+edit), and send-login for THEIR org's players only.
+
+PLAN (3 stages, each its own PR):
+- Stage 1 (frontend, low-risk): add per-registration editing (RegistrationEditorModal)
+  to PlayerDetailPage so nothing's lost when Attendees points here.
+- Stage 2 (SECURITY — show Ron the diff before merge): relax admin-get-player /
+  admin-update-player to allow an org admin acting on a player who belongs to their
+  org (event_registrations→events→tournaments→org OR organization_contacts); flip the
+  /admin/players/:playerId route off RequirePlatformAdmin; HIDE merge + impersonate
+  for non-platform admins; scope reg view/edit to the org admin's org.
+- Stage 3 (frontend): reroute Attendees By-Player 'Manage' → /admin/players/:id.
+Explore agent mapping the edge-fn authz + reg-data shapes in flight; build Stage 1 next.
 
 ## 2026-08-06 — Merge-accounts WIZARD shipped to TEST (#664, closes #663)
 
