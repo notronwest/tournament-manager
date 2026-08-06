@@ -67,6 +67,20 @@ export const SEED = {
   invitesView: {
     inviteeEmail: "e2e-vic@wmpc.test", // dedicated invitee — invite never consumed
   },
+  // Manage-registration editor (#657). Organizer (Olive, an org owner) drives
+  // the admin Attendees editor. One event per scenario; unique player names so
+  // the By-Player filter box narrows to one row. Emails match seed.ts §9.
+  manageReg: {
+    tournamentSlug: "e2e-manage-reg",
+    adminEmail: "e2e-organizer@wmpc.test", // Olive, org owner
+    reassignOk: { player: "Ray Reassign", targetName: "Nora NotInEvent", targetEmail: "mr-nora@wmpc.test", event: "MR Reassign Happy" },
+    reassignCollision: { player: "Cal Collide", targetName: "Dara Duplicate", event: "MR Reassign Collision" },
+    assignPartnerExisting: { player: "Perry Primary", partnerName: "Eddie Existing", event: "MR Partner Existing" },
+    assignPartnerNew: { player: "Nate NeedsPartner", partnerName: "Cody Comp", partnerEmail: "mr-cody@wmpc.test", event: "MR Partner New" },
+    removePartner: { player: "Tom Team", partnerName: "Tina Team", event: "MR Remove Partner" },
+    withdrawPaid: { player: "Wade Paid", email: "mr-wade@wmpc.test", event: "MR Withdraw Paid" },
+    withdrawPending: { player: "Pete Pending", email: "mr-pete@wmpc.test", event: "MR Withdraw Pending" },
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";
