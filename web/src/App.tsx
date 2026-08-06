@@ -21,6 +21,7 @@ import SiteAttendeesPage from "./pages/admin/SiteAttendeesPage";
 import SiteAdminPage from "./pages/admin/SiteAdminPage";
 import SiteUnregisteredPage from "./pages/admin/SiteUnregisteredPage";
 import PlayerDetailPage from "./pages/admin/PlayerDetailPage";
+import MergeAccountsPage from "./pages/admin/MergeAccountsPage";
 import ChangeRequestsPage from "./pages/admin/ChangeRequestsPage";
 import BulkEventsEditPage from "./pages/admin/BulkEventsEditPage";
 import CourtManagerPage from "./pages/admin/CourtManagerPage";
@@ -341,6 +342,20 @@ export default function App() {
         element={
           <RequireAuth>
             <SiteUnregisteredPage />
+          </RequireAuth>
+        }
+      />
+
+      {/* Platform-admin-only "Merge accounts" wizard. Site-wide (not
+          org-scoped). Defined before the :orgSlug catch-all so
+          "merge-accounts" isn't treated as a slug. */}
+      <Route
+        path="/admin/merge-accounts"
+        element={
+          <RequireAuth>
+            <RequirePlatformAdmin>
+              <MergeAccountsPage />
+            </RequirePlatformAdmin>
           </RequireAuth>
         }
       />

@@ -5,7 +5,6 @@ import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import { impersonatePlayer } from "../../lib/impersonation";
 import { sendLoginLink, resendWelcome } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { MergePlayerModal } from "../../components/MergePlayerModal";
 import {
   ink,
   inkSoft,
@@ -143,9 +142,6 @@ export default function PlayerDetailPage() {
   // "Log in as" — platform-admin impersonation (edge function enforces authz).
   const [signingIn, setSigningIn] = useState(false);
   const [impersonateError, setImpersonateError] = useState<string | null>(null);
-  // Merge-duplicate flow (platform-admin only): the current player is the winner
-  // (kept); the admin picks the duplicate (loser) to fold in and remove.
-  const [mergeOpen, setMergeOpen] = useState(false);
 
   const onLoginAs = async () => {
     if (!player?.auth_user_id || signingIn) return;
@@ -219,7 +215,6 @@ export default function PlayerDetailPage() {
   }, [playerId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isPlatformAdmin) void load();
   }, [isPlatformAdmin, load]);
 
@@ -329,20 +324,21 @@ export default function PlayerDetailPage() {
               >
                 {onboardBusy === "welcome" ? "Sending…" : "Resend welcome"}
               </button>
-              {/* Merge duplicate — platform-admin action; this record is kept. */}
-              <button
-                type="button"
-                onClick={() => setMergeOpen(true)}
+              {/* Merge duplicate — platform-admin action; this record is the
+                  destination (kept). Opens the standalone merge wizard. */}
+              <Link
+                to={`/admin/merge-accounts?destination=${player.id}`}
                 title="Merge a duplicate player record into this one, then remove it"
                 style={{
                   ...ctaSecondaryStyle,
                   fontSize: 13,
                   padding: "8px 14px",
                   cursor: "pointer",
+                  textDecoration: "none",
                 }}
               >
                 Merge duplicate…
-              </button>
+              </Link>
             </div>
             {!player.auth_user_id && (
               <div style={{ marginTop: 8, fontSize: 12, color: inkMuted }}>
@@ -383,24 +379,6 @@ export default function PlayerDetailPage() {
             onChanged={load}
           />
           <HistorySection history={history} />
-
-          {mergeOpen && (
-            <MergePlayerModal
-              winner={{
-                id: player.id,
-                first_name: player.first_name,
-                last_name: player.last_name,
-                email: player.email,
-              }}
-              onClose={() => setMergeOpen(false)}
-              onMerged={() => {
-                // The loser is now soft-deleted; the winner (this page) absorbed
-                // its data. Close the modal and refresh the winner's history.
-                setMergeOpen(false);
-                void load();
-              }}
-            />
-          )}
         </>
       )}
     </main>
