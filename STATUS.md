@@ -3,6 +3,21 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Merge-accounts WIZARD shipped to TEST (#664, closes #663)
+
+Rebuilt merge to Ron's mockup: standalone platform-admin two-step wizard at
+`/admin/merge-accounts` (site-wide, ordered before the `:orgSlug` catch-all).
+Step 1 search-picks Source (removed) + Destination (kept) with preview cards;
+Step 2 is a Source·Destination·**Merged** comparison table — per-field radio drives
+a live green Merged column, grouped General + Registrations, defaults Destination
+with blank→Source fallback, required names never blanked. Reuses #660's enriched
+`admin-merge-players` backend UNCHANGED (winner=Destination, loser=Source) — no
+edge-fn/migration change. `MergePlayerModal` deleted; PlayerDetailPage's "Merge
+duplicate…" now links to the wizard with `?destination=<id>`. typecheck/build/lint
+green; table scrolls in its own container at 390px. NOT browser-verified
+(platform-admin gated) — eyeball on TEST. NEXT: Ron click-through on TEST; then
+promote merge (#660+#664) + manage-registration set (#654+#656+#658) to PROD.
+
 ## 2026-08-06 — manage-reg E2E VERIFIED GREEN in CI · merge field-picker shipped · merge wizard next
 
 **#1 (editing works) — PROVEN.** Discovered the nightly regression workflow is NOT
