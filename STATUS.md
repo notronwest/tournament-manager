@@ -3,6 +3,31 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — manage-reg E2E VERIFIED GREEN in CI · merge field-picker shipped · merge wizard next
+
+**#1 (editing works) — PROVEN.** Discovered the nightly regression workflow is NOT
+inert (secrets ARE wired; it runs + passes). Dispatched it on demand against main and
+got **50 passed** incl. all 7 manage-registration tests. Took 3 harness fixes (editor
+itself never needed one): (a) #661 seed selected non-existent `organization_members.id`
+(composite PK, no id) → aborted seed; (b) #662 the lazy `db()` wasn't invoked at the
+multi-line `await db\n .from(` sites (single-line sed missed them) → `db.from is not a
+function`. Both slipped past `npm run typecheck` because **e2e/ isn't in tsconfig** —
+worth wiring an e2e typecheck to CI (follow-up). Manage-registration editor set
+(#654+#656+#658) is TEST-green and ready to promote to PROD.
+
+**#2 merge tool — v1 shipped, now being redesigned.** Shipped #660 (field-by-field
+picker + both records' registrations) — done entirely in the `admin-merge-players` edge
+fn (service-role enriches preview with both full profiles + registrations; commit applies
+whitelisted field overrides) + lib + `MergePlayerModal`, NO migration/RPC change. Then
+Ron sent a mockup of the target UX and chose: **standalone two-step wizard** (Step 1 pick
+Source + Destination; Step 2 a 3-column Source·Destination·**Merged** live comparison
+table, radio per field), **Destination wins, blank Destination falls back to Source**.
+The #660 backend already supports all of this (winner=Destination, loser=Source). NEXT:
+build `MergeAccountsPage` standalone wizard, wire `/admin/merge-accounts` (platform-admin),
+retire `MergePlayerModal`, point PlayerDetailPage's "Merge duplicate…" at the new page
+(?destination=<id>). Can't browser-verify (platform-admin gated) — rely on typecheck/build
++ the click-through on TEST.
+
 ## 2026-08-05 — Harden + E2E the manage-registration editor (#658, closes #657) → TEST
 
 Ron hit a duplicate-key error reassigning a reg to an already-registered player, and
