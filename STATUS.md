@@ -3,6 +3,15 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — All Players (site admin) can add a player (#674) → TEST
+
+The site-admin All Players page (SiteAttendeesPage, /admin/attendees) was read-only.
+Added an 'Add player' panel (first/last/email/phone) like Contacts' add: creates a
+global players record (no org link, no account) and navigates to the new player's
+page. Dedupes on email (surfaces the existing player instead of a duplicate, same
+rule as createOrgContact). Platform-admin only; client-side insert, no edge fn/
+migration. typecheck/build/lint green; not browser-verified (auth-gated).
+
 ## 2026-08-06 — Person-page unification COMPLETE on TEST (Stages 2 + 3 merged)
 
 Ron said "merge both" → merged Stage 2 (#670, security) and Stage 3 (#672). **Edge-fn
