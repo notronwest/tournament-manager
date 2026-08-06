@@ -3,6 +3,39 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-05 — Harden + E2E the manage-registration editor (#658, closes #657) → TEST
+
+Ron hit a duplicate-key error reassigning a reg to an already-registered player, and
+asked to (a) run through ALL edit scenarios with full E2E coverage and (b) be able to
+seed a test tournament with every scenario + tear it down — before exposing the editor
+publicly ("a bit of a rats nest").
+
+**Bug fix** — reassigning onto a player already active (pending/paid) in the same event
+violated `event_registrations_event_id_player_id_active_uidx`. `reassignRegistrationPlayer`
+now pre-checks via `activeRegForPlayerInEvent` (predicate matches the index exactly:
+status in pending_payment/paid) and throws a friendly message; also guards self-reassign
+and self-as-own-partner. Editor dialog got `aria-labelledby` for E2E targeting.
+
+**Seed + E2E** — `e2e/seed.ts`: grant the E2E organizer org membership (admin surfaces
+need it; the older public/self-service flows didn't) + a new `e2e-manage-reg` tournament
+with one event per scenario, reset each run. `e2e/flows/manage-registration.spec.ts`:
+7 desktop tests driving Attendees By-Player → Manage → Edit and asserting DB state via
+service-role — reassign-ok, reassign-collision (blocked), assign-partner existing (reuse)
++ new (comp $0), remove-partner, withdraw paid→withdrawn, withdraw pending→cancelled.
+
+**Manual tool** — platform-admin `tools/seed-scenarios` page seeds an equivalent
+throwaway tournament (`reg-scenarios-test`, `@scenario.test` players) + tear-down, so
+Ron can exercise every scenario by hand on TEST.
+
+Verified typecheck/build/lint + `playwright --list` (7 tests). **NOT run E2E end-to-end**
+— needs a deployed build of the branch + the E2E secrets (which gate the currently-inert
+nightly regression workflow). Money-safe: no edit path touches payments/refunds.
+
+NEXT: Ron exercises scenarios on TEST via the Seed-scenarios tool (Admin → Tools → Seed
+scenarios → Seed → Open Attendees). To make the E2E actually run in CI, wire
+`E2E_SUPABASE_URL` / `E2E_BASE_URL` / `E2E_SUPABASE_SERVICE_ROLE_KEY` secrets (regression.yml).
+Then promote the manage-registration set (#654 + #656 + #658) to PROD.
+
 ## 2026-08-05 — Fix "can't find edit registration": per-player Manage in By-Player view (#656) → TEST
 
 Ron on TEST: "I don't see an edit registration." Cause: the reg Edit only lived in the
