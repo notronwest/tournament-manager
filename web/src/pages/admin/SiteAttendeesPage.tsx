@@ -18,6 +18,10 @@ import {
   pageH1Style,
   inputStyle,
   statusPanelStyle,
+  panelStyle,
+  ctaPrimaryStyle,
+  ctaPrimaryDisabledStyle,
+  ctaSecondaryStyle,
 } from "../../lib/publicTheme";
 
 type Player = {
@@ -44,6 +48,57 @@ export default function SiteAttendeesPage() {
   // enforces that. Only players with a linked auth account are eligible.
   const [signingIn, setSigningIn] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Add a player (global record — like Contacts' add, minus the org link). If an
+  // email is given and already belongs to a player, we don't create a duplicate;
+  // we point the admin at the existing record instead.
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ firstName: "", lastName: "", email: "", phone: "" });
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [dupPlayerId, setDupPlayerId] = useState<string | null>(null);
+  const canAdd = addForm.firstName.trim().length > 0 && addForm.lastName.trim().length > 0;
+
+  const onAddPlayer = async () => {
+    if (!canAdd || adding) return;
+    setAdding(true);
+    setAddError(null);
+    setDupPlayerId(null);
+    try {
+      const email = addForm.email.trim() || null;
+      if (email) {
+        const { data: existing, error: lookupErr } = await supabase
+          .from("players")
+          .select("id")
+          .eq("email", email)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true })
+          .limit(1);
+        if (lookupErr) throw new Error(lookupErr.message);
+        if (existing && existing.length > 0) {
+          setDupPlayerId((existing[0] as { id: string }).id);
+          setAdding(false);
+          return;
+        }
+      }
+      const { data: inserted, error: insErr } = await supabase
+        .from("players")
+        .insert({
+          first_name: addForm.firstName.trim(),
+          last_name: addForm.lastName.trim(),
+          email,
+          phone: addForm.phone.trim() || null,
+        })
+        .select("id")
+        .single();
+      if (insErr) throw new Error(insErr.message);
+      // Land on the new player's page to continue managing them.
+      navigate(`/admin/players/${(inserted as { id: string }).id}`);
+    } catch (e) {
+      setAddError((e as { message?: string })?.message ?? "Could not add the player.");
+      setAdding(false);
+    }
+  };
 
   const onLoginAs = async (p: Player) => {
     if (!p.auth_user_id || signingIn) return;
@@ -160,7 +215,79 @@ export default function SiteAttendeesPage() {
             {total.toLocaleString()} player{total !== 1 ? "s" : ""}
           </span>
         )}
+        <button
+          type="button"
+          onClick={() => {
+            setShowAdd((v) => !v);
+            setAddError(null);
+            setDupPlayerId(null);
+          }}
+          style={{ ...ctaSecondaryStyle, marginLeft: "auto", fontSize: 13, padding: "8px 14px" }}
+        >
+          {showAdd ? "Cancel" : "+ Add player"}
+        </button>
       </div>
+
+      {showAdd && (
+        <div style={{ ...panelStyle, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, color: ink, marginBottom: 4 }}>Add a player</div>
+          <p style={{ fontSize: 12.5, color: inkSoft, margin: "0 0 12px", lineHeight: 1.5 }}>
+            Creates a global player record (no account). If the email already
+            belongs to a player, we'll point you at that record instead of making
+            a duplicate.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <input
+              placeholder="First name *"
+              value={addForm.firstName}
+              onChange={(e) => setAddForm((f) => ({ ...f, firstName: e.target.value }))}
+              style={{ ...inputStyle, flex: "1 1 160px", minWidth: 0 }}
+            />
+            <input
+              placeholder="Last name *"
+              value={addForm.lastName}
+              onChange={(e) => setAddForm((f) => ({ ...f, lastName: e.target.value }))}
+              style={{ ...inputStyle, flex: "1 1 160px", minWidth: 0 }}
+            />
+            <input
+              type="email"
+              placeholder="Email (optional)"
+              value={addForm.email}
+              onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+              style={{ ...inputStyle, flex: "1 1 200px", minWidth: 0 }}
+            />
+            <input
+              placeholder="Phone (optional)"
+              value={addForm.phone}
+              onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))}
+              style={{ ...inputStyle, flex: "1 1 140px", minWidth: 0 }}
+            />
+          </div>
+          {addError && (
+            <div style={{ ...statusPanelStyle("danger"), marginTop: 12 }} role="alert">
+              {addError}
+            </div>
+          )}
+          {dupPlayerId && (
+            <div style={{ ...statusPanelStyle("warn"), marginTop: 12 }}>
+              A player with that email already exists.{" "}
+              <Link to={`/admin/players/${dupPlayerId}`} style={{ color: courtBlue, fontWeight: 500 }}>
+                Open that player →
+              </Link>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={onAddPlayer}
+              disabled={!canAdd || adding}
+              style={!canAdd || adding ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+            >
+              {adding ? "Adding…" : "Add player"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {loadError && <div style={statusPanelStyle("danger")}>{loadError}</div>}
 
