@@ -23,8 +23,7 @@ const db = () => (_db ??= admin());
 let tournamentIdCache: string | null = null;
 async function tournamentId(): Promise<string> {
   if (tournamentIdCache) return tournamentIdCache;
-  const { data, error } = await db
-    .from("tournaments")
+  const { data, error } = await db().from("tournaments")
     .select("id")
     .eq("slug", MR.tournamentSlug)
     .is("deleted_at", null)
@@ -35,8 +34,7 @@ async function tournamentId(): Promise<string> {
 }
 
 async function playerIdByEmail(email: string): Promise<string> {
-  const { data, error } = await db
-    .from("players")
+  const { data, error } = await db().from("players")
     .select("id")
     .eq("email", email)
     .is("deleted_at", null)
@@ -46,8 +44,7 @@ async function playerIdByEmail(email: string): Promise<string> {
 }
 
 async function eventIdByName(name: string): Promise<string> {
-  const { data, error } = await db
-    .from("events")
+  const { data, error } = await db().from("events")
     .select("id")
     .eq("tournament_id", await tournamentId())
     .eq("name", name)
@@ -67,8 +64,7 @@ type Reg = {
 };
 
 async function regById(id: string): Promise<Reg> {
-  const { data, error } = await db
-    .from("event_registrations")
+  const { data, error } = await db().from("event_registrations")
     .select("id, player_id, status, partner_status, partner_registration_id, event_fee_cents")
     .eq("id", id)
     .limit(1);
@@ -78,8 +74,7 @@ async function regById(id: string): Promise<Reg> {
 
 async function regFor(email: string, eventName: string): Promise<Reg> {
   const [pid, eid] = await Promise.all([playerIdByEmail(email), eventIdByName(eventName)]);
-  const { data, error } = await db
-    .from("event_registrations")
+  const { data, error } = await db().from("event_registrations")
     .select("id, player_id, status, partner_status, partner_registration_id, event_fee_cents")
     .eq("event_id", eid)
     .eq("player_id", pid)
@@ -90,8 +85,7 @@ async function regFor(email: string, eventName: string): Promise<Reg> {
 }
 
 async function activeRegsInEvent(eventName: string): Promise<Reg[]> {
-  const { data, error } = await db
-    .from("event_registrations")
+  const { data, error } = await db().from("event_registrations")
     .select("id, player_id, status, partner_status, partner_registration_id, event_fee_cents")
     .eq("event_id", await eventIdByName(eventName))
     .is("deleted_at", null);
