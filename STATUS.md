@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Person-page unification Stage 2 built → DRAFT review PR #670 (security; NOT merged)
+
+Stage 2 (open person page to org admins, scoped) implemented per locked design and
+opened as a **draft PR #670 for Ron to review before merge** (closes #669). No
+migration. New `_shared/playerOrgAccess.ts` = single authz source for admin-get-
+player + admin-update-player: platform admin → full; org member of `?org=<slug>`
+WHERE player belongs to that org (contact row OR reg in its tournaments, walked
+EXPLICITLY org→tournaments→events→regs = fail-closed, no nested-filter ambiguity) →
+scoped (profile + that org's regs only; account internals withheld; profile-only
+writes — server 403s org callers sending loginEmail/passwordAction/avatarHidden).
+Merge + impersonate unchanged (platform-only). Frontend: PlayerDetailPage reads
+?org, loads for all (403→error), hides impersonate/merge/account/image for org
+scope, threads orgSlug into profile save; OrgContactsPage 'Manage' links all org
+members to /admin/players/<id>?org=<slug> (retired inline edit modal). Frontend
+typecheck/build/lint green. ⚠️ Edge fns NOT locally typechecked (no Deno) — watch
+the deploy after merge. NEXT: Ron reviews #670 (esp. playerOrgAccess.ts authz) →
+merge → Stage 3 reroute Attendees By-Player 'Manage' → /admin/players/<id>?org=<slug>.
+
 ## 2026-08-06 — Person-page unification: Stage 1 SHIPPED (#668); Stage 2 (security) design open
 
 Stage 1 DONE → TEST (#668, closes #667): PlayerDetailPage's Tournament-history rows
