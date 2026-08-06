@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   PlayerPicker,
   emptySelection,
@@ -8,8 +8,12 @@ import { ConfirmModal } from "./ConfirmModal";
 import {
   previewMerge,
   commitMerge,
+  PICK_FIELDS,
   type MergePreview,
   type MergeMoves,
+  type MergeRegistration,
+  type MergeOverrides,
+  type PickField,
 } from "../lib/mergePlayers";
 import {
   ink,
@@ -18,6 +22,7 @@ import {
   rule,
   ruleSoft,
   bg,
+  cream,
   panelStyle,
   bodyFontStack,
   headingFontStack,
@@ -47,6 +52,81 @@ const MOVE_LABELS: { key: keyof MergeMoves; label: string }[] = [
   { key: "contact_broadcast_recipients", label: "Email recipients" },
 ];
 
+// Human labels for each pickable profile field.
+const FIELD_LABELS: Record<PickField, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  email: "Email",
+  phone: "Phone",
+  gender: "Gender",
+  dob: "Date of birth",
+  city: "City",
+  state: "State",
+  self_rating_doubles: "Self rating (doubles)",
+  self_rating_mixed: "Self rating (mixed)",
+  self_rating_singles: "Self rating (singles)",
+};
+
+// Fields that are NOT NULL on the players table — we never let the admin pick a
+// blank value for these (the loser option is disabled when the loser is blank).
+const REQUIRED_FIELDS = new Set<PickField>(["first_name", "last_name"]);
+
+type PickValue = string | number | null;
+
+function isBlank(v: PickValue): boolean {
+  return v === null || (typeof v === "string" && v.trim() === "");
+}
+
+// Two field values are "the same decision" — both blank, or equal (strings
+// compared trimmed). Fields that match need no picker row.
+function valuesMatch(a: PickValue, b: PickValue): boolean {
+  if (isBlank(a) && isBlank(b)) return true;
+  if (isBlank(a) || isBlank(b)) return false;
+  if (typeof a === "string" && typeof b === "string") return a.trim() === b.trim();
+  return a === b;
+}
+
+// Human-readable value for a field. Blank → muted placeholder; gender codes →
+// words; everything else → the raw string/number.
+function formatFieldValue(field: PickField, value: PickValue): string {
+  if (isBlank(value)) return "— (none)";
+  if (field === "gender") {
+    if (value === "M") return "Male";
+    if (value === "F") return "Female";
+    if (value === "X") return "Other";
+  }
+  return String(value);
+}
+
+type PickMap = Partial<Record<PickField, "winner" | "loser">>;
+
+// Default pick per field: the winner's value, UNLESS the winner's is blank and
+// the loser's is set (so the only data present is never silently dropped).
+function computeDefaultPicks(preview: MergePreview): PickMap {
+  const picks: PickMap = {};
+  for (const field of PICK_FIELDS) {
+    const w = preview.winner[field];
+    const l = preview.loser[field];
+    picks[field] = isBlank(w) && !isBlank(l) ? "loser" : "winner";
+  }
+  return picks;
+}
+
+// Turn the picks into the override payload: only fields where the admin chose
+// the loser's (differing) value. Never blanks a required (NOT NULL) field.
+function buildOverrides(preview: MergePreview, picks: PickMap): MergeOverrides {
+  const overrides: MergeOverrides = {};
+  for (const field of PICK_FIELDS) {
+    if (picks[field] !== "loser") continue;
+    const w = preview.winner[field];
+    const l = preview.loser[field];
+    if (valuesMatch(w, l)) continue; // picking loser but it equals winner — no-op
+    if (REQUIRED_FIELDS.has(field) && isBlank(l)) continue; // never blank a name
+    overrides[field] = l;
+  }
+  return overrides;
+}
+
 export function MergePlayerModal({
   winner,
   onClose,
@@ -62,6 +142,11 @@ export function MergePlayerModal({
   const [preview, setPreview] = useState<MergePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Per-field source pick (which record's value to keep). Seeded from the
+  // winner-first default rule whenever a fresh preview loads; reset when the
+  // selected duplicate changes.
+  const [picks, setPicks] = useState<PickMap>({});
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [committing, setCommitting] = useState(false);
@@ -79,7 +164,10 @@ export function MergePlayerModal({
     (async () => {
       try {
         const p = await previewMerge(winner.id, loserId);
-        if (!cancelled) setPreview(p);
+        if (!cancelled) {
+          setPreview(p);
+          setPicks(computeDefaultPicks(p));
+        }
       } catch (e) {
         if (!cancelled) {
           setPreviewError((e as Error).message ?? "Could not preview the merge.");
@@ -98,18 +186,28 @@ export function MergePlayerModal({
   const handleSelectionChange = (s: PlayerSelection) => {
     setSelection(s);
     setPreview(null);
+    setPicks({});
     setPreviewError(null);
     setCommitError(null);
   };
 
   const clearSelection = () => handleSelectionChange(emptySelection);
 
+  // The field values that will be forced onto the kept record (loser picks that
+  // differ from the winner). Empty = the RPC's default (winner keeps everything,
+  // blanks backfilled) applies.
+  const overrides = useMemo<MergeOverrides>(
+    () => (preview ? buildOverrides(preview, picks) : {}),
+    [preview, picks],
+  );
+  const overrideCount = Object.keys(overrides).length;
+
   const runCommit = async () => {
     if (!loserId) return;
     setCommitting(true);
     setCommitError(null);
     try {
-      await commitMerge(winner.id, loserId);
+      await commitMerge(winner.id, loserId, overrides);
       setConfirmOpen(false);
       setDone(true);
     } catch (e) {
@@ -225,7 +323,13 @@ export function MergePlayerModal({
               </div>
             )}
             {preview && !previewLoading && (
-              <PreviewBody preview={preview} />
+              <PreviewBody
+                preview={preview}
+                picks={picks}
+                onPick={(field, source) =>
+                  setPicks((prev) => ({ ...prev, [field]: source }))
+                }
+              />
             )}
 
             {commitError && (
@@ -284,7 +388,17 @@ export function MergePlayerModal({
                 {preview.winner.first_name} {preview.winner.last_name}
               </strong>
               , then soft-deleted. Their registrations, payments, and history
-              move to the kept record. This isn't easily reversible.
+              move to the kept record.
+              {overrideCount > 0 && (
+                <>
+                  {" "}
+                  Your chosen value{overrideCount === 1 ? "" : "s"} for{" "}
+                  <strong>{overrideCount}</strong> field
+                  {overrideCount === 1 ? "" : "s"} will be applied to the kept
+                  record.
+                </>
+              )}{" "}
+              This isn't easily reversible.
             </>
           }
         />
@@ -295,7 +409,15 @@ export function MergePlayerModal({
 
 // ─── Preview body: identities · moves · conflicts ─────────────────────────────
 
-function PreviewBody({ preview }: { preview: MergePreview }) {
+function PreviewBody({
+  preview,
+  picks,
+  onPick,
+}: {
+  preview: MergePreview;
+  picks: PickMap;
+  onPick: (field: PickField, source: "winner" | "loser") => void;
+}) {
   const moves = MOVE_LABELS.filter(({ key }) => preview.moves[key] > 0);
   const c = preview.conflicts;
   const hasConflicts =
@@ -313,6 +435,12 @@ function PreviewBody({ preview }: { preview: MergePreview }) {
         <PartyRow role="Keep" party={preview.winner} tone="success" />
         <PartyRow role="Remove" party={preview.loser} tone="danger" />
       </div>
+
+      {/* Field picker — decide, field by field, which value to keep */}
+      <FieldPicker preview={preview} picks={picks} onPick={onPick} />
+
+      {/* Registrations — informational (consolidated automatically) */}
+      <RegistrationsSection preview={preview} />
 
       {/* Moves */}
       <div style={{ fontSize: 12, fontWeight: 600, color: ink, marginBottom: 6 }}>
@@ -433,6 +561,318 @@ function ConflictList({ items }: { items: string[] }) {
         <li key={`${it}-${i}`}>{it}</li>
       ))}
     </ul>
+  );
+}
+
+// ─── Field picker: choose which record's value to keep, per differing field ──
+
+function FieldPicker({
+  preview,
+  picks,
+  onPick,
+}: {
+  preview: MergePreview;
+  picks: PickMap;
+  onPick: (field: PickField, source: "winner" | "loser") => void;
+}) {
+  const differing = PICK_FIELDS.filter(
+    (f) => !valuesMatch(preview.winner[f], preview.loser[f]),
+  );
+  const matchingCount = PICK_FIELDS.length - differing.length;
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: ink, marginBottom: 6 }}>
+        Choose what to keep
+      </div>
+
+      {differing.length === 0 ? (
+        <p style={{ fontSize: 13, color: inkMuted, margin: "0 0 4px" }}>
+          Both records have the same profile details — nothing to choose.
+        </p>
+      ) : (
+        <>
+          <p style={{ fontSize: 12.5, color: inkSoft, margin: "0 0 10px", lineHeight: 1.5 }}>
+            These fields differ between the two records. Pick the value to keep
+            on <strong>{preview.winner.first_name || "the kept record"}</strong>.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {differing.map((field) => (
+              <FieldPickRow
+                key={field}
+                field={field}
+                winnerValue={preview.winner[field]}
+                loserValue={preview.loser[field]}
+                selected={picks[field] ?? "winner"}
+                onPick={(source) => onPick(field, source)}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {matchingCount > 0 && (
+        <p style={{ fontSize: 12, color: inkMuted, margin: "10px 0 0" }}>
+          {matchingCount} field{matchingCount === 1 ? "" : "s"} match and{" "}
+          {matchingCount === 1 ? "is" : "are"} unchanged.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FieldPickRow({
+  field,
+  winnerValue,
+  loserValue,
+  selected,
+  onPick,
+}: {
+  field: PickField;
+  winnerValue: PickValue;
+  loserValue: PickValue;
+  selected: "winner" | "loser";
+  onPick: (source: "winner" | "loser") => void;
+}) {
+  // Never allow blanking a NOT NULL field (first/last name) via the loser side.
+  const loserDisabled = REQUIRED_FIELDS.has(field) && isBlank(loserValue);
+
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: ink, marginBottom: 5 }}>
+        {FIELD_LABELS[field]}
+      </div>
+      <div
+        role="radiogroup"
+        aria-label={FIELD_LABELS[field]}
+        style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+      >
+        <PickOption
+          sourceLabel="This record"
+          value={formatFieldValue(field, winnerValue)}
+          selected={selected === "winner"}
+          onClick={() => onPick("winner")}
+        />
+        <PickOption
+          sourceLabel="Duplicate"
+          value={formatFieldValue(field, loserValue)}
+          selected={selected === "loser"}
+          disabled={loserDisabled}
+          onClick={() => onPick("loser")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PickOption({
+  sourceLabel,
+  value,
+  selected,
+  disabled = false,
+  onClick,
+}: {
+  sourceLabel: string;
+  value: string;
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={`${sourceLabel}: ${value}`}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        flex: "1 1 180px",
+        minWidth: 0,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 8,
+        textAlign: "left",
+        padding: "8px 10px",
+        borderRadius: 8,
+        border: selected ? `2px solid ${ink}` : `1px solid ${rule}`,
+        // pad-compensate the thinner unselected border so heights match
+        margin: selected ? 0 : 1,
+        background: selected ? cream : "#fff",
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+        fontFamily: bodyFontStack,
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          flex: "0 0 auto",
+          width: 14,
+          height: 14,
+          marginTop: 2,
+          borderRadius: "50%",
+          border: `2px solid ${selected ? ink : inkMuted}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {selected && (
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: ink }} />
+        )}
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span
+          style={{
+            display: "block",
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.07em",
+            color: inkMuted,
+            marginBottom: 2,
+          }}
+        >
+          {sourceLabel}
+        </span>
+        <span
+          style={{
+            display: "block",
+            fontSize: 13,
+            color: ink,
+            fontWeight: selected ? 600 : 400,
+            overflowWrap: "anywhere",
+            lineHeight: 1.35,
+          }}
+        >
+          {value}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// ─── Registrations: both parties' history, split Current / Previous ───────────
+
+function RegistrationsSection({ preview }: { preview: MergePreview }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: ink, marginBottom: 4 }}>
+        Registrations
+      </div>
+      <p style={{ fontSize: 12, color: inkMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
+        For reference — every registration below moves to the kept record
+        automatically. Nothing to choose here.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <RegistrationsParty
+          name={`${preview.winner.first_name} ${preview.winner.last_name}`.trim()}
+          role="Keep"
+          regs={preview.winner_registrations}
+        />
+        <RegistrationsParty
+          name={`${preview.loser.first_name} ${preview.loser.last_name}`.trim()}
+          role="Remove"
+          regs={preview.loser_registrations}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RegistrationsParty({
+  name,
+  role,
+  regs,
+}: {
+  name: string;
+  role: "Keep" | "Remove";
+  regs: MergeRegistration[];
+}) {
+  const current = regs.filter((r) => r.is_current);
+  const previous = regs.filter((r) => !r.is_current);
+  const accent = role === "Keep" ? "#1e6b2c" : "#9c2412";
+
+  return (
+    <div
+      style={{
+        border: `1px solid ${rule}`,
+        borderRadius: 8,
+        padding: "8px 12px",
+        background: "#fff",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          gap: 8,
+          marginBottom: regs.length > 0 ? 6 : 0,
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+          {name || "This record"}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            color: accent,
+          }}
+        >
+          {role}
+        </span>
+      </div>
+      {regs.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: inkMuted }}>No registrations.</div>
+      ) : (
+        <>
+          <RegistrationGroup label="Current" regs={current} />
+          <RegistrationGroup label="Previous" regs={previous} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function RegistrationGroup({
+  label,
+  regs,
+}: {
+  label: string;
+  regs: MergeRegistration[];
+}) {
+  if (regs.length === 0) return null;
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          letterSpacing: "0.07em",
+          color: inkMuted,
+          marginBottom: 2,
+        }}
+      >
+        {label}
+      </div>
+      <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
+        {regs.map((r, i) => (
+          <li
+            key={`${r.event_name}-${r.tournament}-${i}`}
+            style={{ fontSize: 12.5, color: inkSoft, lineHeight: 1.45, padding: "1px 0" }}
+          >
+            <span style={{ color: ink }}>{r.event_name}</span>
+            {r.format ? ` · ${r.format}` : ""} · {r.tournament} · {r.status}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
