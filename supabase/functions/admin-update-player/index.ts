@@ -26,6 +26,7 @@
 
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { resolvePlayerAccess } from "../_shared/playerOrgAccess.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,6 +53,10 @@ type PasswordAction =
   | { type: "set_temp_password" };
 type Body = {
   playerId: string;
+  // Optional org scope. When the caller isn't a platform admin, they must name
+  // an org they belong to (and the player must belong to it); such callers may
+  // ONLY patch profile fields — not login email, password, or avatar moderation.
+  orgSlug?: string;
   profile?: ProfilePatch;
   loginEmail?: string;
   passwordAction?: PasswordAction;
@@ -94,15 +99,6 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
-  const { data: padmin } = await admin
-    .from("platform_admins")
-    .select("user_id")
-    .eq("user_id", callerUser.id)
-    .maybeSingle();
-  if (!padmin) {
-    return jsonResp({ error: "Not a platform admin" }, 403);
-  }
-
   // ── Parse body ──────────────────────────────────────────────────
   let body: Body;
   try {
@@ -112,6 +108,7 @@ Deno.serve(async (req: Request) => {
   }
   const playerId = (body.playerId || "").trim();
   if (!playerId) return jsonResp({ error: "playerId is required." }, 400);
+  const orgSlug = (body.orgSlug || "").trim() || null;
 
   const profile = body.profile;
   const loginEmail =
@@ -127,6 +124,25 @@ Deno.serve(async (req: Request) => {
     avatarHidden === undefined
   ) {
     return jsonResp({ error: "Nothing to update." }, 400);
+  }
+
+  // ── Authorize ───────────────────────────────────────────────────
+  // Platform admin → anything. Org member (of the named org, where the player
+  // belongs) → profile fields ONLY. Account (login email / password) and avatar
+  // moderation stay platform-admin-only, since a player is a shared global
+  // record and those actions reach across every org.
+  const access = await resolvePlayerAccess(admin, callerUser.id, playerId, orgSlug);
+  if (!access) {
+    return jsonResp({ error: "Not authorized to update this player." }, 403);
+  }
+  if (
+    access.scope === "org" &&
+    (loginEmail !== undefined || passwordAction || avatarHidden !== undefined)
+  ) {
+    return jsonResp(
+      { error: "Org admins can only edit profile details, not account or image settings." },
+      403,
+    );
   }
 
   // ── Load the player ─────────────────────────────────────────────

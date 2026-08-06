@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
-import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import { impersonatePlayer } from "../../lib/impersonation";
 import { sendLoginLink, resendWelcome } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
@@ -82,6 +81,7 @@ type HistoryRow = {
 
 type GetPlayerResponse = {
   ok: boolean;
+  scope?: "platform" | "org";
   player: PlayerProfile;
   account: Account | null;
   history: HistoryRow[];
@@ -136,11 +136,13 @@ const STATUS_LABELS: Record<string, string> = {
 const statusLabel = (s: string) => STATUS_LABELS[s] ?? s;
 
 export default function PlayerDetailPage() {
-  const isPlatformAdmin = usePlatformAdmin();
   const { playerId } = useParams<{ playerId: string }>();
+  const [searchParams] = useSearchParams();
+  const orgSlug = searchParams.get("org");
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [scope, setScope] = useState<"platform" | "org" | null>(null);
   const [player, setPlayer] = useState<PlayerProfile | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -225,7 +227,7 @@ export default function PlayerDetailPage() {
     setLoading(true);
     setLoadError(null);
     const { data, error } = await supabase.functions.invoke("admin-get-player", {
-      body: { playerId },
+      body: { playerId, orgSlug: orgSlug ?? undefined },
     });
     setLoading(false);
     if (error) {
@@ -237,36 +239,18 @@ export default function PlayerDetailPage() {
       setLoadError(res?.error ?? "Failed to load player.");
       return;
     }
+    setScope(res.scope ?? "platform");
     setPlayer(res.player);
     setAccount(res.account);
     setHistory(res.history ?? []);
     setAvatarUrl(res.avatarUrl ?? null);
-  }, [playerId]);
+  }, [playerId, orgSlug]);
 
   useEffect(() => {
-    if (isPlatformAdmin) void load();
-  }, [isPlatformAdmin, load]);
+    void load();
+  }, [load]);
 
-  if (isPlatformAdmin === null) {
-    return (
-      <div style={{ padding: 24, color: inkMuted, fontSize: 14, fontFamily: bodyFontStack }}>
-        Loading…
-      </div>
-    );
-  }
-  if (!isPlatformAdmin) {
-    return (
-      <main style={{ padding: "24px 32px", maxWidth: 600, margin: "0 auto", fontFamily: bodyFontStack }}>
-        <h1 style={{ ...pageH1Style, fontSize: 20, marginTop: 0 }}>Access denied</h1>
-        <p style={{ color: inkSoft, fontSize: 14 }}>
-          This page is restricted to platform administrators.
-        </p>
-        <Link to="/admin" style={breadcrumbLinkStyle}>
-          ← Back to admin
-        </Link>
-      </main>
-    );
-  }
+  const isPlatform = scope === "platform";
 
   return (
     <main style={{ padding: "24px 32px", maxWidth: 900, margin: "0 auto", fontFamily: bodyFontStack }}>
@@ -296,6 +280,7 @@ export default function PlayerDetailPage() {
             )}
           </p>
 
+          {isPlatform && (
           <div style={{ margin: "0 0 24px" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
               <button
@@ -390,23 +375,33 @@ export default function PlayerDetailPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* key by player id so a navigation to a different player
               remounts these and their local form state resets cleanly
               (no reset-in-effect needed). */}
-          <ProfileSection key={`p-${player.id}`} player={player} onSaved={setPlayer} />
-          <ImageSection
-            key={`i-${player.id}`}
+          <ProfileSection
+            key={`p-${player.id}`}
             player={player}
-            avatarUrl={avatarUrl}
-            onChanged={load}
+            orgSlug={orgSlug}
+            onSaved={setPlayer}
           />
-          <AccountSection
-            key={`a-${player.id}`}
-            player={player}
-            account={account}
-            onChanged={load}
-          />
+          {isPlatform && (
+            <ImageSection
+              key={`i-${player.id}`}
+              player={player}
+              avatarUrl={avatarUrl}
+              onChanged={load}
+            />
+          )}
+          {isPlatform && (
+            <AccountSection
+              key={`a-${player.id}`}
+              player={player}
+              account={account}
+              onChanged={load}
+            />
+          )}
           <HistorySection history={history} onManage={openRegEditor} />
 
           {editingReg && (
@@ -426,9 +421,11 @@ export default function PlayerDetailPage() {
 
 function ProfileSection({
   player,
+  orgSlug,
   onSaved,
 }: {
   player: PlayerProfile;
+  orgSlug: string | null;
   onSaved: (p: PlayerProfile) => void;
 }) {
   const [firstName, setFirstName] = useState(player.first_name);
@@ -467,6 +464,7 @@ function ProfileSection({
       {
         body: {
           playerId: player.id,
+          orgSlug: orgSlug ?? undefined,
           profile: {
             firstName,
             lastName,
