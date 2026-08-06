@@ -15,14 +15,14 @@ admin-get-player, admin-update-player, admin-merge-players) had NOT deployed to 
 yet. Transient: new frontend + old edge fns → merge-wizard preview enrichment +
 person-page per-reg Manage + org-admin access look degraded/inert on PROD until the
 deploy lands (no data risk; platform-admin basic flows fine). SELF-RESOLVES on deploy.
-UPDATE: that queued deploy (31118196280) got **CANCELLED** (job cancelled with no
-steps run — sat in the runner queue too long; NOT a code failure — identical code
-deployed green to TEST). **Re-ran it** (`gh run rerun 31118196280`); re-run queued,
-backgrounded watch in flight. Until it goes green, PROD frontend is new but the 4
-edge fns are OLD → merge-wizard preview / person-page per-reg Manage / org-admin
-access degraded on PROD (no data risk; platform-admin basics fine). NEXT: confirm the
-re-run deploys green; if it cancels again, re-run once more or check for a runner/
-concurrency issue. Then PROD consistent.
+UPDATE: that queued deploy (31118196280) got CANCELLED (runner queue too long; NOT a
+code failure). Re-ran it → **SUCCESS**. PROD now fully consistent: deploy (4 edge fns:
+_shared/playerOrgAccess.ts, admin-get-player, admin-update-player, admin-merge-players)
+✅, Cloudflare prod frontend ✅, no migrations. **Whole session's work is LIVE on
+production.** Lesson: a long GitHub-runner queue can cancel the prod edge-fn deploy —
+if a promotion's `deploy` check shows cancelled, just re-run it (code already TEST-green).
+NEXT: nothing outstanding — optional TEST/PROD click-through of the new person-page
+org-admin flow if a non-platform org admin exists.
 
 ## 2026-08-06 — All Players (site admin) can add a player (#674) → TEST
 
