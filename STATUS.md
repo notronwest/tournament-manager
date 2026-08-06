@@ -3,6 +3,20 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Reg editor: surface pending partner invites + one-click pair (#677) → TEST
+
+Ron hit a mutual-invite deadlock (River invited Adam, Adam invited River, neither
+accepted) and the Manage-registration modal only showed an 'Invite pending' badge —
+not WHO, so it was un-fixable without remembering the roster. Fix (#677, closes #676):
+the Partner section now loads pending-invite context (fetchRegPartnerContext →
+partner_invites touching the player, both directions, with the other party's active
+reg) and shows 'Invited <name>' / '<name> invited them', with a highlighted callout
+for the mutual case. A 'Pair them' button (pairAndResolveInvites) confirms the team
+AND deletes both pending invites in one click when the counterpart is registered.
+Org-staff RLS covers both writes (reg update + invite delete — invites ephemeral).
+Frontend + read helper; no edge fn/migration. typecheck/build/lint green; not
+browser-verified (auth-gated). On TEST — promote with the next batch.
+
 ## 2026-08-06 — PROMOTED main → production (#675) — frontend live, edge-fn deploy queued
 
 Ron: "Push main to production." Merged promotion PR #675 (main→production, --merge
