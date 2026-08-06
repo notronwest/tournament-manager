@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import PendingPartnerInvitesPanel from "./PendingPartnerInvitesPanel";
@@ -7,7 +7,6 @@ import {
   RegistrationEditorModal,
   type EditableRegistration,
 } from "../../components/RegistrationEditorModal";
-import { PlayerRegistrationsModal } from "../../components/PlayerRegistrationsModal";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -186,8 +185,8 @@ export default function AttendeesPage() {
   const [filter, setFilter] = useState("");
   const [view, setView] = useState<ViewMode>("players");
   const [editing, setEditing] = useState<EditableRegistration | null>(null);
-  const [managing, setManaging] = useState<Player | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!org || !tournamentSlug) return;
@@ -487,7 +486,11 @@ export default function AttendeesPage() {
           visible={visible}
           rows={rows}
           seekers={seekers}
-          onManage={setManaging}
+          onManage={(p) => {
+            // Managing a person now lives on the unified person page, scoped to
+            // this org (?org=) so org admins are authorized there.
+            if (org) navigate(`/admin/players/${p.id}?org=${org.slug}`);
+          }}
         />
       ) : (
         <ByEventView eventGroups={eventGroups} onEdit={setEditing} />
@@ -501,15 +504,6 @@ export default function AttendeesPage() {
         />
       )}
 
-      {managing && org && (
-        <PlayerRegistrationsModal
-          orgId={org.id}
-          playerId={managing.id}
-          playerName={playerFullName(managing)}
-          onClose={() => setManaging(null)}
-          onChanged={() => setReloadKey((k) => k + 1)}
-        />
-      )}
     </div>
   );
 }
