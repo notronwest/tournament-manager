@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Person-page unification COMPLETE on TEST (Stages 2 + 3 merged)
+
+Ron said "merge both" → merged Stage 2 (#670, security) and Stage 3 (#672). **Edge-fn
+deploy for #670 CONFIRMED GREEN** (the no-local-Deno risk cleared — admin-get-player,
+admin-update-player, _shared/playerOrgAccess.ts typechecked + deployed to TEST). Stage
+3 (#672, closes #671): Attendees By-Player 'Manage' now navigates to
+/admin/players/<id>?org=<slug> (org-scoped person page) instead of the inline modal;
+By-Event per-reg 'Edit' unchanged. So BOTH Contacts + Attendees now route "manage a
+person" to the one unified page. Full unification (all 3 stages: #668 reg-editing,
+#670 org-admin access, #672 attendees reroute) live on TEST.
+
+NEXT: Ron TEST click-throughs (as a platform admin AND, to exercise Stage 2, as a
+non-platform org admin if one exists) — verify org admins see only their org's slice
+and can't reach merge/impersonate/account. Then a PROD promotion bundle is due — a lot
+has stacked on TEST this session: manage-registration editor (#654/#656/#658), merge
+field-picker + wizard (#660/#664), Contacts Manage (#666), and person-page unification
+(#668/#670/#672). Consider promoting main→production in one batch once verified.
+
 ## 2026-08-06 — Person-page unification Stage 2 built → DRAFT review PR #670 (security; NOT merged)
 
 Stage 2 (open person page to org admins, scoped) implemented per locked design and
