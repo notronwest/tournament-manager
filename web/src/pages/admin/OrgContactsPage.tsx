@@ -2,14 +2,12 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
-import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import { sendLoginLink } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { PlayerRegistrationsModal } from "../../components/PlayerRegistrationsModal";
 import {
   fetchOrgContacts,
   createOrgContact,
-  updateContactPerson,
   removeOrgContact,
   type OrgContact,
   type ContactSource,
@@ -74,7 +72,6 @@ type ImportResult = {
 // Sending email lives on the separate Email page.
 export default function OrgContactsPage() {
   const { org } = useCurrentOrg();
-  const isPlatformAdmin = usePlatformAdmin();
   const [contacts, setContacts] = useState<OrgContact[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("none");
@@ -104,7 +101,6 @@ export default function OrgContactsPage() {
     setLoginBusy(null);
   };
 
-  const [editTarget, setEditTarget] = useState<OrgContact | null>(null);
   const [removeTarget, setRemoveTarget] = useState<OrgContact | null>(null);
   const [registerTarget, setRegisterTarget] = useState<OrgContact | null>(null);
   const [regsTarget, setRegsTarget] = useState<OrgContact | null>(null);
@@ -289,21 +285,16 @@ export default function OrgContactsPage() {
                           {loginBusy === c.playerId ? "Sending…" : "Login link"}
                         </button>
                       )}
-                      {/* Managing a person routes to the unified admin page
-                          (edit · merge · sign in as · history). That page is
-                          platform-admin only; org-admins keep the inline edit
-                          modal since they can't reach it. */}
-                      {isPlatformAdmin === true ? (
-                        <Link
-                          to={`/admin/players/${c.playerId}`}
-                          style={{ ...rowBtn, textDecoration: "none", display: "inline-block" }}
-                          title="Open this person's admin page — edit, merge, sign in as, history"
-                        >
-                          Manage
-                        </Link>
-                      ) : (
-                        <button style={rowBtn} onClick={() => setEditTarget(c)}>Edit</button>
-                      )}
+                      {/* Managing a person routes to the unified admin page.
+                          Org-scoped (?org=) so the edge function authorizes an
+                          org admin to edit profile + view this org's history. */}
+                      <Link
+                        to={`/admin/players/${c.playerId}?org=${org.slug}`}
+                        style={{ ...rowBtn, textDecoration: "none", display: "inline-block" }}
+                        title="Open this person's admin page — edit profile, view history"
+                      >
+                        Manage
+                      </Link>
                       {c.source === "registrant" ? (
                         <span style={{ color: inkMuted, fontSize: 12, marginLeft: 8 }} title="Registrants are managed via their registration">—</span>
                       ) : (
@@ -323,34 +314,6 @@ export default function OrgContactsPage() {
             </table>
           </div>
         </>
-      )}
-
-      {editTarget && (
-        <ContactFormModal
-          title="Edit contact"
-          initial={{
-            firstName: editTarget.firstName,
-            lastName: editTarget.lastName,
-            email: editTarget.email,
-            phone: editTarget.phone,
-            city: editTarget.city,
-            state: editTarget.state,
-          }}
-          note="Edits this person's details wherever they appear — they're a shared record across your tournaments."
-          onClose={() => setEditTarget(null)}
-          onSave={async (input) => {
-            await updateContactPerson(editTarget.playerId, input);
-            setContacts((prev) =>
-              (prev ?? []).map((c) =>
-                c.playerId === editTarget.playerId
-                  ? { ...c, firstName: input.firstName, lastName: input.lastName, email: input.email, phone: input.phone, city: input.city, state: input.state }
-                  : c,
-              ),
-            );
-            setEditTarget(null);
-            setActionMsg("Contact updated.");
-          }}
-        />
       )}
 
       {registerTarget && (
@@ -417,28 +380,7 @@ function AddContactPanel({
   );
 }
 
-// ── Contact form (add + edit) ─────────────────────────────────────────
-function ContactFormModal({
-  title,
-  initial,
-  note,
-  onClose,
-  onSave,
-}: {
-  title: string;
-  initial: ContactInput;
-  note?: string;
-  onClose: () => void;
-  onSave: (input: ContactInput) => Promise<void>;
-}) {
-  return (
-    <ModalShell title={title} onClose={onClose}>
-      {note && <p style={{ fontSize: 12.5, color: inkSoft, margin: "0 0 14px", lineHeight: 1.5 }}>{note}</p>}
-      <ContactFormFields submitLabel="Save changes" initial={initial} onCancel={onClose} onSave={onSave} />
-    </ModalShell>
-  );
-}
-
+// ── Contact form (add) ────────────────────────────────────────────────
 function ContactFormFields({
   initial,
   submitLabel,
