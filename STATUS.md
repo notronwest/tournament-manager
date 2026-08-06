@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Contacts 'Manage' → unified person page (#666, closes #665) → TEST
+
+Ron: managing a registered person should go to ONE place (edit · merge · sign in as
+· history). The org Contacts row's Edit (inline ContactFormModal) now becomes a
+**Manage** link to `/admin/players/<id>` (PlayerDetailPage — already has profile
+edit via admin-update-player, merge→wizard, impersonate/"sign in as", send-login,
+reg history). Access nuance: PlayerDetailPage is RequirePlatformAdmin while Contacts
+is org-member-reachable, so the Manage link shows only for platform admins;
+non-platform org admins keep the inline edit modal. Other row actions unchanged.
+typecheck/build/lint green; not browser-verified (auth-gated).
+
+OPEN DECISIONS for full 'one place' unification (raised to Ron, not yet built):
+(1) open the person page to ORG admins for their org's players — needs
+admin-get-player/admin-update-player/impersonation to accept org-admin scope (a
+security change); (2) route Attendees By-Player 'Manage' there too — but first add
+registration editing to PlayerDetailPage (today it's in PlayerRegistrationsModal)
+so nothing's lost. NEXT: Ron's call on (1)+(2); TEST click-through.
+
 ## 2026-08-06 — Merge-accounts WIZARD shipped to TEST (#664, closes #663)
 
 Rebuilt merge to Ron's mockup: standalone platform-admin two-step wizard at
