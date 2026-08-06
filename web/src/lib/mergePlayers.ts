@@ -7,14 +7,50 @@ import { supabase } from "../supabase";
 // The WINNER is the record we keep; the LOSER is the duplicate that gets its
 // rows re-pointed at the winner and is then soft-deleted.
 
-// One party in the merge (winner or loser identity summary).
+// Profile fields the admin can pick between the two records. Keep in sync with
+// the edge function's PICK_FIELDS and the field-picker UI.
+export const PICK_FIELDS = [
+  "first_name",
+  "last_name",
+  "email",
+  "phone",
+  "gender",
+  "dob",
+  "city",
+  "state",
+  "self_rating_doubles",
+  "self_rating_mixed",
+  "self_rating_singles",
+] as const;
+export type PickField = (typeof PICK_FIELDS)[number];
+
+// One party in the merge — full profile so the UI can compare field-by-field.
 export type MergeParty = {
   id: string;
   first_name: string;
   last_name: string;
   email: string | null;
+  phone: string | null;
+  gender: string | null;
+  dob: string | null;
+  city: string | null;
+  state: string | null;
+  self_rating_doubles: number | null;
+  self_rating_mixed: number | null;
+  self_rating_singles: number | null;
   has_account: boolean;
   deleted: boolean;
+};
+
+// One registration row shown per party (informational — regs are consolidated
+// onto the winner automatically; this just shows each side's history).
+export type MergeRegistration = {
+  event_name: string;
+  format: string | null;
+  tournament: string;
+  status: string;
+  ends_at: string | null;
+  is_current: boolean;
 };
 
 // Counts of rows that will be re-pointed from loser → winner, by table.
@@ -54,7 +90,13 @@ export type MergePreview = {
   loser: MergeParty;
   moves: MergeMoves;
   conflicts: MergeConflicts;
+  winner_registrations: MergeRegistration[];
+  loser_registrations: MergeRegistration[];
 };
+
+// The admin's field picks: a subset of PICK_FIELDS → the value to force onto the
+// kept record (only fields where the pick differs from the winner's own value).
+export type MergeOverrides = Partial<Record<PickField, string | number | null>>;
 
 export type MergeResult = {
   ok: true;
@@ -107,13 +149,15 @@ export async function previewMerge(
 }
 
 // Commit the merge: re-point the loser's rows onto the winner, drop duplicate
-// event registrations, and soft-delete the loser. Throws on failure.
+// event registrations, apply the admin's field picks to the winner, and
+// soft-delete the loser. Throws on failure.
 export async function commitMerge(
   winnerId: string,
   loserId: string,
+  overrides?: MergeOverrides,
 ): Promise<MergeResult> {
   const { data, error } = await supabase.functions.invoke("admin-merge-players", {
-    body: { action: "commit", winnerId, loserId },
+    body: { action: "commit", winnerId, loserId, overrides: overrides ?? {} },
   });
   if (error) throw new Error(await mergeFnError(error));
   const res = data as MergeResult & { error?: string; ok?: boolean };
