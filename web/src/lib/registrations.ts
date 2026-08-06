@@ -309,6 +309,102 @@ export async function createPartnerRegistration(
   return data.id;
 }
 
+// One end of a pending partner invite touching a registration: the OTHER person
+// (whom this player invited, or who invited this player), with their active reg
+// in the event if they have one (so we can offer to pair the two directly).
+export type InviteContact = {
+  inviteId: string;
+  playerId: string;
+  name: string;
+  email: string | null;
+  regId: string | null; // their active reg in THIS event, if registered — pairable
+};
+
+// The pending-invite context around one registration, so the admin editor can
+// SHOW who a "pending" partner is instead of just a badge — the key gap when
+// two players invite each other and neither accepts.
+export type RegPartnerContext = {
+  invited: InviteContact[]; // people this player invited (still pending)
+  invitedBy: InviteContact[]; // people who invited this player (still pending)
+};
+
+export async function fetchRegPartnerContext(
+  eventId: string,
+  playerId: string,
+): Promise<RegPartnerContext> {
+  const { data: invites, error } = await supabase
+    .from("partner_invites")
+    .select("id, inviter_player_id, invitee_player_id, invitee_email")
+    .eq("event_id", eventId)
+    .eq("status", "pending")
+    .or(`inviter_player_id.eq.${playerId},invitee_player_id.eq.${playerId}`);
+  if (error) throw new Error(error.message);
+  const rows = invites ?? [];
+  if (rows.length === 0) return { invited: [], invitedBy: [] };
+
+  const otherIds = Array.from(
+    new Set(
+      rows.map((r) =>
+        r.inviter_player_id === playerId ? r.invitee_player_id : r.inviter_player_id,
+      ),
+    ),
+  );
+  const [{ data: players }, { data: regs }] = await Promise.all([
+    supabase.from("players").select("id, first_name, last_name").in("id", otherIds),
+    supabase
+      .from("event_registrations")
+      .select("id, player_id")
+      .eq("event_id", eventId)
+      .in("player_id", otherIds)
+      .is("deleted_at", null)
+      .not("status", "in", INACTIVE_STATUSES),
+  ]);
+  const nameById = new Map(
+    (players ?? []).map((p) => [p.id, `${p.first_name} ${p.last_name}`.trim()]),
+  );
+  const regByPlayer = new Map((regs ?? []).map((r) => [r.player_id, r.id]));
+
+  const invited: InviteContact[] = [];
+  const invitedBy: InviteContact[] = [];
+  for (const r of rows) {
+    const outbound = r.inviter_player_id === playerId;
+    const otherId = outbound ? r.invitee_player_id : r.inviter_player_id;
+    const contact: InviteContact = {
+      inviteId: r.id,
+      playerId: otherId,
+      name: nameById.get(otherId) || r.invitee_email || "(unknown)",
+      email: outbound ? r.invitee_email : null,
+      regId: regByPlayer.get(otherId) ?? null,
+    };
+    (outbound ? invited : invitedBy).push(contact);
+  }
+  return { invited, invitedBy };
+}
+
+// Pair two registrations AND clear any pending invites between the two players
+// (either direction) — used to resolve the "invited each other, nobody accepted"
+// deadlock in one click. Invites are ephemeral (hard-deleted); org staff may
+// delete them (delete policy allows sender/recipient/org).
+export async function pairAndResolveInvites(
+  regId: string,
+  partnerRegId: string,
+  eventId: string,
+  playerAId: string,
+  playerBId: string,
+): Promise<void> {
+  await pairRegistrations(regId, partnerRegId);
+  const { error } = await supabase
+    .from("partner_invites")
+    .delete()
+    .eq("event_id", eventId)
+    .eq("status", "pending")
+    .or(
+      `and(inviter_player_id.eq.${playerAId},invitee_player_id.eq.${playerBId}),` +
+        `and(inviter_player_id.eq.${playerBId},invitee_player_id.eq.${playerAId})`,
+    );
+  if (error) throw new Error(error.message);
+}
+
 // Active registrations in an event (candidates to pick as an existing partner).
 export async function fetchEventRegistrants(eventId: string): Promise<
   {
