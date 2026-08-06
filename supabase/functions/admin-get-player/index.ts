@@ -119,6 +119,7 @@ Deno.serve(async (req: Request) => {
       partner_status,
       registered_at,
       partner_registration_id,
+      event_fee_cents,
       events (
         id,
         name,
@@ -179,6 +180,10 @@ Deno.serve(async (req: Request) => {
       status: r.status as string,
       partnerStatus: r.partner_status as string,
       registeredAt: r.registered_at as string,
+      // Fields the registration editor needs to edit this reg in place.
+      eventId: (ev?.id as string) ?? null,
+      partnerRegId,
+      eventFeeCents: (r.event_fee_cents as number) ?? 0,
       partnerName: partnerRegId
         ? partnerNameById.get(partnerRegId) ?? null
         : null,
