@@ -15,9 +15,14 @@ admin-get-player, admin-update-player, admin-merge-players) had NOT deployed to 
 yet. Transient: new frontend + old edge fns → merge-wizard preview enrichment +
 person-page per-reg Manage + org-admin access look degraded/inert on PROD until the
 deploy lands (no data risk; platform-admin basic flows fine). SELF-RESOLVES on deploy.
-NEXT: confirm run 31118196280 completes green (backgrounded watch will notify); if it
-stays stuck, re-run the "Deploy edge functions" workflow for production. Then PROD is
-fully consistent.
+UPDATE: that queued deploy (31118196280) got **CANCELLED** (job cancelled with no
+steps run — sat in the runner queue too long; NOT a code failure — identical code
+deployed green to TEST). **Re-ran it** (`gh run rerun 31118196280`); re-run queued,
+backgrounded watch in flight. Until it goes green, PROD frontend is new but the 4
+edge fns are OLD → merge-wizard preview / person-page per-reg Manage / org-admin
+access degraded on PROD (no data risk; platform-admin basics fine). NEXT: confirm the
+re-run deploys green; if it cancels again, re-run once more or check for a runner/
+concurrency issue. Then PROD consistent.
 
 ## 2026-08-06 — All Players (site admin) can add a player (#674) → TEST
 
