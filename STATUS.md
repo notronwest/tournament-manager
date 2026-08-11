@@ -3,6 +3,26 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Setup intake MOCKUP (#681) + contract-status decoupling found
+
+Ron picked: build the intake form first, as a real interactive mockup. Built
+web/src/pages/public/TournamentSetupIntakePage.tsx — a 5-step wizard (Your
+tournament · Events & registration · Rules & the day · Extras & prizes · Review),
+public route /setup, local-state-only (Submit = confirmation). Verified rendering +
+interactive at 375px in the browser preview (read_page confirms all 5 steps + fields
+live). PR #681 (NOT for merge — mockup for feedback; Cloudflare preview + /setup).
+
+Ron then flagged: "I have a signed contract but its status doesn't appear right."
+ROOT CAUSE (design): quote_status (submitted→draft→quoted→accepted→declined) and a
+SEPARATE contracts.contract_status (draft→sent→signed_offline) are DECOUPLED. A quote
+must already be 'accepted' to generate a contract; ContractPage updates ONLY
+contract_status — signing never advances the quote, and there's no 'signed/won/setup'
+quote status. So a signed contract can look 'stuck'. Gave Ron a read-only diagnostic
+SQL (contracts ⋈ quotes ⋈ quote_customers showing both statuses) to pinpoint whether
+it's the contract_status (didn't get set to signed_offline) or the quote sitting in the
+wrong bucket. NEXT: Ron reports what the query shows → targeted fix (data correction
+and/or systemic: cascade signed→quote status, part of the funnel work).
+
 ## 2026-08-06 — Tournament setup: host guide + intake doc (#680); funnel proposal pending
 
 New thread (pre-tournament setup). Ron drafted a 'things to consider' doc + wants a
