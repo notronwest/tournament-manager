@@ -45,6 +45,7 @@ import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage
 import CheckoutPage from "./pages/public/CheckoutPage";
 import DonatePage from "./pages/public/DonatePage";
 import CustomerQuotePage from "./pages/public/CustomerQuotePage";
+import TournamentSetupIntakePage from "./pages/public/TournamentSetupIntakePage";
 import EstimatePage from "./pages/public/EstimatePage";
 import GettingStartedPage from "./pages/public/GettingStartedPage";
 import HomePage from "./pages/public/HomePage";
@@ -135,6 +136,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/confirm" element={<AuthConfirmPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* Tournament setup intake (customer-facing) — mockup for now; will move
+          behind a per-customer token once wired to the accepted-quote flow. */}
+      <Route path="/setup" element={<TournamentSetupIntakePage />} />
 
       {/* Public tournament pages — anonymous-readable. RLS already
           restricts to status in (published, closed, completed). */}
