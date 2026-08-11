@@ -3,6 +3,23 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-06 — Tournament setup: host guide + intake doc (#680); funnel proposal pending
+
+New thread (pre-tournament setup). Ron drafted a 'things to consider' doc + wants a
+customer intake form, and sensed an 'umbrella/funnel' over the contract stuff.
+Findings: the 'contract stuff' = **Quote Studio** (quote_customers + quotes, status
+submitted→draft→quoted→accepted→declined); tournaments are separate (draft→published→
+closed→completed→cancelled). GAP: an **accepted quote doesn't convert to / link a
+tournament**, and there's no setup/intake step between them — that's the funnel Ron
+senses. Wrote docs/tournament-host-guide.md (completed Ron's considerations + a
+grouped, form-ready intake spec) → PR #680 (closes #679), left for Ron to edit/merge.
+PROPOSAL given to Ron (not built): funnel = Inquiry(opportunity=quote) → Quoted →
+Accepted → **Setup/Intake (new)** → Published → Running → Wrapped; reuse Quote Studio
+(don't add an 'opportunities' table); add an accepted-quote→tournament conversion
+(link + prefill) + the intake step; optional CRM pipeline board. NEXT: Ron picks depth
+(doc only / + conversion / + pipeline board) + whether to build the intake form as a
+real interactive mockup.
+
 ## 2026-08-06 — PROMOTED #677 → production (frontend-only, clean)
 
 Ron: "push to production." Delta was frontend-only (#677 + STATUS; NO migrations, NO
