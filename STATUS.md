@@ -3,6 +3,20 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-13 — Fix nightly regression: manage-reg editor now opens via person page (#682)
+
+Nightly regression red every night since ~08-06. Root cause: Stage 3 (#672) rerouted
+Attendees By-Player 'Manage' to NAVIGATE to the person page instead of opening a modal,
+but the E2E openEditor still clicked 'Manage'→'Edit' expecting the old modal → all 7
+manage-registration tests timed out on the editor dialog. Fixed openEditor (#682) to
+the real flow: Attendees 'Manage' → person page (waitForURL /admin/players/) → the
+history row's 'Manage' → editor dialog. Merged to main (--admin). The 8th nightly
+failure (registration.spec.ts:60 singles) is a SEPARATE pre-existing FLAKE — passed 8h
+earlier, register flow unchanged (scrollIntoViewIfNeeded race); left as-is pending
+confirmation. Dispatched regression run 31731202327 to verify the 7 pass; watching.
+NEXT: confirm run green (allowing for the singles flake); if singles keeps flaking,
+harden its Save-button wait.
+
 ## 2026-08-06 — Setup intake MOCKUP (#681) + contract-status decoupling found
 
 Ron picked: build the intake form first, as a real interactive mockup. Built
