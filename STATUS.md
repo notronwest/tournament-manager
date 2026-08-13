@@ -13,9 +13,13 @@ the real flow: Attendees 'Manage' → person page (waitForURL /admin/players/) �
 history row's 'Manage' → editor dialog. Merged to main (--admin). The 8th nightly
 failure (registration.spec.ts:60 singles) is a SEPARATE pre-existing FLAKE — passed 8h
 earlier, register flow unchanged (scrollIntoViewIfNeeded race); left as-is pending
-confirmation. Dispatched regression run 31731202327 to verify the 7 pass; watching.
-NEXT: confirm run green (allowing for the singles flake); if singles keeps flaking,
-harden its Save-button wait.
+confirmation. Dispatched regression run 31731202327 to verify → **GREEN: 49 passed, 1 flaky, 0
+failed.** All 7 manage-reg tests pass; singles passed clean this run (confirmed
+flake). Residual flakiness: registration.spec.ts:16 'register with an existing
+partner' flaked (failed once ~21s, passed on retry) — pre-existing, doesn't fail
+the run. Nightly is green again. OPTIONAL follow-up: harden the intermittently-flaky
+partner-register tests (scrollIntoViewIfNeeded / tapClear race under the fixed
+bottom bar) if the flakes get noisy.
 
 ## 2026-08-06 — Setup intake MOCKUP (#681) + contract-status decoupling found
 
