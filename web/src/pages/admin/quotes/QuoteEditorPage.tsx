@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../../supabase";
 import { useAuth } from "../../../auth/AuthProvider";
@@ -8,6 +8,13 @@ import type { QuoteLineInput, QuotePlatform } from "../../../lib/quotePricing";
 import {
   LOCAL_RADIUS_MILES,
 } from "../../../lib/quotePricing";
+import {
+  deriveStage,
+  STAGE_COLORS,
+  STAGE_LABELS,
+} from "../../../lib/quotePipeline";
+import type { PipelineStage } from "../../../lib/quotePipeline";
+import { ConfirmModal } from "../../../components/ConfirmModal";
 import {
   bodyFontStack,
   breadcrumbLinkStyle,
@@ -31,6 +38,8 @@ import {
   ruleSoft,
   sectionH2Style,
   statusPanelStyle,
+  warnBg,
+  warnFg,
 } from "../../../lib/publicTheme";
 import type { Database } from "../../../types/supabase";
 
@@ -65,6 +74,26 @@ const STATUS_OPTIONS: { value: QuoteStatus; label: string }[] = [
   { value: "accepted", label: "Accepted" },
   { value: "declined", label: "Declined" },
 ];
+
+// One-line "what's next" copy shown in the stage header (paired with the
+// stage's primary action button below it).
+const STAGE_NEXT: Record<PipelineStage, string> = {
+  new: "New inquiry — start drafting a quote.",
+  drafting: "Not sent yet.",
+  quoted: "Sent — waiting on the customer.",
+  accepted: "Accepted — get the agreement signed.",
+  signed: "Signed — ready to set up the tournament.",
+  declined: "Declined.",
+};
+
+// Outlined red button — used for the meaningful "Mark declined" action so it
+// reads as consequential without dominating the primary path.
+const dangerOutlineBtnStyle: CSSProperties = {
+  ...ctaPrimaryStyle,
+  background: "transparent",
+  color: courtRed,
+  boxShadow: `inset 0 0 0 2px ${courtRed}`,
+};
 
 const CATEGORY_ORDER: ServiceCategory[] = ["core", "setup", "branding", "awards", "equipment", "media"];
 const CATEGORY_LABELS: Record<ServiceCategory, string> = {
@@ -153,6 +182,14 @@ export default function QuoteEditorPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  // Unsaved-changes tracking — set true on any edit to a quote field or line
+  // item, cleared after a successful save / on initial load.
+  const [dirty, setDirty] = useState(false);
+
+  // ── Stage header ──────────────────────────────────────────────────────
+  const [showManual, setShowManual] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<null | "accept" | "decline">(null);
+  const [stageBusy, setStageBusy] = useState(false);
 
   // ── Contract state ────────────────────────────────────────────────────
   const [contracts, setContracts] = useState<ContractRow[]>([]);
@@ -253,6 +290,8 @@ export default function QuoteEditorPage() {
           setSelected(sel);
           setLineStates((prev) => ({ ...prev, ...states }));
         }
+        // Freshly loaded from the DB — no unsaved edits yet.
+        setDirty(false);
     })();
     return () => { cancelled = true; };
   }, [isNew, quoteId, isPlatformAdmin]);
@@ -345,6 +384,58 @@ export default function QuoteEditorPage() {
       return;
     }
     navigate(`/admin/quotes/${quoteId}/contract/${data.id}`);
+  }
+
+  // ── Stage / status changes (immediate effect, unbundled from Save) ──────
+  // Persists the quote status directly so the stage buttons take effect on
+  // their own — Save no longer owns status changes (it still writes status
+  // as part of a revision, which is harmless / idempotent).
+  async function setStageStatus(newStatus: QuoteStatus) {
+    // New quotes have no row yet — keep it local; Save persists it.
+    if (isNew || !quoteId) {
+      setStatus(newStatus);
+      return;
+    }
+    setStageBusy(true);
+    setSaveError(null);
+    setSavedMsg(null);
+    const { error } = await supabase
+      .from("quotes")
+      .update({ status: newStatus })
+      .eq("id", quoteId);
+    setStageBusy(false);
+    if (error) {
+      setSaveError(error.message ?? "Could not update the stage.");
+      return;
+    }
+    setStatus(newStatus);
+    const label = STATUS_OPTIONS.find((o) => o.value === newStatus)?.label ?? newStatus;
+    setSavedMsg(`Stage updated to ${label}.`);
+  }
+
+  // Mark the latest contract signed offline → derives the "Signed" stage.
+  async function markContractSigned() {
+    const latest = contracts[0];
+    if (!latest) return;
+    setStageBusy(true);
+    setContractError(null);
+    const { error } = await supabase
+      .from("contracts")
+      .update({ status: "signed_offline" })
+      .eq("id", latest.id);
+    setStageBusy(false);
+    if (error) {
+      setContractError(error.message ?? "Could not mark the contract signed.");
+      return;
+    }
+    setContracts((prev) =>
+      prev.map((c) => (c.id === latest.id ? { ...c, status: "signed_offline" } : c)),
+    );
+    setSavedMsg("Contract marked as signed.");
+  }
+
+  function scrollToId(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // ── Derive line items for pricing engine ───────────────────────────────
@@ -566,6 +657,7 @@ export default function QuoteEditorPage() {
       }
 
       setSavedMsg(`Revision ${nextRevNum} saved.`);
+      setDirty(false);
       if (isNew) {
         navigate(`/admin/quotes/${finalQuoteId}`);
       } else {
@@ -605,6 +697,14 @@ export default function QuoteEditorPage() {
     acc[cat] = catalog.filter((s) => s.category === cat);
     return acc;
   }, {} as Record<ServiceCategory, ServiceRow[]>);
+
+  // ── Stage derivation (status + signed-contract → unified pipeline) ──────
+  const hasSignedContract = contracts.some((c) => c.status === "signed_offline");
+  const stage = deriveStage(status, hasSignedContract);
+  const customerRevisionExists = revisions.some((r) => r.created_by === "customer");
+  const latestContract = contracts[0] ?? null;
+  const hasUnsignedContract = !!latestContract && latestContract.status !== "signed_offline";
+  const nextRevisionNumber = (revisions[0]?.revision_number ?? 0) + 1;
 
   // Revision viewer
   if (viewingRevision) {
@@ -687,30 +787,240 @@ export default function QuoteEditorPage() {
         <div style={{ ...statusPanelStyle("success"), marginBottom: 16 }}>{savedMsg}</div>
       )}
 
-      {/* ── Status ── */}
-      <div style={{ ...panelMutedStyle, marginBottom: 20 }}>
-        <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Status</h2>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {STATUS_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setStatus(opt.value)}
+      {/* ── Stage + next step (existing quotes) ── */}
+      {!isNew ? (
+        <section style={{ ...panelMutedStyle, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span
               style={{
-                padding: "6px 14px",
-                borderRadius: 20,
-                border: `1px solid ${status === opt.value ? ink : rule}`,
-                background: status === opt.value ? ink : "transparent",
-                color: status === opt.value ? "#fff" : inkSoft,
-                fontSize: 13,
-                fontWeight: 600,
+                display: "inline-block",
+                background: STAGE_COLORS[stage],
+                color: "#fff",
+                fontFamily: headingFontStack,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                padding: "4px 12px",
+                borderRadius: 4,
+              }}
+            >
+              {STAGE_LABELS[stage]}
+            </span>
+            <span style={{ fontSize: 14, color: inkSoft, fontWeight: 500 }}>{STAGE_NEXT[stage]}</span>
+          </div>
+
+          {/* Primary action(s) for this stage */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+            {stage === "new" && (
+              <button
+                onClick={() => setStageStatus("draft")}
+                disabled={stageBusy}
+                style={stageBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                Start drafting
+              </button>
+            )}
+            {stage === "drafting" && (
+              <button
+                onClick={() => {
+                  void setStageStatus("quoted");
+                  scrollToId("share-section");
+                }}
+                disabled={stageBusy}
+                style={stageBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                Send to customer
+              </button>
+            )}
+            {stage === "quoted" && (
+              <>
+                {customerRevisionExists && (
+                  <button
+                    onClick={() => scrollToId("history-section")}
+                    style={ctaSecondaryStyle}
+                  >
+                    Review customer's changes
+                  </button>
+                )}
+                <button
+                  onClick={() => setConfirmAction("accept")}
+                  disabled={stageBusy}
+                  style={stageBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+                >
+                  Mark accepted
+                </button>
+                <button
+                  onClick={() => setConfirmAction("decline")}
+                  disabled={stageBusy}
+                  style={dangerOutlineBtnStyle}
+                >
+                  Mark declined
+                </button>
+              </>
+            )}
+            {stage === "accepted" && (
+              <>
+                <button
+                  onClick={() => scrollToId("contract-section")}
+                  style={ctaPrimaryStyle}
+                >
+                  Generate contract
+                </button>
+                {hasUnsignedContract && (
+                  <button
+                    onClick={markContractSigned}
+                    disabled={stageBusy}
+                    style={ctaSecondaryStyle}
+                  >
+                    Mark signed
+                  </button>
+                )}
+              </>
+            )}
+            {stage === "signed" && (
+              <button
+                disabled
+                title="wiring in progress"
+                style={{ ...ctaPrimaryDisabledStyle, cursor: "not-allowed" }}
+              >
+                Start setup (coming soon)
+              </button>
+            )}
+          </div>
+
+          {/* Manual override — secondary, opt-in */}
+          <div style={{ marginTop: 14, borderTop: `1px solid ${rule}`, paddingTop: 12 }}>
+            <button
+              onClick={() => setShowManual((v) => !v)}
+              style={{
+                background: "none",
+                border: "none",
+                padding: 0,
                 cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                color: inkMuted,
                 fontFamily: bodyFontStack,
               }}
             >
-              {opt.label}
+              Change stage manually {showManual ? "▴" : "▾"}
             </button>
-          ))}
+            {showManual && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {STATUS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setStageStatus(opt.value)}
+                    disabled={stageBusy}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: 20,
+                      border: `1px solid ${status === opt.value ? ink : rule}`,
+                      background: status === opt.value ? ink : "transparent",
+                      color: status === opt.value ? "#fff" : inkSoft,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: stageBusy ? "not-allowed" : "pointer",
+                      fontFamily: bodyFontStack,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ) : (
+        /* New quote — status is local until Create persists it. */
+        <div style={{ ...panelMutedStyle, marginBottom: 20 }}>
+          <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Status</h2>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {STATUS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setStatus(opt.value)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 20,
+                  border: `1px solid ${status === opt.value ? ink : rule}`,
+                  background: status === opt.value ? ink : "transparent",
+                  color: status === opt.value ? "#fff" : inkSoft,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: bodyFontStack,
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* ── Revision history (record — kept near the top) ── */}
+      {!isNew && revisions.length > 0 && (
+        <section id="history-section" style={{ ...panelMutedStyle, marginBottom: 20 }}>
+          <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Revision history</h2>
+          <p style={{ fontSize: 12, color: inkMuted, margin: "0 0 12px" }}>
+            The record of the back-and-forth. Read-only — newest first.
+          </p>
+          <div style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: "hidden" }}>
+            {revisions.map((rev, i) => {
+              const who = rev.created_by === "customer" ? "Customer" : "You";
+              return (
+                <div
+                  key={rev.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    padding: "10px 14px",
+                    borderTop: i > 0 ? `1px solid ${ruleSoft}` : "none",
+                    background: rev.is_current ? infoBg : "#fff",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+                      #{rev.revision_number}
+                      {rev.is_current && (
+                        <span style={{ marginLeft: 6, fontSize: 11, color: courtGreen }}>current</span>
+                      )}
+                    </span>
+                    <span style={{ fontSize: 12, color: inkMuted, marginLeft: 10 }}>
+                      {who} · {new Date(rev.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
+                      {formatDollars(rev.subtotal_cents)}
+                    </span>
+                    <button
+                      onClick={() => setViewingRevision(rev)}
+                      style={{ ...breadcrumbLinkStyle, background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13 }}
+                    >
+                      View
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Working-draft banner: everything below here is editable ── */}
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ ...sectionH2Style, margin: 0, fontSize: 16 }}>
+          {isNew ? "New quote" : "Working draft"}
+        </h2>
+        <p style={{ fontSize: 12, color: inkMuted, margin: "2px 0 0" }}>
+          Edit below, then save to record a new revision.
+        </p>
       </div>
 
       {/* ── Event basics ── */}
@@ -718,25 +1028,25 @@ export default function QuoteEditorPage() {
         <h2 style={{ ...sectionH2Style, marginTop: 0 }}>Event details</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0 20px" }}>
           <FieldRow label="Event name">
-            <input style={inputStyle} type="text" value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="Summer Classic 2026" />
+            <input style={inputStyle} type="text" value={eventName} onChange={(e) => { setEventName(e.target.value); setDirty(true); }} placeholder="Summer Classic 2026" />
           </FieldRow>
           <FieldRow label="Event dates">
-            <input style={inputStyle} type="text" value={eventDates} onChange={(e) => setEventDates(e.target.value)} placeholder="July 12–13, 2026" />
+            <input style={inputStyle} type="text" value={eventDates} onChange={(e) => { setEventDates(e.target.value); setDirty(true); }} placeholder="July 12–13, 2026" />
           </FieldRow>
           <FieldRow label="Days">
-            <input style={inputStyle} type="number" min={1} max={7} value={numDays} onChange={(e) => setNumDays(Math.max(1, Number(e.target.value)))} />
+            <input style={inputStyle} type="number" min={1} max={7} value={numDays} onChange={(e) => { setNumDays(Math.max(1, Number(e.target.value))); setDirty(true); }} />
           </FieldRow>
           <FieldRow label="Events / divisions">
-            <input style={inputStyle} type="number" min={1} value={numEvents} onChange={(e) => setNumEvents(Math.max(1, Number(e.target.value)))} />
+            <input style={inputStyle} type="number" min={1} value={numEvents} onChange={(e) => { setNumEvents(Math.max(1, Number(e.target.value))); setDirty(true); }} />
           </FieldRow>
           <FieldRow label="Expected players">
-            <input style={inputStyle} type="number" min={0} value={numEntries} onChange={(e) => setNumEntries(Math.max(0, Number(e.target.value)))} />
+            <input style={inputStyle} type="number" min={0} value={numEntries} onChange={(e) => { setNumEntries(Math.max(0, Number(e.target.value))); setDirty(true); }} />
           </FieldRow>
           <FieldRow label="Players in 2+ events">
-            <input style={inputStyle} type="number" min={0} value={multiEventPlayers} onChange={(e) => setMultiEventPlayers(Math.max(0, Number(e.target.value)))} />
+            <input style={inputStyle} type="number" min={0} value={multiEventPlayers} onChange={(e) => { setMultiEventPlayers(Math.max(0, Number(e.target.value))); setDirty(true); }} />
           </FieldRow>
           <FieldRow label="Distance (miles)">
-            <input style={inputStyle} type="number" min={0} value={distanceMiles} onChange={(e) => setDistanceMiles(Math.max(0, Number(e.target.value)))} />
+            <input style={inputStyle} type="number" min={0} value={distanceMiles} onChange={(e) => { setDistanceMiles(Math.max(0, Number(e.target.value))); setDirty(true); }} />
             {distanceMiles > LOCAL_RADIUS_MILES && (
               <p style={{ margin: "4px 0 0", fontSize: 12, color: inkMuted }}>Travel cost will be included.</p>
             )}
@@ -745,7 +1055,7 @@ export default function QuoteEditorPage() {
             <select
               style={{ ...inputStyle, cursor: "pointer" }}
               value={platform}
-              onChange={(e) => setPlatform(e.target.value as QuotePlatform)}
+              onChange={(e) => { setPlatform(e.target.value as QuotePlatform); setDirty(true); }}
             >
               <option value="bertanderne">bert & erne</option>
               <option value="pickleballbrackets">PickleballBrackets</option>
@@ -756,10 +1066,10 @@ export default function QuoteEditorPage() {
           <p style={{ fontSize: 12, fontWeight: 700, color: inkMuted, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 12px" }}>Organizer registration pricing</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0 20px" }}>
             <FieldRow label="First event fee ($)">
-              <input style={inputStyle} type="number" min={0} value={firstEventFee} onChange={(e) => setFirstEventFee(Math.max(0, Number(e.target.value)))} />
+              <input style={inputStyle} type="number" min={0} value={firstEventFee} onChange={(e) => { setFirstEventFee(Math.max(0, Number(e.target.value))); setDirty(true); }} />
             </FieldRow>
             <FieldRow label="Additional event fee ($)">
-              <input style={inputStyle} type="number" min={0} value={additionalEventFee} onChange={(e) => setAdditionalEventFee(Math.max(0, Number(e.target.value)))} />
+              <input style={inputStyle} type="number" min={0} value={additionalEventFee} onChange={(e) => { setAdditionalEventFee(Math.max(0, Number(e.target.value))); setDirty(true); }} />
             </FieldRow>
           </div>
         </div>
@@ -819,7 +1129,7 @@ export default function QuoteEditorPage() {
                           borderTop: i > 0 ? `1px solid ${ruleSoft}` : "none",
                           cursor: "pointer",
                         }}
-                        onClick={() => setSelected((prev) => ({ ...prev, [svc.key]: !prev[svc.key] }))}
+                        onClick={() => { setSelected((prev) => ({ ...prev, [svc.key]: !prev[svc.key] })); setDirty(true); }}
                       >
                         <input
                           type="checkbox"
@@ -845,12 +1155,13 @@ export default function QuoteEditorPage() {
                                 type="number"
                                 min={1}
                                 value={ls?.qty ?? 1}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setLineStates((prev) => ({
                                     ...prev,
                                     [svc.key]: { ...prev[svc.key], qty: Math.max(1, Number(e.target.value)) },
-                                  }))
-                                }
+                                  }));
+                                  setDirty(true);
+                                }}
                                 style={{ width: 60, padding: "4px 8px", fontSize: 13, border: `1px solid ${rule}`, borderRadius: 4, fontFamily: bodyFontStack }}
                               />
                             </div>
@@ -870,12 +1181,13 @@ export default function QuoteEditorPage() {
                                 min={0}
                                 placeholder={(svc.unit_price_cents / 100).toFixed(0)}
                                 value={ls?.overridePriceCents ?? ""}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setLineStates((prev) => ({
                                     ...prev,
                                     [svc.key]: { ...prev[svc.key], overridePriceCents: e.target.value },
-                                  }))
-                                }
+                                  }));
+                                  setDirty(true);
+                                }}
                                 style={{ width: 80, padding: "4px 8px", fontSize: 13, border: `1px solid ${ls?.overridePriceCents ? courtBlue : rule}`, borderRadius: 4, fontFamily: bodyFontStack }}
                                 title="Override unit price (leave empty for catalog rate)"
                               />
@@ -904,7 +1216,7 @@ export default function QuoteEditorPage() {
                                   type="radio"
                                   name="onsite-mode"
                                   checked={onsiteMgmtMode === mode}
-                                  onChange={() => setOnsiteMgmtMode(mode)}
+                                  onChange={() => { setOnsiteMgmtMode(mode); setDirty(true); }}
                                 />
                                 {mode === "per_day" ? "Flat per day" : "% of organizer revenue"}
                               </label>
@@ -917,7 +1229,7 @@ export default function QuoteEditorPage() {
                                   max={100}
                                   step={0.5}
                                   value={onsitePct}
-                                  onChange={(e) => setOnsitePct(Math.max(0, Math.min(100, Number(e.target.value))))}
+                                  onChange={(e) => { setOnsitePct(Math.max(0, Math.min(100, Number(e.target.value)))); setDirty(true); }}
                                   style={{ width: 64, padding: "4px 8px", fontSize: 13, border: `1px solid ${rule}`, borderRadius: 4, fontFamily: bodyFontStack }}
                                 />
                                 <span style={{ fontSize: 13, color: inkSoft }}>%</span>
@@ -938,53 +1250,9 @@ export default function QuoteEditorPage() {
         })}
       </section>
 
-      {/* ── Revision history ── */}
-      {!isNew && revisions.length > 0 && (
-        <section style={{ ...panelMutedStyle, marginBottom: 20 }}>
-          <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Revision history</h2>
-          <div style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: "hidden" }}>
-            {revisions.map((rev, i) => (
-              <div
-                key={rev.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 14px",
-                  borderTop: i > 0 ? `1px solid ${ruleSoft}` : "none",
-                  background: rev.is_current ? infoBg : "#fff",
-                }}
-              >
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-                    Rev #{rev.revision_number}
-                    {rev.is_current && <span style={{ marginLeft: 6, fontSize: 11, color: courtGreen }}>current</span>}
-                  </span>
-                  <span style={{ fontSize: 12, color: inkMuted, marginLeft: 10 }}>
-                    {new Date(rev.created_at).toLocaleString()} · by {rev.created_by}
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>{formatDollars(rev.subtotal_cents)}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: rev.estimated_net_cents >= 0 ? courtGreen : courtRed }}>
-                    net {formatDollars(rev.estimated_net_cents)}
-                  </span>
-                  <button
-                    onClick={() => setViewingRevision(rev)}
-                    style={{ ...breadcrumbLinkStyle, background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13 }}
-                  >
-                    View
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* ── Share link ── */}
       {!isNew && shareTokenLoaded && (
-        <section style={{ ...panelMutedStyle, marginBottom: 20 }}>
+        <section id="share-section" style={{ ...panelMutedStyle, marginBottom: 20 }}>
           <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Customer share link</h2>
           <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 12px" }}>
             Send this link to the customer so they can review and customize their quote — no login required.
@@ -1049,7 +1317,7 @@ export default function QuoteEditorPage() {
 
       {/* ── Contracts (accepted quotes only) ── */}
       {!isNew && status === "accepted" && (
-        <section style={{ ...panelMutedStyle, marginBottom: 20 }}>
+        <section id="contract-section" style={{ ...panelMutedStyle, marginBottom: 20 }}>
           <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Contracts</h2>
           <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 12px" }}>
             Generate an independent-contractor agreement from the current accepted revision. Download or print it as a PDF.
@@ -1112,33 +1380,105 @@ export default function QuoteEditorPage() {
         <Link to="/admin/quotes" style={ctaSecondaryStyle}>Cancel</Link>
       </div>
 
-      {/* ── Sticky totals bar ── */}
+      {/* ── Sticky bottom: unsaved-changes bar + totals ── */}
       <div
         style={{
           position: "fixed",
           bottom: 0,
           left: 0,
           right: 0,
-          background: ink,
-          borderTop: `3px solid ${courtYellow}`,
           zIndex: 100,
-          padding: "12px 20px",
         }}
       >
-        <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
-          <SummaryCell label="WMPC cost" value={formatDollars(wmpcServiceCostCents(quote.wmpcTotalCents, quote.passthroughTotalCents))} color={courtYellow} />
-          {quote.passthroughTotalCents > 0 && (
-            <SummaryCell label="PickleballBrackets fee" value={formatDollars(quote.passthroughTotalCents)} color="#6b7280" />
-          )}
-          <SummaryCell label="Organizer revenue" value={formatDollars(quote.organizerRevenueCents)} color={courtGreen} />
-          <SummaryCell label="Estimated net" value={formatDollars(quote.estimatedNetCents)} color={quote.estimatedNetCents >= 0 ? courtGreen : "#e05050"} />
-          {quote.travel.flagged && (
-            <span style={{ fontSize: 11, color: courtYellow, fontFamily: bodyFontStack, opacity: 0.8, maxWidth: 160, lineHeight: 1.3 }}>
-              ⚠ Travel est. included ({formatDollars(quote.travel.totalCents)})
-            </span>
-          )}
+        {/* Unsaved-changes bar — only for existing quotes (new uses Create). */}
+        {dirty && !isNew && (
+          <div
+            style={{
+              background: warnBg,
+              borderTop: `1px solid ${courtYellow}`,
+            }}
+          >
+            <div
+              style={{
+                maxWidth: 900,
+                margin: "0 auto",
+                display: "flex",
+                gap: 14,
+                alignItems: "center",
+                justifyContent: "space-between",
+                flexWrap: "wrap",
+                padding: "10px 20px",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: warnFg }}>
+                  You have unsaved changes to this quote.
+                </span>
+                <span style={{ fontSize: 12, color: warnFg, opacity: 0.85, marginLeft: 8 }}>
+                  Saving records a new revision.
+                </span>
+              </div>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={saving ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                {saving ? "Saving…" : `Save as revision ${nextRevisionNumber}`}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Totals */}
+        <div
+          style={{
+            background: ink,
+            borderTop: `3px solid ${courtYellow}`,
+            padding: "12px 20px",
+          }}
+        >
+          <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+            <SummaryCell label="WMPC cost" value={formatDollars(wmpcServiceCostCents(quote.wmpcTotalCents, quote.passthroughTotalCents))} color={courtYellow} />
+            {quote.passthroughTotalCents > 0 && (
+              <SummaryCell label="PickleballBrackets fee" value={formatDollars(quote.passthroughTotalCents)} color="#6b7280" />
+            )}
+            <SummaryCell label="Organizer revenue" value={formatDollars(quote.organizerRevenueCents)} color={courtGreen} />
+            <SummaryCell label="Estimated net" value={formatDollars(quote.estimatedNetCents)} color={quote.estimatedNetCents >= 0 ? courtGreen : "#e05050"} />
+            {quote.travel.flagged && (
+              <span style={{ fontSize: 11, color: courtYellow, fontFamily: bodyFontStack, opacity: 0.8, maxWidth: 160, lineHeight: 1.3 }}>
+                ⚠ Travel est. included ({formatDollars(quote.travel.totalCents)})
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* ── Stage-change confirmations ── */}
+      {confirmAction === "accept" && (
+        <ConfirmModal
+          title="Mark this quote accepted?"
+          body="This moves the opportunity to Accepted so you can generate the agreement. You can still change the stage afterward."
+          confirmLabel="Mark accepted"
+          destructive={false}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={async () => {
+            await setStageStatus("accepted");
+            setConfirmAction(null);
+          }}
+        />
+      )}
+      {confirmAction === "decline" && (
+        <ConfirmModal
+          title="Mark this quote declined?"
+          body="This marks the opportunity Declined. You can reopen it later by changing the stage manually."
+          confirmLabel="Mark declined"
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={async () => {
+            await setStageStatus("declined");
+            setConfirmAction(null);
+          }}
+        />
+      )}
     </main>
   );
 }
