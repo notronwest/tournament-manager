@@ -54,6 +54,9 @@ type Form = {
   numCourts: string;
   // Step 2 — events & registration
   brackets: string;
+  skillLevels: string;
+  duprRated: YesNo;
+  moneyBall: boolean;
   format: string;
   expectedSize: string;
   capPerEvent: string;
@@ -98,7 +101,8 @@ const EMPTY: Form = {
   tournamentName: "", hostingOrg: "", contactName: "", contactEmail: "",
   contactPhone: "", backupContact: "", startDate: "", endDate: "", rainDate: "",
   dailyStart: "", dailyEnd: "", venueName: "", venueAddress: "", setting: "",
-  numCourts: "", brackets: "", format: "", expectedSize: "", capPerEvent: "",
+  numCourts: "", brackets: "", skillLevels: "", duprRated: "", moneyBall: false,
+  format: "", expectedSize: "", capPerEvent: "",
   waitlist: "", entryFee: "", perEventFee: "", feeIncludes: "", regOpen: "",
   regClose: "", refundPolicy: "", ballBrand: "", ballProvidedBy: "",
   partnerMatching: "", clubRules: "", spectatorAreas: "", outsideFood: "",
@@ -322,6 +326,18 @@ function StepEvents({ form, set }: StepProps) {
         <textarea style={textarea} rows={4} value={form.brackets} onChange={(e) => set("brackets", e.target.value)} placeholder={"Men's 3.5–4.0 Doubles\nWomen's 3.0 Doubles\nMixed 3.5 Doubles\n50+ Doubles"} />
       </Field>
       <Row>
+        <Field label="Which skill levels?" hint="e.g. 2.5, 3.0, 3.5, 4.0, 4.5, 5.0+ — or combined like 3.5–4.0">
+          <input style={inputStyle} value={form.skillLevels} onChange={(e) => set("skillLevels", e.target.value)} placeholder="3.0, 3.5, 4.0, 4.5+" />
+        </Field>
+        <YesNoField label="DUPR rated?" value={form.duprRated} onChange={(v) => set("duprRated", v)} />
+      </Row>
+      {form.duprRated === "yes" && (
+        <div style={{ ...statusPanelStyle("info"), fontSize: 13, marginTop: -4 }}>
+          Great — we'll set the events up to report scores to DUPR. Players will
+          need their DUPR profiles / IDs.
+        </div>
+      )}
+      <Row>
         <Field label="Format">
           <select style={inputStyle} value={form.format} onChange={(e) => set("format", e.target.value)}>
             <option value="">Not sure yet</option>
@@ -433,6 +449,7 @@ function StepExtras({ form, set }: StepProps) {
       <CheckCard checked={form.brewerySample} onToggle={(v) => set("brewerySample", v)} title="Brewery sample table" desc="A local brewer sets up a table (e.g. ~12 PM Saturday) to hand out samples — if you're comfortable with it and your venue permits." />
       <CheckCard checked={form.foodVendors} onToggle={(v) => set("foodVendors", v)} title="Food truck / coffee cart" desc="A lunch food truck or a morning coffee cart keeps players happy on-site." />
       <CheckCard checked={form.vendorTables} onToggle={(v) => set("vendorTables", v)} title="Vendor / sponsor tables" desc="Paddle brands, local shops, or sponsors with a table at the event." />
+      <CheckCard checked={form.moneyBall} onToggle={(v) => set("moneyBall", v)} title="MoneyBall game" desc="An optional cash side-game / exhibition — players buy in and the winner takes a pot. A reliable crowd favorite; we can run one per day." />
 
       <div style={{ borderTop: `1px solid ${ruleSoft}`, margin: "16px 0 4px", paddingTop: 16, fontSize: 13, fontWeight: 700, color: inkSoft, fontFamily: headingFontStack, textTransform: "uppercase", letterSpacing: "0.06em" }}>
         On the day
@@ -463,6 +480,7 @@ function StepReview({ form, onJump }: { form: Form; onJump: (n: number) => void 
     form.brewerySample && "Brewery sample table",
     form.foodVendors && "Food truck / coffee",
     form.vendorTables && "Vendor tables",
+    form.moneyBall && "MoneyBall game",
     form.photographer && "Photographer",
     form.announcer && "Announcer",
     form.liveScores && "Live scores",
@@ -475,6 +493,7 @@ function StepReview({ form, onJump }: { form: Form; onJump: (n: number) => void 
       <ReviewRow label="Venue" value={[form.venueName, form.venueAddress].filter(Boolean).join(" · ")} onEdit={() => onJump(0)} />
       <ReviewRow label="Contact" value={[form.contactName, form.contactEmail].filter(Boolean).join(" · ")} onEdit={() => onJump(0)} />
       <ReviewRow label="Brackets" value={form.brackets ? form.brackets.split("\n").filter(Boolean).length + " listed" : ""} onEdit={() => onJump(1)} />
+      <ReviewRow label="Levels / DUPR" value={[form.skillLevels, form.duprRated === "yes" ? "DUPR rated" : form.duprRated === "no" ? "not DUPR" : ""].filter(Boolean).join(" · ")} onEdit={() => onJump(1)} />
       <ReviewRow label="Ball" value={form.ballBrand} onEdit={() => onJump(1)} />
       <ReviewRow label="Outside food / alcohol" value={[yn(form.outsideFood), yn(form.outsideAlcohol)].join(" / ")} onEdit={() => onJump(2)} />
       <ReviewRow label="Filming" value={yn(form.filming)} onEdit={() => onJump(2)} />
