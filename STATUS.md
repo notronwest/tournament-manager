@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-13 — Quote workflow MOCKUP (#687) — de-risk 3rd iteration; browser-verified
+
+Ron still struggling with the quote editor after #686 (2nd iteration). Wants: move
+opportunity through stages MANUALLY (prominent), form only when editing (not always
+shown), a GATED step flow, and a thorough activity history (created/edited/sent/by
+whom/when). Rather than a 3rd blind change to the real page, built a REAL clickable
+mockup: web/src/pages/public/QuoteWorkflowMockup.tsx, public route
+/mockups/quote-workflow, PR #687 (NOT for merge). Prominent clickable stage stepper
+(New→Drafting→Quoted→Accepted→Signed→Setup; click a step to move), next-step card per
+stage, read-only quote summary + Edit toggle, thorough activity timeline (with when +
+who). **Browser-VERIFIED** (finally not auth-gated): stepper moves stages + updates
+next-step live; Edit toggle; no console errors. Timeline is fully derivable from
+existing data (quotes.created_at, quote_revisions created_at/created_by, share tokens
+created_at = sent, contracts generated_at) — NO schema change for v1. NEXT: Ron clicks
+the preview (PR #687 Cloudflare URL + /mockups/quote-workflow) → on his OK, wire this
+exact design into the real QuoteEditorPage (replacing #686's layout) + delete the
+mockup route. Then remaining funnel: customer Accept/Decline; Stage 3 setup handoff.
+
 ## 2026-08-13 — Quote editor workflow redesign (#686) → TEST
 
 Ron: the quote editor page is the confusing one — status buttons "seem to do nothing"
