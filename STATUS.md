@@ -3,6 +3,16 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-13 — Cleared lingering WIP PRs (Ron: "still seeing WIP code")
+
+Ron flagged leftover WIP in the PR panel. The only open PRs were the setup-intake
+content: **#680 host-guide doc → MERGED** (finished reference), **#681 /setup mockup
+→ CLOSED** (throwaway preview; public unauthenticated /setup shouldn't merge as-is —
+the REAL wired intake comes in Stage 3; mockup branch kept for reference). Verified
+the pipeline #684 IS live on TEST (fresh Cloudflare build), no literal 'WIP' text
+anywhere in web/src, contracts readable by platform-admin (pipeline fetch works), and
+/setup is NOT on main. No open PRs remain.
+
 ## 2026-08-13 — Opportunity funnel Stage 1: pipeline on home + filtering (#684) → TEST
 
 Ron wants the quotes/opportunity funnel built + integrated (list on home w/ show-hide
