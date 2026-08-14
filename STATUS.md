@@ -3,6 +3,22 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-13 — Opportunity funnel Stage 1: pipeline on home + filtering (#684) → TEST
+
+Ron wants the quotes/opportunity funnel built + integrated (list on home w/ show-hide
+filtering; status driven by manual + customer interaction; accepted+signed → gather
+tournament details via the /setup intake). Chose to start with Stage 1. Shipped #684
+(closes #683): new lib/quotePipeline derives ONE lifecycle stage (New→Drafting→Quoted
+→Accepted→Signed; Declined off-ramp) from quote_status + contract signed_offline — so
+a signed contract finally reads right (fixes the decoupling). New reusable
+components/OpportunitiesPipeline (fetches quotes+contracts, multi-select show/hide
+stage chips w/ counts, rows→editor, next-step hints). QuotesListPage retitled
+'Opportunities' uses it; AdminIndexPage embeds it (limit 5) on the platform-admin home.
+No schema change. typecheck/build/lint green; NOT browser-verified (admin-gated) — Ron
+click-through on TEST (home + /admin/quotes). NEXT (agreed order): Stage 2 = customer
+Accept/Decline + signed→stage transitions (token RPC + RLS); Stage 3 = accepted+signed
+→ /setup intake handoff (wire the mockup to a real record + tournament creation).
+
 ## 2026-08-13 — Setup intake: added DUPR-rated, skill levels, MoneyBall (#680 + #681)
 
 Ron added 3 more intake questions. Added to BOTH the host-guide doc (PR #680,
