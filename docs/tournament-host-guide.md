@@ -29,9 +29,17 @@ page. Anything you don't know yet is fine — we can fill it in as it firms up.
 ### Events & format
 - The **brackets** you want: skill divisions, age groups, gender
   (men's / women's / mixed / open), and singles / doubles
+- **Which skill levels?** e.g. 2.5, 3.0, 3.5, 4.0, 4.5, 5.0+ — the divisions
+  you want offered (and whether any are combined, e.g. "3.5–4.0")
+- **Is it DUPR rated?** Do you want match results submitted to **DUPR**? If so,
+  players will need their DUPR profiles / IDs, and we'll set the event up to
+  report scores.
 - **Expected size** and any **cap** per event (and whether you want a **waitlist**)
 - **Format** per event (round robin, single/double elimination, pool → bracket)
 - **Scoring** (e.g. games to 11, win by 2; rally vs. traditional; best-of)
+- **A MoneyBall game?** An optional cash side-game / exhibition (players buy in,
+  winner takes a pot) — a crowd favorite. Want us to include one, and on which
+  day?
 
 ### Registration & pricing
 - **Entry fee** (tournament-level) and **per-event fee**, and what each includes
