@@ -3,6 +3,15 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-13 — Setup intake: added DUPR-rated, skill levels, MoneyBall (#680 + #681)
+
+Ron added 3 more intake questions. Added to BOTH the host-guide doc (PR #680,
+Events & format: 'Which skill levels?', 'Is it DUPR rated?', 'A MoneyBall game?')
+and the interactive mockup (PR #681: Step 2 gains a skill-levels field + DUPR
+yes/no with an info note; Step 4 gains a MoneyBall opt-in card; Review surfaces
+both). Verified typecheck/build/lint + rendered /setup Step 2 in the browser (new
+fields show, no console errors). Both still open PRs awaiting Ron's review/merge.
+
 ## 2026-08-13 — Fix nightly regression: manage-reg editor now opens via person page (#682)
 
 Nightly regression red every night since ~08-06. Root cause: Stage 3 (#672) rerouted
