@@ -3,6 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-13 — Quote editor workflow redesign (#686) → TEST
+
+Ron: the quote editor page is the confusing one — status buttons "seem to do nothing"
+(only persisted inside a revision Save), history buried at bottom, everything equally
+editable, no save prompt, no next-step. Full redesign (#686, closes #685), logic
+PRESERVED (handleSave/pricing/contract/share behavior-identical; only setDirty +
+anchor ids added):
+- **Stage + next-step header**: derives stage (status + signed contract), shows the
+  one obvious next action per stage (Draft→Send · Quoted→Mark accepted/declined +
+  Review customer changes · Accepted→Generate contract/Mark signed · Signed→Start
+  setup [disabled until Stage 3]). New setStageStatus writes quotes.status IMMEDIATELY
+  + feedback (fixes 'buttons do nothing'). Manual override kept, secondary.
+- **Save discipline**: dirty flag + sticky 'Save as revision N' bar.
+- **History up + fixed**: read-only revision timeline near top; editable region
+  labelled 'Working draft'.
+typecheck/build/lint green; NOT browser-verified (admin-gated) — Ron click-through on
+TEST (open any quote). NOTE: this is effectively funnel Stage 2 UX (status now
+interaction+manual). REMAINING funnel: customer-side Accept/Decline on their quote
+page (token RPC); Stage 3 accepted+signed → /setup intake handoff (Start-setup button
+is a disabled placeholder for now).
+
 ## 2026-08-13 — Cleared lingering WIP PRs (Ron: "still seeing WIP code")
 
 Ron flagged leftover WIP in the PR panel. The only open PRs were the setup-intake
