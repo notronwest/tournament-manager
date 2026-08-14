@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import OpportunitiesPipeline from "../../components/OpportunitiesPipeline";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
@@ -17,6 +18,7 @@ import {
   displayFontStack,
   ctaPrimaryStyle,
   ctaSecondaryStyle,
+  courtBlue,
 } from "../../lib/publicTheme";
 
 type OrgSummary = { slug: string; name: string };
@@ -175,6 +177,20 @@ export default function AdminIndexPage() {
             </div>
             <span aria-hidden style={{ fontSize: 18, color: warnFg }}>→</span>
           </Link>
+        )}
+
+        {/* Opportunities pipeline — quotes from new inquiry through a signed
+            agreement, right on the home page with show/hide filtering. */}
+        {isPlatformAdmin && (
+          <section style={{ marginBottom: 28 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ ...sectionLabelStyle, marginTop: 0 }}>Opportunities</div>
+              <Link to="/admin/quotes" style={{ fontSize: 12.5, color: courtBlue, textDecoration: "none", fontWeight: 600 }}>
+                Open pipeline →
+              </Link>
+            </div>
+            <OpportunitiesPipeline limit={5} />
+          </section>
         )}
 
         {orgs.length > 0 && (
