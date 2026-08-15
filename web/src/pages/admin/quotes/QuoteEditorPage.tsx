@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "../../../supabase";
 import { useAuth } from "../../../auth/AuthProvider";
 import { usePlatformAdmin } from "../../../hooks/usePlatformAdmin";
@@ -57,6 +58,44 @@ type CustomerRow = Database["public"]["Tables"]["quote_customers"]["Row"];
 type RevisionRow = Database["public"]["Tables"]["quote_revisions"]["Row"];
 type LineItemRow = Database["public"]["Tables"]["quote_line_items"]["Row"];
 
+// `tournament_setups` isn't in the generated `Database` types yet (migration is
+// live on TEST but types haven't been regenerated), so it's reached via an
+// untyped client — mirrors the pattern in lib/orgContacts.ts.
+const untyped = supabase as unknown as SupabaseClient;
+
+// Setup record for a quote. Untyped because the table isn't in `Database` yet.
+type SetupRow = {
+  id: string;
+  token: string;
+  status: string;
+  answers: Record<string, unknown>;
+  submitted_at: string | null;
+};
+
+// camelCase / snake_case / kebab-case key → "Title Case" label.
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Render an arbitrary answer value as readable text (booleans → Yes/No,
+// arrays joined, objects JSON-ified, blank → em dash).
+function formatAnswerValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "boolean") return v ? "Yes" : "No";
+  if (Array.isArray(v)) {
+    return v.length
+      ? v.map((x) => (x && typeof x === "object" ? JSON.stringify(x) : String(x))).join(", ")
+      : "—";
+  }
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
 const CONTRACT_TERMS_VERSION = "v1.0-2026";
 
 const CONTRACT_STATUS_LABELS: Record<ContractStatus, string> = {
@@ -102,10 +141,6 @@ const STEPPER: { key: StepKey; label: string }[] = [
   { key: "signed", label: "Signed" },
   { key: "setup", label: "Setup" },
 ];
-// The subset of steps that map to a real pipeline stage, in order — used to
-// place the current stage on the stepper.
-const STEPPER_STAGES: PipelineStage[] = ["new", "drafting", "quoted", "accepted", "signed"];
-
 // Outlined red button — used for the meaningful "Mark declined" action so it
 // reads as consequential without dominating the primary path.
 const dangerOutlineBtnStyle: CSSProperties = {
@@ -218,6 +253,10 @@ export default function QuoteEditorPage() {
   const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [generatingContract, setGeneratingContract] = useState(false);
   const [contractError, setContractError] = useState<string | null>(null);
+
+  // ── Setup state ───────────────────────────────────────────────────────
+  const [setup, setSetup] = useState<SetupRow | null>(null);
+  const [setupLinkCopied, setSetupLinkCopied] = useState(false);
 
   // Load service catalog
   useEffect(() => {
@@ -332,6 +371,23 @@ export default function QuoteEditorPage() {
       .eq("quote_id", quoteId)
       .order("generated_at", { ascending: false })
       .then(({ data }) => setContracts(data ?? []));
+  }, [isNew, quoteId, isPlatformAdmin]);
+
+  // Load the setup record for this quote (untyped table). Soft-handle errors —
+  // a missing/failed setup lookup must not break the editor.
+  useEffect(() => {
+    if (isNew || !isPlatformAdmin || !quoteId) return;
+    let cancelled = false;
+    untyped
+      .from("tournament_setups")
+      .select("id, token, status, answers, submitted_at")
+      .eq("quote_id", quoteId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSetup((data as SetupRow | null) ?? null);
+      });
+    return () => { cancelled = true; };
   }, [isNew, quoteId, isPlatformAdmin]);
 
   // Load active share token for this quote
@@ -463,6 +519,29 @@ export default function QuoteEditorPage() {
 
   function scrollToId(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Kick off tournament setup: create the setup record (token/status default in
+  // the DB) so the admin can copy the link to the customer. No-op if one exists.
+  async function handleStartSetup() {
+    if (!quoteId) return;
+    if (setup) {
+      scrollToId("setup-section");
+      return;
+    }
+    setSaveError(null);
+    setSavedMsg(null);
+    const { data, error } = await untyped
+      .from("tournament_setups")
+      .insert({ quote_id: quoteId })
+      .select("id, token, status, answers, submitted_at")
+      .single();
+    if (error || !data) {
+      setSaveError(error?.message ?? "Could not start setup.");
+      return;
+    }
+    setSetup(data as SetupRow);
+    setSavedMsg("Setup started — copy the link below and send it to the customer.");
   }
 
   // ── Derive line items for pricing engine ───────────────────────────────
@@ -735,9 +814,12 @@ export default function QuoteEditorPage() {
   const nextRevisionNumber = (revisions[0]?.revision_number ?? 0) + 1;
   const currentRevision = revisions.find((r) => r.is_current) ?? revisions[0] ?? null;
 
-  // Where the current stage sits on the linear stepper (-1 for declined —
-  // it's off the linear track, so no step reads as "current").
-  const currentStepIndex = STEPPER_STAGES.indexOf(stage);
+  // Where the current stage sits on the linear stepper. Once a setup record
+  // exists, the "Setup" step is current (prior steps read as complete);
+  // otherwise the pipeline stage drives it. -1 for declined — it's off the
+  // linear track, so no step reads as "current".
+  const currentStepKey = setup ? "setup" : stage;
+  const currentStepIndex = STEPPER.findIndex((s) => s.key === currentStepKey);
 
   // ── Activity timeline ──────────────────────────────────────────────────
   // A single chronological log assembled from data already fetched: the quote
@@ -827,13 +909,17 @@ export default function QuoteEditorPage() {
         if (hasUnsignedContract) void markContractSigned();
         break;
       case "setup":
-        break; // disabled — wiring in progress
+        scrollToId("setup-section");
+        break;
     }
   }
 
   // Per-step interactivity: disabled state + tooltip.
   function stepDisabled(key: StepKey): { disabled: boolean; title?: string } {
-    if (key === "setup") return { disabled: true, title: "wiring in progress" };
+    if (key === "setup")
+      return setup
+        ? { disabled: false }
+        : { disabled: true, title: "Start setup from the Signed stage" };
     if (key === "signed" && !hasAnyContract)
       return { disabled: true, title: "Generate a contract first" };
     return { disabled: false };
@@ -1113,15 +1199,23 @@ export default function QuoteEditorPage() {
                 </button>
               </>
             )}
-            {stage === "signed" && (
-              <button
-                disabled
-                title="wiring in progress"
-                style={{ ...ctaPrimaryDisabledStyle, cursor: "not-allowed" }}
-              >
-                Start setup (coming soon)
-              </button>
-            )}
+            {stage === "signed" &&
+              (!setup ? (
+                <button
+                  onClick={handleStartSetup}
+                  disabled={stageBusy}
+                  style={stageBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+                >
+                  Start setup
+                </button>
+              ) : (
+                <button
+                  onClick={() => scrollToId("setup-section")}
+                  style={ctaSecondaryStyle}
+                >
+                  Setup started — view below
+                </button>
+              ))}
             {stage === "declined" && (
               <button
                 onClick={() => setStageStatus("draft")}
@@ -1607,6 +1701,66 @@ export default function QuoteEditorPage() {
           </button>
         </section>
       )}
+
+      {/* ── Tournament setup (once started) ── */}
+      {!isNew && setup && (() => {
+        const setupUrl = `${window.location.origin}/setup/${setup.token}`;
+        const submitted = setup.status === "submitted" || setup.status === "complete";
+        const statusLine =
+          setup.status === "in_progress"
+            ? "Customer has started filling it out."
+            : submitted
+              ? `Submitted ✓${setup.submitted_at ? ` on ${new Date(setup.submitted_at).toLocaleDateString()}` : ""}`
+              : "Link ready — send it to the customer.";
+        const answerEntries = Object.entries(setup.answers ?? {});
+        return (
+          <section id="setup-section" style={{ ...panelMutedStyle, marginBottom: 20 }}>
+            <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Tournament setup</h2>
+            <p style={{ fontSize: 13, color: inkSoft, margin: "0 0 12px" }}>{statusLine}</p>
+
+            {/* Customer link — copy and send (no auto-email). */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+              <input
+                readOnly
+                value={setupUrl}
+                onFocus={(e) => e.currentTarget.select()}
+                style={{ ...inputStyle, flex: 1, minWidth: 200, fontFamily: "monospace", fontSize: 13 }}
+              />
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(setupUrl);
+                  setSetupLinkCopied(true);
+                  window.setTimeout(() => setSetupLinkCopied(false), 2000);
+                }}
+                style={{ ...ctaSecondaryStyle, fontSize: 12, padding: "5px 12px", flexShrink: 0 }}
+              >
+                {setupLinkCopied ? "Copied!" : "Copy link"}
+              </button>
+            </div>
+
+            {/* Answers review (once submitted). */}
+            <div style={{ borderTop: `1px solid ${rule}`, paddingTop: 14, marginTop: 14 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: inkMuted, margin: "0 0 10px" }}>
+                Customer answers
+              </p>
+              {submitted && answerEntries.length > 0 ? (
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(140px, 220px) 1fr", gap: "8px 16px", fontSize: 14 }}>
+                  {answerEntries.map(([k, v]) => (
+                    <div key={k} style={{ display: "contents" }}>
+                      <span style={{ color: inkMuted, fontWeight: 600, wordBreak: "break-word" }}>{humanizeKey(k)}</span>
+                      <span style={{ color: ink, wordBreak: "break-word" }}>{formatAnswerValue(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ fontSize: 13, color: inkMuted, margin: 0 }}>
+                  Answers will appear here once the customer submits.
+                </p>
+              )}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ── Activity timeline (record — read-only, newest first) ── */}
       {!isNew && activity.length > 0 && (
