@@ -3,6 +3,29 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Regression triage + E2E coverage sweep (#708 → #709)
+
+Ron: "why did regression fail today + sweep changes into E2E." **Failure diagnosis:**
+today's two nightly runs (09:37, 17:35) both PASSED. The last red run was **2026-08-14
+18:07** — flaky partner-picker timeouts in registration.spec.ts (1 fail + 2 flaky, 47
+passed; all three ~20s `locator` timeouts) that cleared on the next two runs with no code
+change. **Environmental (free-tier DB/app cold-start), not a code regression.**
+
+**Coverage sweep (#709, merged):** added 2 deterministic specs for organizer-initiated
+refund (#704) to manage-registration.spec.ts — (1) comp'd paid reg → "Issue refund" +
+remove → withdrawn (no Stripe, since refund_compute returns $0 for a no-payment reg); (2)
+Issue-refund absent on a pending reg. Seeded Rita (paid) + Gary (pending). **Validated via
+a dispatched regression run on the branch: 52 passed, 0 flaky** (both new tests green).
+Swept COVERAGE.md: refund → ✅ no-money slice; added ❌ rows w/ blockers for pricing
+N-events (#697), date-only (#701), Setup (#691/#693/#695), opportunity/quote pipeline
+(#684/#686).
+
+**Still uncovered (tracked in COVERAGE.md):** the real money refund + all checkout/pricing
+math (💳 gated on Stripe-test #255); the entire organizer/admin surface incl. date-only
+create/edit + Setup admin (needs the first organizer-auth spec). Cheapest next non-Stripe
+wins noted there: pricing "N included" in the register basket, and the customer /setup/:token
++ /q/:token token pages (seed a token like invite-accept).
+
 ## 2026-08-15 — Organizer-initiated refunds → TEST (#704: #706 DB + #707 edge/UI)
 
 Ron: "We should be able to initiate the refund without the customer asking." Built the
