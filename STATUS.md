@@ -3,6 +3,22 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Setup rethink MOCKUP: separate process UI + questions manager (#696)
+
+Ron: Setup should be a SEPARATE process + separate UI (integrated w/ the opportunity,
+not buried in the quote editor), and he needs a place to MANAGE the setup questions
+(establish + grow them, like a catalog → the customer form is built from them, not
+hardcoded). Built a clickable mockup web/src/pages/public/SetupProcessMockup.tsx, route
+/mockups/setup, PR #696 (NOT for merge). Two tabs: (1) 'This setup' — standalone Setup
+surface w/ its own progress stepper (Sent→Opened→Submitted→In review→Complete),
+organizer link, grouped answers, '← from the signed opportunity' link; (2) 'Setup
+questions' — catalog manager: sections + questions, each w/ editable label + type
+(short/long/yes-no/select/multi/number) + Required + add/remove/reorder. BROWSER-VERIFIED
+both tabs render + interactive. NEXT: Ron reacts to the mockup → build the real thing:
+a setup_questions catalog table (like service_catalog) driving a DYNAMIC customer form
+(replaces the hardcoded intake), + Setup as its own admin surface (own route, linked
+from the opportunity). This supersedes/reworks the just-shipped hardcoded Setup 3c form.
+
 ## 2026-08-15 — SETUP flow COMPLETE end-to-end (3a+3b+3c) → TEST
 
 Full funnel Stage 3 shipped: Signed quote → Start setup → copy link → customer fills
