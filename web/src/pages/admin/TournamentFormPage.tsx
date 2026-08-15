@@ -121,8 +121,8 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       setLocationId(data.location_id ?? null);
       setLocationName(data.location_name ?? "");
       setLocationAddress(data.location_address ?? "");
-      setStartsAt(isoToLocal(data.starts_at));
-      setEndsAt(isoToLocal(data.ends_at));
+      setStartsAt(isoToDate(data.starts_at));
+      setEndsAt(isoToDate(data.ends_at));
       setRegistrationOpensAt(isoToLocal(data.registration_opens_at));
       setRegistrationClosesAt(isoToLocal(data.registration_closes_at));
       setPricingPattern(data.pricing_pattern);
@@ -188,8 +188,8 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
       return;
     }
 
-    const startsAtIso = toIso(startsAt);
-    const endsAtIso = toIso(endsAt);
+    const startsAtIso = dateToIso(startsAt);
+    const endsAtIso = dateToIso(endsAt);
     if (!startsAtIso || !endsAtIso) {
       setError("Start and end dates are required.");
       return;
@@ -392,18 +392,18 @@ export default function TournamentFormPage({ mode }: { mode: Mode }) {
         </Field>
 
         <FieldRow>
-          <Field label="Starts at" required>
+          <Field label="Start date" required>
             <input
-              type="datetime-local"
+              type="date"
               required
               value={startsAt}
               onChange={(e) => setStartsAt(e.target.value)}
               style={inputStyle}
             />
           </Field>
-          <Field label="Ends at" required>
+          <Field label="End date" required>
             <input
-              type="datetime-local"
+              type="date"
               required
               value={endsAt}
               onChange={(e) => setEndsAt(e.target.value)}
@@ -606,4 +606,21 @@ function isoToLocal(iso: string | null): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Tournament start/end are date-only — events carry their own start times.
+// Store the picked calendar day as local midnight → ISO for the timestamptz
+// column (matches how we treat datetime-local: as local, not UTC).
+function dateToIso(dateValue: string): string | null {
+  if (!dateValue) return null;
+  return new Date(`${dateValue}T00:00:00`).toISOString();
+}
+
+// Inverse of dateToIso: the local calendar day (YYYY-MM-DD) a <input
+// type="date"> expects. Reads back the same day dateToIso stored.
+function isoToDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
