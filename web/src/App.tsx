@@ -62,6 +62,7 @@ import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import ResetPasswordPage from "./pages/public/ResetPasswordPage";
+import TournamentSetupIntakePage from "./pages/public/TournamentSetupIntakePage";
 import AuthConfirmPage from "./pages/public/AuthConfirmPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
@@ -135,6 +136,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/confirm" element={<AuthConfirmPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      {/* Customer tournament-setup intake — public, token-gated, no auth.
+          The token scopes read/write via get_setup_by_token / save_setup_by_token. */}
+      <Route path="/setup/:token" element={<TournamentSetupIntakePage />} />
 
       {/* Public tournament pages — anonymous-readable. RLS already
           restricts to status in (published, closed, completed). */}
