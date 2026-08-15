@@ -3,6 +3,26 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Setup design decision: per-setup question SELECTION (like the quote picker)
+
+Ron (reviewing the mockup via an interactive Artifact — he can't reach the PR preview
+because the magic link redirects to TEST; note the /mockups routes are actually PUBLIC,
+separate login issue): Setup should let us SELECT which questions get sent to each
+organizer — "similar to how we build the quote" (check/uncheck from the catalog);
+based on the contract, some questions may not apply. Updated the Artifact mockup
+(https://claude.ai/code/artifact/d5cf216e-997f-4b1c-b5c0-131c91207ab5, re-published
+same URL) to add a "Questions for this organizer" picker: grouped checklist of catalog
+questions, pre-selected from the contract, uncheck to drop, live count → Send.
+
+REAL-BUILD MODEL (locked concept): a master **setup_questions** catalog (like
+service_catalog; establish+grow) + per-setup a **selected subset** (a selection join,
+like quote line items pick from the catalog) → drives a DYNAMIC customer /setup form
+showing only the selected questions. Supersedes the hardcoded intake (3c). NOTE: the
+in-repo React mockup (#696 /mockups/setup) does NOT yet have the picker — only the
+Artifact does; sync it when building for real. NEXT: Ron finalizes the mockup → build:
+setup_questions catalog + admin manager + per-setup selection UI on the Setup surface +
+dynamic customer form generated from the selected questions.
+
 ## 2026-08-15 — Setup rethink MOCKUP: separate process UI + questions manager (#696)
 
 Ron: Setup should be a SEPARATE process + separate UI (integrated w/ the opportunity,
