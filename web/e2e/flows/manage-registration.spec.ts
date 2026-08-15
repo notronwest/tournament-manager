@@ -9,6 +9,12 @@
  *
  * MONEY-SAFE invariant: none of these paths touch payments/refunds. They only
  * move players, pair/unpair, and flip registration status.
+ *
+ * The "issue refund" describe at the bottom (#704) exercises the organizer-
+ * initiated refund, but only its DETERMINISTIC, no-money slice: the seeded paid
+ * regs are comps with no payment behind them, so the refund preview computes $0
+ * refundable and the edge fn never calls Stripe. The real money refund stays
+ * gated on Stripe test mode (#255).
  */
 import { test, expect, admin, loginAs, SEED } from "../fixtures";
 import type { Page, Locator } from "@playwright/test";
@@ -240,5 +246,49 @@ test.describe("manage registration editor", () => {
     await expect(dialog).toBeHidden();
 
     expect((await regById(before.id)).status).toBe("cancelled");
+  });
+});
+
+// Organizer-initiated refund (#704) — issue a refund from the editor with no
+// withdrawal request. Only the no-money slice is deterministic here (see the
+// file header); the actual Stripe refund is gated on #255.
+test.describe("issue refund (organizer-initiated, #704)", () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAs(page, MR.adminEmail);
+  });
+
+  test("issue refund + remove withdraws a paid reg (no request needed)", async ({ page }) => {
+    const before = await regFor(MR.refundRemove.email, MR.refundRemove.event);
+    expect(before.status).toBe("paid");
+
+    const dialog = await openEditor(page, MR.refundRemove.player);
+    const refund = section(dialog, page, "Issue refund");
+    await refund.getByRole("button", { name: /issue a refund/i }).click();
+
+    // This comp has no payment → $0 refundable, "also remove" on by default, so
+    // the primary button withdraws with no Stripe call. Waiting on it also waits
+    // for the preview to load.
+    const primary = refund.getByRole("button", {
+      name: /withdraw \(no refund\)|issue .*refund/i,
+    });
+    await expect(primary).toBeEnabled();
+    await primary.click();
+
+    // ConfirmModal — the confirm control is labeled "Issue refund".
+    await page.getByRole("button", { name: "Issue refund", exact: true }).click();
+    await expect(dialog).toBeHidden();
+
+    expect((await regById(before.id)).status).toBe("withdrawn");
+  });
+
+  test("issue refund is not offered on a pending (unpaid) registration", async ({ page }) => {
+    const before = await regFor(MR.refundGatingPending.email, MR.refundGatingPending.event);
+    expect(before.status).toBe("pending_payment");
+
+    const dialog = await openEditor(page, MR.refundGatingPending.player);
+    // Refunds are paid-only — no Issue-refund section for an unpaid reg.
+    await expect(dialog.getByRole("heading", { name: "Issue refund" })).toHaveCount(0);
+    // The Withdraw section is still there (a pending reg can be cancelled).
+    await expect(dialog.getByRole("heading", { name: "Withdraw" })).toBeVisible();
   });
 });
