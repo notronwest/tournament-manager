@@ -28,6 +28,8 @@ import {
   headingFontStack,
   ink,
   infoBg,
+  infoBorder,
+  infoFg,
   inkMuted,
   inkSoft,
   inputStyle,
@@ -38,6 +40,8 @@ import {
   ruleSoft,
   sectionH2Style,
   statusPanelStyle,
+  successBg,
+  successFg,
   warnBg,
   warnFg,
 } from "../../../lib/publicTheme";
@@ -85,6 +89,22 @@ const STAGE_NEXT: Record<PipelineStage, string> = {
   signed: "Signed — ready to set up the tournament.",
   declined: "Declined.",
 };
+
+// The clickable stage stepper — the linear opportunity lifecycle. "setup" is a
+// display-only future step (no matching status yet). "declined" is intentionally
+// NOT here (it's an off-ramp, reachable via the next-step actions).
+type StepKey = "new" | "drafting" | "quoted" | "accepted" | "signed" | "setup";
+const STEPPER: { key: StepKey; label: string }[] = [
+  { key: "new", label: "New" },
+  { key: "drafting", label: "Drafting" },
+  { key: "quoted", label: "Quoted" },
+  { key: "accepted", label: "Accepted" },
+  { key: "signed", label: "Signed" },
+  { key: "setup", label: "Setup" },
+];
+// The subset of steps that map to a real pipeline stage, in order — used to
+// place the current stage on the stepper.
+const STEPPER_STAGES: PipelineStage[] = ["new", "drafting", "quoted", "accepted", "signed"];
 
 // Outlined red button — used for the meaningful "Mark declined" action so it
 // reads as consequential without dominating the primary path.
@@ -187,7 +207,10 @@ export default function QuoteEditorPage() {
   const [dirty, setDirty] = useState(false);
 
   // ── Stage header ──────────────────────────────────────────────────────
-  const [showManual, setShowManual] = useState(false);
+  // Read-only summary vs. editable working draft. Existing quotes open
+  // read-only; the "Edit quote" button flips this on. New quotes are always
+  // in the editable state.
+  const [editing, setEditing] = useState(false);
   const [confirmAction, setConfirmAction] = useState<null | "accept" | "decline">(null);
   const [stageBusy, setStageBusy] = useState(false);
 
@@ -257,44 +280,48 @@ export default function QuoteEditorPage() {
       }
       const q = data as QuoteWithAll;
       setQuoteData(q);
-
-        // Populate form from quote
-        setEventName(q.event_name ?? "");
-        setEventDates(q.event_dates ?? "");
-        setNumDays(q.num_days);
-        setNumEvents(q.num_events);
-        setNumEntries(q.num_entries);
-        setMultiEventPlayers(q.multi_event_players);
-        setDistanceMiles(q.distance_miles);
-        setPlatform(q.platform as QuotePlatform);
-        setFirstEventFee(q.first_event_fee_cents / 100);
-        setAdditionalEventFee(q.additional_event_fee_cents / 100);
-        setStatus(q.status);
-
-        // Populate line states from current revision
-        const currentRev = q.quote_revisions.find((r) => r.is_current);
-        if (currentRev) {
-          const sel: Record<string, boolean> = {};
-          const states: Record<string, LineState> = {};
-          for (const li of currentRev.quote_line_items) {
-            sel[li.service_key] = true;
-            states[li.service_key] = {
-              key: li.service_key,
-              label: li.label,
-              qty: li.qty,
-              unitPriceCents: li.unit_price_cents,
-              overridePriceCents: "",
-              passThroughCostCents: li.passthrough_cost_cents,
-            };
-          }
-          setSelected(sel);
-          setLineStates((prev) => ({ ...prev, ...states }));
-        }
-        // Freshly loaded from the DB — no unsaved edits yet.
-        setDirty(false);
+      applyQuoteToForm(q);
     })();
     return () => { cancelled = true; };
   }, [isNew, quoteId, isPlatformAdmin]);
+
+  // Populate the editable form fields + line states from a loaded quote and its
+  // current revision. Reused on initial load and to discard edits on Cancel.
+  function applyQuoteToForm(q: QuoteWithAll) {
+    setEventName(q.event_name ?? "");
+    setEventDates(q.event_dates ?? "");
+    setNumDays(q.num_days);
+    setNumEvents(q.num_events);
+    setNumEntries(q.num_entries);
+    setMultiEventPlayers(q.multi_event_players);
+    setDistanceMiles(q.distance_miles);
+    setPlatform(q.platform as QuotePlatform);
+    setFirstEventFee(q.first_event_fee_cents / 100);
+    setAdditionalEventFee(q.additional_event_fee_cents / 100);
+    setStatus(q.status);
+
+    // Populate line states from current revision
+    const currentRev = q.quote_revisions.find((r) => r.is_current);
+    if (currentRev) {
+      const sel: Record<string, boolean> = {};
+      const states: Record<string, LineState> = {};
+      for (const li of currentRev.quote_line_items) {
+        sel[li.service_key] = true;
+        states[li.service_key] = {
+          key: li.service_key,
+          label: li.label,
+          qty: li.qty,
+          unitPriceCents: li.unit_price_cents,
+          overridePriceCents: "",
+          passThroughCostCents: li.passthrough_cost_cents,
+        };
+      }
+      setSelected(sel);
+      setLineStates((prev) => ({ ...prev, ...states }));
+    }
+    // Freshly loaded from the DB — no unsaved edits yet.
+    setDirty(false);
+  }
 
   // Load contracts for this quote
   useEffect(() => {
@@ -704,7 +731,123 @@ export default function QuoteEditorPage() {
   const customerRevisionExists = revisions.some((r) => r.created_by === "customer");
   const latestContract = contracts[0] ?? null;
   const hasUnsignedContract = !!latestContract && latestContract.status !== "signed_offline";
+  const hasAnyContract = contracts.length > 0;
   const nextRevisionNumber = (revisions[0]?.revision_number ?? 0) + 1;
+  const currentRevision = revisions.find((r) => r.is_current) ?? revisions[0] ?? null;
+
+  // Where the current stage sits on the linear stepper (-1 for declined —
+  // it's off the linear track, so no step reads as "current").
+  const currentStepIndex = STEPPER_STAGES.indexOf(stage);
+
+  // ── Activity timeline ──────────────────────────────────────────────────
+  // A single chronological log assembled from data already fetched: the quote
+  // itself, each revision, the customer share link, and each contract. Sorted
+  // newest-first. Read-only.
+  type Activity = {
+    key: string;
+    at: string;
+    label: string;
+    detail?: string;
+    who?: string;
+    dot: string;
+    rev?: RevisionWithLines;
+  };
+  const activity: Activity[] = [];
+  if (quoteData) {
+    activity.push({
+      key: "created",
+      at: quoteData.created_at,
+      label: "Opportunity created",
+      who: quoteData.source === "public" ? "Customer" : "You",
+      dot: courtBlue,
+    });
+  }
+  for (const rev of revisions) {
+    const who = rev.created_by === "admin" ? "You" : "Customer";
+    activity.push({
+      key: `rev-${rev.id}`,
+      at: rev.created_at,
+      label:
+        rev.revision_number === 1
+          ? "Quote drafted — revision 1"
+          : `Quote updated — revision ${rev.revision_number}`,
+      detail: formatDollars(rev.subtotal_cents),
+      who,
+      dot: inkMuted,
+      rev,
+    });
+  }
+  if (shareToken) {
+    activity.push({
+      key: `share-${shareToken.id}`,
+      at: shareToken.created_at,
+      label: "Sent to customer",
+      detail: "Share link generated",
+      dot: STAGE_COLORS.quoted,
+    });
+  }
+  for (const c of contracts) {
+    activity.push({
+      key: `contract-${c.id}`,
+      at: c.generated_at,
+      label: "Contract generated",
+      detail: `Terms ${c.terms_version}`,
+      dot: courtGreen,
+    });
+    if (c.status === "signed_offline") {
+      activity.push({
+        key: `signed-${c.id}`,
+        at: c.generated_at,
+        label: "Signed agreement",
+        detail: "Marked signed offline",
+        dot: STAGE_COLORS.signed,
+      });
+    }
+  }
+  activity.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+  // Click a stepper step → move the opportunity via the real operations.
+  function handleStepClick(key: StepKey) {
+    if (stageBusy) return;
+    switch (key) {
+      case "new":
+        void setStageStatus("submitted");
+        break;
+      case "drafting":
+        void setStageStatus("draft");
+        break;
+      case "quoted":
+        void setStageStatus("quoted");
+        break;
+      case "accepted":
+        setConfirmAction("accept");
+        break;
+      case "signed":
+        // Only meaningful when a contract exists and isn't signed yet.
+        if (hasUnsignedContract) void markContractSigned();
+        break;
+      case "setup":
+        break; // disabled — wiring in progress
+    }
+  }
+
+  // Per-step interactivity: disabled state + tooltip.
+  function stepDisabled(key: StepKey): { disabled: boolean; title?: string } {
+    if (key === "setup") return { disabled: true, title: "wiring in progress" };
+    if (key === "signed" && !hasAnyContract)
+      return { disabled: true, title: "Generate a contract first" };
+    return { disabled: false };
+  }
+
+  // Human-readable list of the currently-selected services, for the read-only
+  // summary. Mirrors the on-site pct-mode label used in the editor.
+  const selectedServiceNames = catalog
+    .filter((s) => selected[s.key])
+    .map((s) =>
+      s.key === "onsite_mgmt_day" && onsiteMgmtMode === "pct_revenue"
+        ? `${s.name} (${onsitePct}% of revenue)`
+        : s.name,
+    );
 
   // Revision viewer
   if (viewingRevision) {
@@ -787,31 +930,116 @@ export default function QuoteEditorPage() {
         <div style={{ ...statusPanelStyle("success"), marginBottom: 16 }}>{savedMsg}</div>
       )}
 
-      {/* ── Stage + next step (existing quotes) ── */}
-      {!isNew ? (
-        <section style={{ ...panelMutedStyle, marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <span
-              style={{
-                display: "inline-block",
-                background: STAGE_COLORS[stage],
-                color: "#fff",
-                fontFamily: headingFontStack,
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                padding: "4px 12px",
-                borderRadius: 4,
-              }}
-            >
-              {STAGE_LABELS[stage]}
-            </span>
-            <span style={{ fontSize: 14, color: inkSoft, fontWeight: 500 }}>{STAGE_NEXT[stage]}</span>
+      {/* ── Stage stepper (existing quotes) — the primary, clickable control ── */}
+      {!isNew && (
+        <section style={{ ...panelMutedStyle, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "flex-start" }}>
+            {STEPPER.map((step, i) => {
+              const isCurrent = currentStepIndex >= 0 && i === currentStepIndex;
+              const isDone = currentStepIndex >= 0 && i < currentStepIndex;
+              const lineFilled = currentStepIndex >= 0 && i <= currentStepIndex;
+              const { disabled, title } = stepDisabled(step.key);
+              const circleBg = isCurrent ? courtBlue : isDone ? courtGreen : "#fff";
+              const circleFg = isCurrent || isDone ? "#fff" : inkMuted;
+              const circleBorder = isCurrent ? courtBlue : isDone ? courtGreen : rule;
+              return (
+                <div
+                  key={step.key}
+                  style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", minWidth: 0 }}
+                >
+                  {/* connector line into this step from the previous one */}
+                  {i > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 15,
+                        left: "-50%",
+                        right: "50%",
+                        height: 2,
+                        background: lineFilled ? courtGreen : rule,
+                        zIndex: 0,
+                      }}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleStepClick(step.key)}
+                    disabled={disabled || stageBusy}
+                    title={title}
+                    aria-current={isCurrent ? "step" : undefined}
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      width: 32,
+                      height: 32,
+                      borderRadius: "50%",
+                      border: `2px solid ${circleBorder}`,
+                      background: circleBg,
+                      color: circleFg,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      fontFamily: headingFontStack,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: 0,
+                      cursor: disabled || stageBusy ? "not-allowed" : "pointer",
+                      opacity: disabled ? 0.55 : 1,
+                    }}
+                  >
+                    {isDone ? "✓" : i + 1}
+                  </button>
+                  <span
+                    style={{
+                      marginTop: 6,
+                      fontSize: 11,
+                      fontWeight: isCurrent ? 700 : 600,
+                      color: isCurrent ? courtBlue : isDone ? ink : inkMuted,
+                      textAlign: "center",
+                      fontFamily: bodyFontStack,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
+          <p style={{ fontSize: 12, color: inkMuted, margin: "14px 0 0", textAlign: "center" }}>
+            {stage === "declined"
+              ? "This opportunity is declined — click a step to reopen it."
+              : "Click a step to move this opportunity."}
+          </p>
+        </section>
+      )}
 
-          {/* Primary action(s) for this stage */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
+      {/* ── Next-step card (existing quotes) — same actions the page already had ── */}
+      {!isNew && (
+        <section
+          style={{
+            background: stage === "signed" ? successBg : infoBg,
+            border: `1px solid ${stage === "signed" ? courtGreen : infoBorder}`,
+            borderRadius: 10,
+            padding: 18,
+            marginBottom: 20,
+          }}
+        >
+          <h2
+            style={{
+              ...sectionH2Style,
+              marginTop: 0,
+              marginBottom: 4,
+              fontSize: 15,
+              color: stage === "signed" ? successFg : infoFg,
+            }}
+          >
+            Next step · {STAGE_LABELS[stage]}
+          </h2>
+          <p style={{ fontSize: 14, color: inkSoft, margin: "0 0 14px", lineHeight: 1.5 }}>
+            {STAGE_NEXT[stage]}
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {stage === "new" && (
               <button
                 onClick={() => setStageStatus("draft")}
@@ -876,6 +1104,13 @@ export default function QuoteEditorPage() {
                     Mark signed
                   </button>
                 )}
+                <button
+                  onClick={() => setConfirmAction("decline")}
+                  disabled={stageBusy}
+                  style={dangerOutlineBtnStyle}
+                >
+                  Mark declined
+                </button>
               </>
             )}
             {stage === "signed" && (
@@ -887,53 +1122,21 @@ export default function QuoteEditorPage() {
                 Start setup (coming soon)
               </button>
             )}
-          </div>
-
-          {/* Manual override — secondary, opt-in */}
-          <div style={{ marginTop: 14, borderTop: `1px solid ${rule}`, paddingTop: 12 }}>
-            <button
-              onClick={() => setShowManual((v) => !v)}
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 600,
-                color: inkMuted,
-                fontFamily: bodyFontStack,
-              }}
-            >
-              Change stage manually {showManual ? "▴" : "▾"}
-            </button>
-            {showManual && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                {STATUS_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setStageStatus(opt.value)}
-                    disabled={stageBusy}
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: 20,
-                      border: `1px solid ${status === opt.value ? ink : rule}`,
-                      background: status === opt.value ? ink : "transparent",
-                      color: status === opt.value ? "#fff" : inkSoft,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: stageBusy ? "not-allowed" : "pointer",
-                      fontFamily: bodyFontStack,
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+            {stage === "declined" && (
+              <button
+                onClick={() => setStageStatus("draft")}
+                disabled={stageBusy}
+                style={stageBusy ? ctaPrimaryDisabledStyle : ctaSecondaryStyle}
+              >
+                Reopen — back to drafting
+              </button>
             )}
           </div>
         </section>
-      ) : (
-        /* New quote — status is local until Create persists it. */
+      )}
+
+      {/* New quote — status is local until Create persists it. */}
+      {isNew && (
         <div style={{ ...panelMutedStyle, marginBottom: 20 }}>
           <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Status</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -960,68 +1163,19 @@ export default function QuoteEditorPage() {
         </div>
       )}
 
-      {/* ── Revision history (record — kept near the top) ── */}
-      {!isNew && revisions.length > 0 && (
-        <section id="history-section" style={{ ...panelMutedStyle, marginBottom: 20 }}>
-          <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Revision history</h2>
-          <p style={{ fontSize: 12, color: inkMuted, margin: "0 0 12px" }}>
-            The record of the back-and-forth. Read-only — newest first.
-          </p>
-          <div style={{ border: `1px solid ${rule}`, borderRadius: 8, overflow: "hidden" }}>
-            {revisions.map((rev, i) => {
-              const who = rev.created_by === "customer" ? "Customer" : "You";
-              return (
-                <div
-                  key={rev.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    padding: "10px 14px",
-                    borderTop: i > 0 ? `1px solid ${ruleSoft}` : "none",
-                    background: rev.is_current ? infoBg : "#fff",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-                      #{rev.revision_number}
-                      {rev.is_current && (
-                        <span style={{ marginLeft: 6, fontSize: 11, color: courtGreen }}>current</span>
-                      )}
-                    </span>
-                    <span style={{ fontSize: 12, color: inkMuted, marginLeft: 10 }}>
-                      {who} · {new Date(rev.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: ink }}>
-                      {formatDollars(rev.subtotal_cents)}
-                    </span>
-                    <button
-                      onClick={() => setViewingRevision(rev)}
-                      style={{ ...breadcrumbLinkStyle, background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13 }}
-                    >
-                      View
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+      {/* ── Quote body: read-only summary OR the editable working draft ── */}
+      {isNew || editing ? (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <h2 style={{ ...sectionH2Style, margin: 0, fontSize: 16 }}>
+              {isNew ? "New quote" : "Editing"}
+            </h2>
+            <p style={{ fontSize: 12, color: inkMuted, margin: "2px 0 0" }}>
+              {isNew
+                ? "Fill in the details, then create the quote."
+                : "Saving records a new revision."}
+            </p>
           </div>
-        </section>
-      )}
-
-      {/* ── Working-draft banner: everything below here is editable ── */}
-      <div style={{ marginBottom: 12 }}>
-        <h2 style={{ ...sectionH2Style, margin: 0, fontSize: 16 }}>
-          {isNew ? "New quote" : "Working draft"}
-        </h2>
-        <p style={{ fontSize: 12, color: inkMuted, margin: "2px 0 0" }}>
-          Edit below, then save to record a new revision.
-        </p>
-      </div>
 
       {/* ── Event basics ── */}
       <section style={{ ...panelStyle, marginBottom: 20 }}>
@@ -1250,6 +1404,92 @@ export default function QuoteEditorPage() {
         })}
       </section>
 
+          {/* Edit controls for an existing quote (new quotes use the bottom Create button) */}
+          {!isNew && (
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 20 }}>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={saving ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+              >
+                {saving ? "Saving…" : `Save as revision ${nextRevisionNumber}`}
+              </button>
+              <button
+                onClick={() => {
+                  if (quoteData) applyQuoteToForm(quoteData);
+                  setEditing(false);
+                }}
+                style={ctaSecondaryStyle}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        /* ── Read-only quote summary ── */
+        <section style={{ ...panelStyle, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+            <div>
+              <h2 style={{ ...sectionH2Style, margin: 0, fontSize: 16 }}>Current quote</h2>
+              <p style={{ fontSize: 12, color: inkMuted, margin: "2px 0 0" }}>
+                {currentRevision ? `Revision ${currentRevision.revision_number}` : "No saved revision yet"}
+              </p>
+            </div>
+            <button onClick={() => setEditing(true)} style={ctaSecondaryStyle}>
+              Edit quote
+            </button>
+          </div>
+
+          {/* Event details */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "12px 20px", marginBottom: 16 }}>
+            <SummaryPair label="Event name" value={eventName || "—"} />
+            <SummaryPair label="Dates" value={eventDates || "—"} />
+            <SummaryPair label="Days" value={String(numDays)} />
+            <SummaryPair label="Divisions" value={String(numEvents)} />
+            <SummaryPair label="Expected players" value={String(numEntries)} />
+            <SummaryPair label="Players in 2+ events" value={String(multiEventPlayers)} />
+            <SummaryPair label="Distance" value={`${distanceMiles} mi`} />
+            <SummaryPair label="Platform" value={platform === "bertanderne" ? "bert & erne" : "PickleballBrackets"} />
+            <SummaryPair label="First event fee" value={formatDollars(Math.round(firstEventFee * 100))} />
+            <SummaryPair label="Additional event fee" value={formatDollars(Math.round(additionalEventFee * 100))} />
+          </div>
+
+          {/* Selected services */}
+          <div style={{ borderTop: `1px solid ${rule}`, paddingTop: 14, marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: inkMuted, margin: "0 0 8px" }}>
+              Selected services
+            </p>
+            {selectedServiceNames.length === 0 ? (
+              <p style={{ fontSize: 13, color: inkMuted, margin: 0 }}>No services selected.</p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, color: ink, lineHeight: 1.7 }}>
+                {selectedServiceNames.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Estimated total */}
+          <div style={{ borderTop: `1px solid ${rule}`, paddingTop: 14, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: inkMuted }}>
+                Estimated quote total
+              </span>
+              <div style={{ fontSize: 26, fontWeight: 700, color: ink, fontFamily: headingFontStack, lineHeight: 1.1 }}>
+                {formatDollars(wmpcServiceCostCents(quote.wmpcTotalCents, quote.passthroughTotalCents))}
+              </div>
+            </div>
+            {quote.travel.flagged && (
+              <span style={{ fontSize: 12, color: inkMuted, paddingBottom: 4 }}>
+                Includes travel est. {formatDollars(quote.travel.totalCents)}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* ── Share link ── */}
       {!isNew && shareTokenLoaded && (
         <section id="share-section" style={{ ...panelMutedStyle, marginBottom: 20 }}>
@@ -1368,17 +1608,70 @@ export default function QuoteEditorPage() {
         </section>
       )}
 
-      {/* ── Save button ── */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={saving ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
-        >
-          {saving ? "Saving…" : isNew ? "Create quote" : "Save revision"}
-        </button>
-        <Link to="/admin/quotes" style={ctaSecondaryStyle}>Cancel</Link>
-      </div>
+      {/* ── Activity timeline (record — read-only, newest first) ── */}
+      {!isNew && activity.length > 0 && (
+        <section id="history-section" style={{ ...panelMutedStyle, marginBottom: 20 }}>
+          <h2 style={{ ...sectionH2Style, marginTop: 0, fontSize: 14 }}>Activity</h2>
+          <p style={{ fontSize: 12, color: inkMuted, margin: "0 0 16px" }}>
+            The record of this opportunity — newest first.
+          </p>
+          <div style={{ position: "relative", paddingLeft: 22 }}>
+            {/* vertical rail */}
+            <div style={{ position: "absolute", left: 5, top: 4, bottom: 4, width: 2, background: rule }} />
+            {activity.map((a) => (
+              <div key={a.key} style={{ position: "relative", paddingBottom: 16 }}>
+                <div
+                  style={{
+                    position: "absolute",
+                    left: -22,
+                    top: 3,
+                    width: 12,
+                    height: 12,
+                    borderRadius: "50%",
+                    background: a.dot,
+                    border: `2px solid #fff`,
+                    boxShadow: `0 0 0 1px ${rule}`,
+                  }}
+                />
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: ink }}>{a.label}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {a.detail && (
+                      <span style={{ fontSize: 13, color: inkSoft }}>{a.detail}</span>
+                    )}
+                    {a.rev && (
+                      <button
+                        onClick={() => setViewingRevision(a.rev!)}
+                        style={{ ...breadcrumbLinkStyle, background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 13 }}
+                      >
+                        View
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <span style={{ fontSize: 12, color: inkMuted }}>
+                  {new Date(a.at).toLocaleString()}
+                  {a.who ? ` · ${a.who}` : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Create button (new quotes only — existing quotes save via Edit) ── */}
+      {isNew && (
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={saving ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+          >
+            {saving ? "Saving…" : "Create quote"}
+          </button>
+          <Link to="/admin/quotes" style={ctaSecondaryStyle}>Cancel</Link>
+        </div>
+      )}
 
       {/* ── Sticky bottom: unsaved-changes bar + totals ── */}
       <div
@@ -1480,6 +1773,19 @@ export default function QuoteEditorPage() {
         />
       )}
     </main>
+  );
+}
+
+function SummaryPair({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: inkMuted, fontFamily: bodyFontStack }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 14, color: ink, fontFamily: bodyFontStack, wordBreak: "break-word" }}>
+        {value}
+      </span>
+    </div>
   );
 }
 
