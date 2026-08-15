@@ -3,6 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — SETUP flow COMPLETE end-to-end (3a+3b+3c) → TEST
+
+Full funnel Stage 3 shipped: Signed quote → Start setup → copy link → customer fills
+/setup/:token → answers reviewed on the quote. All merged to TEST, no open PRs.
+- 3a #691: tournament_setups migration (APPLIED green on TEST) + token RPCs.
+- 3b #693: admin Start-setup (creates the setup, lights up Setup stepper stage) +
+  copyable customer link + read-only answers review panel on QuoteEditorPage.
+- 3c #695: customer /setup/:token intake (the 5-step wizard w/ DUPR/levels/MoneyBall)
+  wired to get_setup_by_token (load/prefill) + save_setup_by_token (submit + save-
+  later). BROWSER-VERIFIED the load + invalid-link path against TEST. Caught+fixed a
+  lost-`this` crash (supabase.rpc must be bound) that typecheck/build/lint all MISSED —
+  reminder: browser-verify public pages.
+Client uses untyped supabase cast (tournament_setups + RPCs not in generated types;
+regenerate types someday to drop the casts). Current quote fits: move to Signed →
+Start setup. NOT verified: admin Start-setup + the happy-path form load (both need a
+platform-admin session / real token — Ron click-through on TEST). REMAINING funnel:
+customer-side Accept/Decline on the quote page (token RPC); feed submitted setup
+answers → tournament creation (future). Whole session's TEST pile (quote editor
+redesign #689, opportunities pipeline #684, Setup #691/#693/#695, etc.) is unpromoted
+— a PROD batch is due when Ron's verified.
+
 ## 2026-08-15 — Building SETUP (funnel Stage 3). Ron: "build the Setup" + current quote fit
 
 Ron approved: copy-link (no auto-email) + full flow. Building in 3 parts:
