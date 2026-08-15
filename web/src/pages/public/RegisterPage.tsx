@@ -672,6 +672,7 @@ export default function RegisterPage() {
     ? computeLineItems(basketEvents, {
         firstEventFeeCents: activeTier.first_event_fee_cents,
         additionalEventFeeCents: activeTier.additional_event_fee_cents,
+        firstEventsIncluded: activeTier.first_events_included ?? 1,
       })
     : { items: [] as LineItem[], totalCents: 0 };
   const lineItemByEventId = new Map(

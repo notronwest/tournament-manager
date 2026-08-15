@@ -19,8 +19,14 @@
 import type { Database } from "../types/supabase";
 import { formatUsd } from "./pricing";
 
+// first_events_included was added in 20260815130000; extend the generated Row
+// locally until types are regenerated (never hand-edit types/supabase.ts).
+// Optional so DB selects using the not-yet-regenerated Row type still assign
+// cleanly; every consumer falls back to 1 when it's absent.
 export type PricingTier =
-  Database["public"]["Tables"]["tournament_pricing_tiers"]["Row"];
+  Database["public"]["Tables"]["tournament_pricing_tiers"]["Row"] & {
+    first_events_included?: number;
+  };
 
 export type PricingPattern =
   Database["public"]["Enums"]["pricing_pattern"];
@@ -205,6 +211,9 @@ export type TierDraft = {
   endsOn: string;
   firstEventFeeDollars: string;
   additionalEventFeeDollars: string;
+  // How many events the entry fee includes (>= 1). 1 = entry includes the 1st
+  // event only (the default).
+  firstEventsIncluded: number;
 };
 
 // A DB-ready tier row for the replace_pricing_tiers RPC.
@@ -214,6 +223,7 @@ export type TierInsert = {
   ends_at: string | null;
   first_event_fee_cents: number;
   additional_event_fee_cents: number;
+  first_events_included: number;
 };
 
 // How many tiers each preset pattern uses, and their fixed labels.
@@ -241,6 +251,7 @@ export function makeEmptyTierDraft(label = ""): TierDraft {
     endsOn: "",
     firstEventFeeDollars: "0",
     additionalEventFeeDollars: "0",
+    firstEventsIncluded: 1,
   };
 }
 
@@ -275,6 +286,7 @@ export function defaultTiersForPattern(
       endsOn: i === labels.length - 1 ? "" : (prev?.endsOn ?? ""),
       firstEventFeeDollars: prev?.firstEventFeeDollars ?? "0",
       additionalEventFeeDollars: prev?.additionalEventFeeDollars ?? "0",
+      firstEventsIncluded: prev?.firstEventsIncluded ?? 1,
     };
   });
 }
@@ -288,6 +300,7 @@ export function tiersToDrafts(tiers: PricingTier[]): TierDraft[] {
     endsOn: endsAtIsoToThroughDate(t.ends_at),
     firstEventFeeDollars: (t.first_event_fee_cents / 100).toFixed(2),
     additionalEventFeeDollars: (t.additional_event_fee_cents / 100).toFixed(2),
+    firstEventsIncluded: Math.max(1, t.first_events_included ?? 1),
   }));
 }
 
@@ -330,10 +343,11 @@ export function tierDraftsToInserts(
     const additional = Math.round(
       parseFloat(t.additionalEventFeeDollars || "0") * 100,
     );
-    return { t, i, first, additional };
+    const included = Math.round(Number(t.firstEventsIncluded ?? 1));
+    return { t, i, first, additional, included };
   });
 
-  for (const { t, i, first, additional } of parsed) {
+  for (const { t, i, first, additional, included } of parsed) {
     const label = t.label.trim() || `Tier ${i + 1}`;
     if (Number.isNaN(first) || first < 0) {
       return {
@@ -345,6 +359,12 @@ export function tierDraftsToInserts(
       return {
         rows: null,
         error: `${label}: additional-event fee must be a non-negative number.`,
+      };
+    }
+    if (Number.isNaN(included) || included < 1) {
+      return {
+        rows: null,
+        error: `${label}: events included in the entry fee must be a whole number ≥ 1.`,
       };
     }
     // Every tier except the last needs a "through" date to define
@@ -368,7 +388,7 @@ export function tierDraftsToInserts(
   // tier[i+1].starts_at = tier[i].ends_at. First start + last end null.
   const rows: TierInsert[] = [];
   let prevEnd: string | null = null;
-  for (const { t, i, first, additional } of parsed) {
+  for (const { t, i, first, additional, included } of parsed) {
     const isLast = i === tiers.length - 1;
     const endsAt = isLast ? null : throughDateToEndsAtIso(t.endsOn);
     if (!isLast && !endsAt) {
@@ -383,6 +403,7 @@ export function tierDraftsToInserts(
       ends_at: endsAt,
       first_event_fee_cents: first,
       additional_event_fee_cents: additional,
+      first_events_included: included,
     });
     prevEnd = endsAt;
   }

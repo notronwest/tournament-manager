@@ -521,6 +521,7 @@ function RegisterForEventModal({
     return {
       firstEventFeeCents: tier?.first_event_fee_cents ?? 0,
       additionalEventFeeCents: tier?.additional_event_fee_cents ?? 0,
+      firstEventsIncluded: tier?.first_events_included ?? 1,
     };
   }, [tournament]);
 

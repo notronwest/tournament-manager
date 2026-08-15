@@ -404,6 +404,7 @@ export default function CheckoutPage() {
         {
           firstEventFeeCents: activeTier.first_event_fee_cents,
           additionalEventFeeCents: activeTier.additional_event_fee_cents,
+          firstEventsIncluded: activeTier.first_events_included ?? 1,
         },
         alreadyHasPaidEvent,
       )

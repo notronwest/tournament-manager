@@ -32,6 +32,10 @@ import type { Database } from "../types/supabase";
 export type PricingRates = {
   firstEventFeeCents: number;
   additionalEventFeeCents: number;
+  // How many events the entry fee covers. 1 = the entry fee includes only the
+  // "first" event (the historical behavior). N > 1 → the next N-1 picks are
+  // $0 "included"; picks beyond the Nth get the additional rate.
+  firstEventsIncluded: number;
 };
 type Event = Pick<
   Database["public"]["Tables"]["events"]["Row"],
@@ -69,7 +73,7 @@ export type LineItem = {
   // Which tier was charged. "override" for per-event-fee events,
   // "first" for the priciest non-override pick, "additional" for
   // every other non-override pick.
-  tier: "override" | "first" | "additional";
+  tier: "override" | "first" | "included" | "additional";
 };
 
 /**
@@ -111,6 +115,10 @@ export function computeLineItems(
 
   // Classify each event's tier by where it fell in the sort.
   // Overrides keep their own "override" label regardless.
+  // How many events the entry fee covers (min 1). The top pick is the "first"
+  // event; the next (included-1) picks are $0 "included"; the rest "additional".
+  // MUST mirror compute_checkout_total's rn<=first_events_included rule.
+  const included = Math.max(1, rates.firstEventsIncluded ?? 1);
   const tierByEventId = new Map<string, LineItem["tier"]>();
   sortedDesc.forEach((t, i) => {
     const hasOverride = t.ev.event_fee_cents > 0;
@@ -118,6 +126,8 @@ export function computeLineItems(
       tierByEventId.set(t.ev.id, "override");
     } else if (i === 0 && !alreadyHasPaidEvent) {
       tierByEventId.set(t.ev.id, "first");
+    } else if (i < included && !alreadyHasPaidEvent) {
+      tierByEventId.set(t.ev.id, "included");
     } else {
       tierByEventId.set(t.ev.id, "additional");
     }
@@ -130,9 +140,11 @@ export function computeLineItems(
     const cents =
       tier === "first"
         ? tiers.fullPrice
-        : tier === "additional"
-          ? tiers.additionalPrice
-          : ev.event_fee_cents; // override
+        : tier === "included"
+          ? 0
+          : tier === "additional"
+            ? tiers.additionalPrice
+            : ev.event_fee_cents; // override
     return { event: ev, cents, tier };
   });
 

@@ -217,7 +217,13 @@ export function PricingTiersEditor({
 
               <div style={feeGridStyle}>
                 <label style={feeFieldStyle}>
-                  <span>Entry fee — includes 1st event (USD)</span>
+                  <span>
+                    Entry fee — includes{" "}
+                    {tier.firstEventsIncluded > 1
+                      ? `first ${tier.firstEventsIncluded} events`
+                      : "1st event"}{" "}
+                    (USD)
+                  </span>
                   <input
                     type="number"
                     min="0"
@@ -227,6 +233,25 @@ export function PricingTiersEditor({
                     onChange={(e) =>
                       updateTier(tier.key, {
                         firstEventFeeDollars: e.target.value,
+                      })
+                    }
+                    style={locked ? { ...feeInputStyle, ...lockedInputStyle } : feeInputStyle}
+                  />
+                </label>
+                <label style={feeFieldStyle}>
+                  <span>Events included in the entry fee</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={tier.firstEventsIncluded}
+                    readOnly={locked}
+                    onChange={(e) =>
+                      updateTier(tier.key, {
+                        firstEventsIncluded: Math.max(
+                          1,
+                          Math.round(Number(e.target.value) || 1),
+                        ),
                       })
                     }
                     style={locked ? { ...feeInputStyle, ...lockedInputStyle } : feeInputStyle}
@@ -299,6 +324,9 @@ function PreviewMath({
       {tiers.map((t, i) => {
         const first = Math.round(dollars(t.firstEventFeeDollars) * 100);
         const add = Math.round(dollars(t.additionalEventFeeDollars) * 100);
+        const included = Math.max(1, Math.round(Number(t.firstEventsIncluded ?? 1)));
+        // Entry covers the first `included` events; events beyond it get `add`.
+        const priceFor = (k: number) => first + add * Math.max(0, k - included);
         return (
           <div key={t.key}>
             {!isSingle && (
@@ -306,17 +334,25 @@ function PreviewMath({
                 {t.label.trim() || `Tier ${i + 1}`}:
               </div>
             )}
+            {included > 1 && (
+              <div style={{ ...previewRowStyle, color: "#166534" }}>
+                <span>Entry includes first {included} events</span>
+                <span>{formatUsd(first)}</span>
+              </div>
+            )}
+            {included <= 1 && (
+              <div style={previewRowStyle}>
+                <span>Entry (1 event)</span>
+                <span>{formatUsd(first)}</span>
+              </div>
+            )}
             <div style={previewRowStyle}>
-              <span>Entry (1 event)</span>
-              <span>{formatUsd(first)}</span>
+              <span>{included + 1} events</span>
+              <span>{formatUsd(priceFor(included + 1))}</span>
             </div>
             <div style={previewRowStyle}>
-              <span>Entry + 1 extra event</span>
-              <span>{formatUsd(first + add)}</span>
-            </div>
-            <div style={previewRowStyle}>
-              <span>Entry + 2 extra events</span>
-              <span>{formatUsd(first + add * 2)}</span>
+              <span>{included + 2} events</span>
+              <span>{formatUsd(priceFor(included + 2))}</span>
             </div>
           </div>
         );
