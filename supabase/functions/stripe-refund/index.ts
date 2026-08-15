@@ -17,6 +17,16 @@
 //     'withdrawn', no refund. Either stamps withdrawal_decided_at +
 //     withdrawal_decision.
 //
+//   mode: "admin_refund" — an ORGANIZER issues a refund with NO withdrawal
+//     request (#704). { eventRegistrationId, amountCents?, removeFromEvent?,
+//     reason?, dryRun }. Authorized as an ADMIN of the reg's tournament org.
+//     Works on a currently-paid reg. The amount DEFAULTS to the tournament's
+//     cancellation policy (refund_compute) and is overridable via amountCents,
+//     capped at net-paid minus already-refunded. removeFromEvent (default
+//     true) → also withdraw + unpair (status 'refunded'/'withdrawn');
+//     removeFromEvent:false → keep the player registered (status stays 'paid',
+//     the refund recorded only via refunded_cents).
+//
 // Refund mechanics (Connect DIRECT charges): the charge lives on the
 // organizer's connected account, so the refund is created scoped to that
 // account ({ stripeAccount: connected_acct }) — refund_compute returns it.
@@ -51,10 +61,11 @@ function json(body: unknown, status = 200) {
 type Body = {
   eventRegistrationId?: string;
   dryRun?: boolean;
-  mode?: "self" | "resolve";
+  mode?: "self" | "resolve" | "admin_refund";
   decision?: "approve" | "deny"; // resolve only
-  amountCents?: number; // resolve + approve only
-  reason?: string; // self + manual_required (player's stated reason)
+  amountCents?: number; // resolve + approve + admin_refund (override) only
+  removeFromEvent?: boolean; // admin_refund only — also withdraw the player
+  reason?: string; // self + manual_required (player's stated reason) / admin note
 };
 
 type RefundComputeRow = {
@@ -101,6 +112,7 @@ Deno.serve(async (req: Request) => {
       mode = "self",
       decision,
       amountCents,
+      removeFromEvent,
       reason,
     } = (await req.json()) as Body;
     if (!eventRegistrationId) return json({ error: "missing_event_registration_id" }, 400);
@@ -109,12 +121,13 @@ Deno.serve(async (req: Request) => {
     const { data: reg } = await admin
       .from("event_registrations")
       .select(
-        "id, player_id, event_id, status, partner_registration_id, withdrawal_requested_at, withdrawal_decided_at",
+        "id, player_id, event_id, status, partner_registration_id, withdrawal_requested_at, withdrawal_decided_at, refunded_cents",
       )
       .eq("id", eventRegistrationId)
       .is("deleted_at", null)
       .maybeSingle();
     if (!reg) return json({ error: "registration_not_found" }, 404);
+    const alreadyRefunded = Math.max(0, Number(reg.refunded_cents ?? 0));
 
     // ── Authoritative money context (server-side, read-only) ────────────
     const { data: rows, error: rpcErr } = await admin.rpc("refund_compute", {
@@ -221,7 +234,12 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
         if (pay && typeof pay.amount_cents === "number") paymentNet = pay.amount_cents;
       }
-      const maxRefundable = Math.max(0, Math.min(r.paid_cents, paymentNet));
+      // Subtract anything already refunded (e.g. a prior keep-registered
+      // organizer refund) so we never ask Stripe for more than remains.
+      const maxRefundable = Math.max(
+        0,
+        Math.min(r.paid_cents, paymentNet) - alreadyRefunded,
+      );
 
       // Approve amount: integer, 0 ≤ amount ≤ maxRefundable. Deny → 0.
       let amount = 0;
@@ -272,6 +290,12 @@ Deno.serve(async (req: Request) => {
         } catch (e: any) {
           return json({ error: "refund_failed", detail: String(e?.message ?? e) }, 502);
         }
+        // Keep the running refunded total accurate (guarded on the snapshot).
+        await admin
+          .from("event_registrations")
+          .update({ refunded_cents: alreadyRefunded + amount })
+          .eq("id", eventRegistrationId)
+          .eq("refunded_cents", alreadyRefunded);
       }
 
       const newStatus = decision === "approve" && amount > 0 ? "refunded" : "withdrawn";
@@ -293,6 +317,151 @@ Deno.serve(async (req: Request) => {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // ADMIN_REFUND — organizer issues a refund with NO withdrawal request
+    // (#704). Amount defaults to the cancellation policy, overridable; the
+    // organizer chooses whether to also remove the player from the event.
+    // ════════════════════════════════════════════════════════════════════
+    if (mode === "admin_refund") {
+      // Authorize: caller must be an ADMIN of the reg's tournament org.
+      const { data: ev } = await admin
+        .from("events")
+        .select("tournament_id")
+        .eq("id", reg.event_id)
+        .maybeSingle();
+      const { data: trn } = ev
+        ? await admin
+            .from("tournaments")
+            .select("organization_id")
+            .eq("id", ev.tournament_id)
+            .maybeSingle()
+        : { data: null as { organization_id: string } | null };
+      const orgId = trn?.organization_id;
+      if (!orgId) return json({ error: "org_not_found" }, 404);
+
+      const caller = createClient(
+        supabaseUrl,
+        // @ts-expect-error Deno env
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: `Bearer ${jwt}` } } },
+      );
+      const { data: authorized, error: roleErr } = await caller.rpc("has_org_role", {
+        org: orgId,
+        min_role: "admin",
+      });
+      if (roleErr) return json({ error: "auth_check_failed" }, 500);
+      if (!authorized) return json({ error: "forbidden_not_organizer" }, 403);
+
+      // Only a currently-paid reg can be refunded cold.
+      if (reg.status !== "paid") return json({ error: "not_refundable" }, 409);
+
+      // Net charged for this reg, bounded by the covering payment, minus what
+      // has already been refunded. Stripe is the hard backstop regardless.
+      let paymentNet = r.paid_cents;
+      if (r.payment_id) {
+        const { data: pay } = await admin
+          .from("payments")
+          .select("amount_cents")
+          .eq("id", r.payment_id)
+          .maybeSingle();
+        if (pay && typeof pay.amount_cents === "number") paymentNet = pay.amount_cents;
+      }
+      const maxRefundable = Math.max(
+        0,
+        Math.min(r.paid_cents, paymentNet) - alreadyRefunded,
+      );
+
+      // Default amount = the cancellation policy's computed refund, clamped to
+      // what's still refundable. When the policy defers to the organizer
+      // (manual_required) there's no number → default to the full remainder.
+      const policyDefault =
+        r.decision === "manual_required"
+          ? maxRefundable
+          : Math.max(0, Math.min(r.refund_cents, maxRefundable));
+
+      // Override: explicit amountCents wins; otherwise the policy default.
+      const amount =
+        typeof amountCents === "number" ? Math.trunc(amountCents) : policyDefault;
+      if (!Number.isInteger(amount) || amount < 0) {
+        return json({ error: "invalid_amount" }, 400);
+      }
+      if (amount > maxRefundable) {
+        return json({ error: "amount_exceeds_paid", maxRefundableCents: maxRefundable }, 422);
+      }
+
+      const remove = removeFromEvent !== false; // default: also remove
+      const preview = {
+        mode: "admin_refund",
+        policyDecision: r.decision,
+        policyDefaultCents: policyDefault,
+        maxRefundableCents: maxRefundable,
+        alreadyRefundedCents: alreadyRefunded,
+        amountCents: amount,
+        removeFromEvent: remove,
+        currency: "usd",
+        partner: remove ? partner : null,
+      };
+      if (dryRun) return json(preview);
+
+      // Issue the Stripe refund first. Idempotency keyed on the reg + the
+      // running refunded total, so a double-submit of THIS refund no-ops but a
+      // later distinct partial refund still gets its own key.
+      if (amount > 0) {
+        if (!r.payment_intent) return json({ error: "no_payment_intent" }, 409);
+        if (!r.connected_acct) return json({ error: "no_connected_account" }, 409);
+        try {
+          await stripe.refunds.create(
+            {
+              payment_intent: r.payment_intent,
+              amount,
+              refund_application_fee: false, // platform keeps its fee
+              metadata: {
+                event_registration_id: eventRegistrationId,
+                reason: "organizer_initiated",
+              },
+            },
+            {
+              stripeAccount: r.connected_acct,
+              idempotencyKey: `admin_refund_${eventRegistrationId}_${alreadyRefunded}`,
+            },
+          );
+        } catch (e: any) {
+          return json({ error: "refund_failed", detail: String(e?.message ?? e) }, 502);
+        }
+        // Record it — guarded on the snapshot so a double-submit can't
+        // double-count the running total.
+        await admin
+          .from("event_registrations")
+          .update({ refunded_cents: alreadyRefunded + amount })
+          .eq("id", eventRegistrationId)
+          .eq("refunded_cents", alreadyRefunded);
+      }
+
+      if (remove) {
+        const newStatus = amount > 0 ? "refunded" : "withdrawn";
+        const { data: upd } = await admin
+          .from("event_registrations")
+          .update({
+            status: newStatus,
+            withdrawal_requested_at:
+              reg.withdrawal_requested_at ?? new Date().toISOString(),
+            withdrawal_decided_at: new Date().toISOString(),
+            withdrawal_decision: "approved",
+            withdrawal_reason:
+              typeof reason === "string" ? reason.slice(0, 2000) : null,
+          })
+          .eq("id", eventRegistrationId)
+          .eq("status", "paid")
+          .select("id");
+        if (upd && upd.length > 0) await unpairPartner();
+        return json({ ...preview, applied: true, newStatus });
+      }
+
+      // Keep registered: status stays 'paid'; the refund lives in
+      // refunded_cents only, and the partner pairing is untouched.
+      return json({ ...preview, applied: true, newStatus: "paid" });
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // SELF — the player withdraws themselves (owner-authorized)
     // ════════════════════════════════════════════════════════════════════
     const { data: player } = await admin
@@ -303,10 +472,14 @@ Deno.serve(async (req: Request) => {
     if (!player) return json({ error: "player_not_found" }, 404);
     if (reg.player_id !== player.id) return json({ error: "forbidden" }, 403);
 
+    // Clamp the policy refund by anything already refunded (e.g. a prior
+    // keep-registered organizer refund) so Stripe is never over-asked.
+    const selfRefund = Math.max(0, Math.min(r.refund_cents, r.paid_cents - alreadyRefunded));
+
     const preview = {
       decision: r.decision,
       paidCents: r.paid_cents,
-      refundCents: r.refund_cents,
+      refundCents: selfRefund,
       currency: "usd",
       partner,
     };
@@ -349,7 +522,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Paid, no money back → withdraw without a Stripe call.
-    if (r.refund_cents <= 0) {
+    if (selfRefund <= 0) {
       const { data: upd } = await admin
         .from("event_registrations")
         .update({ status: "withdrawn" })
@@ -369,7 +542,7 @@ Deno.serve(async (req: Request) => {
       await stripe.refunds.create(
         {
           payment_intent: r.payment_intent,
-          amount: r.refund_cents,
+          amount: selfRefund,
           // No reverse_transfer — direct charges have no transfer; the refund
           // debits the organizer's balance directly.
           refund_application_fee: false, // platform keeps its fee
@@ -386,6 +559,12 @@ Deno.serve(async (req: Request) => {
     } catch (e: any) {
       return json({ error: "refund_failed", detail: String(e?.message ?? e) }, 502);
     }
+    // Keep the running refunded total accurate (guarded on the snapshot).
+    await admin
+      .from("event_registrations")
+      .update({ refunded_cents: alreadyRefunded + selfRefund })
+      .eq("id", eventRegistrationId)
+      .eq("refunded_cents", alreadyRefunded);
 
     const { data: upd } = await admin
       .from("event_registrations")

@@ -8,6 +8,12 @@ import {
 } from "./PlayerPicker";
 import { ConfirmModal } from "./ConfirmModal";
 import {
+  previewAdminRefund,
+  executeAdminRefund,
+  type AdminRefundPreview,
+} from "../lib/refunds";
+import { formatUsd } from "../lib/pricing";
+import {
   reassignRegistrationPlayer,
   withdrawRegistration,
   pairRegistrations,
@@ -90,6 +96,48 @@ export function RegistrationEditorModal({
   );
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+
+  // Organizer-initiated refund (#704). Only paid regs can be refunded.
+  const canRefund = reg.status === "paid";
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundPreview, setRefundPreview] = useState<AdminRefundPreview | null>(null);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundAmountStr, setRefundAmountStr] = useState("");
+  const [refundRemove, setRefundRemove] = useState(true);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundConfirm, setRefundConfirm] = useState(false);
+  const [refundBusy, setRefundBusy] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  // Open the refund panel and fetch the policy default + max refundable.
+  const openRefund = async () => {
+    setRefundOpen(true);
+    setRefundLoading(true);
+    setRefundError(null);
+    setRefundPreview(null);
+    const { preview, error: err } = await previewAdminRefund(reg.regId);
+    if (err || !preview) {
+      setRefundError(err ?? "Could not load refund details.");
+      setRefundLoading(false);
+      return;
+    }
+    setRefundPreview(preview);
+    setRefundAmountStr((preview.policyDefaultCents / 100).toFixed(2));
+    setRefundLoading(false);
+  };
+
+  // Parse the dollar input → cents, clamped to [0, max].
+  const refundMaxCents = refundPreview?.maxRefundableCents ?? 0;
+  const refundAmountCents = (() => {
+    const n = Math.round(parseFloat(refundAmountStr || "0") * 100);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(n, refundMaxCents);
+  })();
+  const refundAmountValid =
+    refundPreview != null &&
+    Number.isFinite(parseFloat(refundAmountStr)) &&
+    refundAmountCents >= 0 &&
+    refundAmountCents <= refundMaxCents;
 
   // Pending-invite context, so the admin can SEE who this player invited / who
   // invited them — the missing piece when two people invite each other.
@@ -345,12 +393,149 @@ export function RegistrationEditorModal({
             </Section>
           )}
 
+          {/* Issue refund — organizer-initiated, paid regs only (#704) */}
+          {canRefund && (
+            <Section title="Issue refund">
+              {!refundOpen ? (
+                <>
+                  <p style={hint}>
+                    Refund this player yourself — no withdrawal request needed.
+                    The amount defaults to the tournament's cancellation policy
+                    and you can override it.
+                  </p>
+                  <button
+                    onClick={openRefund}
+                    disabled={anyBusy}
+                    style={{
+                      ...ctaSecondaryStyle,
+                      opacity: anyBusy ? 0.6 : 1,
+                    }}
+                  >
+                    Issue a refund…
+                  </button>
+                </>
+              ) : refundLoading ? (
+                <p style={hint}>Loading refund details…</p>
+              ) : refundError && !refundPreview ? (
+                <div>
+                  <div style={statusPanelStyle("danger")}>{refundError}</div>
+                  <button
+                    onClick={() => setRefundOpen(false)}
+                    style={{ ...ghostButtonStyle, marginTop: 10 }}
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : refundPreview ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <p style={{ ...hint, margin: 0 }}>
+                    Cancellation policy:{" "}
+                    <strong>{prettyPolicy(refundPreview.policyDecision)}</strong>
+                    {" → suggests "}
+                    <strong>{formatUsd(refundPreview.policyDefaultCents)}</strong>.
+                    {refundPreview.alreadyRefundedCents > 0 && (
+                      <>
+                        {" "}
+                        Already refunded{" "}
+                        {formatUsd(refundPreview.alreadyRefundedCents)}.
+                      </>
+                    )}
+                  </p>
+
+                  <label style={fieldLabel}>
+                    Refund amount (USD)
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                      <span style={{ color: inkSoft }}>$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={refundAmountStr}
+                        onChange={(e) => setRefundAmountStr(e.target.value)}
+                        style={refundInput}
+                      />
+                    </div>
+                    <span style={{ fontSize: 11.5, color: inkMuted }}>
+                      Max {formatUsd(refundPreview.maxRefundableCents)} (net paid
+                      {refundPreview.alreadyRefundedCents > 0
+                        ? " minus already refunded"
+                        : ""}
+                      ).
+                    </span>
+                  </label>
+
+                  <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={refundRemove}
+                      onChange={(e) => setRefundRemove(e.target.checked)}
+                      style={{ marginTop: 2 }}
+                    />
+                    <span>
+                      Also remove {reg.playerName} from the event
+                      <span style={{ display: "block", color: inkMuted, fontSize: 11.5 }}>
+                        {refundRemove
+                          ? hasPartner
+                            ? "They'll be withdrawn and their partner unpaired."
+                            : "They'll be withdrawn from this event."
+                          : "They stay registered — money back only."}
+                      </span>
+                    </span>
+                  </label>
+
+                  <label style={fieldLabel}>
+                    Note (optional)
+                    <input
+                      type="text"
+                      value={refundReason}
+                      onChange={(e) => setRefundReason(e.target.value)}
+                      placeholder="Reason for the refund"
+                      style={{ ...refundInput, marginTop: 4 }}
+                    />
+                  </label>
+
+                  {refundError && (
+                    <div style={statusPanelStyle("danger")}>{refundError}</div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        setRefundOpen(false);
+                        setRefundError(null);
+                      }}
+                      disabled={refundBusy}
+                      style={ghostButtonStyle}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => setRefundConfirm(true)}
+                      disabled={!refundAmountValid || refundBusy}
+                      style={
+                        !refundAmountValid || refundBusy
+                          ? ctaPrimaryDisabledStyle
+                          : ctaPrimaryStyle
+                      }
+                    >
+                      {refundAmountCents > 0
+                        ? `Issue ${formatUsd(refundAmountCents)} refund`
+                        : refundRemove
+                          ? "Withdraw (no refund)"
+                          : "Issue refund"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </Section>
+          )}
+
           {/* Withdraw */}
           <Section title="Withdraw" danger>
             <p style={hint}>
               Pulls this player from the event and unpairs their partner. This
-              does <strong>not</strong> issue a refund — refunds are handled
-              separately via the withdrawal queue.
+              does <strong>not</strong> issue a refund — to refund, use{" "}
+              <strong>Issue refund</strong> above (it can also remove them).
             </p>
             <button
               onClick={() => setWithdrawOpen(true)}
@@ -376,8 +561,8 @@ export function RegistrationEditorModal({
               This withdraws them from <strong>{reg.eventName}</strong> and
               unpairs any partner.
               <div style={{ ...statusPanelStyle("warn"), marginTop: 10 }}>
-                It does <strong>not</strong> issue a refund. Handle refunds
-                separately via the withdrawal queue.
+                It does <strong>not</strong> issue a refund. To refund, use{" "}
+                <strong>Issue refund</strong> instead.
               </div>
             </div>
           }
@@ -399,8 +584,76 @@ export function RegistrationEditorModal({
           }}
         />
       )}
+
+      {refundConfirm && refundPreview && (
+        <ConfirmModal
+          title="Issue refund?"
+          body={
+            <div>
+              {refundAmountCents > 0 ? (
+                <>
+                  Refund <strong>{formatUsd(refundAmountCents)}</strong> to{" "}
+                  <strong>{reg.playerName}</strong> for{" "}
+                  <strong>{reg.eventName}</strong>. This goes back to their
+                  original payment and can't be undone here.
+                </>
+              ) : (
+                <>
+                  No money will be refunded to <strong>{reg.playerName}</strong>.
+                </>
+              )}
+              <div style={{ ...statusPanelStyle(refundRemove ? "warn" : "info"), marginTop: 10 }}>
+                {refundRemove
+                  ? hasPartner
+                    ? "They'll also be withdrawn from the event and their partner unpaired."
+                    : "They'll also be withdrawn from the event."
+                  : "They stay registered — money back only."}
+              </div>
+            </div>
+          }
+          confirmLabel={refundBusy ? "Processing…" : "Issue refund"}
+          onCancel={() => (refundBusy ? undefined : setRefundConfirm(false))}
+          onConfirm={async () => {
+            setRefundBusy(true);
+            setRefundError(null);
+            const { error: err } = await executeAdminRefund({
+              regId: reg.regId,
+              amountCents: refundAmountCents,
+              removeFromEvent: refundRemove,
+              reason: refundReason.trim() || undefined,
+            });
+            setRefundBusy(false);
+            if (err) {
+              setRefundConfirm(false);
+              setRefundError(err);
+              return;
+            }
+            setRefundConfirm(false);
+            setRefundOpen(false);
+            await done();
+          }}
+        />
+      )}
     </>
   );
+}
+
+// Cancellation-policy decision → human label for the refund panel.
+function prettyPolicy(decision: string): string {
+  switch (decision) {
+    case "full":
+      return "full refund";
+    case "partial":
+      return "partial refund";
+    case "none":
+      return "no refund";
+    case "manual_required":
+      return "organizer decides";
+    case "unpaid":
+      return "unpaid";
+    default:
+      return decision;
+  }
 }
 
 function errMsg(e: unknown): string {
@@ -608,4 +861,26 @@ const hint: CSSProperties = {
   color: inkSoft,
   margin: "0 0 12px",
   lineHeight: 1.5,
+};
+
+const fieldLabel: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: inkSoft,
+};
+
+const refundInput: CSSProperties = {
+  flex: 1,
+  padding: "8px 10px",
+  border: `1px solid ${rule}`,
+  borderRadius: 6,
+  fontSize: 14,
+  fontFamily: bodyFontStack,
+  color: ink,
+  background: "#fff",
+  width: "100%",
+  boxSizing: "border-box",
 };
