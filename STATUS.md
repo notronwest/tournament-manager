@@ -3,6 +3,33 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Tournament dates = date-only (#701/#702) + pricing copy reflects N (#700)
+
+Two small frontend-only changes, both merged to TEST:
+
+**Date-only tournament start/end (#701 → #702).** Ron: "creating tournaments we don't
+need start time — just start date and end date; events handle their own times." Switched
+the create **wizard** (`TournamentWizardPage`) + edit **form** (`TournamentFormPage`) from
+`datetime-local` → `type="date"`, relabeled "Start date"/"End date". Registration
+opens/closes KEEP date+time (real deadlines). New helpers `dateToIso`/`isoToDate` in both
+(store picked day as local-midnight ISO, read back same local day — no TZ drift); `toIso`/
+`isoToLocal` stay for the reg-window fields. Wizard `fmtDay` pins date-only values to local.
+No schema change (`starts_at`/`ends_at` already timestamptz; we just stop collecting time).
+
+**Pricing copy reflects N (#700, follow-up to #699).** Ron flagged the public headline still
+said "includes 1 event". Updated customer-facing labels (display only — charge math
+untouched): PublicTournamentPage headline "includes N events" + per-event register cost line
+is now 3-way (first=entry / included="$0 · included in your entry" / additional="+$Y"), driven
+by active-reg-count vs N; CheckoutPage summary first→"registration" + new "included in
+registration"; RegisterPage basket counts included ("N included") + shows "$0 (included in
+entry)" per row instead of hiding it.
+
+typecheck+build clean both; lint only the pre-existing set-state-in-effect errors (verified
+unchanged on main). COULDN'T browser-verify locally (no web/.env.local → Supabase unreachable;
+create form is auth-gated, pricing display is data-gated) — flagged in both PRs to eyeball on
+the Cloudflare PR preview (own Supabase scope). NEXT: Ron confirms on TEST; the big TEST→prod
+promotion batch (now includes pricing-N + date-only) still pending.
+
 ## 2026-08-15 — Pricing: entry fee includes first N events — SHIPPED to TEST (#697, both halves)
 
 Ron: "select the number of events the entrance includes — currently defaults to 1."
