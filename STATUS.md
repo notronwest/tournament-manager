@@ -3,6 +3,36 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Organizer-initiated refunds → TEST (#704: #706 DB + #707 edge/UI)
+
+Ron: "We should be able to initiate the refund without the customer asking." Built the
+admin refund path (today refunds only fired from a player's withdrawal request via
+stripe-refund `resolve`). Ron's design calls (AskUserQuestion): **amount defaults to the
+tournament's cancellation policy, overridable** (partial ok); **"let me choose each time"**
+whether to also remove the player from the event.
+
+- **DB (#706, applied to TEST):** `event_registrations.refunded_cents int not null default 0`
+  — running total refunded so partial refunds cap correctly + a keep-registered partial stays
+  consistent with a later withdrawal. Written only by the edge fn.
+- **Edge fn (#707, deployed to TEST):** stripe-refund new **`admin_refund`** mode —
+  admin-authorized (has_org_role) on a **paid** reg; default = refund_compute policy amount,
+  override via amountCents, capped at net-paid − already-refunded; **removeFromEvent** (default
+  true → withdraw+unpair → refunded/withdrawn; false → keep paid, refund tracked in
+  refunded_cents). Idempotency keyed on reg + running total (repeat partials safe, double-submit
+  no-ops). Also **clamped the existing self/resolve paths by refunded_cents** + keep the total
+  accurate so a prior keep-registered refund can't be double-issued (Stripe is the hard backstop).
+- **UI (#707):** RegistrationEditorModal (Attendees/Contacts/person page → Manage) gets an
+  **"Issue refund"** section on paid regs — dry-run preview (policy default + max), amount input,
+  remove checkbox, note, partner-unpair warning, ConfirmModal → execute. New client lib
+  `web/src/lib/refunds.ts`. Withdraw copy updated (no longer "queue only").
+
+typecheck+build+lint clean. **NOT verified live** — no web/.env.local + needs a real Stripe-test
+paid registration. **Ron: verify on TEST** — on a paid reg: (1) full refund + remove, (2) partial
+refund + keep registered, then confirm a 2nd refund caps at the remainder and a later withdrawal
+doesn't double-refund. Then promote to PROD when satisfied. (Two other refund paths — the
+player-facing self-withdraw and the request queue — were touched defensively; regression-worth a
+glance too.)
+
 ## 2026-08-15 — PROMOTED TEST → PROD (#703): pricing-N, date-only, Setup, quote redesign, opportunities
 
 Ron: "Push to production." Promoted `main` → `production` via PR #703 (`--merge --admin`;
