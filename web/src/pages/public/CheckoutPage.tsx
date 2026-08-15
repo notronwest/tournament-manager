@@ -919,10 +919,12 @@ export default function CheckoutPage() {
                   <span style={{ color: inkSoft }}>
                     (
                     {it.tier === "first"
-                      ? "registration · incl. 1 event"
-                      : it.tier === "additional"
-                        ? "additional event"
-                        : "event fee"}
+                      ? "registration"
+                      : it.tier === "included"
+                        ? "included in registration"
+                        : it.tier === "additional"
+                          ? "additional event"
+                          : "event fee"}
                     )
                   </span>
                 </span>

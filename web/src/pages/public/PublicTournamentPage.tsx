@@ -608,6 +608,9 @@ export default function PublicTournamentPage({
   const activeTier = pickActivePricingTier(tiers);
   const regFeeCents = activeTier?.first_event_fee_cents ?? 0;
   const additionalFeeCents = activeTier?.additional_event_fee_cents ?? 0;
+  // How many events the registration fee covers (>= 1); events beyond this
+  // get the additional-event fee. Mirrors compute_checkout_total.
+  const includedEvents = Math.max(1, activeTier?.first_events_included ?? 1);
   const isMultiTier = tiers.length > 1;
 
   // Does the signed-in player already hold an active registration in
@@ -621,9 +624,18 @@ export default function PublicTournamentPage({
     "pending_payment",
     "awaiting_partner",
   ]);
-  const hasActiveRegInTournament = Array.from(myStatus.values()).some((s) =>
+  // How many active regs the player already holds in THIS tournament. The
+  // first counts against the entry fee; the next up to (includedEvents-1) are
+  // $0 included; everything past includedEvents is an additional-fee event.
+  const activeRegCount = Array.from(myStatus.values()).filter((s) =>
     activeRegStates.has(s.state),
-  );
+  ).length;
+  const entryCostTier: "first" | "included" | "additional" =
+    activeRegCount === 0
+      ? "first"
+      : activeRegCount < includedEvents
+        ? "included"
+        : "additional";
   const myPendingGroup =
     pendingGroups?.find((g) => g.tournamentId === tournament.id) ?? null;
 
@@ -734,7 +746,8 @@ export default function PublicTournamentPage({
                 ${(regFeeCents / 100).toFixed(0)}
               </div>
               <div style={{ fontSize: 13, color: inkSoft, marginTop: 3 }}>
-                to register · includes 1 event
+                to register · includes {includedEvents}{" "}
+                {includedEvents === 1 ? "event" : "events"}
               </div>
               {additionalFeeCents > 0 && (
                 <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
@@ -1146,7 +1159,7 @@ export default function PublicTournamentPage({
                 user={user}
                 regFeeCents={regFeeCents}
                 additionalFeeCents={additionalFeeCents}
-                isAdditionalEvent={hasActiveRegInTournament}
+                entryCostTier={entryCostTier}
                 alreadyRegisteredPlayerIds={
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
@@ -1382,7 +1395,7 @@ function EventCard({
   user,
   regFeeCents,
   additionalFeeCents,
-  isAdditionalEvent,
+  entryCostTier,
   alreadyRegisteredPlayerIds,
   rosterRows,
   isFocused,
@@ -1399,12 +1412,12 @@ function EventCard({
   myStatus: MyRegStatus | undefined;
   me: Player | null;
   user: ReturnType<typeof useAuth>["user"];
-  // Active-tier fees + whether the player already holds a reg in this
-  // tournament. Drive the context-aware cost line in the register
-  // form: registration fee for the first event, +additional after.
+  // Active-tier fees + how this event prices for the player right now.
+  // Drives the context-aware cost line in the register form: entry fee
+  // for the first event, $0 for included events, +additional past that.
   regFeeCents: number;
   additionalFeeCents: number;
-  isAdditionalEvent: boolean;
+  entryCostTier: "first" | "included" | "additional";
   // F3: ids of players already registered for THIS event. Folded
   // into the PartnerSearch excludePlayerIds so the search can't
   // surface someone who's already in.
@@ -2667,12 +2680,19 @@ function EventCard({
                 color: inkSoft,
               }}
             >
-              {isAdditionalEvent ? (
+              {entryCostTier === "additional" ? (
                 <>
                   Extra event:{" "}
                   <strong>+${(additionalFeeCents / 100).toFixed(0)}</strong>{" "}
                   <span style={{ color: inkMuted }}>
                     (added to your registration)
+                  </span>
+                </>
+              ) : entryCostTier === "included" ? (
+                <>
+                  <strong>$0</strong>{" "}
+                  <span style={{ color: inkMuted }}>
+                    · included in your entry
                   </span>
                 </>
               ) : (
