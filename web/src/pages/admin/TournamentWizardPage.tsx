@@ -247,8 +247,8 @@ export default function TournamentWizardPage() {
       setLocationName(t.location_name ?? "");
       setLocationAddress(t.location_address ?? "");
       setPickleballType(t.pickleball_type ?? "");
-      setStartsAt(isoToLocal(t.starts_at));
-      setEndsAt(isoToLocal(t.ends_at));
+      setStartsAt(isoToDate(t.starts_at));
+      setEndsAt(isoToDate(t.ends_at));
       setRegistrationOpensAt(isoToLocal(t.registration_opens_at));
       setRegistrationClosesAt(isoToLocal(t.registration_closes_at));
       setPricingPattern(t.pricing_pattern);
@@ -353,8 +353,8 @@ export default function TournamentWizardPage() {
       setError("URL slug is required.");
       return false;
     }
-    const startsAtIso = toIso(startsAt);
-    const endsAtIso = toIso(endsAt);
+    const startsAtIso = dateToIso(startsAt);
+    const endsAtIso = dateToIso(endsAt);
     if (!startsAtIso || !endsAtIso) {
       setError("Start and end dates are required.");
       return false;
@@ -695,7 +695,9 @@ export default function TournamentWizardPage() {
   const editMode = !!tournament;
   const fmtDay = (local: string): string => {
     if (!local) return "";
-    const d = new Date(local);
+    // Date-only values ("YYYY-MM-DD") parse as UTC midnight, which can render
+    // as the previous day in negative-offset zones — pin them to local.
+    const d = new Date(local.includes("T") ? local : `${local}T00:00:00`);
     if (Number.isNaN(d.getTime())) return "";
     return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   };
@@ -1369,18 +1371,18 @@ function BasicsStep(props: {
       </Field>
 
       <FieldRow>
-        <Field label="Starts at" required>
+        <Field label="Start date" required>
           <input
-            type="datetime-local"
+            type="date"
             required
             value={props.startsAt}
             onChange={(e) => props.setStartsAt(e.target.value)}
             style={inputStyle}
           />
         </Field>
-        <Field label="Ends at" required>
+        <Field label="End date" required>
           <input
-            type="datetime-local"
+            type="date"
             required
             value={props.endsAt}
             onChange={(e) => props.setEndsAt(e.target.value)}
@@ -3130,6 +3132,23 @@ function isoToLocal(iso: string | null): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Tournament start/end are date-only — events carry their own start times.
+// Store the picked calendar day as local midnight → ISO for the timestamptz
+// column (matches how we treat datetime-local: as local, not UTC).
+function dateToIso(dateValue: string): string | null {
+  if (!dateValue) return null;
+  return new Date(`${dateValue}T00:00:00`).toISOString();
+}
+
+// Inverse of dateToIso: the local calendar day (YYYY-MM-DD) a <input
+// type="date"> expects. Reads back the same day dateToIso stored.
+function isoToDate(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function fmtDate(iso: string): string {
