@@ -3,6 +3,26 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Building SETUP (funnel Stage 3). Ron: "build the Setup" + current quote fit
+
+Ron approved: copy-link (no auto-email) + full flow. Building in 3 parts:
+- **3a DONE (#691) → TEST, migration APPLIED green**: tournament_setups table (one per
+  quote, jsonb answers, token, status sent→in_progress→submitted→complete), platform-
+  admin RLS, SECURITY DEFINER token RPCs get_setup_by_token / save_setup_by_token
+  (anon), mirroring quote share-token pattern. (Couldn't test SQL locally; migrate
+  workflow confirmed success on TEST.) NOTE: types NOT regenerated — client uses the
+  `untyped` cast (supabase as unknown as SupabaseClient, per orgContacts) + .rpc().
+- **3b NEXT (admin)**: QuoteEditorPage — 'Start setup' on Signed quotes creates the
+  tournament_setups row (select-or-insert under platform-admin RLS), shows a copyable
+  customer link (${origin}/setup/${token}) + a review panel of submitted answers;
+  activate the 'Setup' stepper stage (currently disabled). Current quote fits: works on
+  any Signed quote.
+- **3c NEXT (customer form)**: /setup/:token = the real intake (reuse the mockup form
+  Ron liked from closed #681 branch mockup/tournament-setup-intake:
+  web/src/pages/public/TournamentSetupIntakePage.tsx — has DUPR/levels/MoneyBall) wired
+  to get_setup_by_token (load) + save_setup_by_token (save/submit).
+Intake fields defined in docs/tournament-host-guide.md (on main).
+
 ## 2026-08-13 — Quote editor: approved workflow design WIRED for real (#689) → TEST
 
 Ron: "pr and merge" (approved the mockup). Wired the browser-verified
