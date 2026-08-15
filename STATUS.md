@@ -3,6 +3,30 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Pricing: entry fee includes first N events — SHIPPED to TEST (#697, both halves)
+
+Ron: "select the number of events the entrance includes — currently defaults to 1."
+Confirmed model: **entry fee covers the first N events** (top pick = `first`/entry;
+picks 2..N = **`included` $0**; picks beyond N = additional-event fee). **N=1 = today's
+behavior exactly → existing tournaments untouched.**
+
+- **DB half (#698, merged, migration APPLIED to TEST):** `tournament_pricing_tiers.first_events_included`
+  `int not null default 1 check (>=1)`; `replace_pricing_tiers` carries it; `compute_checkout_total`
+  (authoritative Stripe charge) classifies `rn<=N` → `included`/$0.
+- **Client half (#699, merged):** mirrored the exact math in `lib/pricing.ts` (new `included`
+  tier, `i<included` 0-based == RPC `rn<=N` 1-based); carried the field through
+  `pricingTiers.ts` (TierDraft/TierInsert/mappers/validate); added per-tier **"Events included
+  in the entry fee"** input in `PricingTiersEditor` (label + preview math reflect N); wired the
+  4 `computeLineItems` callers (checkout, register, org-contacts manual reg, pending-payments bar).
+  `select("*")` fetches carry the column automatically; PendingPaymentsContext's explicit list got it.
+  `first_events_included` is OPTIONAL on the local `PricingTier` extension (generated types lag) —
+  every consumer falls back to 1.
+
+Client preview and `compute_checkout_total` kept identical (they MUST match). typecheck+build clean;
+lint has only the 3 pre-existing react-hooks/react-refresh errors (unchanged on main). NEXT: verify
+on TEST with a >N-event registration once Ron sets N>1 on a tournament; the big TEST→prod promotion
+batch is still pending.
+
 ## 2026-08-15 — Setup design decision: per-setup question SELECTION (like the quote picker)
 
 Ron (reviewing the mockup via an interactive Artifact — he can't reach the PR preview
