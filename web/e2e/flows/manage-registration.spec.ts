@@ -95,13 +95,17 @@ async function activeRegsInEvent(eventName: string): Promise<Reg[]> {
 
 // ── UI helpers ────────────────────────────────────────────────────────────
 
-// Attendees defaults to By-Player. Filter to the one player, open their
-// Manage → the single Edit → the (accessibly-named) editor dialog.
+// Attendees defaults to By-Player. Filter to the one player and click Manage —
+// which now NAVIGATES to the unified person page (org-scoped), where each
+// tournament-history row has its own Manage that opens the editor dialog.
 async function openEditor(page: Page, playerName: string): Promise<Locator> {
   await page.goto(`/admin/${SEED.orgSlug}/tournaments/${MR.tournamentSlug}/attendees`);
   await page.getByPlaceholder(/filter by name/i).fill(playerName);
   await page.getByRole("button", { name: "Manage" }).click();
-  await page.getByRole("button", { name: "Edit" }).click();
+  // Landed on /admin/players/:id?org=… — the person page. Its history row Manage
+  // opens the editor. (Each scenario player has exactly one reg → one Manage.)
+  await page.waitForURL(/\/admin\/players\//);
+  await page.getByRole("button", { name: "Manage" }).click();
   const dialog = page.getByRole("dialog", { name: /manage registration/i });
   await expect(dialog).toBeVisible();
   return dialog;

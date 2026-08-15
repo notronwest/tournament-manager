@@ -672,6 +672,7 @@ export default function RegisterPage() {
     ? computeLineItems(basketEvents, {
         firstEventFeeCents: activeTier.first_event_fee_cents,
         additionalEventFeeCents: activeTier.additional_event_fee_cents,
+        firstEventsIncluded: activeTier.first_events_included ?? 1,
       })
     : { items: [] as LineItem[], totalCents: 0 };
   const lineItemByEventId = new Map(
@@ -1583,6 +1584,9 @@ export default function RegisterPage() {
               {(() => {
                 // Tier breakdown — e.g. "Entry + 2 extra events + 1 flat-fee".
                 const first = lineItems.filter((i) => i.tier === "first").length;
+                const included = lineItems.filter(
+                  (i) => i.tier === "included",
+                ).length;
                 const additional = lineItems.filter(
                   (i) => i.tier === "additional",
                 ).length;
@@ -1591,6 +1595,10 @@ export default function RegisterPage() {
                 ).length;
                 const parts: string[] = [];
                 if (first > 0) parts.push("Entry");
+                if (included > 0)
+                  parts.push(
+                    included === 1 ? "1 included" : `${included} included`,
+                  );
                 if (additional > 0)
                   parts.push(
                     additional === 1 ? "1 extra event" : `${additional} extra events`,
@@ -2014,20 +2022,24 @@ function EventRow({
 
           {/* Per-row price + tier label. Withdrawals hide it — nothing
               to charge. */}
-          {lineItem && !isWillWithdraw && lineItem.cents > 0 && (
-            <div style={{ marginTop: 6, fontSize: 12, color: "#444" }}>
-              <strong>{formatUsd(lineItem.cents)}</strong>{" "}
-              <span style={{ color: "#888" }}>
-                (
-                {lineItem.tier === "first"
-                  ? "entry"
-                  : lineItem.tier === "additional"
-                    ? "extra event"
-                    : "flat fee"}
-                )
-              </span>
-            </div>
-          )}
+          {lineItem &&
+            !isWillWithdraw &&
+            (lineItem.cents > 0 || lineItem.tier === "included") && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#444" }}>
+                <strong>{formatUsd(lineItem.cents)}</strong>{" "}
+                <span style={{ color: "#888" }}>
+                  (
+                  {lineItem.tier === "first"
+                    ? "entry"
+                    : lineItem.tier === "included"
+                      ? "included in entry"
+                      : lineItem.tier === "additional"
+                        ? "extra event"
+                        : "flat fee"}
+                  )
+                </span>
+              </div>
+            )}
 
           {/* Partner line for an unchanged existing reg (issue #1: now
               resolves the invitee's partner too). */}

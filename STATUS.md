@@ -3,6 +3,290 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-15 — Tournament dates = date-only (#701/#702) + pricing copy reflects N (#700)
+
+Two small frontend-only changes, both merged to TEST:
+
+**Date-only tournament start/end (#701 → #702).** Ron: "creating tournaments we don't
+need start time — just start date and end date; events handle their own times." Switched
+the create **wizard** (`TournamentWizardPage`) + edit **form** (`TournamentFormPage`) from
+`datetime-local` → `type="date"`, relabeled "Start date"/"End date". Registration
+opens/closes KEEP date+time (real deadlines). New helpers `dateToIso`/`isoToDate` in both
+(store picked day as local-midnight ISO, read back same local day — no TZ drift); `toIso`/
+`isoToLocal` stay for the reg-window fields. Wizard `fmtDay` pins date-only values to local.
+No schema change (`starts_at`/`ends_at` already timestamptz; we just stop collecting time).
+
+**Pricing copy reflects N (#700, follow-up to #699).** Ron flagged the public headline still
+said "includes 1 event". Updated customer-facing labels (display only — charge math
+untouched): PublicTournamentPage headline "includes N events" + per-event register cost line
+is now 3-way (first=entry / included="$0 · included in your entry" / additional="+$Y"), driven
+by active-reg-count vs N; CheckoutPage summary first→"registration" + new "included in
+registration"; RegisterPage basket counts included ("N included") + shows "$0 (included in
+entry)" per row instead of hiding it.
+
+typecheck+build clean both; lint only the pre-existing set-state-in-effect errors (verified
+unchanged on main). COULDN'T browser-verify locally (no web/.env.local → Supabase unreachable;
+create form is auth-gated, pricing display is data-gated) — flagged in both PRs to eyeball on
+the Cloudflare PR preview (own Supabase scope). NEXT: Ron confirms on TEST; the big TEST→prod
+promotion batch (now includes pricing-N + date-only) still pending.
+
+## 2026-08-15 — Pricing: entry fee includes first N events — SHIPPED to TEST (#697, both halves)
+
+Ron: "select the number of events the entrance includes — currently defaults to 1."
+Confirmed model: **entry fee covers the first N events** (top pick = `first`/entry;
+picks 2..N = **`included` $0**; picks beyond N = additional-event fee). **N=1 = today's
+behavior exactly → existing tournaments untouched.**
+
+- **DB half (#698, merged, migration APPLIED to TEST):** `tournament_pricing_tiers.first_events_included`
+  `int not null default 1 check (>=1)`; `replace_pricing_tiers` carries it; `compute_checkout_total`
+  (authoritative Stripe charge) classifies `rn<=N` → `included`/$0.
+- **Client half (#699, merged):** mirrored the exact math in `lib/pricing.ts` (new `included`
+  tier, `i<included` 0-based == RPC `rn<=N` 1-based); carried the field through
+  `pricingTiers.ts` (TierDraft/TierInsert/mappers/validate); added per-tier **"Events included
+  in the entry fee"** input in `PricingTiersEditor` (label + preview math reflect N); wired the
+  4 `computeLineItems` callers (checkout, register, org-contacts manual reg, pending-payments bar).
+  `select("*")` fetches carry the column automatically; PendingPaymentsContext's explicit list got it.
+  `first_events_included` is OPTIONAL on the local `PricingTier` extension (generated types lag) —
+  every consumer falls back to 1.
+
+Client preview and `compute_checkout_total` kept identical (they MUST match). typecheck+build clean;
+lint has only the 3 pre-existing react-hooks/react-refresh errors (unchanged on main). NEXT: verify
+on TEST with a >N-event registration once Ron sets N>1 on a tournament; the big TEST→prod promotion
+batch is still pending.
+
+## 2026-08-15 — Setup design decision: per-setup question SELECTION (like the quote picker)
+
+Ron (reviewing the mockup via an interactive Artifact — he can't reach the PR preview
+because the magic link redirects to TEST; note the /mockups routes are actually PUBLIC,
+separate login issue): Setup should let us SELECT which questions get sent to each
+organizer — "similar to how we build the quote" (check/uncheck from the catalog);
+based on the contract, some questions may not apply. Updated the Artifact mockup
+(https://claude.ai/code/artifact/d5cf216e-997f-4b1c-b5c0-131c91207ab5, re-published
+same URL) to add a "Questions for this organizer" picker: grouped checklist of catalog
+questions, pre-selected from the contract, uncheck to drop, live count → Send.
+
+REAL-BUILD MODEL (locked concept): a master **setup_questions** catalog (like
+service_catalog; establish+grow) + per-setup a **selected subset** (a selection join,
+like quote line items pick from the catalog) → drives a DYNAMIC customer /setup form
+showing only the selected questions. Supersedes the hardcoded intake (3c). NOTE: the
+in-repo React mockup (#696 /mockups/setup) does NOT yet have the picker — only the
+Artifact does; sync it when building for real. NEXT: Ron finalizes the mockup → build:
+setup_questions catalog + admin manager + per-setup selection UI on the Setup surface +
+dynamic customer form generated from the selected questions.
+
+## 2026-08-15 — Setup rethink MOCKUP: separate process UI + questions manager (#696)
+
+Ron: Setup should be a SEPARATE process + separate UI (integrated w/ the opportunity,
+not buried in the quote editor), and he needs a place to MANAGE the setup questions
+(establish + grow them, like a catalog → the customer form is built from them, not
+hardcoded). Built a clickable mockup web/src/pages/public/SetupProcessMockup.tsx, route
+/mockups/setup, PR #696 (NOT for merge). Two tabs: (1) 'This setup' — standalone Setup
+surface w/ its own progress stepper (Sent→Opened→Submitted→In review→Complete),
+organizer link, grouped answers, '← from the signed opportunity' link; (2) 'Setup
+questions' — catalog manager: sections + questions, each w/ editable label + type
+(short/long/yes-no/select/multi/number) + Required + add/remove/reorder. BROWSER-VERIFIED
+both tabs render + interactive. NEXT: Ron reacts to the mockup → build the real thing:
+a setup_questions catalog table (like service_catalog) driving a DYNAMIC customer form
+(replaces the hardcoded intake), + Setup as its own admin surface (own route, linked
+from the opportunity). This supersedes/reworks the just-shipped hardcoded Setup 3c form.
+
+## 2026-08-15 — SETUP flow COMPLETE end-to-end (3a+3b+3c) → TEST
+
+Full funnel Stage 3 shipped: Signed quote → Start setup → copy link → customer fills
+/setup/:token → answers reviewed on the quote. All merged to TEST, no open PRs.
+- 3a #691: tournament_setups migration (APPLIED green on TEST) + token RPCs.
+- 3b #693: admin Start-setup (creates the setup, lights up Setup stepper stage) +
+  copyable customer link + read-only answers review panel on QuoteEditorPage.
+- 3c #695: customer /setup/:token intake (the 5-step wizard w/ DUPR/levels/MoneyBall)
+  wired to get_setup_by_token (load/prefill) + save_setup_by_token (submit + save-
+  later). BROWSER-VERIFIED the load + invalid-link path against TEST. Caught+fixed a
+  lost-`this` crash (supabase.rpc must be bound) that typecheck/build/lint all MISSED —
+  reminder: browser-verify public pages.
+Client uses untyped supabase cast (tournament_setups + RPCs not in generated types;
+regenerate types someday to drop the casts). Current quote fits: move to Signed →
+Start setup. NOT verified: admin Start-setup + the happy-path form load (both need a
+platform-admin session / real token — Ron click-through on TEST). REMAINING funnel:
+customer-side Accept/Decline on the quote page (token RPC); feed submitted setup
+answers → tournament creation (future). Whole session's TEST pile (quote editor
+redesign #689, opportunities pipeline #684, Setup #691/#693/#695, etc.) is unpromoted
+— a PROD batch is due when Ron's verified.
+
+## 2026-08-15 — Building SETUP (funnel Stage 3). Ron: "build the Setup" + current quote fit
+
+Ron approved: copy-link (no auto-email) + full flow. Building in 3 parts:
+- **3a DONE (#691) → TEST, migration APPLIED green**: tournament_setups table (one per
+  quote, jsonb answers, token, status sent→in_progress→submitted→complete), platform-
+  admin RLS, SECURITY DEFINER token RPCs get_setup_by_token / save_setup_by_token
+  (anon), mirroring quote share-token pattern. (Couldn't test SQL locally; migrate
+  workflow confirmed success on TEST.) NOTE: types NOT regenerated — client uses the
+  `untyped` cast (supabase as unknown as SupabaseClient, per orgContacts) + .rpc().
+- **3b NEXT (admin)**: QuoteEditorPage — 'Start setup' on Signed quotes creates the
+  tournament_setups row (select-or-insert under platform-admin RLS), shows a copyable
+  customer link (${origin}/setup/${token}) + a review panel of submitted answers;
+  activate the 'Setup' stepper stage (currently disabled). Current quote fits: works on
+  any Signed quote.
+- **3c NEXT (customer form)**: /setup/:token = the real intake (reuse the mockup form
+  Ron liked from closed #681 branch mockup/tournament-setup-intake:
+  web/src/pages/public/TournamentSetupIntakePage.tsx — has DUPR/levels/MoneyBall) wired
+  to get_setup_by_token (load) + save_setup_by_token (save/submit).
+Intake fields defined in docs/tournament-host-guide.md (on main).
+
+## 2026-08-13 — Quote editor: approved workflow design WIRED for real (#689) → TEST
+
+Ron: "pr and merge" (approved the mockup). Wired the browser-verified
+/mockups/quote-workflow design into the REAL QuoteEditorPage (#689, closes #688);
+merged to TEST; mockup #687 closed (branch kept). No open PRs remain. Logic PRESERVED
+(handleSave/pricing/contract/share/revision-viewer untouched — verified in diff):
+- Clickable STAGE STEPPER (New·Drafting·Quoted·Accepted·Signed·Setup) → clicking moves
+  the opportunity (setStageStatus; Signed→markContractSigned when a contract exists
+  else disabled; Setup disabled). Replaced the manual-status disclosure.
+- Read-only quote SUMMARY + 'Edit quote' toggle (editable form only in edit mode;
+  Save-as-revision N + Cancel via applyQuoteToForm refactor). No always-on form.
+- ACTIVITY TIMELINE from real data (quotes.created_at, revisions who/when/amount+View,
+  share_tokens=Sent, contracts=generated/signed). No schema change.
+typecheck/build/lint green; NOT browser-verified on the real page (admin-gated) — Ron
+click-through on TEST (open any quote). REMAINING funnel: customer-side Accept/Decline
+on their quote page (token RPC); Stage 3 accepted+signed → /setup intake handoff
+(Start-setup is a disabled placeholder).
+
+## 2026-08-13 — Quote workflow MOCKUP (#687) — de-risk 3rd iteration; browser-verified
+
+Ron still struggling with the quote editor after #686 (2nd iteration). Wants: move
+opportunity through stages MANUALLY (prominent), form only when editing (not always
+shown), a GATED step flow, and a thorough activity history (created/edited/sent/by
+whom/when). Rather than a 3rd blind change to the real page, built a REAL clickable
+mockup: web/src/pages/public/QuoteWorkflowMockup.tsx, public route
+/mockups/quote-workflow, PR #687 (NOT for merge). Prominent clickable stage stepper
+(New→Drafting→Quoted→Accepted→Signed→Setup; click a step to move), next-step card per
+stage, read-only quote summary + Edit toggle, thorough activity timeline (with when +
+who). **Browser-VERIFIED** (finally not auth-gated): stepper moves stages + updates
+next-step live; Edit toggle; no console errors. Timeline is fully derivable from
+existing data (quotes.created_at, quote_revisions created_at/created_by, share tokens
+created_at = sent, contracts generated_at) — NO schema change for v1. NEXT: Ron clicks
+the preview (PR #687 Cloudflare URL + /mockups/quote-workflow) → on his OK, wire this
+exact design into the real QuoteEditorPage (replacing #686's layout) + delete the
+mockup route. Then remaining funnel: customer Accept/Decline; Stage 3 setup handoff.
+
+## 2026-08-13 — Quote editor workflow redesign (#686) → TEST
+
+Ron: the quote editor page is the confusing one — status buttons "seem to do nothing"
+(only persisted inside a revision Save), history buried at bottom, everything equally
+editable, no save prompt, no next-step. Full redesign (#686, closes #685), logic
+PRESERVED (handleSave/pricing/contract/share behavior-identical; only setDirty +
+anchor ids added):
+- **Stage + next-step header**: derives stage (status + signed contract), shows the
+  one obvious next action per stage (Draft→Send · Quoted→Mark accepted/declined +
+  Review customer changes · Accepted→Generate contract/Mark signed · Signed→Start
+  setup [disabled until Stage 3]). New setStageStatus writes quotes.status IMMEDIATELY
+  + feedback (fixes 'buttons do nothing'). Manual override kept, secondary.
+- **Save discipline**: dirty flag + sticky 'Save as revision N' bar.
+- **History up + fixed**: read-only revision timeline near top; editable region
+  labelled 'Working draft'.
+typecheck/build/lint green; NOT browser-verified (admin-gated) — Ron click-through on
+TEST (open any quote). NOTE: this is effectively funnel Stage 2 UX (status now
+interaction+manual). REMAINING funnel: customer-side Accept/Decline on their quote
+page (token RPC); Stage 3 accepted+signed → /setup intake handoff (Start-setup button
+is a disabled placeholder for now).
+
+## 2026-08-13 — Cleared lingering WIP PRs (Ron: "still seeing WIP code")
+
+Ron flagged leftover WIP in the PR panel. The only open PRs were the setup-intake
+content: **#680 host-guide doc → MERGED** (finished reference), **#681 /setup mockup
+→ CLOSED** (throwaway preview; public unauthenticated /setup shouldn't merge as-is —
+the REAL wired intake comes in Stage 3; mockup branch kept for reference). Verified
+the pipeline #684 IS live on TEST (fresh Cloudflare build), no literal 'WIP' text
+anywhere in web/src, contracts readable by platform-admin (pipeline fetch works), and
+/setup is NOT on main. No open PRs remain.
+
+## 2026-08-13 — Opportunity funnel Stage 1: pipeline on home + filtering (#684) → TEST
+
+Ron wants the quotes/opportunity funnel built + integrated (list on home w/ show-hide
+filtering; status driven by manual + customer interaction; accepted+signed → gather
+tournament details via the /setup intake). Chose to start with Stage 1. Shipped #684
+(closes #683): new lib/quotePipeline derives ONE lifecycle stage (New→Drafting→Quoted
+→Accepted→Signed; Declined off-ramp) from quote_status + contract signed_offline — so
+a signed contract finally reads right (fixes the decoupling). New reusable
+components/OpportunitiesPipeline (fetches quotes+contracts, multi-select show/hide
+stage chips w/ counts, rows→editor, next-step hints). QuotesListPage retitled
+'Opportunities' uses it; AdminIndexPage embeds it (limit 5) on the platform-admin home.
+No schema change. typecheck/build/lint green; NOT browser-verified (admin-gated) — Ron
+click-through on TEST (home + /admin/quotes). NEXT (agreed order): Stage 2 = customer
+Accept/Decline + signed→stage transitions (token RPC + RLS); Stage 3 = accepted+signed
+→ /setup intake handoff (wire the mockup to a real record + tournament creation).
+
+## 2026-08-13 — Setup intake: added DUPR-rated, skill levels, MoneyBall (#680 + #681)
+
+Ron added 3 more intake questions. Added to BOTH the host-guide doc (PR #680,
+Events & format: 'Which skill levels?', 'Is it DUPR rated?', 'A MoneyBall game?')
+and the interactive mockup (PR #681: Step 2 gains a skill-levels field + DUPR
+yes/no with an info note; Step 4 gains a MoneyBall opt-in card; Review surfaces
+both). Verified typecheck/build/lint + rendered /setup Step 2 in the browser (new
+fields show, no console errors). Both still open PRs awaiting Ron's review/merge.
+
+## 2026-08-13 — Fix nightly regression: manage-reg editor now opens via person page (#682)
+
+Nightly regression red every night since ~08-06. Root cause: Stage 3 (#672) rerouted
+Attendees By-Player 'Manage' to NAVIGATE to the person page instead of opening a modal,
+but the E2E openEditor still clicked 'Manage'→'Edit' expecting the old modal → all 7
+manage-registration tests timed out on the editor dialog. Fixed openEditor (#682) to
+the real flow: Attendees 'Manage' → person page (waitForURL /admin/players/) → the
+history row's 'Manage' → editor dialog. Merged to main (--admin). The 8th nightly
+failure (registration.spec.ts:60 singles) is a SEPARATE pre-existing FLAKE — passed 8h
+earlier, register flow unchanged (scrollIntoViewIfNeeded race); left as-is pending
+confirmation. Dispatched regression run 31731202327 to verify → **GREEN: 49 passed, 1 flaky, 0
+failed.** All 7 manage-reg tests pass; singles passed clean this run (confirmed
+flake). Residual flakiness: registration.spec.ts:16 'register with an existing
+partner' flaked (failed once ~21s, passed on retry) — pre-existing, doesn't fail
+the run. Nightly is green again. OPTIONAL follow-up: harden the intermittently-flaky
+partner-register tests (scrollIntoViewIfNeeded / tapClear race under the fixed
+bottom bar) if the flakes get noisy.
+
+## 2026-08-06 — Setup intake MOCKUP (#681) + contract-status decoupling found
+
+Ron picked: build the intake form first, as a real interactive mockup. Built
+web/src/pages/public/TournamentSetupIntakePage.tsx — a 5-step wizard (Your
+tournament · Events & registration · Rules & the day · Extras & prizes · Review),
+public route /setup, local-state-only (Submit = confirmation). Verified rendering +
+interactive at 375px in the browser preview (read_page confirms all 5 steps + fields
+live). PR #681 (NOT for merge — mockup for feedback; Cloudflare preview + /setup).
+
+Ron then flagged: "I have a signed contract but its status doesn't appear right."
+ROOT CAUSE (design): quote_status (submitted→draft→quoted→accepted→declined) and a
+SEPARATE contracts.contract_status (draft→sent→signed_offline) are DECOUPLED. A quote
+must already be 'accepted' to generate a contract; ContractPage updates ONLY
+contract_status — signing never advances the quote, and there's no 'signed/won/setup'
+quote status. So a signed contract can look 'stuck'. Gave Ron a read-only diagnostic
+SQL (contracts ⋈ quotes ⋈ quote_customers showing both statuses) to pinpoint whether
+it's the contract_status (didn't get set to signed_offline) or the quote sitting in the
+wrong bucket. NEXT: Ron reports what the query shows → targeted fix (data correction
+and/or systemic: cascade signed→quote status, part of the funnel work).
+
+## 2026-08-06 — Tournament setup: host guide + intake doc (#680); funnel proposal pending
+
+New thread (pre-tournament setup). Ron drafted a 'things to consider' doc + wants a
+customer intake form, and sensed an 'umbrella/funnel' over the contract stuff.
+Findings: the 'contract stuff' = **Quote Studio** (quote_customers + quotes, status
+submitted→draft→quoted→accepted→declined); tournaments are separate (draft→published→
+closed→completed→cancelled). GAP: an **accepted quote doesn't convert to / link a
+tournament**, and there's no setup/intake step between them — that's the funnel Ron
+senses. Wrote docs/tournament-host-guide.md (completed Ron's considerations + a
+grouped, form-ready intake spec) → PR #680 (closes #679), left for Ron to edit/merge.
+PROPOSAL given to Ron (not built): funnel = Inquiry(opportunity=quote) → Quoted →
+Accepted → **Setup/Intake (new)** → Published → Running → Wrapped; reuse Quote Studio
+(don't add an 'opportunities' table); add an accepted-quote→tournament conversion
+(link + prefill) + the intake step; optional CRM pipeline board. NEXT: Ron picks depth
+(doc only / + conversion / + pipeline board) + whether to build the intake form as a
+real interactive mockup.
+
+## 2026-08-06 — PROMOTED #677 → production (frontend-only, clean)
+
+Ron: "push to production." Delta was frontend-only (#677 + STATUS; NO migrations, NO
+edge-fn changes). Merged promotion PR #678 (main→production, --merge --admin). PROD
+**Cloudflare frontend build success** — reg-editor pending-invite context + one-click
+Pair is LIVE on production. No edge-fn/migration steps to watch this time (nothing
+changed there), so none of last promotion's runner-cancel risk applied. PROD now ==
+main. Nothing outstanding.
+
 ## 2026-08-06 — Reg editor: surface pending partner invites + one-click pair (#677) → TEST
 
 Ron hit a mutual-invite deadlock (River invited Adam, Adam invited River, neither
