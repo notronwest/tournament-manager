@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-13 — Quote editor: approved workflow design WIRED for real (#689) → TEST
+
+Ron: "pr and merge" (approved the mockup). Wired the browser-verified
+/mockups/quote-workflow design into the REAL QuoteEditorPage (#689, closes #688);
+merged to TEST; mockup #687 closed (branch kept). No open PRs remain. Logic PRESERVED
+(handleSave/pricing/contract/share/revision-viewer untouched — verified in diff):
+- Clickable STAGE STEPPER (New·Drafting·Quoted·Accepted·Signed·Setup) → clicking moves
+  the opportunity (setStageStatus; Signed→markContractSigned when a contract exists
+  else disabled; Setup disabled). Replaced the manual-status disclosure.
+- Read-only quote SUMMARY + 'Edit quote' toggle (editable form only in edit mode;
+  Save-as-revision N + Cancel via applyQuoteToForm refactor). No always-on form.
+- ACTIVITY TIMELINE from real data (quotes.created_at, revisions who/when/amount+View,
+  share_tokens=Sent, contracts=generated/signed). No schema change.
+typecheck/build/lint green; NOT browser-verified on the real page (admin-gated) — Ron
+click-through on TEST (open any quote). REMAINING funnel: customer-side Accept/Decline
+on their quote page (token RPC); Stage 3 accepted+signed → /setup intake handoff
+(Start-setup is a disabled placeholder).
+
 ## 2026-08-13 — Quote workflow MOCKUP (#687) — de-risk 3rd iteration; browser-verified
 
 Ron still struggling with the quote editor after #686 (2nd iteration). Wants: move
