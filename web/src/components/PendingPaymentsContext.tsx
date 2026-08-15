@@ -30,7 +30,7 @@ export type PendingTournamentGroup = {
     eventId: string;
     eventName: string;
     cents: number;
-    tier: "first" | "additional" | "override";
+    tier: "first" | "included" | "additional" | "override";
   }[];
 };
 
@@ -92,6 +92,7 @@ export function PendingPaymentsProvider({
              pricing_tiers:tournament_pricing_tiers (
                id, sort_order, label, starts_at, ends_at,
                first_event_fee_cents, additional_event_fee_cents,
+               first_events_included,
                tournament_id, created_at, updated_at
              )
            )
@@ -138,6 +139,7 @@ export function PendingPaymentsProvider({
         orgSlug: string;
         entryFeeCents: number;
         additionalEventFeeCents: number;
+        firstEventsIncluded: number;
         events: { id: string; name: string; event_fee_cents: number }[];
       }
     >();
@@ -156,6 +158,7 @@ export function PendingPaymentsProvider({
           orgSlug: org.slug,
           entryFeeCents: activeTier?.first_event_fee_cents ?? 0,
           additionalEventFeeCents: activeTier?.additional_event_fee_cents ?? 0,
+          firstEventsIncluded: activeTier?.first_events_included ?? 1,
           events: [],
         };
         byTournament.set(t.id, g);
@@ -195,6 +198,7 @@ export function PendingPaymentsProvider({
         {
           firstEventFeeCents: g.entryFeeCents,
           additionalEventFeeCents: g.additionalEventFeeCents,
+          firstEventsIncluded: g.firstEventsIncluded,
         },
         paidTournamentIds.has(g.tournamentId),
       );
