@@ -3,6 +3,24 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-17 — Prod finding: www.pickleballangels.com dead (apex is fine) — Ron to fix DNS
+
+Ron: "pickleballangels.com not working." Diagnosed (read-only, no repo change):
+- **Apex `pickleballangels.com` is HEALTHY** — loads the 5th Annual Pickleball Angels
+  tournament (registration open, 6 events, $75/2-events pricing, 41 players), no console/
+  network errors. DNS on Cloudflare (darl/ingrid.ns.cloudflare.com), 200.
+- **ROOT CAUSE: `www.pickleballangels.com` is unconfigured** — no DNS record ("could not
+  resolve host"), TLS cert covers only the bare apex, and the `custom_domains` seed
+  (20260622090000) maps only the apex. Anyone using the `www.` form gets "site can't be
+  reached." **Fix (Ron, Cloudflare dashboard — I can't touch DNS):** add proxied CNAME
+  `www`→`pickleballangels.com` + a Redirect Rule `www.../*` → `https://pickleballangels.com/$1`
+  (301). No app/DB change needed with the redirect approach.
+- **Secondary:** the misspelling **pickleball*angles*.com** (a-n-g-l-e-s) is a DIFFERENT,
+  third-party Squarespace domain that redirects to pickleballindex.com — dead end if that
+  spelling was ever distributed. OFFERED to grep flyer/broadcast assets for the `angles`
+  misspelling + bare `www.` links; awaiting Ron's go-ahead. NEXT: Ron fixes www DNS; optional
+  misspelling-audit sweep.
+
 ## 2026-08-15 — Regression triage + E2E coverage sweep (#708 → #709)
 
 Ron: "why did regression fail today + sweep changes into E2E." **Failure diagnosis:**
