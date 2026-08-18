@@ -3,6 +3,18 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-17 — RESOLVED: www.pickleballangels.com fixed (redirect → apex, verified live)
+
+Ron fixed it in Cloudflare (guided): proxied CNAME `www` → tournament-manager.pages.dev
++ a Redirect Rule `www.pickleballangels.com/*` → `https://pickleballangels.com/` (301,
+static). **Verified live:** www now resolves (Cloudflare IPs), returns 301 → apex → 200
+tournament page, valid TLS (Universal SSL `*.pickleballangels.com` now covers www). Both
+apex and www work. Superseded the "Ron to fix" note below.
+
+Still open (optional): the MISSPELLING `pickleballangles.com` (a-n-g-l-e-s) is a
+third-party Squarespace domain Ron doesn't own → dead end if that spelling was distributed.
+Offered to grep flyer/broadcast assets for the `angles` typo; not yet done.
+
 ## 2026-08-17 — Prod finding: www.pickleballangels.com dead (apex is fine) — Ron to fix DNS
 
 Ron: "pickleballangels.com not working." Diagnosed (read-only, no repo change):
