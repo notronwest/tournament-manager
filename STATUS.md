@@ -3,11 +3,28 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-## 2026-08-21 — In flight: stored digital signature for contracts (app + one-offs)
+## 2026-08-21 — Signature for contracts: approach PIVOTED to in-document signing
 
-Ron wants to create his signature once, have it stored, and auto-applied to contracts.
-Decisions (AskUserQuestion): scope = **Both** (the app's ContractPage contracts AND the
-one-off email-derived contracts I draft); capture = **draw on a signature pad**.
+Ron wants his signature created once, stored, auto-applied to contracts. Decisions
+(AskUserQuestion): scope = **Both** (app ContractPage + one-off drafts); capture = draw on a pad.
+
+**KEY LESSON / pivot:** I (Claude) canNOT reliably store/echo the signature PNG data URL —
+it's ~7KB of base64 and I truncated it when re-typing into a file (decoded to a corrupt
+1478-byte image). So "Claude holds the image and stamps it" does NOT work. **New approach:
+bake signing into the document** — the signature goes hand→page, never through me as text.
+- Delivered: NHBA contract as a self-signing **artifact** (built-in canvas pad → "Apply to
+  contract" stamps the sig onto Ron's line + fills date → Print/Save PDF; sig cached in
+  localStorage so same-browser contracts auto-sign). URL:
+  https://claude.ai/code/artifact/97bf82f5-58e3-458f-ae2f-133bf89f4cee (open in Safari to print).
+- Also published a standalone signature-pad artifact earlier (c86665c8-…) — now superseded by
+  the in-contract pad.
+
+NEXT — the durable **APP FEATURE** (still to build, real "always apply"): in-app signature pad
+on an admin/settings page → store the signature PRIVATELY in the DB (admin-gated, NOT a
+committed asset / public bundle) → ContractPage renders it in the "Ron West · WMPC" block
+(fallback to blank line). PR to TEST as usual. This is the version that works cross-device +
+for app-generated contracts, with no per-contract re-do. For future one-off email contracts:
+generate them in-app once the feature lands, or keep shipping self-signing artifact pages.
 
 Done this session (scratchpad, not in repo): built an interactive signature-pad HTML
 (`scratchpad/signature-pad.html`) — canvas draw, auto-crop to ink bounds, exports a trimmed
