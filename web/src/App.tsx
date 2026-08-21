@@ -63,6 +63,7 @@ import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
 import ResetPasswordPage from "./pages/public/ResetPasswordPage";
 import TournamentSetupIntakePage from "./pages/public/TournamentSetupIntakePage";
+import SetupProcessMockup from "./pages/public/SetupProcessMockup";
 import AuthConfirmPage from "./pages/public/AuthConfirmPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
@@ -139,6 +140,8 @@ export default function App() {
       {/* Customer tournament-setup intake — public, token-gated, no auth.
           The token scopes read/write via get_setup_by_token / save_setup_by_token. */}
       <Route path="/setup/:token" element={<TournamentSetupIntakePage />} />
+      {/* Design mockup (sample data) for Setup as its own process + questions manager. */}
+      <Route path="/mockups/setup" element={<SetupProcessMockup />} />
 
       {/* Public tournament pages — anonymous-readable. RLS already
           restricts to status in (published, closed, completed). */}
