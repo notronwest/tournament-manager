@@ -3,6 +3,27 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-21 — In flight: stored digital signature for contracts (app + one-offs)
+
+Ron wants to create his signature once, have it stored, and auto-applied to contracts.
+Decisions (AskUserQuestion): scope = **Both** (the app's ContractPage contracts AND the
+one-off email-derived contracts I draft); capture = **draw on a signature pad**.
+
+Done this session (scratchpad, not in repo): built an interactive signature-pad HTML
+(`scratchpad/signature-pad.html`) — canvas draw, auto-crop to ink bounds, exports a trimmed
+transparent PNG data URL + copy button; sent to Ron to sign on his phone and paste the
+`data:image/png;base64,…` back. Also drafted the NHBA contract (`scratchpad/nhba-contract.html`,
+styled to match ContractPage — for Sandy Tracy / NH Bankers Assoc, Sep 15 2026, $650; later
+edits: removed travel term, payment "15 days after event concludes", added no-rain-date clause).
+
+NEXT (once Ron pastes the signature data URL): (1) store it in the **memory dir** (persists
+across sessions) so one-off contracts I draft always get it; (2) stamp it on the NHBA contract
++ re-send; (3) **APP FEATURE** — render the stored signature in ContractPage's "Ron West · WMPC"
+signature block (fallback to blank line), + a small admin control to set it. Storage decision:
+keep it PRIVATE — DB (admin-gated), NOT a committed asset / public JS bundle (a signature is
+sensitive). Build as a PR to TEST like usual. Open UX Q for the NHBA contract: 2:30 vs 2:00 start
+(Sandy wants done by 5pm).
+
 ## 2026-08-17 — RESOLVED: www.pickleballangels.com fixed (redirect → apex, verified live)
 
 Ron fixed it in Cloudflare (guided): proxied CNAME `www` → tournament-manager.pages.dev
