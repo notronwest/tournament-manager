@@ -3,6 +3,87 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-24 (later) — Tab variant CHOSEN + shipped: segmented control, Register as CTA
+
+Ron picked **variant 2** (segmented + red Register). Implemented for real; mockup
+scaffolding deleted.
+
+- New `web/src/components/SectionTabs.tsx` — generic segmented-control tab bar built
+  from publicTheme tokens. `ctaKey` prop = the tab that stays **court-red while
+  inactive** and drops to the normal ink fill once active (so red is left only on the
+  per-event Register buttons — verified no colour competition).
+- Accessibility, per shadcn/Radix horizontal-tabs model (the old tabs had **none** of
+  this): roving tabindex, ArrowLeft/Right move *and* activate, Home/End to the ends,
+  and real `aria-controls` ↔ `aria-labelledby` wiring. The two panels in
+  `PublicTournamentPage.tsx` were fragments (`<>`); they're now
+  `<div role="tabpanel" id="tournament-panel-…">`.
+- Desktop width capped at **440px** (uncapped it stretched to ~1016px at 1280 and read
+  as slack). Cap is below mobile width so no media query is needed.
+- Verified in a real preview: 390px + 1280px, keyboard nav confirmed (ArrowRight moved
+  focus → activated Register → swapped panel). typecheck + build green; repo lint still
+  **27 errors, all pre-existing** (identical to baseline).
+- Deleted `web/src/components/__TabsMockup.tsx`; restored a clean `PublicTournamentPage`
+  (net −52 lines there). No mockup/preview scaffolding left in the tree (grep-verified).
+
+**Supersedes the "Ron to pick a tab variant" NEXT in the entry below.** Everything else
+in that entry still stands — still on `feat/registration-payment-editor`, still
+**uncommitted**.
+
+🔜 NEXT — commit + PR the branch (payment editor + tabs); regenerate the stale
+`web/src/types/supabase.ts`.
+
+## 2026-08-24 — Registration price editing (built, uncommitted) + Details/Register tab mockup
+
+Branch **`feat/registration-payment-editor`** — NOT committed, NOT pushed. Two threads:
+
+**1. Change the price on a registered player** (Ron's ask: expose the admin-register
+settings in the Manage Registration modal). Scope decided by Ron via AskUserQuestion:
+**no-migration subset** + **paid regs read-only**.
+- New **Payment** section at the top of `web/src/components/RegistrationEditorModal.tsx`.
+  Unpaid reg → radio: *Record offline payment* (amount + cash/check/venmo/other + note)
+  or *Comp* ($0). Both mark paid, both confirm first. Paid reg → read-only summary of
+  HOW they paid (reads `manual_payments`), pointing at Issue refund.
+- New edge function `supabase/functions/admin-set-registration-payment/index.ts` —
+  org-staff only, authorizes against the reg's OWN org, refuses already-paid rows,
+  optimistic status guard against double-recording. Writes `manual_payments`
+  (server-only table, no client write policy).
+- `web/src/lib/adminRegister.ts` — added `settleRegistrationPayment` /
+  `fetchManualPayments` (+ error-code → copy map). `manual_payments` isn't in the
+  generated types yet, so that read uses the untyped-client pattern from `lib/orgContacts`.
+- Partner: "Signed up with:" line now always renders in the Partner section (name when
+  paired; "nobody yet — they're looking for a partner" / "an invite is out" when not).
+  Ron OK'd keeping it lower in the modal rather than in the header.
+- Verified: typecheck + build green, 0 new lint errors (repo's 27 are pre-existing —
+  confirmed identical with changes stashed), rendered at **390px** in a real preview.
+
+**KEY FINDING — `event_registrations.event_fee_cents` is a SNAPSHOT, not the price.**
+`compute_checkout_total` (`20260815130000_pricing_events_included.sql`) prices from
+`events.event_fee_cents` + the tournament pricing tier and NEVER reads the registration's
+own fee. So editing that column would silently not change what a player is charged. This
+is why post-hoc "invoice at $X" is out of scope — it needs a real
+`price_override_cents` column + a change to that function.
+
+**KNOWN GAP (accepted, flagged to Ron):** a *manually* paid reg (comp/offline) can't be
+corrected — Issue refund can't help it either, since there's no Stripe charge behind cash.
+Correction = withdraw + re-register. The UI copy says so explicitly.
+
+**2. Details/Register tabs "not prominent enough"** — mockup only, live on the real page
+(`/t/pickleball-angels/seacoast`, dev server on **:5199** — 5173 was occupied by another
+project). Temporary scaffolding: `web/src/components/__TabsMockup.tsx` + a swapped-out
+tablist block in `PublicTournamentPage.tsx`. Four switchable variants: 0 Current,
+1 Segmented, 2 Segmented + red Register (**my recommendation**), 3 Tabs + full-width CTA.
+
+🔜 NEXT
+- **Ron to pick a tab variant.** Then implement it properly (add roving-tabindex keyboard
+  nav per Radix — today's tabs have none), cap the segmented control ~420px on desktop
+  (it stretches to ~1016px at 1280), and **delete the `__TabsMockup.tsx` scaffolding +
+  restore the real tablist block**. Do NOT commit the mockup.
+- Commit + PR the payment work (branch already exists, nothing staged).
+- Regenerate `web/src/types/supabase.ts` — it's stale (missing `manual_payments`,
+  `admin_invoiced_at`, `refunded_cents`, `organization_contacts`, `tournament_setups`).
+- Open question if the gap bites: add `event_registrations.price_override_cents` +
+  teach `compute_checkout_total` to honour it, which unlocks real post-hoc re-pricing.
+
 ## 2026-08-21 — Signature for contracts: approach PIVOTED to in-document signing
 
 Ron wants his signature created once, stored, auto-applied to contracts. Decisions
