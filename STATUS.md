@@ -3,6 +3,35 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-24 — HOTFIX promoted: tab switching no longer strands the reader (#716/#717/#718)
+
+Ron: "Clicking Register sends the user to the middle of the page." Fixed, merged,
+promoted, verified live — all within the session.
+
+- **Cause:** switching tabs swaps the whole panel below the control, but the browser
+  keeps the scroll offset. Scroll down through Details, tap Register, and you stay at
+  that pixel depth — partway into the events list with the tab bar off-screen above.
+- **Fix** (`SectionTabs`): re-anchor to the control on switch. Only ever scrolls **up**,
+  so tapping from the top doesn't yank the reader down. Jumps rather than smooth-scrolls
+  (distance can be most of the page; also sidesteps `prefers-reduced-motion`). Lives in a
+  shared `select()` so **click and keyboard** both get it, while *programmatic* `setTab`
+  (the reset on tournament change) deliberately does not scroll.
+- Story **#716** → PR **#717** (squash `c0274f6` on main) → promotion **#718**
+  (merge `c3a18f1`). Frontend only — no migration, no edge function, no schema.
+
+**Verified on live bertanderne.com at 390px** (not just locally):
+
+| case | result |
+|---|---|
+| scrolled down (1308), tab bar 578px off-screen, tap Register | scrolled to 718, tab bar 12px from top, fully visible |
+| at top of page, tap Register | stayed at 0 — no scroll |
+
+🔜 NEXT — unchanged from the entry below, and all still outstanding:
+- Ron: exercise comp + offline payment once in prod (**both money paths remain unproven
+  in production**).
+- Regenerate `web/src/types/supabase.ts`; drop the untyped-client shim in `lib/adminRegister.ts`.
+- Repoint `web/.env` away from PROD (it currently points at the live project).
+
 ## 2026-08-24 — PROMOTED TEST → PROD (#712 · #715). Live on bertanderne.com
 
 Shipped and verified in production. Payment editor + segmented tabs merged to `main`
