@@ -80,6 +80,11 @@ export const SEED = {
     removePartner: { player: "Tom Team", partnerName: "Tina Team", event: "MR Remove Partner" },
     withdrawPaid: { player: "Wade Paid", email: "mr-wade@wmpc.test", event: "MR Withdraw Paid" },
     withdrawPending: { player: "Pete Pending", email: "mr-pete@wmpc.test", event: "MR Withdraw Pending" },
+    // Organizer-initiated refund (#704). Rita is a paid comp (no payment) so
+    // the "remove" path withdraws her without a Stripe call; Gary is pending →
+    // the Issue-refund section must not appear (refunds are paid-only).
+    refundRemove: { player: "Rita Refund", email: "mr-rita@wmpc.test", event: "MR Refund Remove" },
+    refundGatingPending: { player: "Gary Gating", email: "mr-gary@wmpc.test", event: "MR Refund Pending" },
   },
 };
 

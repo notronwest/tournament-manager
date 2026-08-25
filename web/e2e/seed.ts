@@ -435,6 +435,21 @@ async function main() {
   await resetEvent(mrWithdrawPending);
   await insertReg(mrWithdrawPending, await ensurePlayer("mr-pete@wmpc.test", "Pete", "Pending"), "pending_payment");
 
+  // (8) Organizer-initiated refund (#704) — Olive issues a refund from the
+  //     editor with NO withdrawal request. Rita's paid reg has no payment
+  //     behind it (event_fee_cents 0, like the other MR comps), so the refund
+  //     preview computes $0 refundable and the "also remove" path flips her to
+  //     withdrawn WITHOUT touching Stripe — the deterministic slice of the new
+  //     admin_refund mode. Gary's PENDING reg is the negative case: refunds are
+  //     paid-only, so the Issue-refund section must not appear for him.
+  const mrRefundRemove = await singlesEvent(mrT, "MR Refund Remove");
+  await resetEvent(mrRefundRemove);
+  await insertReg(mrRefundRemove, await ensurePlayer("mr-rita@wmpc.test", "Rita", "Refund"), "paid");
+
+  const mrRefundPending = await singlesEvent(mrT, "MR Refund Pending");
+  await resetEvent(mrRefundPending);
+  await insertReg(mrRefundPending, await ensurePlayer("mr-gary@wmpc.test", "Gary", "Gating"), "pending_payment");
+
   console.log("seed: e2e-test fixture ready");
 }
 

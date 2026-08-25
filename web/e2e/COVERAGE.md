@@ -19,12 +19,19 @@ row so the gap is visible.
 
 ## Summary (today)
 
-**47 spec runs green across 3 browser projects** — **chromium** (desktop, 19
+**49 spec runs green across 3 browser projects** — **chromium** (desktop, 21
 specs: the full journey suite) plus two phone-width projects, **iPhone 13** and
 **Pixel 5** (14 each, ~390px touch), which re-run the non-mutating journeys and a
 layout audit. 2 flaky (free-tier DB cold-start, retry-covered); 4 skipped = 2
 parked audits ×2 mobile projects. Runtime **~3 min** (was ~33 min before the
 2026-06-25 reliability pass: mobile-aware fixtures + a fail-fast stop mechanism).
+
+**Recently shipped — coverage status** (2026-08-15 sweep): organizer-initiated
+refund (#704) → ✅ the no-money slice (below). Still ❌: entry-fee-includes-N-events
+pricing (#697), date-only tournament dates (#701), the Setup flow (#691/#693/#695),
+the opportunity/quote pipeline (#684/#686), and Quote Studio — all on the untested
+organizer/admin surface or behind the 💳 money gate. See the sections + the
+"Recently shipped" table near the bottom.
 
 **By journey, the green set is the public player surface** — account/auth (incl.
 signup + reset), discovery, the full registration spread (doubles
@@ -124,6 +131,7 @@ blind to a *clipped* layout).
 | Proceed to checkout | ❌ 💳 | |
 | Pay (Stripe Payment Element) | ❌ 💳 | webhook flips reg → paid |
 | Additional-event pricing | ❌ 💳 | |
+| Entry fee includes first N events (#697) | ❌ | register-basket display ("N included" / "$0 included in entry") is testable **pre-pay** without Stripe; the charged total is 💳. Needs a seeded tier with `first_events_included > 1` + a multi-event registration. |
 | Apply coupon | ❌ 💳 | |
 | Charity donation | ❌ 💳 | board #378 |
 
@@ -139,10 +147,12 @@ blind to a *clipped* layout).
 
 | Journey | Status | Spec / note |
 |---|---|---|
+| **Organizer-initiated refund — issue without a request (#704)** | ✅ | `flows/manage-registration.spec.ts` — no-money slice: comp'd paid reg → "Issue refund" + remove → withdrawn (no Stripe); + paid-only gating. The real money refund is 💳. |
 | Request a refund (player) | ❌ 📧 | |
 | Organizer approve / deny withdrawal | ❌ 💳📧 | |
 | Change-request queue (organizer view) | ❌ | |
 | Self-withdraw refund policy (auto vs manual) | ❌ 💳 | |
+| Organizer refund — actual money back (full/partial, keep-registered) | ❌ 💳 | #704 built; needs Stripe test mode (#255) to assert the charge reversal + `refunded_cents`. |
 
 ## Organizer / admin — tournament setup
 
@@ -150,6 +160,13 @@ _None covered._ Create org · Stripe Connect onboarding 💳 · create tournamen
 (wizard) · create tournament (simple) · edit tournament · change status
 (draft→published→closed→completed) · create event · edit event · bulk-edit
 events · event console.
+
+**Recently shipped here, still ❌:** **date-only tournament dates (#701)** — the
+create wizard + edit form now use date-only pickers ("Start date"/"End date");
+testable once one organizer create/edit spec exists (the whole surface is
+unblocked by that first spec). **Setup flow (#691/#693/#695)** — admin start-setup
++ link + review, and the customer `/setup/:token` intake form (token-gated, so
+testable with a seeded setup token, like the invite-accept flow).
 
 ## Organizer / admin — operations
 
@@ -167,6 +184,13 @@ contacts 📧 · platform fee settings.
 _None covered._ Org picker · site dashboard · site-wide attendees · player
 detail/edit 📧 · Quote Studio (list, create, edit, catalog, send 📧, customer
 view `/q/:token`, contract) · org danger-zone delete.
+
+**Recently shipped here, still ❌:** the **opportunity/quote pipeline on Home
+(#684)** — quotes list with show/hide filtering + lifecycle stage — and the
+**quote-editor workflow redesign (#686/#689)** (stage/next-step, save discipline,
+history). The customer `/q/:token` quote view is token-gated → testable with a
+seeded quote token (like invite-accept / setup); the admin editor needs the first
+organizer/Quote-Studio spec.
 
 ## System / background (mostly indirect)
 
@@ -202,3 +226,10 @@ two highest-value gaps left are both large and currently uncovered:
    un-parks the two ⏸️ mobile audits. Defer unless "registration works on a
    phone" should be its own gate — the layout/nav audit already covers the
    mobile-first bug class.
+
+**Newly-shipped, non-Stripe wins** (small, no organizer-auth or Stripe needed —
+good next specs): **pricing "N events included" (#697)** asserted in the register
+basket (seed a `first_events_included:2` tier + register 2 events → "$0 included
+in entry"); the **customer `/setup/:token` (#695)** and **`/q/:token` quote view
+(#686)** token pages (seed a token, like invite-accept). These close three of the
+2026-08 gaps without unblocking the whole admin surface first.

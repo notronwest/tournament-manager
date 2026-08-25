@@ -3,6 +3,232 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-24 (later) — Tab variant CHOSEN + shipped: segmented control, Register as CTA
+
+Ron picked **variant 2** (segmented + red Register). Implemented for real; mockup
+scaffolding deleted.
+
+- New `web/src/components/SectionTabs.tsx` — generic segmented-control tab bar built
+  from publicTheme tokens. `ctaKey` prop = the tab that stays **court-red while
+  inactive** and drops to the normal ink fill once active (so red is left only on the
+  per-event Register buttons — verified no colour competition).
+- Accessibility, per shadcn/Radix horizontal-tabs model (the old tabs had **none** of
+  this): roving tabindex, ArrowLeft/Right move *and* activate, Home/End to the ends,
+  and real `aria-controls` ↔ `aria-labelledby` wiring. The two panels in
+  `PublicTournamentPage.tsx` were fragments (`<>`); they're now
+  `<div role="tabpanel" id="tournament-panel-…">`.
+- Desktop width capped at **440px** (uncapped it stretched to ~1016px at 1280 and read
+  as slack). Cap is below mobile width so no media query is needed.
+- Verified in a real preview: 390px + 1280px, keyboard nav confirmed (ArrowRight moved
+  focus → activated Register → swapped panel). typecheck + build green; repo lint still
+  **27 errors, all pre-existing** (identical to baseline).
+- Deleted `web/src/components/__TabsMockup.tsx`; restored a clean `PublicTournamentPage`
+  (net −52 lines there). No mockup/preview scaffolding left in the tree (grep-verified).
+
+**Supersedes the "Ron to pick a tab variant" NEXT in the entry below.** Everything else
+in that entry still stands — still on `feat/registration-payment-editor`, still
+**uncommitted**.
+
+🔜 NEXT — commit + PR the branch (payment editor + tabs); regenerate the stale
+`web/src/types/supabase.ts`.
+
+## 2026-08-24 — Registration price editing (built, uncommitted) + Details/Register tab mockup
+
+Branch **`feat/registration-payment-editor`** — NOT committed, NOT pushed. Two threads:
+
+**1. Change the price on a registered player** (Ron's ask: expose the admin-register
+settings in the Manage Registration modal). Scope decided by Ron via AskUserQuestion:
+**no-migration subset** + **paid regs read-only**.
+- New **Payment** section at the top of `web/src/components/RegistrationEditorModal.tsx`.
+  Unpaid reg → radio: *Record offline payment* (amount + cash/check/venmo/other + note)
+  or *Comp* ($0). Both mark paid, both confirm first. Paid reg → read-only summary of
+  HOW they paid (reads `manual_payments`), pointing at Issue refund.
+- New edge function `supabase/functions/admin-set-registration-payment/index.ts` —
+  org-staff only, authorizes against the reg's OWN org, refuses already-paid rows,
+  optimistic status guard against double-recording. Writes `manual_payments`
+  (server-only table, no client write policy).
+- `web/src/lib/adminRegister.ts` — added `settleRegistrationPayment` /
+  `fetchManualPayments` (+ error-code → copy map). `manual_payments` isn't in the
+  generated types yet, so that read uses the untyped-client pattern from `lib/orgContacts`.
+- Partner: "Signed up with:" line now always renders in the Partner section (name when
+  paired; "nobody yet — they're looking for a partner" / "an invite is out" when not).
+  Ron OK'd keeping it lower in the modal rather than in the header.
+- Verified: typecheck + build green, 0 new lint errors (repo's 27 are pre-existing —
+  confirmed identical with changes stashed), rendered at **390px** in a real preview.
+
+**KEY FINDING — `event_registrations.event_fee_cents` is a SNAPSHOT, not the price.**
+`compute_checkout_total` (`20260815130000_pricing_events_included.sql`) prices from
+`events.event_fee_cents` + the tournament pricing tier and NEVER reads the registration's
+own fee. So editing that column would silently not change what a player is charged. This
+is why post-hoc "invoice at $X" is out of scope — it needs a real
+`price_override_cents` column + a change to that function.
+
+**KNOWN GAP (accepted, flagged to Ron):** a *manually* paid reg (comp/offline) can't be
+corrected — Issue refund can't help it either, since there's no Stripe charge behind cash.
+Correction = withdraw + re-register. The UI copy says so explicitly.
+
+**2. Details/Register tabs "not prominent enough"** — mockup only, live on the real page
+(`/t/pickleball-angels/seacoast`, dev server on **:5199** — 5173 was occupied by another
+project). Temporary scaffolding: `web/src/components/__TabsMockup.tsx` + a swapped-out
+tablist block in `PublicTournamentPage.tsx`. Four switchable variants: 0 Current,
+1 Segmented, 2 Segmented + red Register (**my recommendation**), 3 Tabs + full-width CTA.
+
+🔜 NEXT
+- **Ron to pick a tab variant.** Then implement it properly (add roving-tabindex keyboard
+  nav per Radix — today's tabs have none), cap the segmented control ~420px on desktop
+  (it stretches to ~1016px at 1280), and **delete the `__TabsMockup.tsx` scaffolding +
+  restore the real tablist block**. Do NOT commit the mockup.
+- Commit + PR the payment work (branch already exists, nothing staged).
+- Regenerate `web/src/types/supabase.ts` — it's stale (missing `manual_payments`,
+  `admin_invoiced_at`, `refunded_cents`, `organization_contacts`, `tournament_setups`).
+- Open question if the gap bites: add `event_registrations.price_override_cents` +
+  teach `compute_checkout_total` to honour it, which unlocks real post-hoc re-pricing.
+
+## 2026-08-21 — Signature for contracts: approach PIVOTED to in-document signing
+
+Ron wants his signature created once, stored, auto-applied to contracts. Decisions
+(AskUserQuestion): scope = **Both** (app ContractPage + one-off drafts); capture = draw on a pad.
+
+**KEY LESSON / pivot:** I (Claude) canNOT reliably store/echo the signature PNG data URL —
+it's ~7KB of base64 and I truncated it when re-typing into a file (decoded to a corrupt
+1478-byte image). So "Claude holds the image and stamps it" does NOT work. **New approach:
+bake signing into the document** — the signature goes hand→page, never through me as text.
+- Delivered: NHBA contract as a self-signing **artifact** (built-in canvas pad → "Apply to
+  contract" stamps the sig onto Ron's line + fills date → Print/Save PDF; sig cached in
+  localStorage so same-browser contracts auto-sign). URL:
+  https://claude.ai/code/artifact/97bf82f5-58e3-458f-ae2f-133bf89f4cee (open in Safari to print).
+- Also published a standalone signature-pad artifact earlier (c86665c8-…) — now superseded by
+  the in-contract pad.
+
+NEXT — the durable **APP FEATURE** (still to build, real "always apply"): in-app signature pad
+on an admin/settings page → store the signature PRIVATELY in the DB (admin-gated, NOT a
+committed asset / public bundle) → ContractPage renders it in the "Ron West · WMPC" block
+(fallback to blank line). PR to TEST as usual. This is the version that works cross-device +
+for app-generated contracts, with no per-contract re-do. For future one-off email contracts:
+generate them in-app once the feature lands, or keep shipping self-signing artifact pages.
+
+Done this session (scratchpad, not in repo): built an interactive signature-pad HTML
+(`scratchpad/signature-pad.html`) — canvas draw, auto-crop to ink bounds, exports a trimmed
+transparent PNG data URL + copy button; sent to Ron to sign on his phone and paste the
+`data:image/png;base64,…` back. Also drafted the NHBA contract (`scratchpad/nhba-contract.html`,
+styled to match ContractPage — for Sandy Tracy / NH Bankers Assoc, Sep 15 2026, $650; later
+edits: removed travel term, payment "15 days after event concludes", added no-rain-date clause).
+
+NEXT (once Ron pastes the signature data URL): (1) store it in the **memory dir** (persists
+across sessions) so one-off contracts I draft always get it; (2) stamp it on the NHBA contract
++ re-send; (3) **APP FEATURE** — render the stored signature in ContractPage's "Ron West · WMPC"
+signature block (fallback to blank line), + a small admin control to set it. Storage decision:
+keep it PRIVATE — DB (admin-gated), NOT a committed asset / public JS bundle (a signature is
+sensitive). Build as a PR to TEST like usual. Open UX Q for the NHBA contract: 2:30 vs 2:00 start
+(Sandy wants done by 5pm).
+
+## 2026-08-17 — RESOLVED: www.pickleballangels.com fixed (redirect → apex, verified live)
+
+Ron fixed it in Cloudflare (guided): proxied CNAME `www` → tournament-manager.pages.dev
++ a Redirect Rule `www.pickleballangels.com/*` → `https://pickleballangels.com/` (301,
+static). **Verified live:** www now resolves (Cloudflare IPs), returns 301 → apex → 200
+tournament page, valid TLS (Universal SSL `*.pickleballangels.com` now covers www). Both
+apex and www work. Superseded the "Ron to fix" note below.
+
+Still open (optional): the MISSPELLING `pickleballangles.com` (a-n-g-l-e-s) is a
+third-party Squarespace domain Ron doesn't own → dead end if that spelling was distributed.
+Offered to grep flyer/broadcast assets for the `angles` typo; not yet done.
+
+## 2026-08-17 — Prod finding: www.pickleballangels.com dead (apex is fine) — Ron to fix DNS
+
+Ron: "pickleballangels.com not working." Diagnosed (read-only, no repo change):
+- **Apex `pickleballangels.com` is HEALTHY** — loads the 5th Annual Pickleball Angels
+  tournament (registration open, 6 events, $75/2-events pricing, 41 players), no console/
+  network errors. DNS on Cloudflare (darl/ingrid.ns.cloudflare.com), 200.
+- **ROOT CAUSE: `www.pickleballangels.com` is unconfigured** — no DNS record ("could not
+  resolve host"), TLS cert covers only the bare apex, and the `custom_domains` seed
+  (20260622090000) maps only the apex. Anyone using the `www.` form gets "site can't be
+  reached." **Fix (Ron, Cloudflare dashboard — I can't touch DNS):** add proxied CNAME
+  `www`→`pickleballangels.com` + a Redirect Rule `www.../*` → `https://pickleballangels.com/$1`
+  (301). No app/DB change needed with the redirect approach.
+- **Secondary:** the misspelling **pickleball*angles*.com** (a-n-g-l-e-s) is a DIFFERENT,
+  third-party Squarespace domain that redirects to pickleballindex.com — dead end if that
+  spelling was ever distributed. OFFERED to grep flyer/broadcast assets for the `angles`
+  misspelling + bare `www.` links; awaiting Ron's go-ahead. NEXT: Ron fixes www DNS; optional
+  misspelling-audit sweep.
+
+## 2026-08-15 — Regression triage + E2E coverage sweep (#708 → #709)
+
+Ron: "why did regression fail today + sweep changes into E2E." **Failure diagnosis:**
+today's two nightly runs (09:37, 17:35) both PASSED. The last red run was **2026-08-14
+18:07** — flaky partner-picker timeouts in registration.spec.ts (1 fail + 2 flaky, 47
+passed; all three ~20s `locator` timeouts) that cleared on the next two runs with no code
+change. **Environmental (free-tier DB/app cold-start), not a code regression.**
+
+**Coverage sweep (#709, merged):** added 2 deterministic specs for organizer-initiated
+refund (#704) to manage-registration.spec.ts — (1) comp'd paid reg → "Issue refund" +
+remove → withdrawn (no Stripe, since refund_compute returns $0 for a no-payment reg); (2)
+Issue-refund absent on a pending reg. Seeded Rita (paid) + Gary (pending). **Validated via
+a dispatched regression run on the branch: 52 passed, 0 flaky** (both new tests green).
+Swept COVERAGE.md: refund → ✅ no-money slice; added ❌ rows w/ blockers for pricing
+N-events (#697), date-only (#701), Setup (#691/#693/#695), opportunity/quote pipeline
+(#684/#686).
+
+**Still uncovered (tracked in COVERAGE.md):** the real money refund + all checkout/pricing
+math (💳 gated on Stripe-test #255); the entire organizer/admin surface incl. date-only
+create/edit + Setup admin (needs the first organizer-auth spec). Cheapest next non-Stripe
+wins noted there: pricing "N included" in the register basket, and the customer /setup/:token
++ /q/:token token pages (seed a token like invite-accept).
+
+## 2026-08-15 — Organizer-initiated refunds → TEST (#704: #706 DB + #707 edge/UI)
+
+Ron: "We should be able to initiate the refund without the customer asking." Built the
+admin refund path (today refunds only fired from a player's withdrawal request via
+stripe-refund `resolve`). Ron's design calls (AskUserQuestion): **amount defaults to the
+tournament's cancellation policy, overridable** (partial ok); **"let me choose each time"**
+whether to also remove the player from the event.
+
+- **DB (#706, applied to TEST):** `event_registrations.refunded_cents int not null default 0`
+  — running total refunded so partial refunds cap correctly + a keep-registered partial stays
+  consistent with a later withdrawal. Written only by the edge fn.
+- **Edge fn (#707, deployed to TEST):** stripe-refund new **`admin_refund`** mode —
+  admin-authorized (has_org_role) on a **paid** reg; default = refund_compute policy amount,
+  override via amountCents, capped at net-paid − already-refunded; **removeFromEvent** (default
+  true → withdraw+unpair → refunded/withdrawn; false → keep paid, refund tracked in
+  refunded_cents). Idempotency keyed on reg + running total (repeat partials safe, double-submit
+  no-ops). Also **clamped the existing self/resolve paths by refunded_cents** + keep the total
+  accurate so a prior keep-registered refund can't be double-issued (Stripe is the hard backstop).
+- **UI (#707):** RegistrationEditorModal (Attendees/Contacts/person page → Manage) gets an
+  **"Issue refund"** section on paid regs — dry-run preview (policy default + max), amount input,
+  remove checkbox, note, partner-unpair warning, ConfirmModal → execute. New client lib
+  `web/src/lib/refunds.ts`. Withdraw copy updated (no longer "queue only").
+
+typecheck+build+lint clean. **NOT verified live** — no web/.env.local + needs a real Stripe-test
+paid registration. **Ron: verify on TEST** — on a paid reg: (1) full refund + remove, (2) partial
+refund + keep registered, then confirm a 2nd refund caps at the remainder and a later withdrawal
+doesn't double-refund. Then promote to PROD when satisfied. (Two other refund paths — the
+player-facing self-withdraw and the request queue — were touched defensively; regression-worth a
+glance too.)
+
+## 2026-08-15 — PROMOTED TEST → PROD (#703): pricing-N, date-only, Setup, quote redesign, opportunities
+
+Ron: "Push to production." Promoted `main` → `production` via PR #703 (`--merge --admin`;
+the `check` issue-reference gate is a feature-PR guardrail that doesn't apply to promotions —
+`unique-versions` migration gate PASSED). 29 commits.
+
+**Migrations auto-applied to PROD** (workflow 31892377080, success 22s) — both additive,
+backward-compatible, previously clean on TEST:
+- `20260813120000_tournament_setups.sql` (#691) — new table + token RPCs.
+- `20260815130000_pricing_events_included.sql` (#698) — `first_events_included` col (default
+  1 = prior behavior) + `create or replace` on replace_pricing_tiers / compute_checkout_total.
+
+No edge-function changes (that workflow correctly didn't run). Cloudflare auto-builds the
+`production` branch for the frontend.
+
+**Shipped to PROD:** pricing "entry fee includes first N events" (#697/#698/#699/#700) ·
+date-only tournament start/end (#701/#702) · Setup flow end-to-end (#691/#693/#695) ·
+quote-editor workflow redesign (#686/#689) · opportunities pipeline on Home (#684) · host
+guide (#680) · E2E manage-reg fix (#682).
+
+NEXT: eyeball on PROD once Cloudflare finishes — a tier with N>1 (public headline + checkout)
+and a fresh tournament's date pickers (neither browser-verified locally this session, no
+web/.env.local). TEST and PROD are now level.
+
 ## 2026-08-15 — Tournament dates = date-only (#701/#702) + pricing copy reflects N (#700)
 
 Two small frontend-only changes, both merged to TEST:

@@ -8,6 +8,19 @@ import {
 } from "./PlayerPicker";
 import { ConfirmModal } from "./ConfirmModal";
 import {
+  previewAdminRefund,
+  executeAdminRefund,
+  type AdminRefundPreview,
+} from "../lib/refunds";
+import { formatUsd } from "../lib/pricing";
+import {
+  settleRegistrationPayment,
+  fetchManualPayments,
+  type SettleKind,
+  type ManualPaymentMethod,
+  type ManualPaymentRecord,
+} from "../lib/adminRegister";
+import {
   reassignRegistrationPlayer,
   withdrawRegistration,
   pairRegistrations,
@@ -90,6 +103,113 @@ export function RegistrationEditorModal({
   );
   const [error, setError] = useState<string | null>(null);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+
+  // Organizer-initiated refund (#704). Only paid regs can be refunded.
+  const canRefund = reg.status === "paid";
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundPreview, setRefundPreview] = useState<AdminRefundPreview | null>(null);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundAmountStr, setRefundAmountStr] = useState("");
+  const [refundRemove, setRefundRemove] = useState(true);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundConfirm, setRefundConfirm] = useState(false);
+  const [refundBusy, setRefundBusy] = useState(false);
+  const [refundError, setRefundError] = useState<string | null>(null);
+
+  // Open the refund panel and fetch the policy default + max refundable.
+  const openRefund = async () => {
+    setRefundOpen(true);
+    setRefundLoading(true);
+    setRefundError(null);
+    setRefundPreview(null);
+    const { preview, error: err } = await previewAdminRefund(reg.regId);
+    if (err || !preview) {
+      setRefundError(err ?? "Could not load refund details.");
+      setRefundLoading(false);
+      return;
+    }
+    setRefundPreview(preview);
+    setRefundAmountStr((preview.policyDefaultCents / 100).toFixed(2));
+    setRefundLoading(false);
+  };
+
+  // Parse the dollar input → cents, clamped to [0, max].
+  const refundMaxCents = refundPreview?.maxRefundableCents ?? 0;
+  const refundAmountCents = (() => {
+    const n = Math.round(parseFloat(refundAmountStr || "0") * 100);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(n, refundMaxCents);
+  })();
+  const refundAmountValid =
+    refundPreview != null &&
+    Number.isFinite(parseFloat(refundAmountStr)) &&
+    refundAmountCents >= 0 &&
+    refundAmountCents <= refundMaxCents;
+
+  // ── Payment (#: change the price on a registration) ──────────────────
+  // Mirrors the comp / record-offline-payment treatments of the admin
+  // "register a contact" modal, applied after the fact. Only an OPEN BALANCE
+  // can be settled here: once a reg is paid the money has moved, so it is
+  // read-only and the organizer is pointed at Issue refund instead.
+  const isUnpaid =
+    reg.status === "pending_payment" || reg.status === "waitlisted_pending_payment";
+  const [payKind, setPayKind] = useState<SettleKind>("offline");
+  const [payAmountStr, setPayAmountStr] = useState(
+    reg.eventFeeCents > 0 ? (reg.eventFeeCents / 100).toFixed(2) : "",
+  );
+  const [payMethod, setPayMethod] = useState<ManualPaymentMethod>("cash");
+  const [payNote, setPayNote] = useState("");
+  const [payBusy, setPayBusy] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [payConfirm, setPayConfirm] = useState(false);
+
+  // What was already recorded outside Stripe, so a paid reg can show HOW it was
+  // paid (comped / cash at the desk) rather than a bare "Paid" badge.
+  const [manualPays, setManualPays] = useState<ManualPaymentRecord[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchManualPayments(reg.regId);
+        if (!cancelled) setManualPays(rows);
+      } catch {
+        // Non-fatal — the section falls back to the fee on the registration.
+        if (!cancelled) setManualPays([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reg.regId]);
+
+  const payAmountCents = (() => {
+    const n = Math.round(parseFloat(payAmountStr || "0") * 100);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  })();
+  const payAmountValid =
+    payKind === "comp" ||
+    (Number.isFinite(parseFloat(payAmountStr)) && payAmountCents >= 0);
+
+  const onSettle = async () => {
+    setPayError(null);
+    setPayBusy(true);
+    try {
+      await settleRegistrationPayment({
+        regId: reg.regId,
+        kind: payKind,
+        amountCents: payKind === "comp" ? 0 : payAmountCents,
+        method: payKind === "offline" ? payMethod : undefined,
+        note: payNote.trim() || undefined,
+      });
+      setPayConfirm(false);
+      await done();
+    } catch (e) {
+      setPayConfirm(false);
+      setPayError(errMsg(e));
+    } finally {
+      setPayBusy(false);
+    }
+  };
 
   // Pending-invite context, so the admin can SEE who this player invited / who
   // invited them — the missing piece when two people invite each other.
@@ -252,6 +372,116 @@ export function RegistrationEditorModal({
             </div>
           )}
 
+          {/* Payment — settle an open balance, or show how it was paid */}
+          <Section title="Payment">
+            {isUnpaid ? (
+              <>
+                <p style={hint}>
+                  {reg.playerName.split(/\s+/)[0] || reg.playerName} still owes
+                  for this event. Close the balance by waiving the fee or
+                  recording money you collected outside the app — the same
+                  choices you get when registering a player by hand.
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                  <PayOption
+                    checked={payKind === "offline"}
+                    onSelect={() => setPayKind("offline")}
+                    title="Record offline payment"
+                    detail="Cash, check, or Venmo you already collected. Marks them paid."
+                  />
+                  <PayOption
+                    checked={payKind === "comp"}
+                    onSelect={() => setPayKind("comp")}
+                    title="Comp"
+                    detail="Waive the fee entirely — registers them at $0 and marks them paid."
+                  />
+                </div>
+
+                {payKind === "offline" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+                    <label style={fieldLabel}>
+                      Amount collected (USD)
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                        <span style={{ color: inkSoft }}>$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={payAmountStr}
+                          onChange={(e) => setPayAmountStr(e.target.value)}
+                          placeholder="0.00"
+                          style={refundInput}
+                        />
+                      </div>
+                      <span style={{ fontSize: 11.5, color: inkMuted }}>
+                        {reg.eventFeeCents > 0
+                          ? `Fee on this registration: ${formatUsd(reg.eventFeeCents)}.`
+                          : "No fee is recorded on this registration — enter what you actually took."}
+                      </span>
+                    </label>
+
+                    <label style={fieldLabel}>
+                      Method
+                      <select
+                        value={payMethod}
+                        onChange={(e) =>
+                          setPayMethod(e.target.value as ManualPaymentMethod)
+                        }
+                        style={{ ...refundInput, marginTop: 4 }}
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="check">Check</option>
+                        <option value="venmo">Venmo</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+
+                <label style={{ ...fieldLabel, marginBottom: 12 }}>
+                  Note (optional)
+                  <input
+                    type="text"
+                    value={payNote}
+                    onChange={(e) => setPayNote(e.target.value)}
+                    placeholder="e.g. paid at the desk"
+                    style={{ ...refundInput, marginTop: 4 }}
+                  />
+                </label>
+
+                {payError && (
+                  <div style={{ ...statusPanelStyle("danger"), marginBottom: 10 }} role="alert">
+                    {payError}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setPayConfirm(true)}
+                  disabled={anyBusy || payBusy || !payAmountValid}
+                  style={
+                    anyBusy || payBusy || !payAmountValid
+                      ? ctaPrimaryDisabledStyle
+                      : ctaPrimaryStyle
+                  }
+                >
+                  {payBusy
+                    ? "Saving…"
+                    : payKind === "comp"
+                      ? "Comp this entry"
+                      : `Record ${formatUsd(payAmountCents)} payment`}
+                </button>
+              </>
+            ) : (
+              <PaidSummary
+                status={reg.status}
+                eventFeeCents={reg.eventFeeCents}
+                manualPays={manualPays}
+                canRefund={canRefund}
+              />
+            )}
+          </Section>
+
           {/* Reassign player */}
           <Section title="Reassign player">
             <p style={hint}>
@@ -294,7 +524,7 @@ export function RegistrationEditorModal({
               {hasPartner ? (
                 <div style={{ ...panelMutedStyle }}>
                   <div style={{ fontSize: 13, color: inkSoft, marginBottom: 10 }}>
-                    Current partner:{" "}
+                    Signed up with:{" "}
                     <strong style={{ color: ink }}>
                       {reg.partnerName ?? "(partner)"}
                     </strong>
@@ -313,6 +543,17 @@ export function RegistrationEditorModal({
                 </div>
               ) : (
                 <>
+                  <div style={{ ...panelMutedStyle, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, color: inkSoft }}>
+                      Signed up with:{" "}
+                      <strong style={{ color: ink }}>nobody yet</strong> —{" "}
+                      {reg.partnerStatus === "pending"
+                        ? "an invite is out but unaccepted."
+                        : reg.partnerStatus === "declined"
+                          ? "their invite was declined."
+                          : "they're looking for a partner."}
+                    </div>
+                  </div>
                   <p style={hint}>
                     Assign a partner. If they're already registered for this
                     event we'll pair the existing entry; otherwise a comped
@@ -345,12 +586,149 @@ export function RegistrationEditorModal({
             </Section>
           )}
 
+          {/* Issue refund — organizer-initiated, paid regs only (#704) */}
+          {canRefund && (
+            <Section title="Issue refund">
+              {!refundOpen ? (
+                <>
+                  <p style={hint}>
+                    Refund this player yourself — no withdrawal request needed.
+                    The amount defaults to the tournament's cancellation policy
+                    and you can override it.
+                  </p>
+                  <button
+                    onClick={openRefund}
+                    disabled={anyBusy}
+                    style={{
+                      ...ctaSecondaryStyle,
+                      opacity: anyBusy ? 0.6 : 1,
+                    }}
+                  >
+                    Issue a refund…
+                  </button>
+                </>
+              ) : refundLoading ? (
+                <p style={hint}>Loading refund details…</p>
+              ) : refundError && !refundPreview ? (
+                <div>
+                  <div style={statusPanelStyle("danger")}>{refundError}</div>
+                  <button
+                    onClick={() => setRefundOpen(false)}
+                    style={{ ...ghostButtonStyle, marginTop: 10 }}
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : refundPreview ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <p style={{ ...hint, margin: 0 }}>
+                    Cancellation policy:{" "}
+                    <strong>{prettyPolicy(refundPreview.policyDecision)}</strong>
+                    {" → suggests "}
+                    <strong>{formatUsd(refundPreview.policyDefaultCents)}</strong>.
+                    {refundPreview.alreadyRefundedCents > 0 && (
+                      <>
+                        {" "}
+                        Already refunded{" "}
+                        {formatUsd(refundPreview.alreadyRefundedCents)}.
+                      </>
+                    )}
+                  </p>
+
+                  <label style={fieldLabel}>
+                    Refund amount (USD)
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                      <span style={{ color: inkSoft }}>$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={refundAmountStr}
+                        onChange={(e) => setRefundAmountStr(e.target.value)}
+                        style={refundInput}
+                      />
+                    </div>
+                    <span style={{ fontSize: 11.5, color: inkMuted }}>
+                      Max {formatUsd(refundPreview.maxRefundableCents)} (net paid
+                      {refundPreview.alreadyRefundedCents > 0
+                        ? " minus already refunded"
+                        : ""}
+                      ).
+                    </span>
+                  </label>
+
+                  <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={refundRemove}
+                      onChange={(e) => setRefundRemove(e.target.checked)}
+                      style={{ marginTop: 2 }}
+                    />
+                    <span>
+                      Also remove {reg.playerName} from the event
+                      <span style={{ display: "block", color: inkMuted, fontSize: 11.5 }}>
+                        {refundRemove
+                          ? hasPartner
+                            ? "They'll be withdrawn and their partner unpaired."
+                            : "They'll be withdrawn from this event."
+                          : "They stay registered — money back only."}
+                      </span>
+                    </span>
+                  </label>
+
+                  <label style={fieldLabel}>
+                    Note (optional)
+                    <input
+                      type="text"
+                      value={refundReason}
+                      onChange={(e) => setRefundReason(e.target.value)}
+                      placeholder="Reason for the refund"
+                      style={{ ...refundInput, marginTop: 4 }}
+                    />
+                  </label>
+
+                  {refundError && (
+                    <div style={statusPanelStyle("danger")}>{refundError}</div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => {
+                        setRefundOpen(false);
+                        setRefundError(null);
+                      }}
+                      disabled={refundBusy}
+                      style={ghostButtonStyle}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => setRefundConfirm(true)}
+                      disabled={!refundAmountValid || refundBusy}
+                      style={
+                        !refundAmountValid || refundBusy
+                          ? ctaPrimaryDisabledStyle
+                          : ctaPrimaryStyle
+                      }
+                    >
+                      {refundAmountCents > 0
+                        ? `Issue ${formatUsd(refundAmountCents)} refund`
+                        : refundRemove
+                          ? "Withdraw (no refund)"
+                          : "Issue refund"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </Section>
+          )}
+
           {/* Withdraw */}
           <Section title="Withdraw" danger>
             <p style={hint}>
               Pulls this player from the event and unpairs their partner. This
-              does <strong>not</strong> issue a refund — refunds are handled
-              separately via the withdrawal queue.
+              does <strong>not</strong> issue a refund — to refund, use{" "}
+              <strong>Issue refund</strong> above (it can also remove them).
             </p>
             <button
               onClick={() => setWithdrawOpen(true)}
@@ -376,8 +754,8 @@ export function RegistrationEditorModal({
               This withdraws them from <strong>{reg.eventName}</strong> and
               unpairs any partner.
               <div style={{ ...statusPanelStyle("warn"), marginTop: 10 }}>
-                It does <strong>not</strong> issue a refund. Handle refunds
-                separately via the withdrawal queue.
+                It does <strong>not</strong> issue a refund. To refund, use{" "}
+                <strong>Issue refund</strong> instead.
               </div>
             </div>
           }
@@ -399,8 +777,214 @@ export function RegistrationEditorModal({
           }}
         />
       )}
+
+      {payConfirm && (
+        <ConfirmModal
+          title={payKind === "comp" ? "Comp this entry?" : "Record this payment?"}
+          body={
+            <div>
+              {payKind === "comp" ? (
+                <>
+                  Waive the fee for <strong>{reg.playerName}</strong> in{" "}
+                  <strong>{reg.eventName}</strong>. They'll be registered at{" "}
+                  <strong>$0</strong> and marked paid.
+                </>
+              ) : (
+                <>
+                  Record <strong>{formatUsd(payAmountCents)}</strong> collected by{" "}
+                  <strong>{prettyMethod(payMethod)}</strong> from{" "}
+                  <strong>{reg.playerName}</strong> for{" "}
+                  <strong>{reg.eventName}</strong>, and mark them paid.
+                </>
+              )}
+              <div style={{ ...statusPanelStyle("info"), marginTop: 10 }}>
+                No money moves through Stripe — this records a payment you handled
+                yourself. To reverse it you'd withdraw and re-register them.
+              </div>
+            </div>
+          }
+          confirmLabel={payBusy ? "Saving…" : payKind === "comp" ? "Comp entry" : "Record payment"}
+          onCancel={() => (payBusy ? undefined : setPayConfirm(false))}
+          onConfirm={onSettle}
+        />
+      )}
+
+      {refundConfirm && refundPreview && (
+        <ConfirmModal
+          title="Issue refund?"
+          body={
+            <div>
+              {refundAmountCents > 0 ? (
+                <>
+                  Refund <strong>{formatUsd(refundAmountCents)}</strong> to{" "}
+                  <strong>{reg.playerName}</strong> for{" "}
+                  <strong>{reg.eventName}</strong>. This goes back to their
+                  original payment and can't be undone here.
+                </>
+              ) : (
+                <>
+                  No money will be refunded to <strong>{reg.playerName}</strong>.
+                </>
+              )}
+              <div style={{ ...statusPanelStyle(refundRemove ? "warn" : "info"), marginTop: 10 }}>
+                {refundRemove
+                  ? hasPartner
+                    ? "They'll also be withdrawn from the event and their partner unpaired."
+                    : "They'll also be withdrawn from the event."
+                  : "They stay registered — money back only."}
+              </div>
+            </div>
+          }
+          confirmLabel={refundBusy ? "Processing…" : "Issue refund"}
+          onCancel={() => (refundBusy ? undefined : setRefundConfirm(false))}
+          onConfirm={async () => {
+            setRefundBusy(true);
+            setRefundError(null);
+            const { error: err } = await executeAdminRefund({
+              regId: reg.regId,
+              amountCents: refundAmountCents,
+              removeFromEvent: refundRemove,
+              reason: refundReason.trim() || undefined,
+            });
+            setRefundBusy(false);
+            if (err) {
+              setRefundConfirm(false);
+              setRefundError(err);
+              return;
+            }
+            setRefundConfirm(false);
+            setRefundOpen(false);
+            await done();
+          }}
+        />
+      )}
     </>
   );
+}
+
+// Payment method → human label for the confirm copy.
+function prettyMethod(m: ManualPaymentMethod): string {
+  switch (m) {
+    case "cash":
+      return "cash";
+    case "check":
+      return "check";
+    case "venmo":
+      return "Venmo";
+    default:
+      return "another method";
+  }
+}
+
+// One radio row in the Payment section. Mirrors the treatment picker in the
+// admin "register a contact" modal so the two flows read the same.
+function PayOption({
+  checked,
+  onSelect,
+  title,
+  detail,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        gap: 8,
+        alignItems: "flex-start",
+        fontSize: 13,
+        cursor: "pointer",
+      }}
+    >
+      <input
+        type="radio"
+        name="reg-payment-kind"
+        checked={checked}
+        onChange={onSelect}
+        style={{ marginTop: 3 }}
+      />
+      <span>
+        <strong style={{ color: ink }}>{title}</strong>
+        <span style={{ display: "block", color: inkMuted, fontSize: 11.5, lineHeight: 1.45 }}>
+          {detail}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+// Read-only money read-out for a registration that is no longer an open
+// balance. A paid reg is never re-priced here: the money already moved, so
+// lowering it is a refund (Issue refund) and a manually-recorded payment is
+// corrected by withdrawing and re-registering.
+function PaidSummary({
+  status,
+  eventFeeCents,
+  manualPays,
+  canRefund,
+}: {
+  status: RegistrationStatus;
+  eventFeeCents: number;
+  manualPays: ManualPaymentRecord[] | null;
+  canRefund: boolean;
+}) {
+  if (manualPays === null) {
+    return <p style={hint}>Loading payment details…</p>;
+  }
+  const latest = manualPays[0] ?? null;
+
+  const line = latest
+    ? latest.kind === "comp"
+      ? "Comped by an organizer — fee waived ($0)."
+      : `${formatUsd(latest.amountCents)} collected by ${prettyMethod(
+          (latest.method ?? "other") as ManualPaymentMethod,
+        )}, recorded by an organizer.`
+    : status === "paid"
+      ? eventFeeCents > 0
+        ? `Paid online through checkout — ${formatUsd(eventFeeCents)} recorded on this registration.`
+        : "Paid online through checkout."
+      : `This registration is ${status.replace(/_/g, " ")} — there is no open balance to settle.`;
+
+  return (
+    <div>
+      <div style={{ ...panelMutedStyle, marginBottom: 10 }}>
+        <div style={{ fontSize: 13, color: ink, lineHeight: 1.5 }}>{line}</div>
+        {latest?.note && (
+          <div style={{ fontSize: 12, color: inkMuted, marginTop: 4 }}>
+            Note: {latest.note}
+          </div>
+        )}
+      </div>
+      <p style={{ ...hint, margin: 0 }}>
+        {canRefund
+          ? latest
+            ? "The price can't be edited once it's settled. This payment never went through Stripe, so Issue refund can't return it — to change it, withdraw them and register again at the right amount."
+            : "The price can't be edited once it's paid. To give money back, use Issue refund below."
+          : "There's no open balance on this registration."}
+      </p>
+    </div>
+  );
+}
+
+// Cancellation-policy decision → human label for the refund panel.
+function prettyPolicy(decision: string): string {
+  switch (decision) {
+    case "full":
+      return "full refund";
+    case "partial":
+      return "partial refund";
+    case "none":
+      return "no refund";
+    case "manual_required":
+      return "organizer decides";
+    case "unpaid":
+      return "unpaid";
+    default:
+      return decision;
+  }
 }
 
 function errMsg(e: unknown): string {
@@ -608,4 +1192,26 @@ const hint: CSSProperties = {
   color: inkSoft,
   margin: "0 0 12px",
   lineHeight: 1.5,
+};
+
+const fieldLabel: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: inkSoft,
+};
+
+const refundInput: CSSProperties = {
+  flex: 1,
+  padding: "8px 10px",
+  border: `1px solid ${rule}`,
+  borderRadius: 6,
+  fontSize: 14,
+  fontFamily: bodyFontStack,
+  color: ink,
+  background: "#fff",
+  width: "100%",
+  boxSizing: "border-box",
 };
