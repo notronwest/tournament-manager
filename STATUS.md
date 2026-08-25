@@ -3,6 +3,49 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-24 — PROMOTED TEST → PROD (#712 · #715). Live on bertanderne.com
+
+Shipped and verified in production. Payment editor + segmented tabs merged to `main`
+(#712, squash `34eda10`), promoted `main`→`production` via **#715** (merge `f424905`).
+
+- Stories **#713** (change the price on a registration) and **#714** (Details/Register
+  prominence) created, added to the WMPC Roadmap board, closed by the PR, set to **Done**.
+- New edge function **`admin-set-registration-payment`** deployed to TEST **and PROD**.
+  Smoke-verified on both: `401` unauthenticated, `405` on GET, `200` CORS preflight.
+- Migration **`20260815170000_reg_refunded_cents.sql`** applied to PROD by the `migrate`
+  job (it rode along — it was queued in `main`, not part of this feature). Confirmed:
+  `select refunded_cents` returns 200 on the prod project.
+- Promotion also carried **organizer-initiated refunds (#704/#707/#709)**, which had been
+  sitting in `main` unpromoted. Ron chose "promote everything" knowing that.
+- Segmented tabs confirmed live at 390px on both test.bertanderne.com and bertanderne.com
+  with the right tokens (ink `#14181f` active / court-red `#d8341c` CTA) and aria wiring.
+
+⚠️ **STILL UNEXERCISED IN PROD:** neither money path — organizer refunds nor
+comp/offline payment recording — has been run end to end by a signed-in organizer against
+a real registration. Structure is verified (deploy, auth guard, render); the actual write
+is not. **Ron agreed to be the first to record a comp/offline payment on a registration he
+controls and watch it.** Until that happens, treat both as unproven in prod.
+
+⚠️ **`web/.env` POINTS AT PRODUCTION.** The local dev env var is
+`wducsjqyoksmluwfgjxc.supabase.co` — the **PROD** project (TEST is `mvkhdsauaqqjehxdnbuf`).
+So `npm run dev` locally reads and writes the **live** database; browsing localhost showed
+real Pickleball Angels data (47 players). This is now materially riskier, since the feature
+just shipped writes payment records. **Worth fixing:** point `web/.env` (or `.env.local`)
+at the TEST project. Not touched this session — it's Ron's file and pre-existing.
+
+Also of note: `gh pr create` hit the **GraphQL rate limit** (5000/hr exhausted) mid-session
+while REST was untouched — PRs were created via `gh api ... /pulls` instead. Useful fallback.
+
+🔜 NEXT
+- Ron: exercise comp + offline payment once in prod; confirm the reg flips to Paid and the
+  read-only "how they paid" line renders.
+- Regenerate `web/src/types/supabase.ts` (still stale — `manual_payments`,
+  `admin_invoiced_at`, `refunded_cents`, `organization_contacts`, `tournament_setups`),
+  then drop the untyped-client shim in `lib/adminRegister.ts`.
+- Repoint `web/.env` away from PROD.
+- Optional follow-up story: `price_override_cents` + teach `compute_checkout_total` to
+  honour it, which is what real post-hoc re-pricing (and correcting a manual payment) needs.
+
 ## 2026-08-24 (later) — Tab variant CHOSEN + shipped: segmented control, Register as CTA
 
 Ron picked **variant 2** (segmented + red Register). Implemented for real; mockup
