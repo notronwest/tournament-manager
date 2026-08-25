@@ -41,6 +41,21 @@ export function SectionTabs<K extends string>({
   ariaLabel: string;
 }) {
   const refs = useRef<Partial<Record<K, HTMLButtonElement | null>>>({});
+  const trackRef = useRef<HTMLDivElement | null>(null);
+
+  // Switching tabs swaps the whole panel underneath but leaves the scroll
+  // offset alone, so someone who scrolled down the events list and tapped the
+  // other tab landed halfway into unrelated content. Re-anchor to the control
+  // itself — but only ever scroll UP, so a tap from the top of the page doesn't
+  // yank the reader downwards. Jump rather than smooth-scroll: the distance can
+  // be most of the page, and it sidesteps prefers-reduced-motion entirely.
+  const select = (key: K) => {
+    onChange(key);
+    const el = trackRef.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY - ANCHOR_OFFSET;
+    if (window.scrollY > top) window.scrollTo(0, Math.max(0, top));
+  };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const i = tabs.findIndex((t) => t.key === value);
@@ -53,12 +68,13 @@ export function SectionTabs<K extends string>({
     if (next < 0) return;
     e.preventDefault();
     const key = tabs[next].key;
-    onChange(key);
+    select(key);
     refs.current[key]?.focus();
   };
 
   return (
     <div
+      ref={trackRef}
       role="tablist"
       aria-label={ariaLabel}
       onKeyDown={onKeyDown}
@@ -80,7 +96,7 @@ export function SectionTabs<K extends string>({
             aria-controls={`${idPrefix}-panel-${key}`}
             // Roving tabindex: only the active tab is a tab stop.
             tabIndex={active ? 0 : -1}
-            onClick={() => onChange(key)}
+            onClick={() => select(key)}
             style={{
               ...segmentStyle,
               background: active ? ink : cta ? courtRed : "transparent",
@@ -94,6 +110,10 @@ export function SectionTabs<K extends string>({
     </div>
   );
 }
+
+// Breathing room left above the control when re-anchoring, so it doesn't sit
+// flush against the top edge of the viewport.
+const ANCHOR_OFFSET = 12;
 
 // Capped rather than full-bleed: at 1280px an uncapped control stretched to
 // ~1000px and read as slack. Below the cap it stays full width, so mobile is
