@@ -1,5 +1,10 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
 import type { PricingTier } from "./pricingTiers";
+
+// `manual_payments` isn't in the generated `Database` types yet, so reads of it
+// go through an untyped client (same approach as lib/orgContacts).
+const untyped = supabase as unknown as SupabaseClient;
 
 // Data + call for the admin "register a contact for an event" flow. An org admin
 // picks a tournament + event(s) and either comps the entry (waives the fee) or
@@ -137,3 +142,102 @@ export async function adminRegisterContact(
   }
   return data as AdminRegisterResult;
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Settling an EXISTING unpaid registration (the post-hoc comp / offline).
+// ─────────────────────────────────────────────────────────────────────
+
+// Only the two treatments that end at status='paid'. There is no post-hoc
+// "invoice at $X": compute_checkout_total prices from events.event_fee_cents +
+// the tournament tier and never reads event_registrations.event_fee_cents, so a
+// custom balance written here would not change what the player is charged.
+export type SettleKind = "comp" | "offline";
+
+export type SettleRegistrationPayload = {
+  regId: string;
+  kind: SettleKind;
+  // Required (and used) only when kind === "offline"; comp forces $0.
+  amountCents?: number;
+  method?: ManualPaymentMethod;
+  note?: string;
+};
+
+// What was actually recorded against a registration outside Stripe. One row per
+// settlement; the newest is the one the editor shows.
+export type ManualPaymentRecord = {
+  id: string;
+  kind: SettleKind;
+  amountCents: number;
+  method: ManualPaymentMethod | null;
+  note: string | null;
+  createdAt: string;
+};
+
+// Close an open balance as comped or offline-collected. Throws on failure.
+export async function settleRegistrationPayment(
+  payload: SettleRegistrationPayload,
+): Promise<void> {
+  const { error } = await supabase.functions.invoke(
+    "admin-set-registration-payment",
+    { body: payload },
+  );
+  if (error) throw new Error(await fnErrorMessage(error));
+}
+
+type ManualPaymentRow = {
+  id: string;
+  kind: string;
+  amount_cents: number;
+  method: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+// The manual (non-Stripe) payments recorded against one registration, newest
+// first. Readable by org members via RLS; [] when the reg was paid online.
+// `manual_payments` isn't in the generated Database types yet, so this one call
+// goes through the untyped client (same approach as lib/orgContacts).
+export async function fetchManualPayments(
+  regId: string,
+): Promise<ManualPaymentRecord[]> {
+  const { data, error } = await untyped
+    .from("manual_payments")
+    .select("id, kind, amount_cents, method, note, created_at")
+    .eq("event_registration_id", regId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as ManualPaymentRow[]).map((r) => ({
+    id: r.id,
+    kind: r.kind as SettleKind,
+    amountCents: r.amount_cents,
+    method: r.method as ManualPaymentMethod | null,
+    note: r.note,
+    createdAt: r.created_at,
+  }));
+}
+
+// Pull the edge function's JSON { error } out of an invoke failure, falling
+// back to the transport message.
+async function fnErrorMessage(error: unknown): Promise<string> {
+  const ctx = (error as { context?: Response }).context;
+  if (ctx && typeof ctx.json === "function") {
+    try {
+      const body = (await ctx.json()) as { error?: string; detail?: string };
+      if (body?.error) return SETTLE_ERRORS[body.error] ?? body.detail ?? body.error;
+    } catch {
+      /* fall through to the transport message */
+    }
+  }
+  return (error as { message?: string }).message ?? "Something went wrong.";
+}
+
+// Server error codes → organizer-readable copy.
+const SETTLE_ERRORS: Record<string, string> = {
+  already_paid_use_refund:
+    "This registration is already paid — use Issue refund to give money back.",
+  forbidden_org_staff_only:
+    "You don't have permission to record payments for this organization.",
+  registration_not_found: "That registration no longer exists.",
+  manual_payment_insert_failed:
+    "The registration was marked paid but the payment record failed to save. Check the registration before recording it again.",
+};

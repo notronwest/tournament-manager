@@ -14,6 +14,13 @@ import {
 } from "../lib/refunds";
 import { formatUsd } from "../lib/pricing";
 import {
+  settleRegistrationPayment,
+  fetchManualPayments,
+  type SettleKind,
+  type ManualPaymentMethod,
+  type ManualPaymentRecord,
+} from "../lib/adminRegister";
+import {
   reassignRegistrationPlayer,
   withdrawRegistration,
   pairRegistrations,
@@ -138,6 +145,71 @@ export function RegistrationEditorModal({
     Number.isFinite(parseFloat(refundAmountStr)) &&
     refundAmountCents >= 0 &&
     refundAmountCents <= refundMaxCents;
+
+  // ── Payment (#: change the price on a registration) ──────────────────
+  // Mirrors the comp / record-offline-payment treatments of the admin
+  // "register a contact" modal, applied after the fact. Only an OPEN BALANCE
+  // can be settled here: once a reg is paid the money has moved, so it is
+  // read-only and the organizer is pointed at Issue refund instead.
+  const isUnpaid =
+    reg.status === "pending_payment" || reg.status === "waitlisted_pending_payment";
+  const [payKind, setPayKind] = useState<SettleKind>("offline");
+  const [payAmountStr, setPayAmountStr] = useState(
+    reg.eventFeeCents > 0 ? (reg.eventFeeCents / 100).toFixed(2) : "",
+  );
+  const [payMethod, setPayMethod] = useState<ManualPaymentMethod>("cash");
+  const [payNote, setPayNote] = useState("");
+  const [payBusy, setPayBusy] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  const [payConfirm, setPayConfirm] = useState(false);
+
+  // What was already recorded outside Stripe, so a paid reg can show HOW it was
+  // paid (comped / cash at the desk) rather than a bare "Paid" badge.
+  const [manualPays, setManualPays] = useState<ManualPaymentRecord[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await fetchManualPayments(reg.regId);
+        if (!cancelled) setManualPays(rows);
+      } catch {
+        // Non-fatal — the section falls back to the fee on the registration.
+        if (!cancelled) setManualPays([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reg.regId]);
+
+  const payAmountCents = (() => {
+    const n = Math.round(parseFloat(payAmountStr || "0") * 100);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  })();
+  const payAmountValid =
+    payKind === "comp" ||
+    (Number.isFinite(parseFloat(payAmountStr)) && payAmountCents >= 0);
+
+  const onSettle = async () => {
+    setPayError(null);
+    setPayBusy(true);
+    try {
+      await settleRegistrationPayment({
+        regId: reg.regId,
+        kind: payKind,
+        amountCents: payKind === "comp" ? 0 : payAmountCents,
+        method: payKind === "offline" ? payMethod : undefined,
+        note: payNote.trim() || undefined,
+      });
+      setPayConfirm(false);
+      await done();
+    } catch (e) {
+      setPayConfirm(false);
+      setPayError(errMsg(e));
+    } finally {
+      setPayBusy(false);
+    }
+  };
 
   // Pending-invite context, so the admin can SEE who this player invited / who
   // invited them — the missing piece when two people invite each other.
@@ -300,6 +372,116 @@ export function RegistrationEditorModal({
             </div>
           )}
 
+          {/* Payment — settle an open balance, or show how it was paid */}
+          <Section title="Payment">
+            {isUnpaid ? (
+              <>
+                <p style={hint}>
+                  {reg.playerName.split(/\s+/)[0] || reg.playerName} still owes
+                  for this event. Close the balance by waiving the fee or
+                  recording money you collected outside the app — the same
+                  choices you get when registering a player by hand.
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                  <PayOption
+                    checked={payKind === "offline"}
+                    onSelect={() => setPayKind("offline")}
+                    title="Record offline payment"
+                    detail="Cash, check, or Venmo you already collected. Marks them paid."
+                  />
+                  <PayOption
+                    checked={payKind === "comp"}
+                    onSelect={() => setPayKind("comp")}
+                    title="Comp"
+                    detail="Waive the fee entirely — registers them at $0 and marks them paid."
+                  />
+                </div>
+
+                {payKind === "offline" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+                    <label style={fieldLabel}>
+                      Amount collected (USD)
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                        <span style={{ color: inkSoft }}>$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={payAmountStr}
+                          onChange={(e) => setPayAmountStr(e.target.value)}
+                          placeholder="0.00"
+                          style={refundInput}
+                        />
+                      </div>
+                      <span style={{ fontSize: 11.5, color: inkMuted }}>
+                        {reg.eventFeeCents > 0
+                          ? `Fee on this registration: ${formatUsd(reg.eventFeeCents)}.`
+                          : "No fee is recorded on this registration — enter what you actually took."}
+                      </span>
+                    </label>
+
+                    <label style={fieldLabel}>
+                      Method
+                      <select
+                        value={payMethod}
+                        onChange={(e) =>
+                          setPayMethod(e.target.value as ManualPaymentMethod)
+                        }
+                        style={{ ...refundInput, marginTop: 4 }}
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="check">Check</option>
+                        <option value="venmo">Venmo</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+
+                <label style={{ ...fieldLabel, marginBottom: 12 }}>
+                  Note (optional)
+                  <input
+                    type="text"
+                    value={payNote}
+                    onChange={(e) => setPayNote(e.target.value)}
+                    placeholder="e.g. paid at the desk"
+                    style={{ ...refundInput, marginTop: 4 }}
+                  />
+                </label>
+
+                {payError && (
+                  <div style={{ ...statusPanelStyle("danger"), marginBottom: 10 }} role="alert">
+                    {payError}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setPayConfirm(true)}
+                  disabled={anyBusy || payBusy || !payAmountValid}
+                  style={
+                    anyBusy || payBusy || !payAmountValid
+                      ? ctaPrimaryDisabledStyle
+                      : ctaPrimaryStyle
+                  }
+                >
+                  {payBusy
+                    ? "Saving…"
+                    : payKind === "comp"
+                      ? "Comp this entry"
+                      : `Record ${formatUsd(payAmountCents)} payment`}
+                </button>
+              </>
+            ) : (
+              <PaidSummary
+                status={reg.status}
+                eventFeeCents={reg.eventFeeCents}
+                manualPays={manualPays}
+                canRefund={canRefund}
+              />
+            )}
+          </Section>
+
           {/* Reassign player */}
           <Section title="Reassign player">
             <p style={hint}>
@@ -342,7 +524,7 @@ export function RegistrationEditorModal({
               {hasPartner ? (
                 <div style={{ ...panelMutedStyle }}>
                   <div style={{ fontSize: 13, color: inkSoft, marginBottom: 10 }}>
-                    Current partner:{" "}
+                    Signed up with:{" "}
                     <strong style={{ color: ink }}>
                       {reg.partnerName ?? "(partner)"}
                     </strong>
@@ -361,6 +543,17 @@ export function RegistrationEditorModal({
                 </div>
               ) : (
                 <>
+                  <div style={{ ...panelMutedStyle, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, color: inkSoft }}>
+                      Signed up with:{" "}
+                      <strong style={{ color: ink }}>nobody yet</strong> —{" "}
+                      {reg.partnerStatus === "pending"
+                        ? "an invite is out but unaccepted."
+                        : reg.partnerStatus === "declined"
+                          ? "their invite was declined."
+                          : "they're looking for a partner."}
+                    </div>
+                  </div>
                   <p style={hint}>
                     Assign a partner. If they're already registered for this
                     event we'll pair the existing entry; otherwise a comped
@@ -585,6 +778,37 @@ export function RegistrationEditorModal({
         />
       )}
 
+      {payConfirm && (
+        <ConfirmModal
+          title={payKind === "comp" ? "Comp this entry?" : "Record this payment?"}
+          body={
+            <div>
+              {payKind === "comp" ? (
+                <>
+                  Waive the fee for <strong>{reg.playerName}</strong> in{" "}
+                  <strong>{reg.eventName}</strong>. They'll be registered at{" "}
+                  <strong>$0</strong> and marked paid.
+                </>
+              ) : (
+                <>
+                  Record <strong>{formatUsd(payAmountCents)}</strong> collected by{" "}
+                  <strong>{prettyMethod(payMethod)}</strong> from{" "}
+                  <strong>{reg.playerName}</strong> for{" "}
+                  <strong>{reg.eventName}</strong>, and mark them paid.
+                </>
+              )}
+              <div style={{ ...statusPanelStyle("info"), marginTop: 10 }}>
+                No money moves through Stripe — this records a payment you handled
+                yourself. To reverse it you'd withdraw and re-register them.
+              </div>
+            </div>
+          }
+          confirmLabel={payBusy ? "Saving…" : payKind === "comp" ? "Comp entry" : "Record payment"}
+          onCancel={() => (payBusy ? undefined : setPayConfirm(false))}
+          onConfirm={onSettle}
+        />
+      )}
+
       {refundConfirm && refundPreview && (
         <ConfirmModal
           title="Issue refund?"
@@ -635,6 +859,113 @@ export function RegistrationEditorModal({
         />
       )}
     </>
+  );
+}
+
+// Payment method → human label for the confirm copy.
+function prettyMethod(m: ManualPaymentMethod): string {
+  switch (m) {
+    case "cash":
+      return "cash";
+    case "check":
+      return "check";
+    case "venmo":
+      return "Venmo";
+    default:
+      return "another method";
+  }
+}
+
+// One radio row in the Payment section. Mirrors the treatment picker in the
+// admin "register a contact" modal so the two flows read the same.
+function PayOption({
+  checked,
+  onSelect,
+  title,
+  detail,
+}: {
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        gap: 8,
+        alignItems: "flex-start",
+        fontSize: 13,
+        cursor: "pointer",
+      }}
+    >
+      <input
+        type="radio"
+        name="reg-payment-kind"
+        checked={checked}
+        onChange={onSelect}
+        style={{ marginTop: 3 }}
+      />
+      <span>
+        <strong style={{ color: ink }}>{title}</strong>
+        <span style={{ display: "block", color: inkMuted, fontSize: 11.5, lineHeight: 1.45 }}>
+          {detail}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+// Read-only money read-out for a registration that is no longer an open
+// balance. A paid reg is never re-priced here: the money already moved, so
+// lowering it is a refund (Issue refund) and a manually-recorded payment is
+// corrected by withdrawing and re-registering.
+function PaidSummary({
+  status,
+  eventFeeCents,
+  manualPays,
+  canRefund,
+}: {
+  status: RegistrationStatus;
+  eventFeeCents: number;
+  manualPays: ManualPaymentRecord[] | null;
+  canRefund: boolean;
+}) {
+  if (manualPays === null) {
+    return <p style={hint}>Loading payment details…</p>;
+  }
+  const latest = manualPays[0] ?? null;
+
+  const line = latest
+    ? latest.kind === "comp"
+      ? "Comped by an organizer — fee waived ($0)."
+      : `${formatUsd(latest.amountCents)} collected by ${prettyMethod(
+          (latest.method ?? "other") as ManualPaymentMethod,
+        )}, recorded by an organizer.`
+    : status === "paid"
+      ? eventFeeCents > 0
+        ? `Paid online through checkout — ${formatUsd(eventFeeCents)} recorded on this registration.`
+        : "Paid online through checkout."
+      : `This registration is ${status.replace(/_/g, " ")} — there is no open balance to settle.`;
+
+  return (
+    <div>
+      <div style={{ ...panelMutedStyle, marginBottom: 10 }}>
+        <div style={{ fontSize: 13, color: ink, lineHeight: 1.5 }}>{line}</div>
+        {latest?.note && (
+          <div style={{ fontSize: 12, color: inkMuted, marginTop: 4 }}>
+            Note: {latest.note}
+          </div>
+        )}
+      </div>
+      <p style={{ ...hint, margin: 0 }}>
+        {canRefund
+          ? latest
+            ? "The price can't be edited once it's settled. This payment never went through Stripe, so Issue refund can't return it — to change it, withdraw them and register again at the right amount."
+            : "The price can't be edited once it's paid. To give money back, use Issue refund below."
+          : "There's no open balance on this registration."}
+      </p>
+    </div>
   );
 }
 
