@@ -10,6 +10,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { PartnerSearch } from "../../components/PartnerSearch";
+import { SectionTabs } from "../../components/SectionTabs";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
 import { formatUsd } from "../../lib/pricing";
@@ -70,6 +71,12 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
     pickleball_type: string | null;
   } | null;
 };
+// Section tabs for the public tournament page. Register is the CTA tab.
+const SECTION_TABS = [
+  { key: "details" as const, label: "Details" },
+  { key: "register" as const, label: "Register" },
+];
+
 function composeLocationAddress(loc: {
   address?: string | null;
   address_line2?: string | null;
@@ -1029,56 +1036,21 @@ export default function PublicTournamentPage({
         </div>
       )}
 
-      {/* Section tabs — Details first, Register one click away. Built to
-          grow: Schedule / Results can slot in here later. */}
-      <div
-        role="tablist"
-        aria-label="Tournament sections"
-        style={{
-          display: "flex",
-          gap: 4,
-          borderBottom: `1px solid ${rule}`,
-          marginBottom: 24,
-        }}
-      >
-        {(
-          [
-            ["details", "Details"],
-            ["register", "Register"],
-          ] as const
-        ).map(([key, label]) => {
-          const active = tab === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(key)}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontFamily: headingFontStack,
-                fontSize: 14,
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                padding: "10px 14px",
-                color: active ? ink : inkMuted,
-                borderBottom: active
-                  ? `3px solid ${courtRed}`
-                  : "3px solid transparent",
-                marginBottom: -1,
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Section tabs — a segmented control so Register reads as pressable
+          (the old underlined text tabs looked like inert copy). Register keeps
+          the court-red CTA fill until you're on it. Built to grow: Schedule /
+          Results can slot in here later. */}
+      <SectionTabs
+        tabs={SECTION_TABS}
+        value={tab}
+        onChange={setTab}
+        ctaKey="register"
+        idPrefix="tournament"
+        ariaLabel="Tournament sections"
+      />
 
       {tab === "register" && (
-      <>
+      <div role="tabpanel" id="tournament-panel-register" aria-labelledby="tournament-tab-register">
       {/* Pending-invite banner — the most actionable thing on the
           page for a player who just got picked, so it lives above
           the events list. One row per inbound invite; each row has
@@ -1193,11 +1165,11 @@ export default function PublicTournamentPage({
           </div>
         )}
       </section>
-      </>
+      </div>
       )}
 
       {tab === "details" && (
-      <>
+      <div role="tabpanel" id="tournament-panel-details" aria-labelledby="tournament-tab-details">
       {/* Empty state — venue meta now lives in the persistent strip, so the
           Details tab is just the description + info sections; note if none. */}
       {!tournament.description &&
@@ -1271,7 +1243,7 @@ export default function PublicTournamentPage({
           {renderSimpleMd(tournament.faqs_md)}
         </TournamentContentSection>
       )}
-      </>
+      </div>
       )}
 
     </Shell>
