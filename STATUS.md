@@ -3,6 +3,89 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
+## 2026-08-27 — ⏳ IN FLIGHT: download / print the attendee list (#719 → PR #720)
+
+**Green and awaiting your merge** — I stopped at the PR rather than merging, since
+merging `In Review` is your gate. Branch `feat/attendee-roster-download` (`51b0282`).
+
+Ron's ask: a download for attendees "so people who are technologically illiterate can
+see who has signed up (with contact info) and who is waiting for a partner and who is
+asking to be paired with a partner."
+
+**Read of the ask that drove the design:** the people who most need this are the least
+likely to want to work from a laptop, so **paper is the primary output**, not a file.
+One **Download list** button in the attendees header opens the finished document *on
+screen first* — what you see is exactly what prints — then offers Print / Save as PDF
+first and a spreadsheet second.
+
+Three sections, matching the three questions asked at the desk:
+- **Still needs a partner** — `partner_status='seeking'` (doubles, nobody lined up).
+- **Waiting to hear back** — `partner_status='pending'`, and the invitee is **named**,
+  joined from `partner_invites` via `fetchPendingPartnerInvites`.
+- **Everyone signed up** — alphabetical, contact details, team-mates, payment state.
+
+New files: `web/src/lib/rosterExport.ts` (pure grouping + CSV, no React),
+`web/src/lib/rosterExport.test.ts`, `web/src/components/RosterExportModal.tsx`.
+
+**Decisions worth knowing:**
+- Cancelled / refunded / withdrawn are **dropped** from the export (they aren't coming),
+  mirroring `INACTIVE_STATUSES`. The page itself still shows them — only the export filters.
+- Payment wording is plain English ("Not paid yet"), never enum names — volunteers read this.
+- CSV is **one row per person** (a contact list first); its first six headers match
+  `lib/parseContactsFile` so it re-imports through **Import contacts** with no remapping.
+- CSV is RFC 4180 quoted, leading `=/+/-/@` neutralised against Excel formula injection,
+  UTF-8 BOM for accented names (verified on the real blob: `EF BB BF`).
+- **Print isolation deliberately differs from `quotes/ContractPage`.** That page hides
+  siblings with `visibility`, which leaves them occupying space — fine for a one-page
+  contract, but it prints **blank pages ahead of** a multi-page roster. This modal
+  portals to `<body>` and hides siblings with `display` instead. Worth copying that
+  approach if we ever print another long list.
+
+**Verified:** 19 tests pass (13 new); rendered at 390px and letter width; print layout
+confirmed starting at y=0 with no leading blank space; download exercised end to end
+(real blob, correct filename, rows, columns). typecheck + build green, lint unchanged at
+the 27 pre-existing errors. No schema change, no edge function, no new dependency.
+
+⚠️ **Not click-tested on the real page.** Only the modal was driven in a browser harness —
+the attendees page needs an org login and this machine's `web/.env` points at PROD. The
+button wiring (header placement, passing `eventGroups`) is typechecked but unproven.
+**Check it on the PR preview**, which has its own env-var scope.
+
+🔜 NEXT
+- You merge #720 → TEST, try the button on the real page, then say the word to promote.
+- Still outstanding from before: **exercise comp + offline payment in prod** (both money
+  paths remain unproven there); regenerate `web/src/types/supabase.ts`; repoint
+  `web/.env` away from PROD.
+
+## 2026-08-24 — HOTFIX promoted: tab switching no longer strands the reader (#716/#717/#718)
+
+Ron: "Clicking Register sends the user to the middle of the page." Fixed, merged,
+promoted, verified live — all within the session.
+
+- **Cause:** switching tabs swaps the whole panel below the control, but the browser
+  keeps the scroll offset. Scroll down through Details, tap Register, and you stay at
+  that pixel depth — partway into the events list with the tab bar off-screen above.
+- **Fix** (`SectionTabs`): re-anchor to the control on switch. Only ever scrolls **up**,
+  so tapping from the top doesn't yank the reader down. Jumps rather than smooth-scrolls
+  (distance can be most of the page; also sidesteps `prefers-reduced-motion`). Lives in a
+  shared `select()` so **click and keyboard** both get it, while *programmatic* `setTab`
+  (the reset on tournament change) deliberately does not scroll.
+- Story **#716** → PR **#717** (squash `c0274f6` on main) → promotion **#718**
+  (merge `c3a18f1`). Frontend only — no migration, no edge function, no schema.
+
+**Verified on live bertanderne.com at 390px** (not just locally):
+
+| case | result |
+|---|---|
+| scrolled down (1308), tab bar 578px off-screen, tap Register | scrolled to 718, tab bar 12px from top, fully visible |
+| at top of page, tap Register | stayed at 0 — no scroll |
+
+🔜 NEXT — unchanged from the entry below, and all still outstanding:
+- Ron: exercise comp + offline payment once in prod (**both money paths remain unproven
+  in production**).
+- Regenerate `web/src/types/supabase.ts`; drop the untyped-client shim in `lib/adminRegister.ts`.
+- Repoint `web/.env` away from PROD (it currently points at the live project).
+
 ## 2026-08-24 — PROMOTED TEST → PROD (#712 · #715). Live on bertanderne.com
 
 Shipped and verified in production. Payment editor + segmented tabs merged to `main`
