@@ -8,6 +8,7 @@ import {
   type EditableRegistration,
 } from "../../components/RegistrationEditorModal";
 import type { Database } from "../../types/supabase";
+import { RosterExportModal } from "../../components/RosterExportModal";
 import {
   ink,
   inkSoft,
@@ -28,6 +29,7 @@ import {
   infoBg,
   infoBorder,
   infoFg,
+  ctaSecondaryStyle,
 } from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
@@ -186,6 +188,7 @@ export default function AttendeesPage() {
   const [view, setView] = useState<ViewMode>("players");
   const [editing, setEditing] = useState<EditableRegistration | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [exporting, setExporting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -436,6 +439,14 @@ export default function AttendeesPage() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Paper is how a lot of organizers actually run the desk — see
+              RosterExportModal for why this previews before it prints. */}
+          <button
+            onClick={() => setExporting(true)}
+            style={{ ...ctaSecondaryStyle, fontSize: 13, padding: "8px 14px" }}
+          >
+            Download list
+          </button>
           {view === "players" && (
             <input
               type="search"
@@ -478,6 +489,15 @@ export default function AttendeesPage() {
           </div>
         </div>
       </div>
+
+      {exporting && (
+        <RosterExportModal
+          tournamentId={tournament.id}
+          tournamentName={tournament.name}
+          groups={eventGroups}
+          onClose={() => setExporting(false)}
+        />
+      )}
 
       <PendingPartnerInvitesPanel tournamentId={tournament.id} />
 
