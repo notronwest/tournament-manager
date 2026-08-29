@@ -3,7 +3,38 @@
 Append-only session handoff log. **Read this first; append a dated entry
 before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 
-## 2026-08-27 — ⏳ IN FLIGHT: download / print the attendee list (#719 → PR #720)
+## 2026-08-27 — PROMOTED TEST → PROD: download / print the attendee list (#719/#720/#721)
+
+Live on bertanderne.com. Merged `feat/attendee-roster-download` → main (squash `e2ecfe4`,
+PR **#720**), promoted main → production via **#721** (merge `16ae8a1`). Story **#719**
+closed. Frontend only — **no migration, no edge function, no schema change, no new
+dependency**; nothing in this promotion writes to the database.
+
+Verified in the **deployed bundles**, not just locally: the roster strings
+("Download the attendee list", "Still needs a partner", "Waiting to hear back",
+"Needs a partner in", `roster-document`) are present in both the TEST bundle
+(`index-C6S3dhKv.js`) and the PROD bundle (`index-D12XsVgK.js`). 19 tests pass;
+typecheck + build green; lint unchanged at the 27 pre-existing errors.
+
+Design notes and the judgment calls behind it are in the superseded entry below —
+worth keeping, especially the **print-isolation difference** (body portal + `display`
+rather than `quotes/ContractPage`'s `visibility` trick, which prints blank pages ahead
+of anything longer than one page). Copy that approach for the next long printable.
+
+⚠️ **First real click will be a user's.** The modal was driven in a browser harness and
+the strings are confirmed in the live bundle, but the button on the attendees page was
+never click-tested in a logged-in session (it needs an org login, and this machine's
+`web/.env` points at PROD). Open a tournament's Attendees page and press **Download
+list** once to confirm the wiring.
+
+🔜 NEXT — unchanged, all still outstanding:
+- Press **Download list** once on a real tournament (above).
+- **Exercise comp + offline payment in prod** — both money paths from the earlier
+  promotion remain unproven there.
+- Regenerate `web/src/types/supabase.ts`; drop the untyped-client shim in `lib/adminRegister.ts`.
+- Repoint `web/.env` away from PROD.
+
+## 2026-08-27 — (superseded — promoted, see the entry above) download / print the attendee list
 
 **Green and awaiting your merge** — I stopped at the PR rather than merging, since
 merging `In Review` is your gate. Branch `feat/attendee-roster-download` (`51b0282`).
