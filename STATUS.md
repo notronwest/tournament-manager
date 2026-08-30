@@ -5,6 +5,21 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-08-27 — STATUS.md cleaned up + docs promoted; TEST == PROD in sync
+
+Ron: "clean up status -- merge and promote." Archived the 190 pre-2026-08-15 entries to
+[`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md) (STATUS.md 4,201 → ~540 lines; nothing lost) and
+fixed the duplicate attendee-download header. Merged to TEST (#722) + promoted main →
+production (#723); both admin-merged past the issue-ref `check` gate (docs chore, not a
+feature). **production is now level with main (delta 0).** Docs-only — no code/schema/deploy.
+
+Still pending (interactive, not yet built): the **in-app signature feature** — an admin
+signature pad → stored in the DB → auto-rendered in `quotes/ContractPage`'s signer block on
+every generated contract. Ron drew a signature this session but the raw image can't be held
+reliably in text, so one-off contracts were handled as sign-in-page artifacts instead; the
+app feature is the durable "store once, auto-apply" answer. NEXT if resumed: migration for a
+platform/WMPC contract signature + a settings-page pad + ContractPage render.
+
 ## 2026-08-27 — PROMOTED TEST → PROD: download / print the attendee list (#719/#720/#721)
 
 Live on bertanderne.com. Merged `feat/attendee-roster-download` → main (squash `e2ecfe4`,
