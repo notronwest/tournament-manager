@@ -27,6 +27,9 @@ import {
   unpairRegistration,
   createPartnerRegistration,
   fetchEventRegistrants,
+  fetchMoveTargets,
+  moveRegistrationToEvent,
+  type MoveTarget,
   fetchRegPartnerContext,
   pairAndResolveInvites,
   type RegPartnerContext,
@@ -208,6 +211,57 @@ export function RegistrationEditorModal({
       setPayError(errMsg(e));
     } finally {
       setPayBusy(false);
+    }
+  };
+
+  // ── Move to another event ────────────────────────────────────────────
+  // The desk's most common request ("put me in 3.5 instead") used to mean
+  // withdraw + re-register, which throws away the payment record. Targets are
+  // derived from this registration's own event, so the section works
+  // identically from every host without plumbing a tournament id through.
+  const [targets, setTargets] = useState<MoveTarget[] | null>(null);
+  const [moveTo, setMoveTo] = useState<string>("");
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveConfirm, setMoveConfirm] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const t = await fetchMoveTargets(reg.eventId, reg.playerId);
+        if (!cancelled) setTargets(t);
+      } catch {
+        // Non-fatal — every other section still works.
+        if (!cancelled) setTargets([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reg.eventId, reg.playerId]);
+
+  const moveTarget = targets?.find((t) => t.eventId === moveTo) ?? null;
+  const feeDelta = moveTarget ? moveTarget.feeCents - reg.eventFeeCents : 0;
+
+  const onMove = async () => {
+    if (!moveTarget) return;
+    setMoveError(null);
+    setMoveBusy(true);
+    try {
+      await moveRegistrationToEvent({
+        regId: reg.regId,
+        targetEventId: moveTarget.eventId,
+        targetFormat: moveTarget.format,
+        partnerRegId: reg.partnerRegId,
+      });
+      setMoveConfirm(false);
+      await done();
+    } catch (e) {
+      setMoveConfirm(false);
+      setMoveError(errMsg(e));
+    } finally {
+      setMoveBusy(false);
     }
   };
 
@@ -481,6 +535,104 @@ export function RegistrationEditorModal({
               />
             )}
           </Section>
+
+          {/* Move to another event */}
+          {targets !== null && targets.length > 0 && (
+            <Section title="Move to another event">
+              <p style={hint}>
+                Keeps this registration — same payment, same amount already
+                recorded — and just changes which event it's in. Nothing is
+                refunded or re-charged.
+              </p>
+
+              <label style={fieldLabel}>
+                Move to
+                <select
+                  value={moveTo}
+                  onChange={(e) => {
+                    setMoveTo(e.target.value);
+                    setMoveError(null);
+                  }}
+                  style={{ ...refundInput, marginTop: 4 }}
+                >
+                  <option value="">Choose an event…</option>
+                  {targets.map((t) => (
+                    <option
+                      key={t.eventId}
+                      value={t.eventId}
+                      disabled={t.alreadyRegistered}
+                    >
+                      {t.name}
+                      {t.alreadyRegistered
+                        ? " — already registered"
+                        : t.full
+                          ? " — full"
+                          : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {moveTarget && (
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {moveTarget.full && (
+                    <div style={statusPanelStyle("warn")}>
+                      <strong>{moveTarget.name} is full.</strong> You can still
+                      move them in — this puts the event over its cap.
+                    </div>
+                  )}
+                  {moveTarget.ineligibleReasons.length > 0 && (
+                    <div style={statusPanelStyle("warn")}>
+                      <strong>{reg.playerName} doesn't meet this event's
+                      requirements</strong> ({moveTarget.ineligibleReasons.join(", ")}).
+                      Moving them anyway is your call.
+                    </div>
+                  )}
+                  {feeDelta !== 0 && (
+                    <div style={statusPanelStyle("info")}>
+                      {moveTarget.name} is{" "}
+                      <strong>
+                        {formatUsd(Math.abs(feeDelta))}{" "}
+                        {feeDelta > 0 ? "more" : "less"}
+                      </strong>{" "}
+                      than this registration's recorded fee of{" "}
+                      {formatUsd(reg.eventFeeCents)}. The amount doesn't change
+                      on its own — settle the difference with{" "}
+                      <strong>{feeDelta > 0 ? "Payment" : "Issue refund"}</strong>{" "}
+                      afterwards if you need to.
+                    </div>
+                  )}
+                  {hasPartner && (
+                    <div style={statusPanelStyle("warn")}>
+                      <strong>{reg.partnerName ?? "Their partner"}</strong> stays
+                      in {reg.eventName} and goes back to looking for a partner —
+                      a team can't span two events.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {moveError && (
+                <div style={{ ...statusPanelStyle("danger"), marginTop: 10 }} role="alert">
+                  {moveError}
+                </div>
+              )}
+
+              <div style={{ marginTop: 12 }}>
+                <button
+                  onClick={() => setMoveConfirm(true)}
+                  disabled={anyBusy || moveBusy || !moveTarget}
+                  style={
+                    anyBusy || moveBusy || !moveTarget
+                      ? ctaPrimaryDisabledStyle
+                      : ctaPrimaryStyle
+                  }
+                >
+                  {moveBusy ? "Moving…" : "Move to this event"}
+                </button>
+              </div>
+            </Section>
+          )}
 
           {/* Reassign player */}
           <Section title="Reassign player">
@@ -775,6 +927,30 @@ export function RegistrationEditorModal({
               setError(errMsg(e));
             }
           }}
+        />
+      )}
+
+      {moveConfirm && moveTarget && (
+        <ConfirmModal
+          title={`Move ${reg.playerName} to ${moveTarget.name}?`}
+          body={
+            <div>
+              This moves their registration out of{" "}
+              <strong>{reg.eventName}</strong> and into{" "}
+              <strong>{moveTarget.name}</strong>. Their payment status and the{" "}
+              {formatUsd(reg.eventFeeCents)} recorded against it come with them —
+              no money moves.
+              {hasPartner && (
+                <div style={{ ...statusPanelStyle("warn"), marginTop: 10 }}>
+                  <strong>{reg.partnerName ?? "Their partner"}</strong> stays in{" "}
+                  {reg.eventName} and goes back to looking for a partner.
+                </div>
+              )}
+            </div>
+          }
+          confirmLabel={moveBusy ? "Moving…" : "Move registration"}
+          onCancel={() => (moveBusy ? undefined : setMoveConfirm(false))}
+          onConfirm={onMove}
         />
       )}
 
