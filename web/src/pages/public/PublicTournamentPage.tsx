@@ -71,10 +71,13 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
     pickleball_type: string | null;
   } | null;
 };
-// Section tabs for the public tournament page. Register is the CTA tab.
+// Section tabs for the public tournament page. The events tab is the CTA one —
+// it stays court-red until you're on it. Labelled "Events" rather than
+// "Register" because it describes what you're looking at (the brackets you can
+// enter); the per-event Register buttons inside carry the call to action.
 const SECTION_TABS = [
   { key: "details" as const, label: "Details" },
-  { key: "register" as const, label: "Register" },
+  { key: "register" as const, label: "Events" },
 ];
 
 function composeLocationAddress(loc: {
