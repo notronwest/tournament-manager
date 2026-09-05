@@ -5,6 +5,58 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-08-28 — ⏳ IN FLIGHT: move a registration between events + one-click manage (#724/#725 → PR #726)
+
+**Green, awaiting your merge.** Branch `feat/move-registration-between-events`.
+
+Ron: managing a registration "brings me to the player profile and then I have to manage the
+registration… it doesn't allow me to move them to another event", plus rename the red
+Register tab.
+
+**Reachability (#724a):** from **By Player**, *Manage* navigated to the player profile just
+to reach the editor **By Event** already opens inline. Each **event badge on a player's row
+is now a button** opening that registration's editor directly; the subtitle says so, since
+nobody discovers a clickable badge by accident. *Manage* still goes to the profile (right
+place for the whole person). No extra query — partner names resolve from the tournament-wide
+fetch the page already does.
+
+**Move to another event (#724b)** — new editor section. Previously this meant withdraw +
+re-register, throwing away the payment record. Now the same row is kept and only `event_id`
+changes. New helpers in `lib/registrations.ts`: `fetchMoveTargets`, `moveRegistrationToEvent`.
+
+Decisions baked in — **read these before changing it**:
+- **Money is NOT re-priced.** Re-stamping the target's fee onto a paid reg would silently
+  create an over/under-payment. The fee travels with the row; any difference is surfaced with
+  a pointer to Payment / Issue refund (both already in the modal).
+- **Full + ineligible events are shown and FLAGGED, not hidden** — organizers override both
+  routinely, and hiding an expected option reads as a bug. Only an event where they already
+  hold an *active* reg is disabled (the active-unique index would reject it anyway).
+- **A confirmed partner is unpaired first and named** — a team can't span two events; the
+  partner returns to `seeking` in the original event rather than being dragged along.
+- **Targets derive from the reg's own `eventId`**, so the section works identically from all
+  three hosts (AttendeesPage / PlayerRegistrationsModal / PlayerDetailPage) with no
+  tournament id plumbed through.
+
+**Tab rename (#725):** public tabs now read **Details | Events** (was "Register"). Chose
+*Events* over *Brackets* to match the domain model + `events` table; still the court-red CTA
+while inactive. One-word change if Ron prefers Brackets.
+
+**Verified at 390px against LIVE data** (real event + real player, so `fetchMoveTargets`
+actually ran): 5 sibling events listed with the current one excluded; "Mixed 2.75 - 3.25 —
+full" flagged from the real `is_event_full` RPC; eligibility warning fired correctly
+("women's event") from real `checkEligibility`; fee-delta and partner warnings correct.
+19 tests pass; typecheck + build green; lint unchanged at 27 pre-existing errors.
+**No migration, no edge function, no new dependency.**
+
+⚠️ **Not verified:** the badge → editor *click path* (attendees page needs an org login and
+this machine's `web/.env` points at PROD). Typechecked only — click it on the PR preview.
+
+🔜 NEXT
+- Merge #726 → TEST, click a badge, then promote.
+- Still outstanding: **exercise comp + offline payment in prod**; press **Download list**
+  once on a real tournament; regenerate `web/src/types/supabase.ts`; repoint `web/.env`
+  away from PROD.
+
 ## 2026-08-27 — STATUS.md cleaned up + docs promoted; TEST == PROD in sync
 
 Ron: "clean up status -- merge and promote." Archived the 190 pre-2026-08-15 entries to
