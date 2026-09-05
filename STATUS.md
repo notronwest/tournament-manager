@@ -5,7 +5,39 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
-## 2026-08-28 — ⏳ IN FLIGHT: move a registration between events + one-click manage (#724/#725 → PR #726)
+## 2026-08-28 — PROMOTED TEST → PROD: move a registration between events, one-click manage, "Events" tab
+
+Live on bertanderne.com. Merged → main (squash `33630ed`, PR **#726**), promoted via
+**#727** (merge `463b389`). Stories **#724** + **#725** closed. Frontend only — no
+migration, no edge function, no new dependency.
+
+Verified in the **deployed PROD bundle** (`index-BaEteFk1.js`): "Move to another event",
+"Move to this event", "click an event to manage that entry", "a team can't span two
+events", "Moving them anyway is your call" all present; `label:"Events"` present and
+`label:"Register"` **gone**. Tabs confirmed rendering **Details | EVENTS** (court red) at
+390px on both test.bertanderne.com and bertanderne.com.
+
+⚠️ **This one writes to the DB**, unlike the last two promotions. `moveRegistrationToEvent`
+updates `event_id` / `partner_status` / `partner_registration_id` on `event_registrations`
+and unpairs a partner first. Ordinary org-staff RLS write, no new privileges; the
+active-unique index is the backstop. **A move already made can't be rolled back by a Pages
+rollback** — reverse it by moving the player back.
+
+⚠️ **Badge → editor click path still unproven.** Typechecked and in the live bundle, but the
+attendees page needs an org login (this machine's `web/.env` points at PROD), so the first
+real click will be a user's.
+
+Design decisions behind the move are in the superseded entry below — **read them before
+changing it**, especially "money is NOT re-priced" and "full/ineligible are flagged, not
+hidden".
+
+🔜 NEXT — the pile of unproven-in-prod items is growing; worth one pass through the admin UI:
+- Click an event badge on the Attendees page (this change).
+- Press **Download list** once on a real tournament.
+- **Exercise comp + offline payment** — still unproven since the 2026-08-24 promotion.
+- Regenerate `web/src/types/supabase.ts`; repoint `web/.env` away from PROD.
+
+## 2026-08-28 — (superseded — promoted, see the entry above) move a registration between events + one-click manage
 
 **Green, awaiting your merge.** Branch `feat/move-registration-between-events`.
 
