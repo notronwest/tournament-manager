@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
 import type { Database } from "../types/supabase";
+import { checkEligibility } from "./eligibility";
 
 type RegistrationStatus = Database["public"]["Enums"]["registration_status"];
 type PartnerStatus = Database["public"]["Enums"]["partner_status"];
@@ -436,4 +437,118 @@ export async function fetchEventRegistrants(eventId: string): Promise<
       : "(unknown)",
     partnerStatus: r.partner_status,
   }));
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Move a registration to a different event in the same tournament.
+//
+// The common desk request ("put me in 3.5 instead of 4.0") previously meant
+// withdrawing and re-registering, which loses the payment record. Moving keeps
+// the same row — same status, same fee already recorded — and only changes
+// which event it points at.
+//
+// Money is deliberately NOT re-priced. Re-stamping the target event's fee onto
+// a paid registration would silently create an over- or under-payment; instead
+// the fee travels with the row and the UI surfaces any difference so the admin
+// can settle it with the Payment / Issue refund tools already in the editor.
+// ─────────────────────────────────────────────────────────────────────
+
+export type MoveTarget = {
+  eventId: string;
+  name: string;
+  format: EventFormat;
+  gender: Database["public"]["Enums"]["event_gender"];
+  feeCents: number;
+  full: boolean;
+  /** They already hold an active registration here — the DB would reject it. */
+  alreadyRegistered: boolean;
+  /** Empty when they meet the event's gender/rating gates. */
+  ineligibleReasons: string[];
+};
+
+// Sibling events of the one this registration is in, annotated with everything
+// the admin needs to choose safely. Never filters the list — a full or
+// ineligible event is shown and flagged, because organizers override both
+// routinely; only `alreadyRegistered` is genuinely unusable.
+export async function fetchMoveTargets(
+  currentEventId: string,
+  playerId: string,
+): Promise<MoveTarget[]> {
+  const { data: current, error: cErr } = await supabase
+    .from("events")
+    .select("id, tournament_id")
+    .eq("id", currentEventId)
+    .maybeSingle();
+  if (cErr) throw new Error(cErr.message);
+  if (!current) return [];
+
+  const [{ data: events, error: eErr }, { data: player, error: pErr }, { data: mine, error: mErr }] =
+    await Promise.all([
+      supabase
+        .from("events")
+        .select("*")
+        .eq("tournament_id", current.tournament_id)
+        .neq("id", currentEventId)
+        .is("deleted_at", null)
+        .order("name"),
+      supabase.from("players").select("*").eq("id", playerId).maybeSingle(),
+      supabase
+        .from("event_registrations")
+        .select("event_id")
+        .eq("player_id", playerId)
+        .in("status", ["pending_payment", "paid"])
+        .is("deleted_at", null),
+    ]);
+  if (eErr) throw new Error(eErr.message);
+  if (pErr) throw new Error(pErr.message);
+  if (mErr) throw new Error(mErr.message);
+
+  const taken = new Set((mine ?? []).map((r) => r.event_id));
+  const rows = events ?? [];
+
+  // Capacity comes from the same RPC the public register page uses, so "full"
+  // here means what it means to a player.
+  const fullness = await Promise.all(
+    rows.map(async (e) => {
+      const { data } = await supabase.rpc("is_event_full", { p_event_id: e.id });
+      return data === true;
+    }),
+  );
+
+  return rows.map((e, i) => ({
+    eventId: e.id,
+    name: e.name,
+    format: e.format,
+    gender: e.gender,
+    feeCents: e.event_fee_cents,
+    full: fullness[i],
+    alreadyRegistered: taken.has(e.id),
+    ineligibleReasons: player ? checkEligibility(player, e).reasons : [],
+  }));
+}
+
+// Point the registration at a different event. Any confirmed partner is
+// unpaired first — a team can't straddle two events — which leaves them
+// 'seeking' in the original event rather than silently dragging them along.
+export async function moveRegistrationToEvent(args: {
+  regId: string;
+  targetEventId: string;
+  targetFormat: EventFormat;
+  partnerRegId: string | null;
+}): Promise<void> {
+  if (args.partnerRegId) {
+    await unpairRegistration(args.regId, args.partnerRegId);
+  }
+
+  const { error } = await supabase
+    .from("event_registrations")
+    .update({
+      event_id: args.targetEventId,
+      // Doubles needs a partner again; singles has none to need.
+      partner_status: args.targetFormat === "doubles" ? "seeking" : "solo",
+      partner_registration_id: null,
+    })
+    .eq("id", args.regId);
+  // Surfaces the active-unique violation verbatim if two admins race.
+  if (error) throw new Error(error.message);
 }

@@ -45,6 +45,14 @@ type EventForPlayer = {
   // F1/F2: tracks whether THIS player's registration in THIS event is
   // partner_status='seeking' — they signed up needing a partner.
   partnerStatus: PartnerStatus;
+  // Enough to open the registration editor straight from the badge, instead of
+  // routing through the player profile to get at the same modal.
+  regId: string;
+  format: EventFormat;
+  status: RegistrationStatus;
+  partnerRegId: string | null;
+  partnerName: string | null;
+  eventFeeCents: number;
 };
 
 type Row = {
@@ -251,13 +259,26 @@ export default function AttendeesPage() {
       const raw = (data ?? []) as unknown as RawReg[];
 
       // --- By Player grouping (existing) ---
+      // Partner names resolve from the same fetch — every reg in the
+      // tournament is already in hand, so no extra round trip.
+      const rawById = new Map(raw.map((r) => [r.id, r]));
       const byPlayer = new Map<string, Row>();
       for (const r of raw) {
         if (!r.players || !r.events) continue;
+        const partnerRaw = r.partner_registration_id
+          ? (rawById.get(r.partner_registration_id) ?? null)
+          : null;
         const eventEntry: EventForPlayer = {
           id: r.events.id,
           name: r.events.name,
           partnerStatus: r.partner_status,
+          regId: r.id,
+          format: r.events.format,
+          status: r.status,
+          partnerRegId: r.partner_registration_id,
+          partnerName:
+            partnerRaw?.players ? playerFullName(partnerRaw.players) : null,
+          eventFeeCents: r.event_fee_cents,
         };
         const existing = byPlayer.get(r.players.id);
         if (existing) {
@@ -436,6 +457,7 @@ export default function AttendeesPage() {
             {view === "players" && filter
               ? ` · ${visible.length} matching "${filter}"`
               : null}
+            {view === "players" ? " · click an event to manage that entry" : null}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -507,10 +529,27 @@ export default function AttendeesPage() {
           rows={rows}
           seekers={seekers}
           onManage={(p) => {
-            // Managing a person now lives on the unified person page, scoped to
-            // this org (?org=) so org admins are authorized there.
+            // The whole person (profile, cross-tournament history) still lives
+            // on the unified person page, scoped to this org (?org=) so org
+            // admins are authorized there.
             if (org) navigate(`/admin/players/${p.id}?org=${org.slug}`);
           }}
+          onEditReg={(p, e) =>
+            setEditing({
+              regId: e.regId,
+              eventId: e.id,
+              eventName: e.name,
+              format: e.format,
+              playerId: p.id,
+              playerName: playerFullName(p),
+              status: e.status,
+              partnerStatus: e.partnerStatus,
+              partnerRegId: e.partnerRegId,
+              partnerName: e.partnerName,
+              eventFeeCents: e.eventFeeCents,
+              tournamentName: tournament.name,
+            })
+          }
         />
       ) : (
         <ByEventView eventGroups={eventGroups} onEdit={setEditing} />
@@ -535,9 +574,10 @@ type ByPlayerViewProps = {
   rows: Row[];
   seekers: { player: Player; events: EventForPlayer[] }[];
   onManage: (p: Player) => void;
+  onEditReg: (p: Player, e: EventForPlayer) => void;
 };
 
-function ByPlayerView({ visible, rows, seekers, onManage }: ByPlayerViewProps) {
+function ByPlayerView({ visible, rows, seekers, onManage, onEditReg }: ByPlayerViewProps) {
   return (
     <>
       {/* F2: Partner seekers section */}
@@ -724,20 +764,29 @@ function ByPlayerView({ visible, rows, seekers, onManage }: ByPlayerViewProps) {
                 </td>
                 <td style={tdStyle}>
                   <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {/* Each badge opens that registration's editor directly.
+                        Managing a registration used to mean a detour through
+                        the player profile to reach the same modal. */}
                     {row.events.map((e) => (
-                      <span
+                      <button
                         key={e.id}
+                        type="button"
+                        onClick={() => onEditReg(row.player, e)}
+                        title={`Manage ${row.player.first_name}'s ${e.name} registration`}
                         style={{
                           padding: "2px 8px",
                           background: infoBg,
                           color: infoFg,
+                          border: `1px solid ${infoBg}`,
                           borderRadius: 4,
                           fontSize: 11,
                           fontWeight: 500,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
                         }}
                       >
                         {e.name}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 </td>
