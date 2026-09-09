@@ -5,7 +5,82 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
-## 2026-08-28 — ⏳ IN FLIGHT: move a registration between events + one-click manage (#724/#725 → PR #726)
+## 2026-09-08 — Nightly regression triaged: MY rename broke it, not the app (#728 → PR #729)
+
+**Green, awaiting your merge.** Branch `fix/e2e-tab-locator-regression` (`33510fd`).
+**Test-only — no production code touched, so there is nothing to promote.** Merging to
+`main` is what turns the nightly (and its twice-daily Discord alert) green.
+
+**Cause — self-inflicted, from #725 in this same session.** Renaming the public tab
+"Register" → "Events" broke `gotoRegister()` in `web/e2e/fixtures.ts`, which reached event
+cards via `getByRole("tab", { name: /register/i })`. **11 specs** across
+`registration.spec.ts`, `issue-09-confirm-cancel.spec.ts` and `mobile/audit.spec.ts` all
+died on that one line. Each burned the 20s `actionTimeout` — that's the run-time blowout.
+
+| | |
+|---|---|
+| Last green | 2026-09-04 19:36 (3m58s) |
+| #726 merged | 2026-09-05 00:00 |
+| First red | 2026-09-05 12:40 → every run since, ~11m |
+
+**The expensive part was the misdirection**: failures were named "register with an existing
+partner", "mobile audit — Register CTA usable" etc. Nothing had regressed; the app was fine.
+The suite pointed at registration and mobile layout when the change was one word of copy.
+
+**Fix:** `gotoRegister()` now targets `#tournament-tab-register` — SectionTabs'
+`idPrefix` + `key`, the same hook the tab's `aria-controls` already uses. The key stayed
+`register` through the rename; only the label moved. Because an id-anchored locator would
+*hide* a copy regression, the wording is now asserted **deliberately in one place**
+(`discovery.spec.ts`), plus a test that the tab actually reveals its panel. A future rename
+fails **there, once**, in a test that is about the copy.
+
+**Verified with the REAL suite**, not a local approximation: `gh workflow run regression.yml
+--ref <branch>` (run 34294105851, same secrets + deployed target as the nightly) →
+**58 passed / 4 skipped / 0 failed in 2.4m**, vs 11 failed / 41 passed / 9.7m on main.
+
+**LESSON — worth remembering.** `web/e2e/` is not covered by a `web/src` grep. When changing
+user-visible copy that tests might locate by, grep **`web/e2e/` too**. Better: reach for a
+stable id in shared navigation helpers and assert copy once, on purpose.
+
+🔜 NEXT
+- Merge #729 to stop the nightly alerting. No promotion needed.
+- Unchanged and still unproven in prod: click an event badge on Attendees; press
+  **Download list** once; **exercise comp + offline payment**; regenerate
+  `web/src/types/supabase.ts`; repoint `web/.env` away from PROD.
+
+## 2026-08-28 — PROMOTED TEST → PROD: move a registration between events, one-click manage, "Events" tab
+
+Live on bertanderne.com. Merged → main (squash `33630ed`, PR **#726**), promoted via
+**#727** (merge `463b389`). Stories **#724** + **#725** closed. Frontend only — no
+migration, no edge function, no new dependency.
+
+Verified in the **deployed PROD bundle** (`index-BaEteFk1.js`): "Move to another event",
+"Move to this event", "click an event to manage that entry", "a team can't span two
+events", "Moving them anyway is your call" all present; `label:"Events"` present and
+`label:"Register"` **gone**. Tabs confirmed rendering **Details | EVENTS** (court red) at
+390px on both test.bertanderne.com and bertanderne.com.
+
+⚠️ **This one writes to the DB**, unlike the last two promotions. `moveRegistrationToEvent`
+updates `event_id` / `partner_status` / `partner_registration_id` on `event_registrations`
+and unpairs a partner first. Ordinary org-staff RLS write, no new privileges; the
+active-unique index is the backstop. **A move already made can't be rolled back by a Pages
+rollback** — reverse it by moving the player back.
+
+⚠️ **Badge → editor click path still unproven.** Typechecked and in the live bundle, but the
+attendees page needs an org login (this machine's `web/.env` points at PROD), so the first
+real click will be a user's.
+
+Design decisions behind the move are in the superseded entry below — **read them before
+changing it**, especially "money is NOT re-priced" and "full/ineligible are flagged, not
+hidden".
+
+🔜 NEXT — the pile of unproven-in-prod items is growing; worth one pass through the admin UI:
+- Click an event badge on the Attendees page (this change).
+- Press **Download list** once on a real tournament.
+- **Exercise comp + offline payment** — still unproven since the 2026-08-24 promotion.
+- Regenerate `web/src/types/supabase.ts`; repoint `web/.env` away from PROD.
+
+## 2026-08-28 — (superseded — promoted, see the entry above) move a registration between events + one-click manage
 
 **Green, awaiting your merge.** Branch `feat/move-registration-between-events`.
 
