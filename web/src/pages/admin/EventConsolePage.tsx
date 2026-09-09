@@ -374,6 +374,7 @@ export default function EventConsolePage() {
       <div>
         <Link
           to={`/admin/${org.slug}/tournaments/${tournament.slug}`}
+          className="no-print"
           style={{ color: courtBlue, textDecoration: "none", fontSize: 13 }}
         >
           ← {tournament.name}
@@ -442,7 +443,7 @@ export default function EventConsolePage() {
           </div>
           {/* Edit format moved into the Settings tab below — header
               keeps cross-cutting actions only (Print, Reset). */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {event.is_paired_roles && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/pair-teams`}
@@ -504,7 +505,9 @@ export default function EventConsolePage() {
         </div>
       </div>
 
-      <TabStrip active={activeTab} onChange={setActiveTab} />
+      <div className="no-print">
+        <TabStrip active={activeTab} onChange={setActiveTab} />
+      </div>
 
       {activeTab === "settings" && (
         <SettingsTab
@@ -568,6 +571,21 @@ export default function EventConsolePage() {
           onConfirm={onResetAllScores}
         />
       )}
+      {/* Print CSS shared by the Games tab (bracket) and Standings tab
+          (results) print buttons — whichever tab is active on screen
+          is what prints, chrome (nav/tabs/edit controls) stripped via
+          .no-print. Round-robin is excluded from "print bracket" (see
+          RoundRobinSection) since its score inputs aren't a clean
+          printable bracket. */}
+      <style>{`
+        .print-score { display: none; }
+        @media print {
+          .print-score { display: inline; }
+          .print-round-block, .print-standings-table { break-inside: avoid; page-break-inside: avoid; }
+          .print-round-head { break-after: avoid; page-break-after: avoid; }
+          @page { size: letter; margin: 0.5in; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -1462,7 +1480,10 @@ function RoundRobinSection({
   };
 
   return (
-    <section>
+    // Excluded from print — its live score-entry inputs aren't a
+    // clean printout, and "print bracket" (PlayoffSection, below)
+    // covers what a director needs to hand out or post.
+    <section className="no-print">
       <SectionHeader
         title={`Round-robin matches (${matches.length})`}
         right={
@@ -1612,35 +1633,44 @@ function MatchRow({
           whiteSpace: "nowrap",
         }}
       >
-        <input
-          type="number"
-          min="0"
-          value={scoreA}
-          onChange={(e) => setScoreA(e.target.value)}
-          disabled={!canPlay || busy}
-          style={scoreInputStyle}
-        />
-        <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
-        <input
-          type="number"
-          min="0"
-          value={scoreB}
-          onChange={(e) => setScoreB(e.target.value)}
-          disabled={!canPlay || busy}
-          style={scoreInputStyle}
-        />
-        <button
-          onClick={onSave}
-          disabled={!canPlay || busy}
-          style={{ ...tinyPrimaryBtn, marginLeft: 8 }}
-        >
-          {busy ? "…" : "Save"}
-        </button>
-        {err && (
-          <div style={{ color: dangerFg, fontSize: 11, marginTop: 4 }}>
-            {err}
-          </div>
-        )}
+        <div className="no-print" style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            type="number"
+            min="0"
+            value={scoreA}
+            onChange={(e) => setScoreA(e.target.value)}
+            disabled={!canPlay || busy}
+            style={scoreInputStyle}
+          />
+          <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
+          <input
+            type="number"
+            min="0"
+            value={scoreB}
+            onChange={(e) => setScoreB(e.target.value)}
+            disabled={!canPlay || busy}
+            style={scoreInputStyle}
+          />
+          <button
+            onClick={onSave}
+            disabled={!canPlay || busy}
+            style={{ ...tinyPrimaryBtn, marginLeft: 8 }}
+          >
+            {busy ? "…" : "Save"}
+          </button>
+          {err && (
+            <div style={{ color: dangerFg, fontSize: 11, marginTop: 4 }}>
+              {err}
+            </div>
+          )}
+        </div>
+        {/* Plain text so a printed bracket shows a finished score
+            instead of an empty-looking form control. */}
+        <span className="print-score">
+          {match.team_a_score !== null && match.team_b_score !== null
+            ? `${match.team_a_score}–${match.team_b_score}`
+            : "–"}
+        </span>
       </td>
       <td
         style={{
@@ -1731,19 +1761,28 @@ function StandingsSection({
         title="Standings"
         right={
           standings.length > 0 ? (
-            <button
-              type="button"
-              style={tinySecondaryBtn}
-              onClick={() => {
-                const rows = standingsToRows(standings, medals);
-                downloadCsv(
-                  resultsFilename(tournamentName, event.name, new Date()),
-                  resultsToCsv(rows),
-                );
-              }}
-            >
-              Export results (CSV)
-            </button>
+            <div className="no-print" style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                style={tinySecondaryBtn}
+                onClick={() => {
+                  const rows = standingsToRows(standings, medals);
+                  downloadCsv(
+                    resultsFilename(tournamentName, event.name, new Date()),
+                    resultsToCsv(rows),
+                  );
+                }}
+              >
+                Export results (CSV)
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                style={tinyPrimaryBtn}
+              >
+                Print results
+              </button>
+            </div>
           ) : undefined
         }
       />
@@ -1797,7 +1836,7 @@ function StandingsSection({
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {grouped.map((g, gi) => (
-            <div key={g.pool ?? `unassigned-${gi}`}>
+            <div key={g.pool ?? `unassigned-${gi}`} className="print-standings-table">
               {multiPool && (
                 <h3
                   style={{
@@ -2059,9 +2098,14 @@ function PlayoffSection({
         title="Playoff"
         right={
           playoffMatches.length > 0 ? (
-            <button onClick={onReset} disabled={busy} style={tinyDangerBtn}>
-              Reset playoff
-            </button>
+            <div className="no-print" style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => window.print()} style={tinyPrimaryBtn}>
+                Print bracket
+              </button>
+              <button onClick={onReset} disabled={busy} style={tinyDangerBtn}>
+                Reset playoff
+              </button>
+            </div>
           ) : null
         }
       />
@@ -2108,8 +2152,9 @@ function PlayoffSection({
           {Array.from(byRound.entries())
             .sort(([a], [b]) => a - b)
             .map(([round, ms]) => (
-              <div key={round}>
+              <div key={round} className="print-round-block">
                 <h3
+                  className="print-round-head"
                   style={{
                     fontSize: 13,
                     color: inkMuted,
