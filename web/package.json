@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:offline": "vite --mode offline",
     "build": "vite build",
     "build:local": "BUILD_OUT_DIR=../../www/tournamentmanager npm run build",
     "typecheck": "tsc -b --noEmit",
