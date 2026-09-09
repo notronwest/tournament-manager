@@ -5,6 +5,27 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-09 — Builder: offline field import/export (#736), PR #740 open
+
+Built issue #736 (part of the offline-tournament epic #732): a new "Offline
+field" tool on the tournament detail page exports each event's confirmed
+teams (players, partner pairing, seed) to a JSON file, and imports that same
+file's teams into matching events (matched by name) elsewhere — for taking
+the locked Friday-AM registration field to the offline laptop. Also added a
+per-event "Export results (CSV)" button on the event console's Standings
+tab (standings + medal placements) for bringing Sunday's results back
+online. `web/src/lib/fieldFile.ts` documents the JSON file shape in its
+header comment. Typecheck/tests(32/32)/lint(no new vs main)/build all green.
+
+**Not verified:** against an actual offline/local-Postgres target — #733's
+local-runtime PR (#738) hadn't merged yet, so validation was against the
+normal hosted Supabase preview. Import assumes the tournament + its events
+already exist on the target DB (matches by event name); it does not create
+tournaments/events from the file.
+
+**Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
+lands, do a real offline dry run importing a field file end-to-end.
+
 ## 2026-09-08 — Nightly regression GREEN again; merged + promoted (#728/#729/#730)
 
 Merged #729 → main (squash `3675099`), promoted via #730 (merge `bac05c0`). **main == production
