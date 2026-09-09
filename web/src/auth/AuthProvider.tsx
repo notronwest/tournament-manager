@@ -7,6 +7,14 @@ import {
 } from "react";
 import type { AuthError, Session, User } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
+import { isOfflineMode } from "../lib/env";
+
+// Matches the local-only director account created by supabase/seed.sql
+// (issue #734, epic #732). Only ever authenticates against the throwaway
+// local Postgres/Auth stack started by scripts/offline.sh -- never
+// reachable from a deployed DEV/TEST/PROD build. See docs/OFFLINE.md.
+const OFFLINE_DIRECTOR_EMAIL = "director@offline.local";
+const OFFLINE_DIRECTOR_PASSWORD = "bert-and-erne-offline";
 
 type AuthContextValue = {
   user: User | null;
@@ -60,7 +68,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Restore session on mount.
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session && isOfflineMode()) {
+        // No Internet at the venue -- hosted OAuth/magic-link are
+        // unreachable, so sign in as the local-only director account
+        // (supabase/seed.sql) against the local Supabase stack instead.
+        // Zero external network calls; nobody types credentials at the
+        // desk. Falls through to the normal signed-out state (the login
+        // page) if this fails, e.g. the seed hasn't run yet.
+        const { data: offlineData } = await supabase.auth.signInWithPassword({
+          email: OFFLINE_DIRECTOR_EMAIL,
+          password: OFFLINE_DIRECTOR_PASSWORD,
+        });
+        setSession(offlineData.session);
+        setUser(offlineData.session?.user ?? null);
+        setLoading(false);
+        return;
+      }
       setSession(data.session);
       setUser(data.session?.user ?? null);
       setLoading(false);

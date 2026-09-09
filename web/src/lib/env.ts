@@ -60,3 +60,18 @@ export function getEnvLabel(): EnvLabel | null {
   // Unknown → assume production, show nothing.
   return null;
 }
+
+/**
+ * True only when the app is running via `scripts/offline.sh` / `npm run
+ * dev:offline` (Vite `--mode offline`, see docs/OFFLINE.md) against the
+ * LOCAL Supabase stack for an offline event. Never true for the deployed
+ * DEV/TEST/PROD builds -- offline mode is opt-in local tooling, not a
+ * runtime toggle reachable from a hosted build.
+ */
+export function isOfflineMode(): boolean {
+  return (
+    (import.meta.env.VITE_APP_ENV as string | undefined)
+      ?.trim()
+      .toLowerCase() === "offline"
+  );
+}
