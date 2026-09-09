@@ -28,4 +28,25 @@ test.describe("tournament discovery (#252)", () => {
     await expect(page).toHaveURL(new RegExp(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}`));
     await expect(page.getByRole("heading", { name: TOURNAMENT })).toBeVisible();
   });
+
+  // The section tabs' wording, asserted deliberately in ONE place. Every other
+  // spec reaches the event cards via gotoRegister(), which targets the tab by
+  // its stable id — so a rename shows up here as a single honest failure about
+  // copy, instead of 11 confusing timeouts in unrelated registration specs
+  // (which is exactly what #725's "Register" → "Events" rename caused).
+  test("tournament page tabs are labelled Details and Events", async ({ page }) => {
+    await page.goto(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}`);
+    await expect(page.locator("#tournament-tab-details")).toHaveText(/details/i);
+    await expect(page.locator("#tournament-tab-register")).toHaveText(/events/i);
+  });
+
+  // Switching to the events tab reveals its panel — the behaviour every
+  // registration spec depends on gotoRegister() delivering.
+  test("the events tab reveals the events panel", async ({ page }) => {
+    await page.goto(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}`);
+    const tab = page.locator("#tournament-tab-register");
+    await tab.click();
+    await expect(tab).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#tournament-panel-register")).toBeVisible();
+  });
 });

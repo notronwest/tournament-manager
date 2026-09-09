@@ -102,16 +102,25 @@ export async function loginAs(page: Page, email: string) {
   await expect(page).not.toHaveURL(/\/login/);
 }
 
-// Open a tournament's public page and switch to the Register tab, where the
+// Open a tournament's public page and switch to the events tab, where the
 // event cards (register / partner-pick / cancel) live. The page defaults to the
 // Details tab, so every event-card interaction must do this first.
+//
+// Anchored on the tab's stable id, NOT its visible label. The label was
+// "Register" until #725 renamed it to "Events" — a pure copy change that took
+// out 11 specs across three files, because every one of them reached the event
+// cards through this helper's `getByRole("tab", { name: /register/i })`. The id
+// (`tournament-tab-register`, from SectionTabs' idPrefix + key) is the same hook
+// the tab's aria-controls wiring uses and doesn't move when the wording does.
+// The wording itself is asserted on purpose in discovery.spec.ts, so a copy
+// regression still fails — once, in a test that is about the copy.
 export async function gotoRegister(
   page: Page,
   orgSlug = SEED.orgSlug,
   tournamentSlug = SEED.tournamentSlug,
 ) {
   await page.goto(`/t/${orgSlug}/${tournamentSlug}`);
-  await page.getByRole("tab", { name: /register/i }).click();
+  await page.locator("#tournament-tab-register").click();
 }
 
 // Open the doubles partner picker so the search/add controls are interactable.
