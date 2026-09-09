@@ -20,6 +20,12 @@ import {
 import { eligibilityChips } from "../../lib/eligibility";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
+import { downloadCsv } from "../../lib/rosterExport";
+import {
+  standingsToRows,
+  resultsToCsv,
+  resultsFilename,
+} from "../../lib/resultsExport";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -47,7 +53,7 @@ type Event = Database["public"]["Tables"]["events"]["Row"];
 
 type TabKey = "settings" | "teams" | "games" | "standings";
 
-type Medal = {
+export type Medal = {
   team: { label: string; captainRegId: string };
   place: "gold" | "silver" | "bronze";
 };
@@ -57,7 +63,7 @@ type EventRegistration =
   Database["public"]["Tables"]["event_registrations"]["Row"];
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 
-type Team = {
+export type Team = {
   // Captain reg id is the canonical id we use in matches. For doubles it
   // is one of the pair (lowest UUID, deterministic). For singles it's
   // just the one reg.
@@ -71,7 +77,7 @@ type Team = {
   seed: number | null;
 };
 
-type Standing = {
+export type Standing = {
   team: Team;
   wins: number;
   losses: number;
@@ -540,6 +546,7 @@ export default function EventConsolePage() {
       {activeTab === "standings" && (
         <StandingsSection
           event={event}
+          tournamentName={tournament?.name ?? ""}
           standings={standings}
           medals={medals}
         />
@@ -1685,10 +1692,12 @@ function MatchStatusBadge({
 
 function StandingsSection({
   event,
+  tournamentName,
   standings,
   medals,
 }: {
   event: Event;
+  tournamentName: string;
   standings: Standing[];
   medals: Medal[];
 }) {
@@ -1718,7 +1727,26 @@ function StandingsSection({
 
   return (
     <section>
-      <SectionHeader title="Standings" />
+      <SectionHeader
+        title="Standings"
+        right={
+          standings.length > 0 ? (
+            <button
+              type="button"
+              style={tinySecondaryBtn}
+              onClick={() => {
+                const rows = standingsToRows(standings, medals);
+                downloadCsv(
+                  resultsFilename(tournamentName, event.name, new Date()),
+                  resultsToCsv(rows),
+                );
+              }}
+            >
+              Export results (CSV)
+            </button>
+          ) : undefined
+        }
+      />
 
       {medals.length > 0 && (
         <div

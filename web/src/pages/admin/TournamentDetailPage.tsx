@@ -625,6 +625,12 @@ export default function TournamentDetailPage() {
             Schedule
           </Link>
           <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/offline-field`}
+            style={secondaryLinkBtn}
+          >
+            Offline field
+          </Link>
+          <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/wizard/contacts`}
             style={secondaryLinkBtn}
           >
