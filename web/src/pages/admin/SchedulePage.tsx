@@ -738,6 +738,24 @@ export default function SchedulePage() {
         <Empty>No events yet. Add one to start scheduling.</Empty>
       ) : (
         <>
+        <div className="no-print">
+          <button
+            onClick={() => window.print()}
+            style={{
+              marginTop: 16,
+              padding: "8px 16px",
+              background: "#ffffff",
+              color: courtBlue,
+              border: `1px solid ${courtBlue}`,
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              fontFamily: bodyFontStack,
+            }}
+          >
+            Print schedule
+          </button>
           {/* Stats strip */}
           <div
             style={{
@@ -983,8 +1001,99 @@ export default function SchedulePage() {
           </div>
             </>
           )}
+        </div>
         </>
       )}
+      {/* Print output is a dedicated read-only table, not whichever
+          screen view (editable table or absolutely-positioned court
+          timeline) happens to be open — both are unreliable to
+          paginate. Hidden on screen, shown only under @media print. */}
+      {rows.length > 0 && (
+        <PrintScheduleSheet tournamentName={tournament.name} rows={rows} />
+      )}
+      <style>{`
+        .print-only { display: none; }
+        @media print {
+          .print-only { display: block; }
+          .schedule-print-row { break-inside: avoid; page-break-inside: avoid; }
+          @page { size: letter; margin: 0.5in; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// Read-only schedule printout: every scheduled event in start-time order,
+// then anything not yet scheduled. Plain table so browsers repeat the
+// header row and paginate cleanly across sheets.
+function PrintScheduleSheet({
+  tournamentName,
+  rows,
+}: {
+  tournamentName: string;
+  rows: EventRow[];
+}) {
+  const sorted = useMemo(() => {
+    const scheduled = rows
+      .filter((r) => r.scheduledStart)
+      .sort((a, b) => a.scheduledStart!.getTime() - b.scheduledStart!.getTime());
+    const unscheduled = rows.filter((r) => !r.scheduledStart);
+    return [...scheduled, ...unscheduled];
+  }, [rows]);
+
+  const printedOn = new Date().toLocaleString(undefined, {
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+
+  return (
+    <div className="print-only">
+      <h1
+        style={{
+          margin: "0 0 4px",
+          fontSize: 20,
+          fontFamily: headingFontStack,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+        }}
+      >
+        {tournamentName} — Schedule
+      </h1>
+      <p style={{ margin: "0 0 16px", fontSize: 12, color: inkMuted }}>
+        Printed {printedOn}
+      </p>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <thead>
+          <tr style={{ borderBottom: "2px solid #000" }}>
+            <th style={thStyle}>Event</th>
+            <th style={thStyle}>Courts</th>
+            <th style={{ ...thStyle, textAlign: "right" }}>Teams</th>
+            <th style={thStyle}>Start</th>
+            <th style={thStyle}>End</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r) => (
+            <tr
+              key={r.event.id}
+              className="schedule-print-row"
+              style={{ borderBottom: "1px solid #ccc" }}
+            >
+              <td style={tdStyle}>{r.event.name}</td>
+              <td style={tdStyle}>
+                {r.courtNumbers.length > 0 ? r.courtNumbers.join(", ") : "—"}
+              </td>
+              <td style={{ ...tdStyle, textAlign: "right" }}>{r.teamCount}</td>
+              <td style={tdStyle}>
+                {r.scheduledStart ? fmtTime(r.scheduledStart) : "Not scheduled"}
+              </td>
+              <td style={tdStyle}>
+                {r.scheduledEnd ? fmtTime(r.scheduledEnd) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
