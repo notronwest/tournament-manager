@@ -5,7 +5,74 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
-## 2026-09-08 — Nightly regression triaged: MY rename broke it, not the app (#728 → PR #729)
+## 2026-09-09 — Builder: offline field import/export (#736), PR #740 open
+
+Built issue #736 (part of the offline-tournament epic #732): a new "Offline
+field" tool on the tournament detail page exports each event's confirmed
+teams (players, partner pairing, seed) to a JSON file, and imports that same
+file's teams into matching events (matched by name) elsewhere — for taking
+the locked Friday-AM registration field to the offline laptop. Also added a
+per-event "Export results (CSV)" button on the event console's Standings
+tab (standings + medal placements) for bringing Sunday's results back
+online. `web/src/lib/fieldFile.ts` documents the JSON file shape in its
+header comment. Typecheck/tests(32/32)/lint(no new vs main)/build all green.
+
+**Not verified:** against an actual offline/local-Postgres target — #733's
+local-runtime PR (#738) hadn't merged yet, so validation was against the
+normal hosted Supabase preview. Import assumes the tournament + its events
+already exist on the target DB (matches by event name); it does not create
+tournaments/events from the file.
+
+**Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
+lands, do a real offline dry run importing a field file end-to-end.
+
+## 2026-09-08 — Nightly regression GREEN again; merged + promoted (#728/#729/#730)
+
+Merged #729 → main (squash `3675099`), promoted via #730 (merge `bac05c0`). **main == production
+(delta 0).** #728 closed + Done.
+
+**The promotion shipped NO app change** — `git diff origin/production origin/main` was empty for
+both `web/src/` and `supabase/`. The only code was under `web/e2e/`, which never reaches a
+browser. Pure branch hygiene.
+
+**Nightly, measured across three runs of identical code:**
+
+| run | result |
+|---|---|
+| before fix (main) | 11 failed / 41 passed / 9.7m |
+| fix branch `34294105851` | 58 passed / 0 failed / 2.4m |
+| after merge, main `34295453308` | 57 passed / **1 failed** / 3.4m |
+| re-run, main `34295941478` | **58 passed / 0 failed / 2.5m** |
+
+**The tab-locator regression is fully fixed** (11 → 0). The single failure in the middle run
+was something else, and is now **#731**.
+
+### #731 — the flake that was hiding behind the tab break
+
+`registration › register for a singles event` intermittently fails at the Save button. Playwright's
+error-context showed the page was **`/profile`** — `RequireProfile` had ejected the user — while
+the profile was **complete** (Sid / Singles / e2e-sid@wmpc.test all present). That is exactly the
+auth-transition race `RequireProfile.tsx` documents in its own comment and that **#546** closed:
+the profile probe can run before the session token attaches and return **zero rows via RLS with no
+error**. The 6-attempt retry narrowed the window without closing it. Filed **#731**, cross-linked
+from #546, on the board.
+
+**Why it deserves attention:** it is the worst-shaped failure — it names an unrelated feature
+("register for a singles event"), so triage starts by investigating registration code that is
+working fine. It only surfaced now because the tab break was failing that spec *earlier* in the
+flow.
+
+**LESSON (unchanged, still the takeaway):** `web/e2e/` is not covered by a `web/src` grep. When
+changing user-visible copy, grep the E2E suite too — or anchor shared navigation helpers on stable
+ids and assert copy once, on purpose.
+
+🔜 NEXT
+- **#731** — close the RequireProfile race properly; it's the top remaining red-nightly source.
+- Unchanged, still unproven in prod: click an event badge on Attendees; press **Download list**
+  once; **exercise comp + offline payment**; regenerate `web/src/types/supabase.ts`; repoint
+  `web/.env` away from PROD.
+
+## 2026-09-08 — (superseded — merged + promoted, see the entry above) nightly regression triage
 
 **Green, awaiting your merge.** Branch `fix/e2e-tab-locator-regression` (`33510fd`).
 **Test-only — no production code touched, so there is nothing to promote.** Merging to

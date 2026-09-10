@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
+import { isOfflineMode } from "../lib/env";
 import {
   bg,
   ink,
@@ -58,13 +59,19 @@ export default function LoginPage() {
   // typed /login directly defaults to the password form because they
   // probably already have one.
   const isPublicFlow = from.startsWith("/t/");
+  // Offline mode (scripts/offline.sh, docs/OFFLINE.md) has no Internet at
+  // all -- AuthProvider auto-signs-in as the local director account before
+  // this page normally renders. This is only the fallback if that hasn't
+  // happened yet: no OAuth/magic-link (both need external network), just
+  // the plain email/password form so there's no dead-end control on screen.
+  const offline = isOfflineMode();
   // An explicit initial mode can be passed via navigation state — e.g. the
   // "Create your account" CTA on /getting-started sends { mode: "signup" } so
   // the visitor lands directly on the account-creation form. Falls back to the
   // public-flow magic-link default, otherwise the signin form.
   const requestedMode = (location.state as { mode?: Mode } | null)?.mode;
   const [mode, setMode] = useState<Mode>(
-    requestedMode ?? (isPublicFlow ? "magic" : "signin"),
+    offline ? "signin" : (requestedMode ?? (isPublicFlow ? "magic" : "signin")),
   );
 
   const [email, setEmail] = useState("");
@@ -325,17 +332,20 @@ export default function LoginPage() {
                 : "Create account"}
           </h1>
           <p style={{ margin: "0 0 20px", color: inkSoft, fontSize: 13, lineHeight: 1.5 }}>
-            {mode === "forgot"
-              ? "Enter your email and we’ll send you a reset link."
-              : isPublicFlow
-                ? "Sign in or get started — we just need to know who you are before you register."
-                : mode === "signin"
-                  ? "Sign in to manage tournaments."
-                  : "Create your free account — register for tournaments and track your results."}
+            {offline
+              ? "Offline mode — sign in with the local director account."
+              : mode === "forgot"
+                ? "Enter your email and we’ll send you a reset link."
+                : isPublicFlow
+                  ? "Sign in or get started — we just need to know who you are before you register."
+                  : mode === "signin"
+                    ? "Sign in to manage tournaments."
+                    : "Create your free account — register for tournaments and track your results."}
           </p>
 
-          {/* Segmented control — hidden in forgot mode */}
-          {mode !== "forgot" && (
+          {/* Segmented control — hidden in forgot mode and offline (signin-only, no
+              magic-link/signup since both would need external network) */}
+          {mode !== "forgot" && !offline && (
           <div
             role="radiogroup"
             aria-label="Sign-in mode"
@@ -463,7 +473,7 @@ export default function LoginPage() {
                 </Field>
               )}
 
-              {mode === "signin" && (
+              {mode === "signin" && !offline && (
                 <div style={{ textAlign: "right", marginTop: -4 }}>
                   <button
                     type="button"
@@ -518,7 +528,7 @@ export default function LoginPage() {
             </form>
           )}
 
-          {mode !== "forgot" && (
+          {mode !== "forgot" && !offline && (
           <>
           <div
             style={{
