@@ -101,7 +101,7 @@ Runbook: [`supabase/MIGRATIONS.md`](./supabase/MIGRATIONS.md)
 Supabase project — TEST, PROD, or any future one — needs both, once):
 
 - **`pg_net` extension.** Ships available on Supabase (0.20.0) but not
-  auto-created; `20260911050000_install_pg_net_extension.sql` creates it going
+  auto-created; `20260911220000_install_pg_net_extension.sql` creates it going
   forward on TEST/PROD, but a brand-new project needs the migration history
   replayed (or the extension created by hand) before `net.http_post` triggers
   will work. Confirm with `select extname from pg_extension where
