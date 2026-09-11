@@ -17,6 +17,14 @@ import {
   type EventEstimate,
 } from "../../lib/estimator";
 import { SPOT_HOLDING_STATUSES, teamCountFor } from "../../lib/registrationStatus";
+import {
+  courtsNeededFor,
+  packSchedule,
+  parallelGroups,
+  type Placement,
+} from "../../lib/schedulePacker";
+import { ConfirmModal } from "../../components/ConfirmModal";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
 import type { Database } from "../../types/supabase";
 import {
@@ -45,7 +53,22 @@ import {
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
   locations: { court_count: number | null } | null;
 };
-type Event = Database["public"]["Tables"]["events"]["Row"];
+// schedule_order landed in migration 20260911170000; the generated types
+// lag it, so read it through this widening and write via an untyped client.
+type Event = Database["public"]["Tables"]["events"]["Row"] & {
+  schedule_order?: number | null;
+};
+const untyped = supabase as unknown as SupabaseClient;
+
+// Organizer order first (1 = first), creation order for anything unset.
+function sortEvents(list: Event[]): Event[] {
+  return [...list].sort((a, b) => {
+    const ao = a.schedule_order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.schedule_order ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return a.created_at.localeCompare(b.created_at);
+  });
+}
 type EventCourt = Database["public"]["Tables"]["event_courts"]["Row"];
 
 type EventRow = {
@@ -60,6 +83,12 @@ type EventRow = {
   poolBindingConstraint: "court" | "team";
   // Full breakdown for the per-row Details disclosure.
   estimate: EventEstimate;
+  // Teams the plan is based on: registered teams, or max_teams before
+  // anyone has signed up.
+  planTeams: number;
+  // Courts this event can actually keep busy (pools × floor(teams/2)),
+  // capped at the venue. Drives parallel auto-scheduling.
+  courtsNeeded: number;
   // Persisted start time on the event, if any. End is computed from
   // start + totalMinutes.
   scheduledStart: Date | null;
@@ -202,7 +231,7 @@ export default function SchedulePage() {
         return;
       }
 
-      setEvents(evRes.data ?? []);
+      setEvents(sortEvents((evRes.data ?? []) as Event[]));
       setEventCourts((courtsRes.data ?? []) as unknown as EventCourt[]);
 
       // Count registrations per event so the schedule reflects the
@@ -259,6 +288,12 @@ export default function SchedulePage() {
       // event cards) so they can never disagree on an end time.
       const estimate = estimateEvent(event, teamCount, courts);
       const { teamsPerPool, pool, medal, totalMinutes } = estimate;
+      const planTeams = teamCount >= 2 ? teamCount : Math.max(2, event.max_teams ?? 2);
+      const venueCourts = tournament?.locations?.court_count ?? courts;
+      const courtsNeeded = Math.min(
+        Math.max(1, venueCourts),
+        courtsNeededFor(planTeams, event.pool_count, event.teams_advancing_to_playoff),
+      );
       const scheduledStart = event.scheduled_start_at
         ? new Date(event.scheduled_start_at)
         : null;
@@ -276,11 +311,39 @@ export default function SchedulePage() {
         totalMinutes,
         poolBindingConstraint: pool.bindingConstraint,
         estimate,
+        planTeams,
+        courtsNeeded,
         scheduledStart,
         scheduledEnd,
       };
     });
-  }, [events, eventCourts, teamsByEvent]);
+  }, [events, eventCourts, teamsByEvent, tournament]);
+
+  // The auto-schedule PLAN, recomputed live from order / anchor / buffer so
+  // the page can say what parallelism it found before anything is written.
+  const plan: Placement[] = useMemo(() => {
+    const anchorIso = fromLocalInput(anchorLocal);
+    const venueCourts = tournament?.locations?.court_count ?? 0;
+    if (!anchorIso || venueCourts < 1 || rows.length === 0) return [];
+    const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
+    return packSchedule(
+      rows.map((r, i) => ({
+        id: r.event.id,
+        order: i,
+        minutes: r.totalMinutes,
+        courtsNeeded: r.courtsNeeded,
+        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
+      })),
+      new Date(anchorIso).getTime(),
+      bufferMs,
+      venueCourts,
+    );
+  }, [rows, anchorLocal, bufferLocal, tournament, playersByEvent]);
+  const planSpanMinutes = plan.length
+    ? Math.round((Math.max(...plan.map((p) => p.endMs)) - Math.min(...plan.map((p) => p.startMs))) / 60_000)
+    : 0;
+  const planGroups = useMemo(() => parallelGroups(plan), [plan]);
+  const [confirmAuto, setConfirmAuto] = useState(false);
 
   // Per-row "Details" disclosure — the estimator breakdown that used to live
   // on the retired stand-alone RR estimator tool.
@@ -293,26 +356,6 @@ export default function SchedulePage() {
       return next;
     });
 
-  // Tournament total = longest path through the court graph.
-  // Two events that share at least one court can't run fully in
-  // parallel, so we group events into "court clusters" (transitive
-  // closure of court overlap) and sum durations within a cluster.
-  // Tournament total is the max over clusters.
-  // ─── Overlap detection ─────────────────────────────────────────────
-  // Two flavors of conflict, both surfaced to the organizer:
-  //
-  //   1. Court overlap — two events share at least one court AND
-  //      their time windows touch. Hard conflict; one of them won't
-  //      actually be able to play.
-  //
-  //   2. Player overlap — a player registered in two events whose
-  //      time windows touch. Soft conflict (they can't be on two
-  //      courts at once, but in practice some no-shows / late
-  //      starts make it survivable). Surfaced as a warning, not an
-  //      error.
-  //
-  // Both are pair-wise comparisons. Only events with a
-  // scheduled_start_at participate.
   const overlaps = useMemo<Overlap[]>(() => {
     const list: Overlap[] = [];
     const scheduled = rows.filter(
@@ -381,40 +424,17 @@ export default function SchedulePage() {
     return m;
   }, [overlaps]);
 
+  // Tournament time: the real span once every event has a start; until
+  // then, the span the auto-schedule plan would produce.
   const tournamentTotalMinutes = useMemo(() => {
     if (rows.length === 0) return 0;
-    // Union-find over events. Two events merged if they share a court.
-    const parent = new Map<string, string>();
-    for (const r of rows) parent.set(r.event.id, r.event.id);
-    const find = (x: string): string => {
-      const p = parent.get(x) ?? x;
-      if (p === x) return x;
-      const root = find(p);
-      parent.set(x, root);
-      return root;
-    };
-    const union = (a: string, b: string) => {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra !== rb) parent.set(ra, rb);
-    };
-    for (let i = 0; i < rows.length; i++) {
-      for (let j = i + 1; j < rows.length; j++) {
-        const ci = new Set(rows[i].courtNumbers);
-        const overlap = rows[j].courtNumbers.some((c) => ci.has(c));
-        if (overlap) union(rows[i].event.id, rows[j].event.id);
-      }
+    if (rows.every((r) => r.scheduledStart && r.scheduledEnd)) {
+      const start = Math.min(...rows.map((r) => r.scheduledStart!.getTime()));
+      const end = Math.max(...rows.map((r) => r.scheduledEnd!.getTime()));
+      return Math.round((end - start) / 60_000);
     }
-    const clusterMinutes = new Map<string, number>();
-    for (const r of rows) {
-      const root = find(r.event.id);
-      clusterMinutes.set(
-        root,
-        (clusterMinutes.get(root) ?? 0) + r.totalMinutes,
-      );
-    }
-    return Math.max(...clusterMinutes.values());
-  }, [rows]);
+    return planSpanMinutes;
+  }, [rows, planSpanMinutes]);
 
   // ─── Schedule mutations ────────────────────────────────────────────
   // Optimistic local-state updates keep the UI snappy without a full
@@ -431,98 +451,80 @@ export default function SchedulePage() {
     );
   };
 
-  // Auto-schedule walks each court-cluster in court-number order and
-  // packs events back-to-back starting at the anchor. Different
-  // clusters all start at the same anchor (parallel tracks).
+  // Auto-schedule: walk events in the organizer's order and give each the
+  // earliest start where the courts it actually needs fit alongside what's
+  // already running (and no player is double-booked). Writes the start
+  // times AND each event's court slice (event_courts) so the calendar,
+  // the conflicts panel and day-of dispatch all agree.
   const onAutoSchedule = async () => {
+    setConfirmAuto(false);
     setError(null);
-    const anchorIso = fromLocalInput(anchorLocal);
-    if (!anchorIso) {
+    if (plan.length === 0) {
       setError("Pick a start date/time first.");
       return;
     }
-    if (rows.length === 0) return;
     setBusy(true);
-
-    // Cluster events by shared courts (same union-find as the totals).
-    const parent = new Map<string, string>();
-    for (const r of rows) parent.set(r.event.id, r.event.id);
-    const find = (x: string): string => {
-      const p = parent.get(x) ?? x;
-      if (p === x) return x;
-      const root = find(p);
-      parent.set(x, root);
-      return root;
-    };
-    const union = (a: string, b: string) => {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra !== rb) parent.set(ra, rb);
-    };
-    for (let i = 0; i < rows.length; i++) {
-      for (let j = i + 1; j < rows.length; j++) {
-        const ci = new Set(rows[i].courtNumbers);
-        if (rows[j].courtNumbers.some((c) => ci.has(c))) {
-          union(rows[i].event.id, rows[j].event.id);
-        }
-      }
-    }
-
-    // Group rows by cluster root, ordered within a cluster by the
-    // minimum court number (so the schedule is stable + matches the
-    // organizer's mental model of "Court 1 → Court 2 → …").
-    const clusters = new Map<string, EventRow[]>();
-    for (const r of rows) {
-      const root = find(r.event.id);
-      const arr = clusters.get(root) ?? [];
-      arr.push(r);
-      clusters.set(root, arr);
-    }
-    const updates: { id: string; scheduled_start_at: string }[] = [];
-    const anchorMs = new Date(anchorIso).getTime();
-    for (const cluster of clusters.values()) {
-      cluster.sort((a, b) => {
-        const ca = a.courtNumbers[0] ?? 1e9;
-        const cb = b.courtNumbers[0] ?? 1e9;
-        if (ca !== cb) return ca - cb;
-        // Tie-break by creation order so reruns are deterministic.
-        return a.event.created_at.localeCompare(b.event.created_at);
-      });
-      let cursorMs = anchorMs;
-      const bufferMs =
-        Math.max(0, parseInt(bufferLocal || "0", 10)) * 60_000;
-      cluster.forEach((r, i) => {
-        // First event in the cluster starts at the anchor; each
-        // subsequent event is preceded by the buffer (court
-        // turnover, announcements, etc.).
-        if (i > 0) cursorMs += bufferMs;
-        const iso = new Date(cursorMs).toISOString();
-        updates.push({ id: r.event.id, scheduled_start_at: iso });
-        cursorMs += r.totalMinutes * 60_000;
-      });
-    }
-
-    // Run updates in parallel — they're on disjoint rows.
-    const results = await Promise.all(
-      updates.map((u) =>
+    const ids = plan.map((p) => p.id);
+    const startResults = await Promise.all(
+      plan.map((p) =>
         supabase
           .from("events")
-          .update({ scheduled_start_at: u.scheduled_start_at })
-          .eq("id", u.id),
+          .update({ scheduled_start_at: new Date(p.startMs).toISOString() })
+          .eq("id", p.id),
       ),
     );
-    const firstErr = results.find((r) => r.error)?.error;
+    const firstErr = startResults.find((r) => r.error)?.error;
     if (firstErr) {
       setError(firstErr.message);
       setBusy(false);
       return;
     }
+    // Replace court allocations with the packed slices.
+    const { error: delErr } = await supabase.from("event_courts").delete().in("event_id", ids);
+    if (delErr) {
+      setError(`Start times saved, but couldn't reset court allocations: ${delErr.message}`);
+      setBusy(false);
+      return;
+    }
+    const courtRows = plan.flatMap((p) => p.courts.map((c) => ({ event_id: p.id, court_number: c })));
+    const { error: insErr } = await supabase.from("event_courts").insert(courtRows);
+    if (insErr) {
+      setError(`Start times saved, but couldn't assign courts: ${insErr.message}`);
+      setBusy(false);
+      return;
+    }
     setEvents((prev) =>
       prev.map((e) => {
-        const u = updates.find((x) => x.id === e.id);
-        return u ? { ...e, scheduled_start_at: u.scheduled_start_at } : e;
+        const p = plan.find((x) => x.id === e.id);
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
       }),
     );
+    setEventCourts((prev) => [
+      ...prev.filter((ec) => !ids.includes(ec.event_id)),
+      ...(courtRows.map((r) => ({ ...r, created_at: new Date().toISOString() })) as EventCourt[]),
+    ]);
+    setBusy(false);
+  };
+
+  // Move an event up or down in the run order; every event in the
+  // tournament gets a dense 1..n order so the result is unambiguous.
+  const onMove = async (eventId: string, dir: -1 | 1) => {
+    const idx = events.findIndex((e) => e.id === eventId);
+    const to = idx + dir;
+    if (idx < 0 || to < 0 || to >= events.length) return;
+    const next = [...events];
+    [next[idx], next[to]] = [next[to], next[idx]];
+    const renumbered = next.map((e, i) => ({ ...e, schedule_order: i + 1 }));
+    setEvents(renumbered);
+    setError(null);
+    setBusy(true);
+    const results = await Promise.all(
+      renumbered.map((e) =>
+        untyped.from("events").update({ schedule_order: e.schedule_order }).eq("id", e.id),
+      ),
+    );
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) setError(`Order saved locally but not on the server: ${firstErr.message}`);
     setBusy(false);
   };
 
@@ -701,7 +703,7 @@ export default function SchedulePage() {
             />
           </label>
           <button
-            onClick={onAutoSchedule}
+            onClick={() => setConfirmAuto(true)}
             disabled={busy || !anchorLocal}
             style={{
               padding: "8px 16px",
@@ -714,7 +716,7 @@ export default function SchedulePage() {
               cursor: busy || !anchorLocal ? "not-allowed" : "pointer",
               fontFamily: bodyFontStack,
             }}
-            title="Pack each court-cluster back-to-back starting at the chosen time. Parallel clusters all start at the anchor."
+            title="Walks events in the order below. Events run side by side when the courts they actually need fit; otherwise the next one follows after the buffer. Replaces court allocations with each event's slice."
           >
             {busy ? "Scheduling…" : "Auto-schedule"}
           </button>
@@ -745,6 +747,64 @@ export default function SchedulePage() {
             table below.
           </span>
         </div>
+      )}
+
+      {plan.length > 0 && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 12px",
+            background: cream,
+            border: `1px solid ${creamDeep}`,
+            borderRadius: 6,
+            fontSize: 12,
+            color: inkSoft,
+            lineHeight: 1.6,
+          }}
+        >
+          <strong style={{ color: ink }}>Auto-schedule plan</strong> — {fmtDuration(planSpanMinutes)} from{" "}
+          {fmtTime(new Date(plan[0].startMs))}, using courts each event can actually keep busy.{" "}
+          {planGroups.length === 0 ? (
+            <>No two events fit side by side with {tournament.locations?.court_count} courts — they run one after another.</>
+          ) : (
+            <>
+              Running together:
+              <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                {planGroups.map((g, i) => (
+                  <li key={i}>
+                    {g
+                      .map((p) => {
+                        const r = rows.find((x) => x.event.id === p.id);
+                        return r ? `${r.event.name} (${p.courts.length} court${p.courts.length === 1 ? "" : "s"})` : p.id;
+                      })
+                      .join(" + ")}{" "}
+                    · {fmtTime(new Date(Math.min(...g.map((p) => p.startMs))))}–{fmtTime(new Date(Math.max(...g.map((p) => p.endMs))))}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
+      {confirmAuto && (
+        <ConfirmModal
+          title="Auto-schedule these events?"
+          destructive={false}
+          confirmLabel="Auto-schedule"
+          onCancel={() => setConfirmAuto(false)}
+          onConfirm={onAutoSchedule}
+          body={
+            <div style={{ fontSize: 13, color: inkSoft, lineHeight: 1.6 }}>
+              <p style={{ margin: "0 0 8px" }}>
+                Sets a start time for all {plan.length} events in the order shown, running events side by side where their courts fit ({fmtDuration(planSpanMinutes)} total).
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: ink }}>Court allocations will be replaced</strong> with each event's slice for its window (e.g. courts 1–4 for one event, 5–8 for the other). You can still adjust courts on the tournament page afterwards.
+              </p>
+            </div>
+          }
+        />
       )}
 
       {rows.length === 0 ? (
@@ -786,7 +846,7 @@ export default function SchedulePage() {
             <Stat
               label="Tournament time"
               value={fmtDuration(tournamentTotalMinutes)}
-              sub="Longest court-cluster — events on disjoint courts run in parallel."
+              sub={rows.every((r) => r.scheduledStart) ? "First start to last end of the current schedule." : "If auto-scheduled now — events run side by side where the courts they need fit."}
               emphasize
             />
             <Stat
@@ -868,6 +928,28 @@ export default function SchedulePage() {
                         conflicts={overlapsByEventId.get(r.event.id) ?? []}
                         thisEventId={r.event.id}
                       />
+                      <span style={{ display: "inline-flex", gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={() => void onMove(r.event.id, -1)}
+                          disabled={busy || rows[0]?.event.id === r.event.id}
+                          aria-label={`Move ${r.event.name} up`}
+                          title="Move up (runs earlier)"
+                          style={moveBtnStyle}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onMove(r.event.id, 1)}
+                          disabled={busy || rows[rows.length - 1]?.event.id === r.event.id}
+                          aria-label={`Move ${r.event.name} down`}
+                          title="Move down (runs later)"
+                          style={moveBtnStyle}
+                        >
+                          ▼
+                        </button>
+                      </span>
                       {r.teamCount >= 2 && (
                         <button
                           type="button"
@@ -928,6 +1010,12 @@ export default function SchedulePage() {
                       total={courtCount}
                       assigned={r.courtNumbers}
                     />
+                    <div
+                      style={{ fontSize: 10, color: inkMuted, marginTop: 2 }}
+                      title={`${r.event.pool_count} pool${r.event.pool_count === 1 ? "" : "s"} × floor(${r.teamsPerPool} teams ÷ 2) matches at once — the most courts this event can keep busy${r.teamCount < 2 ? " (planning on max teams)" : ""}.`}
+                    >
+                      needs {r.courtsNeeded} of {courtCount}
+                    </div>
                   </td>
                   <td
                     style={{
@@ -1023,13 +1111,14 @@ export default function SchedulePage() {
               lineHeight: 1.6,
             }}
           >
-            <strong>How "Tournament time" is calculated.</strong> Events
-            that share at least one court can't run fully in parallel —
-            they're grouped into a court-cluster and their durations sum.
-            Events on disjoint courts run truly in parallel. The
-            tournament time is the longest of these clusters. If you want
-            to compress further, give each event its own slice of courts
-            on the tournament page.
+            <strong>How auto-schedule works.</strong> Events run in the
+            order shown (use ▲▼). Each event needs only the courts it can
+            keep busy — a pool of 5 teams plays 2 matches at once, so two
+            5-team pools need 4 courts, not 8. Events whose needs fit within
+            the venue run side by side; the next one otherwise starts after
+            the previous ends plus the buffer. A player in two events is
+            never double-booked. Auto-schedule also gives each event its
+            own slice of court numbers for its window.
           </div>
             </>
           )}
@@ -1780,6 +1869,19 @@ function EstimateDetails({ id, row }: { id: string; row: EventRow }) {
     </div>
   );
 }
+
+const moveBtnStyle: CSSProperties = {
+  minWidth: 44,
+  minHeight: 36,
+  padding: 0,
+  fontSize: 11,
+  color: inkSoft,
+  background: "#ffffff",
+  border: `1px solid ${rule}`,
+  borderRadius: 4,
+  cursor: "pointer",
+  fontFamily: bodyFontStack,
+};
 
 const detailsBtnStyle: CSSProperties = {
   padding: "2px 8px",
