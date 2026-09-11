@@ -26,6 +26,24 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Merge events UX: `/admin/:org/tournaments/:slug/events/merge` (+ "Merge" link)
+
+[DB] #767 merged → TEST migrate run green (`merge_events` + `merge_events_preview` live on
+TEST). Verified the SQL on a **local Postgres 16** with all 91 migrations applied (auth/
+storage schemas stubbed) — every rule exercised: staff preview OK / staff merge forbidden,
+format_mismatch, real merge (pairs intact, waitlist appended, duplicate waitlist cancelled,
+invite + courts handled, rename, source soft-deleted), player_conflict named,
+bracket_already_drawn, same_event, anon forbidden. This UX PR adds
+`pages/admin/MergeEventsPage.tsx`: pick "Merge away" + "Keep" (targets of another format
+disabled), preview cards (registered / waitlisted / cap / drawn), blockers panel (format,
+drawn bracket, players in both → link to Attendees), warnings for fee / gender differences
+(fees are NOT re-priced — same rule as moving one registration), "Name of the kept event"
+prefilled with the target's name, ConfirmModal, success panel with links. RPCs called via
+the untyped client (types not regenerated). Route + a "Merge" link beside "Edit all" on
+TournamentDetailPage when ≥2 events. VERIFIED at 390px under Playwright (stubbed RPCs):
+selection → preview → rename → confirm → result, and the conflict path disables the button.
+typecheck/lint/build green. Not run against TEST data — Ron: try it on two throwaway events.
+
 ## 2026-09-11 — Waitlist view PROMOTED → PROD (#760); BUILDING merge events — [DB] first
 
 #757 + #759 promoted via #760 (merge `f725b54`), PROD edge-functions green.

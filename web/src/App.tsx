@@ -67,6 +67,7 @@ import AuthConfirmPage from "./pages/public/AuthConfirmPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import TournamentBriefingPage from "./pages/admin/TournamentBriefingPage";
 import TournamentWaitlistPage from "./pages/admin/TournamentWaitlistPage";
+import MergeEventsPage from "./pages/admin/MergeEventsPage";
 import OfflineFieldPage from "./pages/admin/tools/OfflineFieldPage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
@@ -498,6 +499,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/offline-field"
           element={<OfflineFieldPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/merge"
+          element={<MergeEventsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/events/edit"
