@@ -87,6 +87,12 @@ export default function PendingPartnerInvitesPanel({
     try {
       await resendPartnerInvite(inv.inviteId, baseUrl);
       setState((s) => ({ ...s, [inv.inviteId]: "sent" }));
+      // The function stamped last_sent_at server-side; reflect it here so the
+      // row's "Last sent" moves without a reload.
+      const sentAt = new Date().toISOString();
+      setInvites((list) =>
+        list ? list.map((i) => (i.inviteId === inv.inviteId ? { ...i, lastSentAt: sentAt } : i)) : list,
+      );
       return true;
     } catch (e) {
       setState((s) => ({ ...s, [inv.inviteId]: "error" }));
@@ -230,7 +236,7 @@ export default function PendingPartnerInvitesPanel({
               <th style={th}>Invited by</th>
               <th style={th}>Event</th>
               <th style={th}>What's happened</th>
-              <th style={th}>Invited</th>
+              <th style={th}>Last sent</th>
               <th style={{ ...th, textAlign: "right" }}></th>
             </tr>
           </thead>
@@ -266,7 +272,12 @@ export default function PendingPartnerInvitesPanel({
                   <td style={td}>
                     <ResolutionCell inv={inv} />
                   </td>
-                  <td style={{ ...td, color: inkMuted }}>{fmtDate(inv.createdAt)}</td>
+                  <td style={{ ...td, color: inkMuted, whiteSpace: "nowrap" }}>
+                    {fmtDate(inv.lastSentAt)}
+                    {fmtDate(inv.lastSentAt) !== fmtDate(inv.createdAt) && (
+                      <div style={{ fontSize: 11 }}>invited {fmtDate(inv.createdAt)}</div>
+                    )}
+                  </td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
                     <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                       {res.kind === "registered" && !res.alreadyPaired && inv.inviterRegId && (

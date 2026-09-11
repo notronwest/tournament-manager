@@ -42,6 +42,9 @@ export type PendingInvite = {
   inviteeName: string;
   inviteeEmail: string | null;
   createdAt: string;
+  /** Most recent time the invite email went out (initial send or Resend).
+   * Falls back to createdAt for invites that predate the column. */
+  lastSentAt: string;
   /** The inviter's own registration status for this event, e.g. 'paid',
    * 'pending_payment', 'waitlisted', or null if they have no reg row. */
   inviterStatus: string | null;
@@ -81,7 +84,7 @@ export async function fetchPendingPartnerInvites(tournamentId: string): Promise<
 
   const { data: invites, error: iErr } = await supabase
     .from("partner_invites")
-    .select("id, event_id, inviter_player_id, invitee_player_id, invitee_email, created_at")
+    .select("id, event_id, inviter_player_id, invitee_player_id, invitee_email, created_at, last_sent_at")
     .in("event_id", eventIds)
     .eq("status", "pending");
   if (iErr) throw new Error(iErr.message);
@@ -194,6 +197,8 @@ export async function fetchPendingPartnerInvites(tournamentId: string): Promise<
       inviteeName: nameOf(r.invitee_player_id) || "Unknown",
       inviteeEmail: r.invitee_email,
       createdAt: r.created_at,
+      lastSentAt:
+        (r as unknown as { last_sent_at?: string | null }).last_sent_at ?? r.created_at,
       inviterStatus: status,
       inviterPaid: status === "paid",
       resolution,
