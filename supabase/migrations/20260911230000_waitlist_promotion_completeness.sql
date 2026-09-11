@@ -1,4 +1,4 @@
--- 20260911150000_waitlist_promotion_completeness.sql
+-- 20260911230000_waitlist_promotion_completeness.sql
 --
 -- Fixes issue #771: promotion from the waitlist only happened when a PAID
 -- registration withdrew. Two other ways a spot frees today promoted nobody:
