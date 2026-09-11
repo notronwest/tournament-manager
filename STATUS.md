@@ -1048,3 +1048,15 @@ Intake fields defined in docs/tournament-host-guide.md (on main).
 - [`docs/DESIGN_PREFERENCES.md`](./docs/DESIGN_PREFERENCES.md). Backlog →
   the WMPC Roadmap board (see the Backlog section in `CLAUDE.md`).
 - [`../wmpc-meta/strategy.md`](../wmpc-meta/strategy.md).
+
+## 2026-09-11 — Briefing email + start-times page: venue was blank for saved-location tournaments
+
+Ron: "I don't see location in the briefing email." Wizard-made tournaments (PB Angels
+included) keep their venue in the saved org location (`tournaments.location_id` →
+`locations`); `send-tournament-briefing` and the public `StartTimesPage` read only the
+legacy free-text `location_name` / `location_address`, which are null there. Both now
+select `locations(name, address, address_line2, city, state, postal_code)`, prefer it, and
+compose the address the way the public tournament page does (`composeLocationAddress`);
+the legacy columns stay as the fallback. Briefing harness (stubbed client) confirms the
+intro "at <venue>" line, the "Where" block and the Maps link with the composed address.
+web typecheck + lint + FN tsc clean. Ships as one PR (function + page are independent).
