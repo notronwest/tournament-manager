@@ -520,15 +520,16 @@ function renderBriefing(args: {
       <li style="${LI}"><strong>Lots of water.</strong> You'll play several games in a row — bring more than you think you need.</li>
       <li style="${LI}">Your paddle, court shoes, and a towel.</li>
       <li style="${LI}">Snacks you can eat between games.</li>
-      <li style="${LI}">A layer for the weather, sunscreen, and a hat if you're outdoors.</li>
       <li style="${LI}">A folding chair if you like somewhere to sit between games.</li>
     </ul>
     ${notesHtml}
     ${
-      mapsUrl
-        ? `<h2 style="${H2}">Getting there</h2><p style="${P}">${escapeHtml(where)}<br /><a href="${escapeHtml(mapsUrl)}" style="color:#14181f;">Open in Google Maps</a></p>`
+      where
+        ? `<h2 style="${H2}">Where</h2><p style="${P}">${escapeHtml(where)}${mapsUrl ? `<br /><a href="${escapeHtml(mapsUrl)}" style="color:#14181f;">Open in Google Maps</a>` : ""}</p>`
         : ""
     }
+    <h2 style="${H2}">Can't make it?</h2>
+    <p style="${P}">Tell us as soon as you know${replyTo ? " by replying to this email" : ""}. Please try to find a replacement player of a similar level to take your spot — send us their name and we'll swap them in, which keeps your partner and the bracket whole.</p>
     <p style="${P}margin-top:20px;">Questions? ${replyTo ? "Just reply to this email." : `Contact ${escapeHtml(org.name)}.`} See you on the courts!</p>
   `;
 

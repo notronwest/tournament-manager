@@ -48,6 +48,17 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Briefing email copy: no weather bullet, location always shown, "Can't make it?" section
+
+Ron: drop "A layer for the weather…" from What to bring; include the location; add a
+section for players who can't make it (tell us early, try to find a replacement).
+`send-tournament-briefing`: bullet removed; the "Getting there" block (previously only when
+an address existed) is now a "Where" section whenever a location name OR address exists,
+with the Google Maps link when there's an address; new "Can't make it?" section: tell us as
+soon as you know (by replying, when a reply-to exists), find a replacement of a similar
+level and send their name — keeps the partner and bracket whole. Harness 15/15, weather
+bullet absent, new sections present. [FN] change → merges alone, then promote.
+
 ## 2026-09-11 — Public start times: /t/:org/:slug/start-times page + header button + time on each event card
 
 Ron: "very clear and easy to see link on the tournament home page for start times; a page
