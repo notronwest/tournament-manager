@@ -969,6 +969,16 @@ export default function TournamentDetailPage() {
                 Edit all
               </Link>
             )}
+            {/* Merge two thin brackets into one — every team moves, the
+                kept event can be renamed, the other disappears. */}
+            {events.length > 1 && (
+              <Link
+                to={`/admin/${org.slug}/tournaments/${t.slug}/events/merge`}
+                style={secondaryLinkBtnSmall}
+              >
+                Merge
+              </Link>
+            )}
             <Link
               to={`/admin/${org.slug}/tournaments/${t.slug}/events/new`}
               style={primaryLinkBtnSmall}
