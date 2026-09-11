@@ -7,6 +7,12 @@
 // signal was a "pay to claim" line on the public page if they happened to
 // visit. This closes that gap for organizer-driven offers.
 //
+// If the registration has a CONFIRMED doubles partner who is also 'waitlisted',
+// the partner is promoted and emailed alongside — mirrors promote_from_waitlist
+// (DB), which already carries the confirmed partner along. A team is never left
+// half on the waitlist / half pay-to-claim. A partner who is already paid,
+// pending payment, or otherwise not 'waitlisted' is left untouched.
+//
 // Also re-sends the offer email for a registration that is already in
 // 'waitlisted_pending_payment' (e.g. promoted automatically by withdraw_self),
 // so the organizer can nudge someone who hasn't paid.
@@ -14,7 +20,10 @@
 // ORG-STAFF only (member of the tournament's org, or a platform admin).
 //
 // Body:    { registrationId: string }
-// Returns: { registrationId, status, emailed: boolean, email?: string, detail?: string }
+// Returns: {
+//   registrationId, status, emailed: boolean, email?: string, detail?: string,
+//   partner?: { registrationId: string, promoted: boolean, emailed: boolean, email?: string, detail?: string }
+// }
 //
 // Required secrets (auto-injected): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 // Required secrets (set per project): RESEND_API_KEY, RESEND_FROM_ADDRESS.
@@ -66,7 +75,7 @@ Deno.serve(async (req: Request) => {
     const { data: reg, error: regErr } = await admin
       .from("event_registrations")
       .select(
-        "id, status, player_id, event_id, events!inner(id, name, tournament_id, tournaments!inner(id, name, slug, organization_id, organizations!inner(id, name, slug, contact_email)))",
+        "id, status, player_id, event_id, partner_registration_id, partner_status, events!inner(id, name, tournament_id, tournaments!inner(id, name, slug, organization_id, organizations!inner(id, name, slug, contact_email)))",
       )
       .eq("id", registrationId)
       .is("deleted_at", null)
@@ -78,6 +87,9 @@ Deno.serve(async (req: Request) => {
       id: string;
       status: string;
       player_id: string;
+      event_id: string;
+      partner_registration_id: string | null;
+      partner_status: string;
       events: {
         id: string;
         name: string;
@@ -102,8 +114,10 @@ Deno.serve(async (req: Request) => {
       return json({ error: "not_on_waitlist", status: r.status }, 409);
     }
 
+    const wasFreshOffer = r.status === "waitlisted";
+
     // ── 3. Reserve the spot (idempotent for an already-offered reg) ──
-    if (r.status === "waitlisted") {
+    if (wasFreshOffer) {
       const { error: upErr } = await admin
         .from("event_registrations")
         .update({ status: "waitlisted_pending_payment", waitlist_position: null, updated_at: new Date().toISOString() })
@@ -112,53 +126,52 @@ Deno.serve(async (req: Request) => {
       if (upErr) throw new Error(`promote: ${upErr.message}`);
     }
 
-    // ── 4. Email the player ─────────────────────────────────────────
-    const { data: player } = await admin
-      .from("players")
-      .select("id, first_name, last_name, email")
-      .eq("id", r.player_id)
-      .maybeSingle();
-    const email = ((player?.email ?? "") as string).trim().toLowerCase();
-    if (!email || !email.includes("@")) {
-      return json({ registrationId: r.id, status: "waitlisted_pending_payment", emailed: false, detail: "player has no email address" });
-    }
-    if (!resendApiKey || !rawFrom) {
-      return json({ registrationId: r.id, status: "waitlisted_pending_payment", emailed: false, detail: "email not configured" });
+    // ── 3b. Carry a CONFIRMED, still-waitlisted partner along ────────
+    // Mirrors promote_from_waitlist (DB): a doubles team is never left half
+    // promoted. Only on a fresh offer — a partner already paid / pending /
+    // otherwise off the waitlist is untouched.
+    let partnerRow: { id: string; player_id: string } | null = null;
+    if (wasFreshOffer && r.partner_registration_id && r.partner_status === "confirmed") {
+      const { data: partnerReg } = await admin
+        .from("event_registrations")
+        .select("id, player_id, status")
+        .eq("id", r.partner_registration_id)
+        .eq("event_id", r.event_id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (partnerReg && partnerReg.status === "waitlisted") {
+        const { error: partnerUpErr } = await admin
+          .from("event_registrations")
+          .update({ status: "waitlisted_pending_payment", waitlist_position: null, updated_at: new Date().toISOString() })
+          .eq("id", partnerReg.id)
+          .eq("status", "waitlisted");
+        if (partnerUpErr) throw new Error(`promote_partner: ${partnerUpErr.message}`);
+        partnerRow = { id: partnerReg.id, player_id: partnerReg.player_id };
+      }
     }
 
-    const claimUrl = `${SITE_URL}/t/${org.slug}/${t.slug}`;
-    const P = `margin:0 0 14px;font-size:15px;color:#4a5159;line-height:1.6;`;
-    const html = renderEmailHtml({
-      headingLabel: org.name,
-      heading: `A spot opened in ${event.name}`,
-      bodyHtml: `
-        <p style="${P}">Hi ${escapeHtml(((player?.first_name ?? "") as string).trim() || "there")},</p>
-        <p style="${P}">Good news — a spot has opened up for you in <strong>${escapeHtml(event.name)}</strong> at <strong>${escapeHtml(t.name)}</strong>. It's reserved for you right now.</p>
-        <p style="${P}">To claim it, open the tournament page, find ${escapeHtml(event.name)} and complete your payment. Please do this as soon as you can — if we don't hear from you, the spot goes to the next player on the waitlist.</p>`,
-      ctaLabel: "Claim my spot",
-      ctaUrl: claimUrl,
-      postBodyHtml: `<p style="${P}margin-top:20px;">Can't make it after all? Just reply to this email and we'll pass the spot along.</p>`,
-      footer: `${escapeHtml(org.name)} via bert &amp; erne &mdash; pickleball tournaments<br />You're receiving this because you joined the waitlist for ${escapeHtml(event.name)}.`,
-    });
+    // ── 4. Email the player(s) ────────────────────────────────────────
+    const primary = await sendOfferEmail(admin, r.player_id, event, t, org, resendApiKey, rawFrom, userData.user.email);
+    const result: Record<string, unknown> = {
+      registrationId: r.id,
+      status: "waitlisted_pending_payment",
+      emailed: primary.emailed,
+      ...(primary.email ? { email: primary.email } : {}),
+      ...(primary.detail ? { detail: primary.detail } : {}),
+    };
 
-    const replyTo = org.contact_email || userData.user.email || undefined;
-    const resp = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendApiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: normalizeFrom(rawFrom),
-        to: [email],
-        subject: `A spot opened in ${event.name} — ${t.name}`,
-        html,
-        ...(replyTo ? { reply_to: replyTo } : {}),
-      }),
-    });
-    if (!resp.ok) {
-      const detail = await resp.text();
-      console.error("resend failed", detail);
-      return json({ registrationId: r.id, status: "waitlisted_pending_payment", emailed: false, email, detail });
+    if (partnerRow) {
+      const partnerEmail = await sendOfferEmail(admin, partnerRow.player_id, event, t, org, resendApiKey, rawFrom, userData.user.email);
+      result.partner = {
+        registrationId: partnerRow.id,
+        promoted: true,
+        emailed: partnerEmail.emailed,
+        ...(partnerEmail.email ? { email: partnerEmail.email } : {}),
+        ...(partnerEmail.detail ? { detail: partnerEmail.detail } : {}),
+      };
     }
-    return json({ registrationId: r.id, status: "waitlisted_pending_payment", emailed: true, email });
+
+    return json(result);
   } catch (e) {
     return json(
       { error: "internal_error", detail: String((e as { message?: string })?.message ?? e) },
@@ -166,6 +179,68 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+type EventInfo = { id: string; name: string };
+type TournamentInfo = { id: string; name: string; slug: string };
+type OrgInfo = { id: string; name: string; slug: string; contact_email: string | null };
+
+async function sendOfferEmail(
+  admin: Db,
+  playerId: string,
+  event: EventInfo,
+  t: TournamentInfo,
+  org: OrgInfo,
+  resendApiKey: string | undefined,
+  rawFrom: string | undefined,
+  callerEmail: string | undefined,
+): Promise<{ emailed: boolean; email?: string; detail?: string }> {
+  const { data: player } = await admin
+    .from("players")
+    .select("id, first_name, last_name, email")
+    .eq("id", playerId)
+    .maybeSingle();
+  const email = ((player?.email ?? "") as string).trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    return { emailed: false, detail: "player has no email address" };
+  }
+  if (!resendApiKey || !rawFrom) {
+    return { emailed: false, detail: "email not configured" };
+  }
+
+  const claimUrl = `${SITE_URL}/t/${org.slug}/${t.slug}`;
+  const P = `margin:0 0 14px;font-size:15px;color:#4a5159;line-height:1.6;`;
+  const html = renderEmailHtml({
+    headingLabel: org.name,
+    heading: `A spot opened in ${event.name}`,
+    bodyHtml: `
+      <p style="${P}">Hi ${escapeHtml(((player?.first_name ?? "") as string).trim() || "there")},</p>
+      <p style="${P}">Good news — a spot has opened up for you in <strong>${escapeHtml(event.name)}</strong> at <strong>${escapeHtml(t.name)}</strong>. It's reserved for you right now.</p>
+      <p style="${P}">To claim it, open the tournament page, find ${escapeHtml(event.name)} and complete your payment. Please do this as soon as you can — if we don't hear from you, the spot goes to the next player on the waitlist.</p>`,
+    ctaLabel: "Claim my spot",
+    ctaUrl: claimUrl,
+    postBodyHtml: `<p style="${P}margin-top:20px;">Can't make it after all? Just reply to this email and we'll pass the spot along.</p>`,
+    footer: `${escapeHtml(org.name)} via bert &amp; erne &mdash; pickleball tournaments<br />You're receiving this because you joined the waitlist for ${escapeHtml(event.name)}.`,
+  });
+
+  const replyTo = org.contact_email || callerEmail || undefined;
+  const resp = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${resendApiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from: normalizeFrom(rawFrom),
+      to: [email],
+      subject: `A spot opened in ${event.name} — ${t.name}`,
+      html,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+    }),
+  });
+  if (!resp.ok) {
+    const detail = await resp.text();
+    console.error("resend failed", detail);
+    return { emailed: false, email, detail };
+  }
+  return { emailed: true, email };
+}
 
 function normalizeFrom(raw: string): string {
   const s = raw.trim().replace(/[\r\n]+/g, " ");
