@@ -7,8 +7,13 @@ import {
 } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
+// playoff_seeding landed in migration 20260911190000; generated types lag it.
+const untyped = supabase as unknown as SupabaseClient;
+type PlayoffSeeding = "overall" | "cross_pool";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -61,6 +66,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   // Per-event fee override. $0 means "use the tournament's pricing tiers".
   // Any positive value is a flat charge for this event that ignores tiers.
   const [eventFeeDollars, setEventFeeDollars] = useState("0");
+  // Who is actually signed up (edit mode) — drives the pool-play guidance.
+  // null = not loaded / create mode (no registrations can exist yet).
+  const [regTeams, setRegTeams] = useState<{ complete: number; forming: number } | null>(null);
   // Format config
   const [poolCount, setPoolCount] = useState("1");
   const [playEachTeamTimes, setPlayEachTeamTimes] = useState("1");
@@ -70,6 +78,10 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [poolMinutesPerGame, setPoolMinutesPerGame] = useState("15");
   const [teamsAdvancing, setTeamsAdvancing] = useState("4");
   const [playoffRounds, setPlayoffRounds] = useState("1");
+  // How single-round medal matches are seeded. Cross-pool = Pool 1 #1 vs
+  // Pool 2 #1 for gold, the two #2s for bronze — only meaningful with 2
+  // pools, top 4, 1 round; saved as 'overall' otherwise.
+  const [playoffSeeding, setPlayoffSeeding] = useState<PlayoffSeeding>("overall");
   // Medal-round overrides (separate from pool play because medal
   // matches often play longer — to 15 win-by-2, best of 3, etc.)
   const [medalMatchFormat, setMedalMatchFormat] = useState<
@@ -165,6 +177,24 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
           return;
         }
         setEvent(ev);
+        // Spot-holding registrations → teams, the way the roster counts them:
+        // confirmed pairs make one team each; everyone else (seeking /
+        // invited / solo) is a team still forming. Free waitlisters hold no
+        // spot and aren't counted.
+        const { data: regRows } = await supabase
+          .from("event_registrations")
+          .select("partner_status")
+          .eq("event_id", ev.id)
+          .in("status", SPOT_HOLDING_STATUSES)
+          .is("deleted_at", null);
+        if (cancelled) return;
+        if (regRows) {
+          const confirmed = regRows.filter((r) => r.partner_status === "confirmed").length;
+          setRegTeams({
+            complete: Math.floor(confirmed / 2),
+            forming: regRows.length - confirmed + (confirmed % 2),
+          });
+        }
         setName(ev.name);
         setFormat(ev.format);
         setGender(ev.gender);
@@ -180,6 +210,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         setPoolMinutesPerGame(String(ev.pool_minutes_per_game));
         setTeamsAdvancing(String(ev.teams_advancing_to_playoff));
         setPlayoffRounds(String(ev.playoff_rounds));
+        setPlayoffSeeding(
+          ((ev as unknown as { playoff_seeding?: PlayoffSeeding }).playoff_seeding ?? "overall"),
+        );
         setMedalMatchFormat(ev.medal_match_format);
         setMedalPointsToWin(String(ev.medal_points_to_win));
         setMedalWinBy(String(ev.medal_win_by));
@@ -300,10 +333,16 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
     if (!payload) return;
 
     setBusy(true);
+    const crossPoolAllowed =
+      payload.pool_count === 2 && payload.teams_advancing_to_playoff === 4 && payload.playoff_rounds === 1;
+    const fullPayload = {
+      ...payload,
+      playoff_seeding: crossPoolAllowed ? playoffSeeding : "overall",
+    };
     if (mode === "create") {
-      const { data, error: insErr } = await supabase
+      const { data, error: insErr } = await untyped
         .from("events")
-        .insert(payload)
+        .insert(fullPayload)
         .select()
         .single();
       setBusy(false);
@@ -318,9 +357,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       }
     } else {
       if (!event || !org) return;
-      const { error: updErr } = await supabase
+      const { error: updErr } = await untyped
         .from("events")
-        .update(payload)
+        .update(fullPayload)
         .eq("id", event.id);
       setBusy(false);
       if (updErr) {
@@ -362,6 +401,15 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
     { length: maxPoolsAllowed },
     (_, i) => i + 1,
   );
+  // What the pools would actually look like. Registered teams when we have
+  // them (edit mode), otherwise the cap — creation happens before anyone can
+  // register, so there is nothing else to plan on yet.
+  const registeredTeams = regTeams ? regTeams.complete + regTeams.forming : 0;
+  const planningOnRegistered = regTeams !== null && registeredTeams > 0;
+  const planTeams = planningOnRegistered ? registeredTeams : maxTeamsNum;
+  const poolCountNum = Math.max(1, parseInt(poolCount || "1", 10) || 1);
+  const poolSizes = splitIntoPools(planTeams, poolCountNum);
+  const smallestPool = poolSizes.length ? Math.min(...poolSizes) : 0;
   // Snap pool count back to 1 if the user lowers max_teams below the
   // threshold for the currently selected pool count.
   useEffect(() => {
@@ -664,6 +712,61 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
               : `Multi-pool: each team plays only within its assigned pool. Assign teams to pools on the event console once the event is created.`
           }
         >
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              background: bg,
+              border: `1px solid ${rule}`,
+              borderRadius: 6,
+              fontSize: 13,
+              color: inkSoft,
+              lineHeight: 1.5,
+            }}
+          >
+            {planningOnRegistered && regTeams ? (
+              <div>
+                <strong style={{ color: ink }}>
+                  {registeredTeams} {registeredTeams === 1 ? "team" : "teams"} registered
+                </strong>
+                <span style={{ color: inkMuted }}>
+                  {" "}({regTeams.complete} complete
+                  {regTeams.forming > 0 ? ` · ${regTeams.forming} still forming` : ""}) · cap {maxTeamsNum}
+                </span>
+              </div>
+            ) : (
+              <div>
+                <strong style={{ color: ink }}>No registrations yet</strong>
+                <span style={{ color: inkMuted }}>
+                  {" "}— planning on Max teams ({maxTeamsNum}); revisit once teams sign up.
+                </span>
+              </div>
+            )}
+            {planTeams > 0 && (
+              <div style={{ marginTop: 4 }}>
+                {poolCountNum} {poolCountNum === 1 ? "pool" : "pools"} →{" "}
+                <strong style={{ color: ink }}>{poolSizes.join(" + ")}</strong>{" "}
+                {poolCountNum === 1 ? "teams, everyone plays everyone" : "teams"}
+                {poolCountNum > 1 && smallestPool < 4 && (
+                  <span
+                    style={{
+                      marginLeft: 8,
+                      padding: "1px 6px",
+                      borderRadius: 4,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      background: smallestPool < 3 ? dangerBg : warnBg,
+                      color: smallestPool < 3 ? dangerFg : warnFg,
+                    }}
+                  >
+                    {smallestPool < 3
+                      ? `a pool of ${smallestPool} — too small to play`
+                      : `a pool of ${smallestPool} — below the 4-team minimum`}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <FieldRow>
             <Field
               label="Number of pools"
@@ -823,6 +926,23 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                   </select>
                 </Field>
               </FieldRow>
+              {parseInt(poolCount || "1", 10) === 2 && advancingNum === 4 && roundsNum === 1 && (
+                <fieldset style={{ border: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <legend style={{ fontSize: 13, color: inkSoft, marginBottom: 4 }}>Seeding for the medal matches</legend>
+                  <RadioOption
+                    checked={playoffSeeding === "overall"}
+                    onChange={() => setPlayoffSeeding("overall")}
+                    label="Overall standings"
+                    hint="Top 4 of the combined table: 1 v 2 for gold, 3 v 4 for bronze."
+                  />
+                  <RadioOption
+                    checked={playoffSeeding === "cross_pool"}
+                    onChange={() => setPlayoffSeeding("cross_pool")}
+                    label="Cross-pool"
+                    hint="Pool 1 winner v Pool 2 winner for gold / silver; the two runners-up play for bronze."
+                  />
+                </fieldset>
+              )}
               {playoffWarning && (
                 <div
                   style={{
@@ -1179,6 +1299,15 @@ function RadioOption({
       </span>
     </label>
   );
+}
+
+// Even split with the remainder spread over the first pools: 13 teams in 3
+// pools → 5 + 4 + 4. Mirrors how the event console distributes seeds.
+function splitIntoPools(teams: number, pools: number): number[] {
+  if (teams <= 0 || pools <= 0) return [];
+  const base = Math.floor(teams / pools);
+  const extra = teams % pools;
+  return Array.from({ length: pools }, (_, i) => base + (i < extra ? 1 : 0));
 }
 
 function FieldGroup({

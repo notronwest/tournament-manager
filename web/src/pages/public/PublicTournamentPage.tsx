@@ -929,6 +929,29 @@ export default function PublicTournamentPage({
             flexWrap: "wrap",
           }}
         >
+          {/* Start times — the question every player asks the week of the
+              tournament, so it gets a real button, not a text link. */}
+          <Link
+            to={`/t/${orgSlug}/${tournamentSlug}/start-times`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              minHeight: 44,
+              padding: "10px 18px",
+              borderRadius: 999,
+              background: ink,
+              color: courtYellow,
+              fontFamily: headingFontStack,
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              textDecoration: "none",
+            }}
+          >
+            🕘 Start times
+          </Link>
           <Link
             to={`/t/${orgSlug}/${tournamentSlug}/contact`}
             style={{
@@ -2499,6 +2522,17 @@ function EventCard({
               <Pill bg={cream} fg={courtBlue}>You're looking for a partner</Pill>
             )}
           </div>
+          {/* Start time — set by the organizer on the Schedule page. */}
+          <div style={{ fontSize: 13, marginTop: 4, color: event.scheduled_start_at ? ink : inkMuted }}>
+            {event.scheduled_start_at ? (
+              <>
+                <span aria-hidden="true">🕘 </span>
+                <strong>{fmtStartTime(event.scheduled_start_at)}</strong>
+              </>
+            ) : (
+              "Start time to be announced"
+            )}
+          </div>
           {/* Partner label */}
           {myStatus?.state === "invited" && myStatus.inviterName ? (
             <div style={{ color: ink, fontSize: 12, marginTop: 4 }}>
@@ -3604,6 +3638,14 @@ function fmtShortDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+// "Sat, Sep 19 · 9:00 AM" — the event card's start line.
+function fmtStartTime(iso: string): string {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return `${day} · ${time}`;
 }
 
 function fmtDateTime(iso: string): string {

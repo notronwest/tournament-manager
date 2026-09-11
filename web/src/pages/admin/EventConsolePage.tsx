@@ -1936,6 +1936,10 @@ function PlayoffSection({
 
   const N = event.teams_advancing_to_playoff;
   const R = event.playoff_rounds;
+  // playoff_seeding (migration 20260911190000) — generated types lag it.
+  const seeding =
+    (event as unknown as { playoff_seeding?: "overall" | "cross_pool" }).playoff_seeding ?? "overall";
+  const crossPool = seeding === "cross_pool" && event.pool_count === 2 && N === 4 && R === 1;
 
   const onGenerate = async () => {
     setError(null);
@@ -1945,7 +1949,7 @@ function PlayoffSection({
       );
       return;
     }
-    const top = standings.slice(0, N).map((s) => s.team);
+    let top = standings.slice(0, N).map((s) => s.team);
     if (top.length < N) {
       setError(`Need at least ${N} teams in the standings.`);
       return;
@@ -1957,6 +1961,25 @@ function PlayoffSection({
     if (R === 2 && N !== 4) {
       setError("2-round playoffs (semis + final + bronze) support Top-4 only.");
       return;
+    }
+    // Cross-pool seeding (2 pools, top 4, 1 round): Pool 1 #1 v Pool 2 #1
+    // for gold (position 0), Pool 1 #2 v Pool 2 #2 for bronze (position 1).
+    // Standings are already ordered by record, so filtering by pool keeps
+    // each pool's placement order.
+    if (crossPool) {
+      const inPool = (p: number) => standings.filter((s) => s.team.poolIndex === p).map((s) => s.team);
+      const p1 = inPool(1);
+      const p2 = inPool(2);
+      const unassigned = standings.filter((s) => s.team.poolIndex == null).length;
+      if (unassigned > 0) {
+        setError(`${unassigned} team${unassigned === 1 ? " is" : "s are"} not assigned to a pool — assign pools on the Teams tab first.`);
+        return;
+      }
+      if (p1.length < 2 || p2.length < 2) {
+        setError("Cross-pool seeding needs at least 2 teams in each pool.");
+        return;
+      }
+      top = [p1[0], p2[0], p1[1], p2[1]];
     }
 
     setBusy(true);
@@ -2144,7 +2167,9 @@ function PlayoffSection({
             <div style={{ fontSize: 13, color: inkSoft }}>
               Top {N},{" "}
               {R === 1
-                ? "1 round (pairwise medal matches)"
+                ? crossPool
+                  ? "1 round — cross-pool: pool winners for gold, runners-up for bronze"
+                  : "1 round (pairwise medal matches)"
                 : "2 rounds (semis + final + bronze)"}
             </div>
             <button onClick={onGenerate} disabled={busy} style={primaryBtn(busy)}>
