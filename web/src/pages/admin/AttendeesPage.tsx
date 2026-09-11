@@ -1155,14 +1155,30 @@ function SeekersByDivision({
 
             {[...d.pairable, ...d.waitlisted].map((s) => {
               const isWaitlisted = d.waitlisted.some((w) => w.regId === s.regId);
-              const others = d.pairable.filter((o) => o.regId !== s.regId);
+              // Only offer partners who could actually form a valid team: in a
+              // mixed division that means the other half of "one man + one
+              // woman". A player with no gender on file can pair with anyone.
+              const others = d.pairable.filter(
+                (o) => o.regId !== s.regId && canFormTeam(d.event, s.player.gender, o.player.gender),
+              );
+              const anyoneElse = d.pairable.some((o) => o.regId !== s.regId);
               const g = genderLabel(s.player.gender);
               const rating = seekerRating(d.event, s.player);
+              const needs =
+                d.event.gender === "mixed"
+                  ? s.player.gender === "M"
+                    ? "a woman"
+                    : s.player.gender === "F"
+                      ? "a man"
+                      : null
+                  : null;
               const disabledReason = isWaitlisted
                 ? "On the waitlist — no spot yet"
-                : others.length === 0
+                : !anyoneElse
                   ? "No one else is looking in this division"
-                  : null;
+                  : others.length === 0
+                    ? `Needs ${needs ?? "a partner"} — none looking`
+                    : null;
               return (
                 <div
                   key={s.regId}
@@ -1281,6 +1297,20 @@ function SeekersByDivision({
       )}
     </section>
   );
+}
+
+// Could these two make a valid team in this division? Only mixed doubles has
+// a composition rule (one man + one woman); an unknown gender is treated as
+// able to fill either side so nobody is locked out by a blank profile.
+function canFormTeam(
+  event: { gender: EventGender },
+  a: Database["public"]["Enums"]["player_gender"] | null,
+  b: Database["public"]["Enums"]["player_gender"] | null,
+): boolean {
+  if (event.gender !== "mixed") return true;
+  const known = (x: typeof a) => x === "M" || x === "F";
+  if (!known(a) || !known(b)) return true;
+  return a !== b;
 }
 
 const seekerPillStyle: CSSProperties = {
