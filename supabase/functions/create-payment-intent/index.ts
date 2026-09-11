@@ -102,8 +102,12 @@ Deno.serve(async (req: Request) => {
       .single();
     if (tErr || !tournament) return json({ error: "tournament_not_found" }, 404);
 
-    // Guard: only published tournaments accept payment.
-    if (tournament.status !== "published") {
+    // Guard: published tournaments accept payment, and so do CLOSED ones —
+    // "closed" means no new sign-ups, but a player who already holds a
+    // pending registration (accepted a partner invite, was promoted off the
+    // waitlist, or was added by the organizer) must still be able to pay
+    // for it. Draft / completed / cancelled never take money.
+    if (tournament.status !== "published" && tournament.status !== "closed") {
       return json({ error: "tournament_not_accepting_payment" }, 409);
     }
 
