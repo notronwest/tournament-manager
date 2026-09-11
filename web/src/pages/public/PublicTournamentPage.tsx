@@ -2147,7 +2147,11 @@ function EventCard({
 
   // ─── Right-side action button — depends on current state ─────────
   const renderAction = () => {
-    if (!registrationOpen) return null;
+    // NB: the registration window only gates NEW sign-ups (the Register /
+    // Join-waitlist branches at the bottom). A player who already holds a
+    // registration here — waitlisted, promoted, invited by a partner, or
+    // waiting to pay — keeps their actions after registration closes, so
+    // an accepted invite can still be paid for.
     // On the waitlist (free) — show status + a way to leave, not a
     // register CTA.
     if (myStatus?.state === "waitlisted") {
@@ -2279,6 +2283,8 @@ function EventCard({
         </Link>
       );
     }
+    // Everything below creates a NEW registration — closed means closed.
+    if (!registrationOpen) return null;
     if (expanded) return null;
     if (me && !playerEligible) {
       // An UNSET gender on a single-gender event is fixable — point the
