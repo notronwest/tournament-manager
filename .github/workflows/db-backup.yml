@@ -1,0 +1,94 @@
+name: Database backup (on demand)
+
+# Take a full logical dump of the TEST or PROD Supabase database and keep it
+# as a workflow artifact. Run it BEFORE anything risky (a bulk merge, a data
+# migration, a manual SQL fix) so there is a known-good copy to restore from.
+#
+#   Actions → "Database backup (on demand)" → Run workflow → pick target.
+#
+# Uses the same secrets as migrations.yml (project ref + DB password +
+# account access token) and the Supabase CLI's `db dump` (pg_dump under the
+# hood). Produces three gzipped files in one artifact:
+#   roles.sql   — cluster roles
+#   schema.sql  — every table / function / policy / index
+#   data.sql    — every row, as COPY statements
+#
+# The artifact contains personal data (player names, emails, phones). It is
+# private to repository collaborators and expires after RETENTION_DAYS; download
+# it if you need to keep it longer, and treat the file like the database.
+#
+# Restore (worst case, into an EMPTY project): psql "$DB_URL" -f roles.sql
+# -f schema.sql -f data.sql. For a partial fix, open data.sql and copy the
+# rows you need — it is plain SQL.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which database to back up"
+        type: choice
+        options: [test, prod]
+        default: test
+      retention_days:
+        description: "Days to keep the artifact"
+        type: number
+        default: 14
+
+concurrency:
+  group: db-backup-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve target
+        id: cfg
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROD_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          PROD_PWD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          TEST_REF: ${{ secrets.TEST_SUPABASE_PROJECT_REF }}
+          TEST_PWD: ${{ secrets.TEST_SUPABASE_DB_PASSWORD }}
+        run: |
+          if [ "${{ inputs.target }}" = "prod" ]; then
+            ENV=PROD; REF="$PROD_REF"; PW="$PROD_PWD"
+          else
+            ENV=TEST; REF="$TEST_REF"; PW="$TEST_PWD"
+          fi
+          if [ -z "$TOKEN" ] || [ -z "$REF" ] || [ -z "$PW" ]; then
+            echo "::error::$ENV secrets not set — cannot back up."; exit 1
+          fi
+          echo "::add-mask::$PW"
+          echo "env=$ENV" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "TARGET_PWD=$PW" >> "$GITHUB_ENV"
+          echo "stamp=$(date -u +%Y%m%d-%H%M%SZ)" >> "$GITHUB_OUTPUT"
+
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+
+      - name: Dump ${{ steps.cfg.outputs.env }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          supabase link --project-ref "${{ steps.cfg.outputs.ref }}" --password "$TARGET_PWD"
+          supabase db dump --linked --password "$TARGET_PWD" --role-only -f backup/roles.sql
+          supabase db dump --linked --password "$TARGET_PWD" -f backup/schema.sql
+          supabase db dump --linked --password "$TARGET_PWD" --data-only --use-copy -f backup/data.sql
+          ls -la backup
+          echo "## Backup of ${{ steps.cfg.outputs.env }} (${{ steps.cfg.outputs.ref }}) at ${{ steps.cfg.outputs.stamp }}" >> "$GITHUB_STEP_SUMMARY"
+          for f in backup/*.sql; do
+            echo "- $(basename "$f"): $(wc -c < "$f") bytes, $(grep -c '^COPY ' "$f" || true) COPY blocks" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "- event_registrations rows in data.sql: $(awk '/^COPY public.event_registrations/{f=1;next} f&&/^\\\.$/{exit} f' backup/data.sql | wc -l)" >> "$GITHUB_STEP_SUMMARY"
+          gzip -9 backup/*.sql
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ steps.cfg.outputs.env }}-${{ steps.cfg.outputs.stamp }}
+          path: backup/*.sql.gz
+          retention-days: ${{ inputs.retention_days }}
+          if-no-files-found: error
