@@ -26,6 +26,18 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Player briefing PROMOTED → PROD (#754); waitlist view [FN] next
+
+#752 (function) + #753 (page) promoted via #754 (merge `7b42aad`); PROD edge-functions run
+green. Ron: Schedule page → set start times → Player briefing → "Send me a test" → send.
+**Finding while scoping the waitlist view:** nothing ever emails a player promoted off the
+waitlist — `promote_from_waitlist` (called by `withdraw_self`) flips status to
+`waitlisted_pending_payment` and the only signal is a "pay to claim" line on the public
+page if they visit. **New [FN] `offer-waitlist-spot`**: organizer offers a spot to a
+waitlisted reg (flip + email with a "Claim my spot" CTA to the tournament page), and
+re-sends the email for an already-offered unpaid reg. Org-staff only. Ships first; the
+Waitlist page (per-event queue, add player, offer spot, remove) is the UX PR after it.
+
 ## 2026-09-11 — Player briefing UX: `/admin/:org/tournaments/:slug/briefing` (+ link on detail page)
 
 [FN] #752 merged → TEST (edge-functions run green). This UX PR adds
