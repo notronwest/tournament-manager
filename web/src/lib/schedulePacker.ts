@@ -11,13 +11,28 @@
 // owning all 8 courts is what made a 5-event day come out as 9 hours
 // end-to-end (PB Angels, 2026-09-11).
 
+// One event = one or two back-to-back segments: pool play (its full court
+// need) and, when there is a playoff, the medal round — fewer courts, so the
+// next event can start on what pool play released.
+export type PackSegment = {
+  kind: "pool" | "medal";
+  minutes: number;
+  courtsNeeded: number;
+};
+
 export type PackItem = {
   id: string;
   // Lower runs first. Ties broken by array order.
   order: number;
-  minutes: number;
-  courtsNeeded: number;
+  segments: PackSegment[];
   players: ReadonlySet<string>;
+};
+
+export type PlacedSegment = {
+  kind: "pool" | "medal";
+  startMs: number;
+  endMs: number;
+  courts: number[];
 };
 
 // Why an event didn't start at the anchor: what was in the way at the last
@@ -35,9 +50,9 @@ export type Placement = {
   id: string;
   startMs: number;
   endMs: number;
-  // The disjoint slice of court numbers (1-based) this event gets for its
-  // window — lowest free courts at that time.
+  // Union of every segment's courts — what gets written to event_courts.
   courts: number[];
+  segments: PlacedSegment[];
   heldBy: HoldReason | null;
 };
 
@@ -52,14 +67,29 @@ export function packSchedule(
   const placed: Placement[] = [];
   const playersById = new Map(items.map((i) => [i.id, i.players]));
 
-  for (const item of ordered) {
-    const need = Math.min(total, Math.max(1, item.courtsNeeded));
-    const durMs = Math.max(1, item.minutes) * 60_000;
+  // Court numbers busy at time t, from every placed segment.
+  const busyAt = (t: number, end: number, except?: string) => {
+    const busy = new Set<number>();
+    for (const p of placed) {
+      if (p.id === except) continue;
+      for (const seg of p.segments) {
+        if (seg.startMs < end && seg.endMs > t) for (const c of seg.courts) busy.add(c);
+      }
+    }
+    return busy;
+  };
 
-    // Candidate starts: the anchor, and just after every placed end (with
-    // the buffer). Earliest feasible wins.
+  for (const item of ordered) {
+    const segs = item.segments.length
+      ? item.segments.map((g) => ({ ...g, minutes: Math.max(1, g.minutes), courtsNeeded: Math.min(total, Math.max(1, g.courtsNeeded)) }))
+      : [{ kind: "pool" as const, minutes: 1, courtsNeeded: 1 }];
+    const durMs = segs.reduce((m, g) => m + g.minutes * 60_000, 0);
+
+    // Candidate starts: the anchor, and just after every placed segment end
+    // (with the buffer) — pool play ending frees courts even while that
+    // event's bracket is still running. Earliest feasible wins.
     const candidates = Array.from(
-      new Set([anchorMs, ...placed.map((p) => p.endMs + bufferMs)]),
+      new Set([anchorMs, ...placed.flatMap((p) => p.segments.map((g) => g.endMs + bufferMs))]),
     )
       .filter((t) => t >= anchorMs)
       .sort((a, b) => a - b);
@@ -68,10 +98,9 @@ export function packSchedule(
     let lastRejected: HoldReason | null = null;
     for (const t of candidates) {
       const end = t + durMs;
-      const overlapping = placed.filter((p) => p.startMs < end && p.endMs > t);
-      const busyCourts = new Set(overlapping.flatMap((p) => p.courts));
-      const courtsShort = Math.max(0, busyCourts.size + need - total);
-      const playerClashes = overlapping
+      // Player clash is checked over the whole event window.
+      const overlappingEvents = placed.filter((p) => p.startMs < end && p.endMs > t);
+      const playerClashes = overlappingEvents
         .map((p) => {
           const theirs = playersById.get(p.id);
           let shared = 0;
@@ -79,28 +108,54 @@ export function packSchedule(
           return { id: p.id, shared };
         })
         .filter((c) => c.shared > 0);
+      // Courts are checked per segment; the medal round takes the lowest
+      // courts of the pool slice so it never grabs anything new.
+      let cursor = t;
+      let courtsShort = 0;
+      const placedSegs: PlacedSegment[] = [];
+      let poolCourts: number[] = [];
+      for (const g of segs) {
+        const segEnd = cursor + g.minutes * 60_000;
+        const busy = busyAt(cursor, segEnd);
+        let courts: number[];
+        if (g.kind === "medal" && poolCourts.length) {
+          courts = poolCourts.filter((c) => !busy.has(c)).slice(0, g.courtsNeeded);
+          if (courts.length < g.courtsNeeded) {
+            for (let c = 1; c <= total && courts.length < g.courtsNeeded; c++) if (!busy.has(c) && !courts.includes(c)) courts.push(c);
+          }
+        } else {
+          courts = [];
+          for (let c = 1; c <= total && courts.length < g.courtsNeeded; c++) if (!busy.has(c)) courts.push(c);
+          if (g.kind === "pool") poolCourts = courts;
+        }
+        courtsShort = Math.max(courtsShort, g.courtsNeeded - courts.length);
+        placedSegs.push({ kind: g.kind, startMs: cursor, endMs: segEnd, courts });
+        cursor = segEnd;
+      }
       if (courtsShort > 0 || playerClashes.length > 0) {
         lastRejected = { playerClashes, courtsShort, atMs: t };
         continue;
       }
-      const courts: number[] = [];
-      for (let c = 1; c <= total && courts.length < need; c++) {
-        if (!busyCourts.has(c)) courts.push(c);
-      }
-      chosen = { id: item.id, startMs: t, endMs: end, courts, heldBy: lastRejected };
-      break;
-    }
-    // Always feasible at the latest end + buffer (nothing overlaps there),
-    // so `chosen` is set; the fallback is only for an empty candidate list.
-    if (!chosen) {
-      const t = Math.max(anchorMs, ...placed.map((p) => p.endMs + bufferMs));
       chosen = {
         id: item.id,
         startMs: t,
-        endMs: t + durMs,
-        courts: Array.from({ length: need }, (_, i) => i + 1),
+        endMs: end,
+        courts: Array.from(new Set(placedSegs.flatMap((g) => g.courts))).sort((a, b) => a - b),
+        segments: placedSegs,
         heldBy: lastRejected,
       };
+      break;
+    }
+    if (!chosen) {
+      // Only reachable with an empty candidate list; place after everything.
+      const t = Math.max(anchorMs, ...placed.map((p) => p.endMs + bufferMs));
+      let cursor = t;
+      const placedSegs: PlacedSegment[] = segs.map((g) => {
+        const seg = { kind: g.kind, startMs: cursor, endMs: cursor + g.minutes * 60_000, courts: Array.from({ length: g.courtsNeeded }, (_, i) => i + 1) };
+        cursor = seg.endMs;
+        return seg;
+      });
+      chosen = { id: item.id, startMs: t, endMs: cursor, courts: Array.from(new Set(placedSegs.flatMap((g) => g.courts))), segments: placedSegs, heldBy: lastRejected };
     }
     placed.push(chosen);
   }
@@ -119,17 +174,23 @@ export function parallelGroups(placements: Placement[]): Placement[][] {
   return groups.filter((g) => g.length > 1);
 }
 
-// Courts an event can keep busy: floor(teams / 2) per pool, summed over
-// pools (all pools play at once). The medal round needs at most
-// floor(advancing / 2), never more than pool play in practice.
-export function courtsNeededFor(
-  teams: number,
-  pools: number,
-  teamsAdvancing: number,
-): number {
+// Courts POOL PLAY can keep busy: floor(teams / 2) per pool, summed over
+// pools (all pools play at once).
+export function poolCourtsNeeded(teams: number, pools: number): number {
   const p = Math.max(1, pools);
   const perPool = Math.max(2, Math.ceil(Math.max(2, teams) / p));
-  const poolNeed = p * Math.floor(perPool / 2);
-  const medalNeed = Math.floor(Math.max(0, teamsAdvancing) / 2);
-  return Math.max(1, poolNeed, medalNeed);
+  return Math.max(1, p * Math.floor(perPool / 2));
+}
+
+// Courts the MEDAL ROUND keeps busy: one per simultaneous medal match —
+// floor(advancing / 2) (semis of a 2-round bracket are the same count; the
+// final + bronze are 2). 0 when there is no playoff.
+export function medalCourtsNeeded(teamsAdvancing: number): number {
+  if (teamsAdvancing <= 0) return 0;
+  return Math.max(1, Math.floor(teamsAdvancing / 2));
+}
+
+// Kept for callers that want a single number: the larger of the two.
+export function courtsNeededFor(teams: number, pools: number, teamsAdvancing: number): number {
+  return Math.max(poolCourtsNeeded(teams, pools), medalCourtsNeeded(teamsAdvancing));
 }

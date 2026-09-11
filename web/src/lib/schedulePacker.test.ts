@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { packSchedule, parallelGroups, courtsNeededFor } from "./schedulePacker";
+import { packSchedule, parallelGroups, courtsNeededFor, poolCourtsNeeded, medalCourtsNeeded, type PackItem } from "./schedulePacker";
+
+const one = (id: string, order: number, minutes: number, courtsNeeded: number, players: ReadonlySet<string> = none): PackItem => ({
+  id,
+  order,
+  players,
+  segments: [{ kind: "pool", minutes, courtsNeeded }],
+});
 
 const H = 60 * 60_000;
 const none = new Set<string>();
@@ -22,8 +29,8 @@ describe("packSchedule", () => {
   it("runs two 4-court events side by side on 8 courts, with disjoint court slices", () => {
     const out = packSchedule(
       [
-        { id: "a", order: 1, minutes: 110, courtsNeeded: 4, players: none },
-        { id: "b", order: 2, minutes: 110, courtsNeeded: 4, players: none },
+        one("a", 1, 110, 4, none),
+        one("b", 2, 110, 4, none),
       ],
       0,
       15 * 60_000,
@@ -38,9 +45,9 @@ describe("packSchedule", () => {
   it("queues an event that doesn't fit, after the earliest end plus the buffer", () => {
     const out = packSchedule(
       [
-        { id: "a", order: 1, minutes: 60, courtsNeeded: 4, players: none },
-        { id: "b", order: 2, minutes: 120, courtsNeeded: 4, players: none },
-        { id: "c", order: 3, minutes: 60, courtsNeeded: 6, players: none },
+        one("a", 1, 60, 4, none),
+        one("b", 2, 120, 4, none),
+        one("c", 3, 60, 6, none),
       ],
       0,
       15 * 60_000,
@@ -54,8 +61,8 @@ describe("packSchedule", () => {
   it("keeps a shared player out of two overlapping events", () => {
     const out = packSchedule(
       [
-        { id: "a", order: 1, minutes: 60, courtsNeeded: 2, players: new Set(["p1"]) },
-        { id: "b", order: 2, minutes: 60, courtsNeeded: 2, players: new Set(["p1", "p2"]) },
+        one("a", 1, 60, 2, new Set(["p1"])),
+        one("b", 2, 60, 2, new Set(["p1", "p2"])),
       ],
       0,
       0,
@@ -67,8 +74,8 @@ describe("packSchedule", () => {
   it("respects the chosen order, not array order", () => {
     const out = packSchedule(
       [
-        { id: "late", order: 2, minutes: 60, courtsNeeded: 8, players: none },
-        { id: "first", order: 1, minutes: 60, courtsNeeded: 8, players: none },
+        one("late", 2, 60, 8, none),
+        one("first", 1, 60, 8, none),
       ],
       0,
       0,
@@ -79,7 +86,7 @@ describe("packSchedule", () => {
   });
 
   it("caps courts needed at the venue size", () => {
-    const out = packSchedule([{ id: "a", order: 1, minutes: 60, courtsNeeded: 20, players: none }], 0, 0, 6);
+    const out = packSchedule([one("a", 1, 60, 20, none)], 0, 0, 6);
     expect(out[0].courts).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });
@@ -88,9 +95,9 @@ describe("packSchedule — hold reasons", () => {
   it("names the event and shared-player count that held an event back", () => {
     const out = packSchedule(
       [
-        { id: "womens", order: 1, minutes: 125, courtsNeeded: 3, players: new Set(["sue"]) },
-        { id: "mixed", order: 2, minutes: 80, courtsNeeded: 4, players: new Set(["sue", "tom"]) },
-        { id: "mens", order: 3, minutes: 110, courtsNeeded: 4, players: new Set(["tom2"]) },
+        one("womens", 1, 125, 3, new Set(["sue"])),
+        one("mixed", 2, 80, 4, new Set(["sue", "tom"])),
+        one("mens", 3, 110, 4, new Set(["tom2"])),
       ],
       0,
       15 * 60_000,
@@ -108,8 +115,8 @@ describe("packSchedule — hold reasons", () => {
   it("reports courts short when that is what blocked the earlier slot", () => {
     const out = packSchedule(
       [
-        { id: "a", order: 1, minutes: 60, courtsNeeded: 6, players: none },
-        { id: "b", order: 2, minutes: 60, courtsNeeded: 4, players: none },
+        one("a", 1, 60, 6, none),
+        one("b", 2, 60, 4, none),
       ],
       0,
       0,
@@ -120,12 +127,41 @@ describe("packSchedule — hold reasons", () => {
   });
 });
 
+describe("packSchedule — medal round as its own phase", () => {
+  it("lets the next event start on courts pool play released while the bracket runs", () => {
+    const out = packSchedule(
+      [
+        { id: "womens", order: 1, players: none, segments: [{ kind: "pool", minutes: 105, courtsNeeded: 3 }, { kind: "medal", minutes: 20, courtsNeeded: 2 }] },
+        { id: "mens", order: 2, players: none, segments: [{ kind: "pool", minutes: 75, courtsNeeded: 6 }, { kind: "medal", minutes: 20, courtsNeeded: 2 }] },
+      ],
+      0,
+      0,
+      8,
+    );
+    const w = out[0]; const m = out[1];
+    expect(w.segments[0].courts).toEqual([1, 2, 3]);
+    expect(w.segments[1].courts).toEqual([1, 2]); // medal on the lowest pool courts
+    // mens needs 6: at t=0 only 5 free; at 105 pool play frees court 3 → 6 free (3–8)
+    expect(m.startMs).toBe(105 * 60_000);
+    expect(m.segments[0].courts).toEqual([3, 4, 5, 6, 7, 8]);
+  });
+});
+
+describe("pool/medal court needs", () => {
+  it("splits the need by phase", () => {
+    expect(poolCourtsNeeded(7, 1)).toBe(3);
+    expect(medalCourtsNeeded(4)).toBe(2);
+    expect(medalCourtsNeeded(0)).toBe(0);
+    expect(courtsNeededFor(7, 1, 4)).toBe(3);
+  });
+});
+
 describe("parallelGroups", () => {
   it("groups overlapping placements and drops singletons", () => {
     const groups = parallelGroups([
-      { id: "a", startMs: 0, endMs: H, courts: [1], heldBy: null },
-      { id: "b", startMs: 0, endMs: H, courts: [2], heldBy: null },
-      { id: "c", startMs: 2 * H, endMs: 3 * H, courts: [1], heldBy: null },
+      { id: "a", startMs: 0, endMs: H, courts: [1], heldBy: null, segments: [] },
+      { id: "b", startMs: 0, endMs: H, courts: [2], heldBy: null, segments: [] },
+      { id: "c", startMs: 2 * H, endMs: 3 * H, courts: [1], heldBy: null, segments: [] },
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].map((p) => p.id).sort()).toEqual(["a", "b"]);
