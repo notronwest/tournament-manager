@@ -48,6 +48,22 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Invites stay acceptable after registration closes — [FN] first, then UX
+
+Ron: "allow people who have been invited to accept the invitation (if it's still valid)
+even after tournament registration is closed." Traced the block: the accept page and
+accept_partner_invite RPC never checked the window, but (a) `create-payment-intent`
+refused any tournament whose status isn't 'published' (409 tournament_not_accepting_
+payment), so an invitee could accept and then not pay; and (b) PublicTournamentPage's
+EventCard.renderAction returned null for EVERY state once registrationOpen was false, hiding
+"You're invited", "Pay now", "pay to claim" and "Leave waitlist" for people who already held
+a registration. [FN] (this PR): the guard now allows 'published' OR 'closed' — closed means
+no new sign-ups, but an existing pending registration (accepted invite, waitlist promotion,
+organizer add) can still be paid; draft/completed/cancelled still refused. UX (next PR):
+the registrationOpen gate moves to just the Register / Join-waitlist branches. Invite links
+always went straight to the accept page, so acceptance itself was never blocked — payment
+and the on-page CTAs were.
+
 ## 2026-09-11 — Briefing email copy: no weather bullet, location always shown, "Can't make it?" section
 
 Ron: drop "A layer for the weather…" from What to bring; include the location; add a
