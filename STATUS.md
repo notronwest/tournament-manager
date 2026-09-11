@@ -26,6 +26,23 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Waitlist view UX: `/admin/:org/tournaments/:slug/waitlist` (+ Waitlisted stat)
+
+[FN] offer-waitlist-spot merged (#757). This UX PR adds `pages/admin/TournamentWaitlistPage.tsx`:
+one section per event — capacity ("8 of 8 teams · full", doubles = ceil(active/2)) and the
+queue in order (offered spots ★ first, then #position), each row: name, email · phone, joined
+date, "needs a partner", status pill (Waiting / Spot offered · unpaid), **Offer spot** /
+**Resend offer** (invokes offer-waitlist-spot → success notice names the emailed address, or
+says no email went out), **Remove** (ConfirmModal → status cancelled). **+ Add player** per
+event: PlayerPicker (existing, or new via createOrgContact so they also land on the contact
+list) → inserts a `waitlisted` reg at max position + 1, blocked if already registered/
+waitlisted. Search box filters rows. TournamentDetailPage gains a **Waitlisted** stat tile
+(distinct waitlisted players, from the same regs fetch — `status` added to its select) linking
+here. VERIFIED at 390px under Playwright (stubbed Supabase): no overflow, long names/emails
+wrap, offer → notice, add panel, remove modal. typecheck/build green; the page lints clean.
+NOT exercised against a live DB/Resend — Ron: try Offer spot on TEST with a test player.
+Answering "is Tawnya on the waitlist?" is now the Waitlist page + search.
+
 ## 2026-09-11 — Player briefing PROMOTED → PROD (#754); waitlist view [FN] next
 
 #752 (function) + #753 (page) promoted via #754 (merge `7b42aad`); PROD edge-functions run
