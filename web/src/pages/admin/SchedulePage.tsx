@@ -57,6 +57,7 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
 // lag it, so read it through this widening and write via an untyped client.
 type Event = Database["public"]["Tables"]["events"]["Row"] & {
   schedule_order?: number | null;
+  playoff_seeding?: "overall" | "cross_pool" | null;
 };
 const untyped = supabase as unknown as SupabaseClient;
 
@@ -540,14 +541,17 @@ export default function SchedulePage() {
   // at a time with optimistic local state (the estimate + plan recompute
   // from `events` immediately) and rollback on failure.
   type SetupPatch = Partial<
-    Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds">
+    Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds"> & {
+      playoff_seeding: "overall" | "cross_pool";
+    }
   >;
   const onPatchEvent = async (eventId: string, patch: SetupPatch) => {
     const before = events.find((e) => e.id === eventId);
     if (!before) return;
     setRowErr((m) => ({ ...m, [eventId]: "" }));
     setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, ...patch } : e)));
-    const { error: updErr } = await supabase.from("events").update(patch).eq("id", eventId);
+    // playoff_seeding is newer than the generated types → untyped write.
+    const { error: updErr } = await untyped.from("events").update(patch).eq("id", eventId);
     if (updErr) {
       setEvents((prev) => prev.map((e) => (e.id === eventId ? before : e)));
       setRowErr((m) => ({ ...m, [eventId]: `Couldn't save: ${updErr.message}` }));
@@ -1418,7 +1422,13 @@ function SetupPanel({
   courtCount: number;
   busy: boolean;
   error: string;
-  onPatch: (patch: Partial<Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds">>) => void;
+  onPatch: (
+    patch: Partial<
+      Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds"> & {
+        playoff_seeding: "overall" | "cross_pool";
+      }
+    >,
+  ) => void;
   onToggleCourt: (court: number) => void;
 }) {
   const { event } = row;
@@ -1511,6 +1521,21 @@ function SetupPanel({
             ))}
           </select>
         </label>
+        {event.pool_count === 2 && advancing === 4 && rounds === 1 && (
+          <label style={label}>
+            <span>Medal seeding</span>
+            <select
+              value={event.playoff_seeding ?? "overall"}
+              disabled={busy}
+              onChange={(e) => onPatch({ playoff_seeding: e.target.value as "overall" | "cross_pool" })}
+              style={select}
+              title="Cross-pool: Pool 1 winner v Pool 2 winner for gold; the two runners-up for bronze."
+            >
+              <option value="overall">Overall standings (1v2 gold, 3v4 bronze)</option>
+              <option value="cross_pool">Cross-pool (pool winners → gold, runners-up → bronze)</option>
+            </select>
+          </label>
+        )}
         <label style={label}>
           <span>Playoff rounds</span>
           <select
