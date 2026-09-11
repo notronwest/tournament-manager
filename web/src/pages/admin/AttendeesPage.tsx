@@ -521,7 +521,7 @@ export default function AttendeesPage() {
         />
       )}
 
-      <PendingPartnerInvitesPanel tournamentId={tournament.id} />
+      <PendingPartnerInvitesPanel tournamentId={tournament.id} onChanged={() => setReloadKey((k) => k + 1)} />
 
       {view === "players" ? (
         <ByPlayerView

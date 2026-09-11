@@ -26,6 +26,27 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Pending partner invites: resolution detection, duplicate matching, remove
+
+Ron (with screenshots): the panel listed invites that were done (inviter withdrawn, partner
+paid), couldn't see that Cole Stephan registered under a different email than he was invited
+at, and had no way to remove invites. `lib/partnerInvites.fetchPendingPartnerInvites` now
+loads every live reg in the affected events (with player email) and stamps each invite with a
+`resolution`: **open** (nothing happened), **registered** (invitee found among the event's
+registrants — same player, else email match against the invite email / invitee record, else
+normalized name match — with `alreadyPaired` if they have a confirmed partner), or **settled**
+(inviter withdrawn/cancelled/refunded/no reg, inviter+invitee already paired, or inviter paired
+with someone else). New helpers `deletePartnerInvites` (RLS: org members may delete) and
+`pairInviteWithRegistration` (pairAndResolveInvites + delete the invite, which may point at
+the duplicate player id). Panel: "What's happened" column with pills, rows ordered
+open → registered → done, **Pair & clear**, per-row **Remove/Clear** (ConfirmModal),
+**Clear N done**, **Remove selected**; Resend only for open rows with email. AttendeesPage
+passes onChanged so the list refreshes after pairing. Todd Shaver: he IS in the panel in the
+screenshot (row 5); the roster's "invited — not registered yet" and the panel read the same
+pending invites, so removing the invite clears both. typecheck/lint green, 32 tests pass
+(roster export fixture gained the new fields). Not browser-rendered (Attendees needs many
+stubs) — table keeps its overflow-x scroll on phones as before.
+
 ## 2026-09-11 — Admin change emails UX: registration editor now notifies players (#777 FN merged)
 
 `lib/registrations.notifyRegistrationChange` (invokes notify-registration-change with the
