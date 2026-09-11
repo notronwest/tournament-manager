@@ -26,6 +26,24 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Player briefing UX: `/admin/:org/tournaments/:slug/briefing` (+ link on detail page)
+
+[FN] #752 merged → TEST (edge-functions run green). This UX PR adds
+`pages/admin/TournamentBriefingPage.tsx`: "Who gets it" (recipient count, registrants
+without email, events missing a start time → link to Schedule), settings (subject, waiver
+link, arrive-early / first-game / per-match warm-up minutes, organizer notes, reply-to),
+a live debounced preview (sandboxed iframe of the function's `preview` render, named for
+the sample player), "Send me a test" (function `test` mode → organizer's inbox), and
+"Send to N players" behind a consent checkbox + ConfirmModal (the modal repeats how many
+events still lack a start time). Success panel links to Email → History. Route in App.tsx;
+"Player briefing" link beside Schedule on TournamentDetailPage. Time zone = the
+organizer's browser zone, named on the page and in the email.
+VERIFIED at 390px under Playwright against a stubbed Supabase (auth session in
+localStorage + route intercepts): no horizontal overflow, preview renders, test-send and
+confirm flow work. typecheck/lint/build green, 32 tests pass. NOT exercised against Resend
+— Ron: open the page on TEST, hit "Send me a test", check the inbox, then send for real on
+PROD once promoted. Waitlist view is next.
+
 ## 2026-09-11 — BUILDING: player briefing email (start times + know-before-you-go) — [FN] first
 
 Ron: set start times per bracket and email every attendee their start times plus

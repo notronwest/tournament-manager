@@ -624,6 +624,14 @@ export default function TournamentDetailPage() {
           >
             Schedule
           </Link>
+          {/* Player briefing — email every registrant their start times +
+              what to do before they arrive (waiver, warm-ups, what to bring). */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/briefing`}
+            style={secondaryLinkBtn}
+          >
+            Player briefing
+          </Link>
           <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/offline-field`}
             style={secondaryLinkBtn}
