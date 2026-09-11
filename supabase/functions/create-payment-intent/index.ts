@@ -44,6 +44,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Registration statuses a player can pay for. 'waitlisted_pending_payment' is
+// a promoted waitlister whose spot is reserved ("pay to claim") — the checkout
+// total (compute_checkout_total) includes them, so the guard and the flip
+// below must too, or pay-to-claim 409s / never flips to paid.
+const PAYABLE_STATUSES = ["pending_payment", "waitlisted_pending_payment"];
+
 type Body = {
   orgSlug: string;
   tournamentSlug: string;
@@ -134,8 +140,10 @@ Deno.serve(async (req: Request) => {
     // handled after the coupon step below. We only reject when there's
     // genuinely nothing in the cart (no regs), checked there.
 
-    // Guard: verify the regs we're about to charge are still pending_payment,
-    // not soft-deleted, and belong to this tournament's events. Prevents
+    // Guard: verify the regs we're about to charge are still unpaid
+    // (pending_payment, or waitlisted_pending_payment — a promoted waitlister
+    // paying to claim their reserved spot), not soft-deleted, and belong to
+    // this tournament's events. Prevents
     // charging for a reg that was cancelled/withdrawn between page-load and
     // payment-form submit.
     const regIdsToCharge = lineItems
@@ -146,7 +154,7 @@ Deno.serve(async (req: Request) => {
         .from("event_registrations")
         .select("id, events!inner(tournament_id)")
         .in("id", regIdsToCharge)
-        .eq("status", "pending_payment")
+        .in("status", PAYABLE_STATUSES)
         .is("deleted_at", null)
         .eq("events.tournament_id", tournament.id);
       if (verifyErr) return json({ error: "reg_verify_failed" }, 500);
@@ -192,7 +200,7 @@ Deno.serve(async (req: Request) => {
         .from("event_registrations")
         .update({ status: "paid" })
         .in("id", regIdsToCharge)
-        .eq("status", "pending_payment");
+        .in("status", PAYABLE_STATUSES);
       if (flipErr) return json({ error: "free_confirm_failed" }, 500);
       if (couponId) await admin.rpc("redeem_coupon", { p_coupon_id: couponId });
       await sendFreeInvites(admin, player.id, regIdsToCharge, baseUrl);
