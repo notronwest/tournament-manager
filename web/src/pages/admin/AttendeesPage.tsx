@@ -9,6 +9,13 @@ import {
 } from "../../components/RegistrationEditorModal";
 import type { Database } from "../../types/supabase";
 import { RosterExportModal } from "../../components/RosterExportModal";
+import { PairSeekersModal } from "../../components/PairSeekersModal";
+import {
+  genderLabel,
+  seekerRating,
+  type Seeker,
+} from "../../lib/partnerPairing";
+import { holdsSpot } from "../../lib/registrationStatus";
 import {
   ink,
   inkSoft,
@@ -378,21 +385,6 @@ export default function AttendeesPage() {
     });
   }, [rows, filter]);
 
-  // F2: players with at least one event registration in 'seeking'
-  // state — they signed up needing a partner.
-  const seekers = useMemo(() => {
-    return rows
-      .map((r) => ({
-        player: r.player,
-        events: r.events.filter((e) => e.partnerStatus === "seeking"),
-      }))
-      .filter((s) => s.events.length > 0)
-      .sort((a, b) => {
-        const al = `${a.player.last_name} ${a.player.first_name}`.toLowerCase();
-        const bl = `${b.player.last_name} ${b.player.first_name}`.toLowerCase();
-        return al.localeCompare(bl);
-      });
-  }, [rows]);
 
   if (!org) return null;
   if (loading)
@@ -527,7 +519,8 @@ export default function AttendeesPage() {
         <ByPlayerView
           visible={visible}
           rows={rows}
-          seekers={seekers}
+          eventGroups={eventGroups}
+          onPaired={() => setReloadKey((k) => k + 1)}
           onManage={(p) => {
             // The whole person (profile, cross-tournament history) still lives
             // on the unified person page, scoped to this org (?org=) so org
@@ -572,136 +565,23 @@ export default function AttendeesPage() {
 type ByPlayerViewProps = {
   visible: Row[];
   rows: Row[];
-  seekers: { player: Player; events: EventForPlayer[] }[];
+  eventGroups: EventGroup[];
+  onPaired: () => void;
   onManage: (p: Player) => void;
   onEditReg: (p: Player, e: EventForPlayer) => void;
 };
 
-function ByPlayerView({ visible, rows, seekers, onManage, onEditReg }: ByPlayerViewProps) {
+function ByPlayerView({
+  visible,
+  rows,
+  eventGroups,
+  onPaired,
+  onManage,
+  onEditReg,
+}: ByPlayerViewProps) {
   return (
     <>
-      {/* F2: Partner seekers section */}
-      {seekers.length > 0 && (
-        <section
-          style={{
-            marginBottom: 20,
-            padding: 16,
-            background: infoBg,
-            border: `1px solid ${infoBorder}`,
-            borderRadius: 8,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              fontFamily: headingFontStack,
-              color: infoFg,
-              marginBottom: 4,
-            }}
-          >
-            🤝 Looking for a partner ({seekers.length})
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: infoFg,
-              marginBottom: 12,
-              lineHeight: 1.5,
-            }}
-          >
-            Players who registered without a partner. Reach out to match
-            them up — they're already paid (or pending) and just need a
-            partner to be confirmed.
-          </div>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: 13,
-              background: "#fff",
-              borderRadius: 6,
-              overflow: "hidden",
-            }}
-          >
-            <thead>
-              <tr style={{ background: infoBg }}>
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Email</th>
-                <th style={thStyle}>Phone</th>
-                <th style={thStyle}>Seeking in</th>
-              </tr>
-            </thead>
-            <tbody>
-              {seekers.map((s) => (
-                <tr
-                  key={s.player.id}
-                  style={{ borderTop: `1px solid ${infoBorder}` }}
-                >
-                  <td style={{ ...tdStyle, fontWeight: 500 }}>
-                    {s.player.first_name} {s.player.last_name}
-                  </td>
-                  <td
-                    style={{
-                      ...tdStyle,
-                      color: s.player.email ? inkSoft : inkMuted,
-                    }}
-                  >
-                    {s.player.email ? (
-                      <a
-                        href={`mailto:${s.player.email}`}
-                        style={{ color: courtBlue, textDecoration: "none" }}
-                      >
-                        {s.player.email}
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td
-                    style={{
-                      ...tdStyle,
-                      color: s.player.phone ? inkSoft : inkMuted,
-                    }}
-                  >
-                    {s.player.phone ? (
-                      <a
-                        href={`tel:${s.player.phone}`}
-                        style={{ color: courtBlue, textDecoration: "none" }}
-                      >
-                        {s.player.phone}
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td style={tdStyle}>
-                    <div
-                      style={{ display: "flex", gap: 4, flexWrap: "wrap" }}
-                    >
-                      {s.events.map((e) => (
-                        <span
-                          key={e.id}
-                          style={{
-                            padding: "2px 8px",
-                            background: infoBg,
-                            color: infoFg,
-                            borderRadius: 4,
-                            fontSize: 11,
-                            fontWeight: 500,
-                          }}
-                        >
-                          {e.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
+      <SeekersByDivision eventGroups={eventGroups} onPaired={onPaired} />
 
       {visible.length === 0 ? (
         <div
@@ -1159,6 +1039,258 @@ function viewTabStyle(active: boolean): CSSProperties {
     cursor: "pointer",
   };
 }
+
+
+// --- "Looking for a partner", grouped by division ---
+//
+// Pairing only ever happens inside one division, so seekers are shown per
+// division with a Pair action instead of one flat table across the whole
+// tournament. Only spot-holding registrations (paid / pending / promoted off
+// the waitlist) can be paired — pairing a free-waitlisted seeker into a paid
+// player's team is exactly how a half-waitlisted team happens (Tawnya Lopez,
+// 2026-09-10). Waitlisted seekers are still listed so the organizer sees them.
+
+type DivisionSeekers = {
+  event: EventData;
+  pairable: Seeker[];
+  waitlisted: Seeker[];
+};
+
+function SeekersByDivision({
+  eventGroups,
+  onPaired,
+}: {
+  eventGroups: EventGroup[];
+  onPaired: () => void;
+}) {
+  const [pairing, setPairing] = useState<{
+    event: EventData;
+    seeker: Seeker;
+    candidates: Seeker[];
+  } | null>(null);
+
+  const divisions = useMemo<DivisionSeekers[]>(() => {
+    const out: DivisionSeekers[] = [];
+    for (const g of eventGroups) {
+      if (g.event.format !== "doubles") continue;
+      const seeking = g.regs.filter((r) => r.partner_status === "seeking");
+      if (seeking.length === 0) continue;
+      const toSeeker = (r: RegData): Seeker => ({
+        regId: r.id,
+        playerId: r.player_id,
+        player: r.player,
+      });
+      out.push({
+        event: g.event,
+        pairable: seeking.filter((r) => holdsSpot(r.status)).map(toSeeker),
+        waitlisted: seeking.filter((r) => !holdsSpot(r.status)).map(toSeeker),
+      });
+    }
+    return out;
+  }, [eventGroups]);
+
+  const total = divisions.reduce(
+    (n, d) => n + d.pairable.length + d.waitlisted.length,
+    0,
+  );
+  if (total === 0) return null;
+
+  return (
+    <section
+      style={{
+        marginBottom: 20,
+        padding: 16,
+        background: infoBg,
+        border: `1px solid ${infoBorder}`,
+        borderRadius: 8,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 600,
+          fontFamily: headingFontStack,
+          color: infoFg,
+          marginBottom: 4,
+        }}
+      >
+        🤝 Looking for a partner ({total})
+      </div>
+      <div style={{ fontSize: 12, color: infoFg, marginBottom: 12, lineHeight: 1.5 }}>
+        Players who registered without a partner, by division. Pair two of
+        them here — both show as a confirmed team right away — or reach out
+        first using the contact links.
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {divisions.map((d) => (
+          <div
+            key={d.event.id}
+            style={{
+              background: "#fff",
+              border: `1px solid ${infoBorder}`,
+              borderRadius: 6,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                gap: 8,
+                flexWrap: "wrap",
+                padding: "8px 12px",
+                background: infoBg,
+              }}
+            >
+              <span style={{ fontWeight: 600, fontSize: 13, color: ink }}>
+                {d.event.name}
+              </span>
+              <span style={{ fontSize: 11, color: inkMuted }}>
+                {d.pairable.length + d.waitlisted.length} looking
+                {d.event.gender === "mixed" ? " · mixed: one man + one woman" : ""}
+              </span>
+            </div>
+
+            {[...d.pairable, ...d.waitlisted].map((s) => {
+              const isWaitlisted = d.waitlisted.some((w) => w.regId === s.regId);
+              const others = d.pairable.filter((o) => o.regId !== s.regId);
+              const g = genderLabel(s.player.gender);
+              const rating = seekerRating(d.event, s.player);
+              const disabledReason = isWaitlisted
+                ? "On the waitlist — no spot yet"
+                : others.length === 0
+                  ? "No one else is looking in this division"
+                  : null;
+              return (
+                <div
+                  key={s.regId}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    padding: "10px 12px",
+                    borderTop: `1px solid ${infoBorder}`,
+                  }}
+                >
+                  {/* Content column wraps under the action on narrow screens
+                      instead of shrinking to nothing (DESIGN_PREFERENCES). */}
+                  <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <span style={{ fontWeight: 500, fontSize: 13, color: ink }}>
+                        {playerFullName(s.player)}
+                      </span>
+                      {g && <span style={seekerPillStyle}>{g}</span>}
+                      {rating && (
+                        <span style={{ fontSize: 12, color: inkMuted }}>{rating}</span>
+                      )}
+                      {isWaitlisted && (
+                        <span
+                          style={{ ...seekerPillStyle, background: warnBg, color: warnFg }}
+                        >
+                          Waitlisted
+                        </span>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        fontSize: 12,
+                        marginTop: 2,
+                        color: inkMuted,
+                      }}
+                    >
+                      {s.player.email ? (
+                        <a
+                          href={`mailto:${s.player.email}`}
+                          style={{ color: courtBlue, textDecoration: "none", padding: "6px 0" }}
+                        >
+                          {s.player.email}
+                        </a>
+                      ) : (
+                        <span style={{ padding: "6px 0" }}>no email</span>
+                      )}
+                      {s.player.phone ? (
+                        <a
+                          href={`tel:${s.player.phone}`}
+                          style={{ color: courtBlue, textDecoration: "none", padding: "6px 0" }}
+                        >
+                          {s.player.phone}
+                        </a>
+                      ) : (
+                        <span style={{ padding: "6px 0" }}>no phone</span>
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      flex: "0 0 auto",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      gap: 2,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      disabled={disabledReason !== null}
+                      onClick={() =>
+                        setPairing({ event: d.event, seeker: s, candidates: others })
+                      }
+                      title={disabledReason ?? undefined}
+                      style={{
+                        ...editBtnStyle,
+                        minHeight: 44,
+                        padding: "8px 14px",
+                        opacity: disabledReason ? 0.5 : 1,
+                        cursor: disabledReason ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      Pair with…
+                    </button>
+                    {disabledReason && (
+                      <span style={{ fontSize: 11, color: inkMuted }}>{disabledReason}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {pairing && (
+        <PairSeekersModal
+          event={pairing.event}
+          seeker={pairing.seeker}
+          candidates={pairing.candidates}
+          onClose={() => setPairing(null)}
+          onPaired={onPaired}
+        />
+      )}
+    </section>
+  );
+}
+
+const seekerPillStyle: CSSProperties = {
+  padding: "1px 6px",
+  background: infoBg,
+  color: infoFg,
+  borderRadius: 4,
+  fontSize: 11,
+  fontWeight: 600,
+};
 
 const thStyle: CSSProperties = {
   textAlign: "left",
