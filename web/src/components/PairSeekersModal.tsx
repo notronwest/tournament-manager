@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { ConfirmModal } from "./ConfirmModal";
-import { pairAndResolveInvites } from "../lib/registrations";
+import {
+  pairAndResolveInvites,
+  notifyRegistrationChange,
+} from "../lib/registrations";
 import {
   ink,
   inkMuted,
@@ -43,6 +46,9 @@ export function PairSeekersModal({
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set once the pairing is saved. If the follow-up email couldn't reach
+  // everyone we stay open to say so; the primary button then just closes.
+  const [paired, setPaired] = useState(false);
 
   const sorted = [...candidates].sort((a, b) => {
     const okA = isMixedCompatible(event, seeker.player, a.player) ? 0 : 1;
@@ -52,6 +58,10 @@ export function PairSeekersModal({
   });
 
   const onConfirm = async () => {
+    if (paired) {
+      onClose();
+      return;
+    }
     const pick = sorted.find((c) => c.regId === selected);
     if (!pick) {
       setError("Choose who to pair them with.");
@@ -66,25 +76,51 @@ export function PairSeekersModal({
         seeker.playerId,
         pick.playerId,
       );
-      await onPaired();
-      onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      return;
     }
+    setPaired(true);
+    await onPaired();
+
+    // Same email the Manage editor sends after an organizer pairing
+    // (notify-registration-change, "partner_assigned" → both players). The
+    // pairing is already saved; a mail problem only changes what we say.
+    try {
+      const res = await notifyRegistrationChange({
+        registrationId: seeker.regId,
+        change: "partner_assigned",
+      });
+      if (res.skipped.length > 0) {
+        setError(
+          `Paired. Emailed ${res.emailed.length ? res.emailed.join(", ") : "nobody"}; couldn't email the ${res.skipped
+            .map((s) => `${s.who} (${s.reason})`)
+            .join(", ")}. Let them know another way.`,
+        );
+        return;
+      }
+    } catch (e) {
+      setError(
+        `Paired, but the email didn't go out: ${e instanceof Error ? e.message : String(e)}. Let them know another way.`,
+      );
+      return;
+    }
+    onClose();
   };
 
   return (
     <ConfirmModal
       title={`Pair ${fullName(seeker.player)} in ${event.name}`}
       destructive={false}
-      confirmLabel="Pair these two"
+      confirmLabel={paired ? "Done" : "Pair these two"}
       onCancel={onClose}
       onConfirm={onConfirm}
       body={
         <div style={{ fontFamily: bodyFontStack }}>
           <p style={{ margin: "0 0 10px", fontSize: 13, color: inkSoft }}>
             Other players looking for a partner in this division. Both will
-            show as a confirmed team right away.
+            show as a confirmed team right away and get an email naming their
+            new partner.
             {event.gender === "mixed" && (
               <> Mixed doubles needs one man and one woman.</>
             )}
