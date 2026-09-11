@@ -12,7 +12,21 @@ import { supabase } from "../supabase";
 // already-generated table (tournaments / events / event_registrations / players).
 const untyped = supabase as unknown as SupabaseClient;
 
-const ACTIVE_REG_STATUSES = ["paid", "pending_payment"] as const;
+// A registrant counts as "on the list" unless their registration is over
+// (cancelled / refunded / withdrawn). Waitlisted players are included — they are
+// exactly who an organizer needs to reach. Mirrors INACTIVE_STATUSES in
+// lib/registrations and the roster export.
+const ACTIVE_REG_STATUSES = [
+  "paid",
+  "pending_payment",
+  "waitlisted",
+  "waitlisted_pending_payment",
+] as const;
+
+// PostgREST caps every response at the project's max_rows (1000). A club with
+// more contacts / registrations than that would silently lose the tail, so every
+// list query here pages with .range() until a short page comes back.
+const PAGE_SIZE = 1000;
 
 export type ContactSource = "registrant" | "import" | "manual";
 
@@ -42,13 +56,20 @@ type LinkRow = {
 // list is never stale. Throws on a hard query failure (the page surfaces it).
 export async function fetchOrgContacts(orgId: string): Promise<OrgContact[]> {
   // (a) imported/manual links
-  const { data: linkData, error: linkErr } = await untyped
-    .from("organization_contacts")
-    .select("player_id, source, unsubscribed_at, created_at")
-    .eq("organization_id", orgId)
-    .is("deleted_at", null);
-  if (linkErr) throw new Error(linkErr.message);
-  const links = (linkData ?? []) as LinkRow[];
+  const links: LinkRow[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data: linkData, error: linkErr } = await untyped
+      .from("organization_contacts")
+      .select("player_id, source, unsubscribed_at, created_at")
+      .eq("organization_id", orgId)
+      .is("deleted_at", null)
+      .order("player_id")
+      .range(from, from + PAGE_SIZE - 1);
+    if (linkErr) throw new Error(linkErr.message);
+    const page = (linkData ?? []) as LinkRow[];
+    links.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
 
   const linkByPlayer = new Map<string, LinkRow>();
   for (const l of links) linkByPlayer.set(l.player_id, l);
@@ -205,31 +226,39 @@ export async function updateContactPerson(
   if (error) throw new Error(error.message);
 }
 
+// Distinct players holding a live registration in any of the org's tournaments.
+// One org-scoped query through the events → tournaments join (the same shape the
+// Attendees page uses), rather than collecting every event id into the request
+// URL (a long event list can push that request past the URL limit) and capped
+// at one page. Previously any failure here was swallowed, so the registrant side
+// of the list silently vanished and only imported/manual contacts were left.
+// Errors now throw so the page can say so.
 async function fetchRegistrantPlayerIds(orgId: string): Promise<Set<string>> {
   const ids = new Set<string>();
-  const { data: tourneys } = await supabase
+  const { data: tourneys, error: tErr } = await supabase
     .from("tournaments")
     .select("id")
     .eq("organization_id", orgId)
     .is("deleted_at", null);
+  if (tErr) throw new Error(tErr.message);
   const tournamentIds = (tourneys ?? []).map((t) => t.id);
   if (tournamentIds.length === 0) return ids;
 
-  const { data: events } = await supabase
-    .from("events")
-    .select("id")
-    .in("tournament_id", tournamentIds)
-    .is("deleted_at", null);
-  const eventIds = (events ?? []).map((e) => e.id);
-  if (eventIds.length === 0) return ids;
-
-  const { data: regs } = await supabase
-    .from("event_registrations")
-    .select("player_id")
-    .in("event_id", eventIds)
-    .in("status", ACTIVE_REG_STATUSES)
-    .is("deleted_at", null);
-  for (const r of regs ?? []) if (r.player_id) ids.add(r.player_id);
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data: regs, error: rErr } = await supabase
+      .from("event_registrations")
+      .select("id, player_id, events!inner(tournament_id, deleted_at)")
+      .in("events.tournament_id", tournamentIds)
+      .is("events.deleted_at", null)
+      .in("status", [...ACTIVE_REG_STATUSES])
+      .is("deleted_at", null)
+      .order("id")
+      .range(from, from + PAGE_SIZE - 1);
+    if (rErr) throw new Error(rErr.message);
+    const page = regs ?? [];
+    for (const r of page) if (r.player_id) ids.add(r.player_id);
+    if (page.length < PAGE_SIZE) break;
+  }
   return ids;
 }
 

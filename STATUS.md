@@ -26,6 +26,30 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — HOTFIX: Email recipients list short (PB Angels saw 40) — fixed, promoting to PROD
+
+Ron: "email RECIPIENTS for the 5th annual pb angels only shows 40 people." Couldn't
+query PROD from the sandbox (no DB access), so diagnosed from code. The org contact
+list's registrant side (`lib/orgContacts.fetchRegistrantPlayerIds` + the same builder in
+`send-contact-broadcast`) had four ways to come up short, all fixed in one change:
+- **Silent failure.** The tournaments/events/registrations queries ignored `error`; any
+  failure returned `[]`, so every registrant vanished and only imported/manual contacts
+  remained (the 40).
+- **Every event id in the request URL.** `.in("event_id", [...all org events])` — a big
+  tournament's event list can blow the URL limit (→ the silent failure above). Now one
+  org-scoped query through `events!inner(tournament_id)` — the Attendees page's shape,
+  which works on the same data.
+- **Waitlisted excluded.** Only paid/pending_payment counted. Now anyone whose
+  registration isn't over (cancelled/refunded/withdrawn) — matches the roster export.
+- **1000-row cap.** Every list query now pages with `.range()`; the edge function also
+  chunks the `players` lookup (300 ids).
+Compose tab now shows "Not included: N with no email address, M unsubscribed" so a short
+list is explainable. Client + edge function kept in lockstep. typecheck/lint/build green,
+32 tests pass. Ron asked for merge + PROD promotion ASAP → merged to main, promoted via
+main→production PR (main == production before this, so the promotion is only this fix).
+**Verify on PROD:** /admin/pickleball-angels/email → recipient count should match the
+tournament's attendee list (minus no-email/unsubscribed, now itemized under the count).
+
 ## 2026-09-08 — Nightly regression GREEN again; merged + promoted (#728/#729/#730)
 
 Merged #729 → main (squash `3675099`), promoted via #730 (merge `bac05c0`). **main == production

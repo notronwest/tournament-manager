@@ -38,7 +38,10 @@ const corsHeaders = {
 const RESEND = "https://api.resend.com";
 const MAX_RECIPIENTS = 3000;
 const BATCH_SIZE = 100; // Resend /emails/batch caps at 100 per call.
-const ACTIVE_REG_STATUSES = ["paid", "pending_payment"];
+// Anyone whose registration isn't over (cancelled / refunded / withdrawn),
+// waitlisted players included. Must match lib/orgContacts on the client.
+const ACTIVE_REG_STATUSES = ["paid", "pending_payment", "waitlisted", "waitlisted_pending_payment"];
+const PAGE_SIZE = 1000; // PostgREST max_rows — page every list query past it.
 
 type Body = {
   organizationId?: string;
@@ -256,59 +259,78 @@ async function buildRecipients(admin: Db, organizationId: string): Promise<Recip
   const unsubscribed = new Set<string>();
 
   // (a) imported/manual contacts
-  const { data: contacts } = await admin
-    .from("organization_contacts")
-    .select("player_id, unsubscribed_at")
-    .eq("organization_id", organizationId)
-    .is("deleted_at", null);
-  for (const c of (contacts ?? []) as { player_id: string; unsubscribed_at: string | null }[]) {
-    if (c.unsubscribed_at) unsubscribed.add(c.player_id);
-    else playerIds.add(c.player_id);
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data: contacts, error } = await admin
+      .from("organization_contacts")
+      .select("player_id, unsubscribed_at")
+      .eq("organization_id", organizationId)
+      .is("deleted_at", null)
+      .order("player_id")
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`contacts: ${error.message}`);
+    const page = (contacts ?? []) as { player_id: string; unsubscribed_at: string | null }[];
+    for (const c of page) {
+      if (c.unsubscribed_at) unsubscribed.add(c.player_id);
+      else playerIds.add(c.player_id);
+    }
+    if (page.length < PAGE_SIZE) break;
   }
 
-  // (b) registrants — distinct players in the org's event_registrations.
-  const { data: tourneys } = await admin
+  // (b) registrants — distinct players with a live registration in any of the
+  //     org's tournaments. One org-scoped query via the events join (same shape
+  //     as the client's lib/orgContacts), paged past max_rows.
+  const { data: tourneys, error: tErr } = await admin
     .from("tournaments")
     .select("id")
     .eq("organization_id", organizationId)
     .is("deleted_at", null);
+  if (tErr) throw new Error(`tournaments: ${tErr.message}`);
   const tournamentIds = (tourneys ?? []).map((t: { id: string }) => t.id);
   if (tournamentIds.length > 0) {
-    const { data: events } = await admin
-      .from("events")
-      .select("id")
-      .in("tournament_id", tournamentIds)
-      .is("deleted_at", null);
-    const eventIds = (events ?? []).map((e: { id: string }) => e.id);
-    if (eventIds.length > 0) {
-      const { data: regs } = await admin
+    for (let from = 0; ; from += PAGE_SIZE) {
+      const { data: regs, error: rErr } = await admin
         .from("event_registrations")
-        .select("player_id")
-        .in("event_id", eventIds)
+        .select("id, player_id, events!inner(tournament_id, deleted_at)")
+        .in("events.tournament_id", tournamentIds)
+        .is("events.deleted_at", null)
         .in("status", ACTIVE_REG_STATUSES)
-        .is("deleted_at", null);
-      for (const r of (regs ?? []) as { player_id: string }[]) {
+        .is("deleted_at", null)
+        .order("id")
+        .range(from, from + PAGE_SIZE - 1);
+      if (rErr) throw new Error(`registrations: ${rErr.message}`);
+      const page = (regs ?? []) as { player_id: string }[];
+      for (const r of page) {
         if (!unsubscribed.has(r.player_id)) playerIds.add(r.player_id);
       }
+      if (page.length < PAGE_SIZE) break;
     }
   }
 
   if (playerIds.size === 0) return [];
 
-  const { data: players } = await admin
-    .from("players")
-    .select("id, email, first_name, last_name")
-    .in("id", [...playerIds])
-    .is("deleted_at", null);
-
-  const out: Recipient[] = [];
-  const seenEmail = new Set<string>();
-  for (const p of (players ?? []) as {
+  // Person rows, chunked so the id list stays well under the URL limit.
+  type PlayerRow = {
     id: string;
     email: string | null;
     first_name: string | null;
     last_name: string | null;
-  }[]) {
+  };
+  const players: PlayerRow[] = [];
+  const allIds = [...playerIds];
+  const CHUNK = 300;
+  for (let i = 0; i < allIds.length; i += CHUNK) {
+    const { data, error } = await admin
+      .from("players")
+      .select("id, email, first_name, last_name")
+      .in("id", allIds.slice(i, i + CHUNK))
+      .is("deleted_at", null);
+    if (error) throw new Error(`players: ${error.message}`);
+    players.push(...((data ?? []) as PlayerRow[]));
+  }
+
+  const out: Recipient[] = [];
+  const seenEmail = new Set<string>();
+  for (const p of players) {
     const email = (p.email ?? "").trim().toLowerCase();
     if (!email || !email.includes("@")) continue;
     if (seenEmail.has(email)) continue; // one send per address
