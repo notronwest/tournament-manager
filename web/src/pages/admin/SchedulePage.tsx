@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -9,10 +10,24 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
-  estimateMedalRound,
-  estimatePoolPlay,
+  estimateEvent,
   fmtDuration,
+  poolPlayExplanation,
+  utilizationLabel,
+  type EventEstimate,
 } from "../../lib/estimator";
+import { SPOT_HOLDING_STATUSES, teamCountFor } from "../../lib/registrationStatus";
+import {
+  medalCourtsNeeded,
+  packSchedule,
+  parallelGroups,
+  poolCourtsNeeded,
+  type Placement,
+  type PlacedSegment,
+} from "../../lib/schedulePacker";
+import { ConfirmModal } from "../../components/ConfirmModal";
+import { SchedulePrintModal } from "../../components/SchedulePrintModal";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
 import type { Database } from "../../types/supabase";
 import {
@@ -40,8 +55,26 @@ import {
 // joined in on the tournament fetch below.
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
   locations: { court_count: number | null } | null;
+  // Migration 20260911210000 — generated types lag it.
+  schedule_locked_at?: string | null;
 };
-type Event = Database["public"]["Tables"]["events"]["Row"];
+// schedule_order landed in migration 20260911170000; the generated types
+// lag it, so read it through this widening and write via an untyped client.
+type Event = Database["public"]["Tables"]["events"]["Row"] & {
+  schedule_order?: number | null;
+  playoff_seeding?: "overall" | "cross_pool" | null;
+};
+const untyped = supabase as unknown as SupabaseClient;
+
+// Organizer order first (1 = first), creation order for anything unset.
+function sortEvents(list: Event[]): Event[] {
+  return [...list].sort((a, b) => {
+    const ao = a.schedule_order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.schedule_order ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return a.created_at.localeCompare(b.created_at);
+  });
+}
 type EventCourt = Database["public"]["Tables"]["event_courts"]["Row"];
 
 type EventRow = {
@@ -54,11 +87,29 @@ type EventRow = {
   medalMinutes: number;
   totalMinutes: number;
   poolBindingConstraint: "court" | "team";
+  // Full breakdown for the per-row Details disclosure.
+  estimate: EventEstimate;
+  // Teams the plan is based on: registered teams, or max_teams before
+  // anyone has signed up.
+  planTeams: number;
+  // Courts pool play can actually keep busy (pools × floor(teams/2)),
+  // capped at the venue. Drives parallel auto-scheduling.
+  courtsNeeded: number;
+  // Courts the medal round keeps busy (one per medal match; 0 = no playoff).
+  medalCourtsNeeded: number;
   // Persisted start time on the event, if any. End is computed from
   // start + totalMinutes.
   scheduledStart: Date | null;
   scheduledEnd: Date | null;
+  // The event's two phases as actually placed on courts (when scheduled):
+  // pool play on the lowest `courtsNeeded` of its assigned courts, then the
+  // medal round on the lowest `medalCourtsNeeded` of those. Conflicts and
+  // the calendar work from these, so a bracket only "holds" the courts it
+  // is really using.
+  phases: RowPhase[];
 };
+
+type RowPhase = { kind: "pool" | "medal"; start: Date; end: Date; courts: number[] };
 
 type Overlap =
   | {
@@ -170,10 +221,13 @@ export default function SchedulePage() {
           .from("event_courts")
           .select("*, events!inner(tournament_id)")
           .eq("events.tournament_id", t.id),
+        // Spot-holding registrations only (paid / pending / promoted off the
+        // waitlist) — a free waitlister isn't a team to schedule around.
         supabase
           .from("event_registrations")
-          .select("event_id, player_id, events!inner(tournament_id)")
+          .select("event_id, player_id, status, partner_status, events!inner(tournament_id)")
           .eq("events.tournament_id", t.id)
+          .in("status", SPOT_HOLDING_STATUSES)
           .is("deleted_at", null),
       ]);
       if (cancelled) return;
@@ -193,7 +247,7 @@ export default function SchedulePage() {
         return;
       }
 
-      setEvents(evRes.data ?? []);
+      setEvents(sortEvents((evRes.data ?? []) as Event[]));
       setEventCourts((courtsRes.data ?? []) as unknown as EventCourt[]);
 
       // Count registrations per event so the schedule reflects the
@@ -202,12 +256,25 @@ export default function SchedulePage() {
       // a player registered in two events scheduled at the same time.
       const counts = new Map<string, number>();
       const players = new Map<string, Set<string>>();
-      type RegRow = { event_id: string; player_id: string };
+      type RegRow = {
+        event_id: string;
+        player_id: string;
+        status: Database["public"]["Enums"]["registration_status"];
+        partner_status: Database["public"]["Enums"]["partner_status"];
+      };
+      const regsByEvent = new Map<string, RegRow[]>();
       for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
-        counts.set(r.event_id, (counts.get(r.event_id) ?? 0) + 1);
+        const list = regsByEvent.get(r.event_id) ?? [];
+        list.push(r);
+        regsByEvent.set(r.event_id, list);
         const set = players.get(r.event_id) ?? new Set<string>();
         set.add(r.player_id);
         players.set(r.event_id, set);
+      }
+      // Teams, not registrations: a confirmed pair is one team; a seeker is
+      // a team still forming (same count the roster + capacity check use).
+      for (const ev of evRes.data ?? []) {
+        counts.set(ev.id, teamCountFor(ev.format, regsByEvent.get(ev.id) ?? []));
       }
       setTeamsByEvent(counts);
       setPlayersByEvent(players);
@@ -226,44 +293,36 @@ export default function SchedulePage() {
       courtsByEvent.set(ec.event_id, arr);
     }
     return events.map((event) => {
-      const regCount = teamsByEvent.get(event.id) ?? 0;
-      const teamCount =
-        event.format === "doubles" ? Math.floor(regCount / 2) : regCount;
-      const teamsPerPool =
-        event.pool_count > 0
-          ? Math.max(2, Math.ceil(teamCount / event.pool_count))
-          : Math.max(2, teamCount);
+      const teamCount = teamsByEvent.get(event.id) ?? 0;
       const courtNumbers = (courtsByEvent.get(event.id) ?? []).sort(
         (a, b) => a - b,
       );
       // Fall back to 1 court when an event hasn't claimed any — the
       // estimate still renders, just pessimistically.
       const courts = Math.max(1, courtNumbers.length);
-
-      const pool = estimatePoolPlay({
-        courts,
-        pools: event.pool_count,
-        teamsPerPool,
-        minutesPerGame: event.pool_minutes_per_game,
-        playEachOpponentTimes: event.play_each_team_times,
-      });
-      const medal =
-        event.teams_advancing_to_playoff > 0
-          ? estimateMedalRound({
-              courts,
-              teamsAdvancing: event.teams_advancing_to_playoff,
-              rounds: (event.playoff_rounds as 1 | 2) ?? 1,
-              format: event.medal_match_format,
-              minutesPerGame: event.medal_minutes_per_game,
-            })
-          : null;
-      const totalMinutes = pool.totalMinutes + (medal?.totalMinutes ?? 0);
+      // One adapter for every view (schedule table, calendar, tournament
+      // event cards) so they can never disagree on an end time.
+      const estimate = estimateEvent(event, teamCount, courts);
+      const { teamsPerPool, pool, medal, totalMinutes } = estimate;
+      const planTeams = teamCount >= 2 ? teamCount : Math.max(2, event.max_teams ?? 2);
+      const venueCourts = tournament?.locations?.court_count ?? courts;
+      const courtsNeeded = Math.min(Math.max(1, venueCourts), poolCourtsNeeded(planTeams, event.pool_count));
+      const medalNeed = Math.min(Math.max(1, venueCourts), medalCourtsNeeded(event.teams_advancing_to_playoff));
       const scheduledStart = event.scheduled_start_at
         ? new Date(event.scheduled_start_at)
         : null;
       const scheduledEnd = scheduledStart
         ? new Date(scheduledStart.getTime() + totalMinutes * 60_000)
         : null;
+      const phases: RowPhase[] = [];
+      if (scheduledStart) {
+        const poolEnd = new Date(scheduledStart.getTime() + pool.totalMinutes * 60_000);
+        const poolCourts = courtNumbers.slice(0, Math.max(1, Math.min(courtNumbers.length || 1, courtsNeeded)));
+        phases.push({ kind: "pool", start: scheduledStart, end: poolEnd, courts: poolCourts.length ? poolCourts : [1] });
+        if (medal && medal.totalMinutes > 0) {
+          phases.push({ kind: "medal", start: poolEnd, end: scheduledEnd!, courts: (poolCourts.length ? poolCourts : [1]).slice(0, Math.max(1, medalNeed)) });
+        }
+      }
       return {
         event,
         teamCount,
@@ -274,32 +333,67 @@ export default function SchedulePage() {
         medalMinutes: medal?.totalMinutes ?? 0,
         totalMinutes,
         poolBindingConstraint: pool.bindingConstraint,
+        estimate,
+        planTeams,
+        courtsNeeded,
+        medalCourtsNeeded: medalNeed,
         scheduledStart,
         scheduledEnd,
+        phases,
       };
     });
-  }, [events, eventCourts, teamsByEvent]);
+  }, [events, eventCourts, teamsByEvent, tournament]);
 
-  // Tournament total = longest path through the court graph.
-  // Two events that share at least one court can't run fully in
-  // parallel, so we group events into "court clusters" (transitive
-  // closure of court overlap) and sum durations within a cluster.
-  // Tournament total is the max over clusters.
-  // ─── Overlap detection ─────────────────────────────────────────────
-  // Two flavors of conflict, both surfaced to the organizer:
-  //
-  //   1. Court overlap — two events share at least one court AND
-  //      their time windows touch. Hard conflict; one of them won't
-  //      actually be able to play.
-  //
-  //   2. Player overlap — a player registered in two events whose
-  //      time windows touch. Soft conflict (they can't be on two
-  //      courts at once, but in practice some no-shows / late
-  //      starts make it survivable). Surfaced as a warning, not an
-  //      error.
-  //
-  // Both are pair-wise comparisons. Only events with a
-  // scheduled_start_at participate.
+  // The auto-schedule PLAN, recomputed live from order / anchor / buffer so
+  // the page can say what parallelism it found before anything is written.
+  const plan: Placement[] = useMemo(() => {
+    const anchorIso = fromLocalInput(anchorLocal);
+    const venueCourts = tournament?.locations?.court_count ?? 0;
+    if (!anchorIso || venueCourts < 1 || rows.length === 0) return [];
+    const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
+    return packSchedule(
+      rows.map((r, i) => ({
+        id: r.event.id,
+        order: i,
+        segments: [
+          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
+          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
+        ],
+        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
+      })),
+      new Date(anchorIso).getTime(),
+      bufferMs,
+      venueCourts,
+    );
+  }, [rows, anchorLocal, bufferLocal, tournament, playersByEvent]);
+  const planSpanMinutes = plan.length
+    ? Math.round((Math.max(...plan.map((p) => p.endMs)) - Math.min(...plan.map((p) => p.startMs))) / 60_000)
+    : 0;
+  const planGroups = useMemo(() => parallelGroups(plan), [plan]);
+  const [confirmAuto, setConfirmAuto] = useState(false);
+  // "Moved 3 later events" after a manual start-time change cascaded.
+  const [cascadeNote, setCascadeNote] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const locked = !!tournament?.schedule_locked_at;
+  // Everything that edits the schedule is off while busy OR locked.
+  const frozen = busy || locked;
+  // Drag-to-reorder (HTML5 DnD; ▲▼ stay for keyboard + touch).
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // Per-row inline save errors (courts / pools / playoff edits).
+  const [rowErr, setRowErr] = useState<Record<string, string>>({});
+
+  // Per-row "Details" disclosure — the estimator breakdown that used to live
+  // on the retired stand-alone RR estimator tool.
+  const [openDetails, setOpenDetails] = useState<Set<string>>(new Set());
+  const toggleDetails = (id: string) =>
+    setOpenDetails((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   const overlaps = useMemo<Overlap[]>(() => {
     const list: Overlap[] = [];
     const scheduled = rows.filter(
@@ -319,17 +413,33 @@ export default function SchedulePage() {
         const overlapEnd = Math.min(aEnd, bEnd);
         if (overlapStart >= overlapEnd) continue;
 
-        // Court overlap
-        const aCourts = new Set(a.courtNumbers);
-        const sharedCourts = b.courtNumbers.filter((c) => aCourts.has(c));
-        if (sharedCourts.length > 0) {
+        // Court overlap — per PHASE, so a bracket running on 2 courts only
+        // collides with the next event on those 2 courts, not the whole slice.
+        const courtHits = new Map<number, { start: number; end: number }>();
+        for (const pa of a.phases) {
+          for (const pb of b.phases) {
+            const ws = Math.max(pa.start.getTime(), pb.start.getTime());
+            const we = Math.min(pa.end.getTime(), pb.end.getTime());
+            if (ws >= we) continue;
+            const set = new Set(pa.courts);
+            for (const c of pb.courts) {
+              if (!set.has(c)) continue;
+              const prev = courtHits.get(c);
+              courtHits.set(c, prev ? { start: Math.min(prev.start, ws), end: Math.max(prev.end, we) } : { start: ws, end: we });
+            }
+          }
+        }
+        if (courtHits.size > 0) {
+          const courts = Array.from(courtHits.keys()).sort((x, y) => x - y);
+          const ws = Math.min(...Array.from(courtHits.values()).map((w) => w.start));
+          const we = Math.max(...Array.from(courtHits.values()).map((w) => w.end));
           list.push({
             type: "court",
             a,
             b,
-            courts: sharedCourts,
-            windowStart: new Date(overlapStart),
-            windowEnd: new Date(overlapEnd),
+            courts,
+            windowStart: new Date(ws),
+            windowEnd: new Date(we),
           });
         }
 
@@ -368,40 +478,17 @@ export default function SchedulePage() {
     return m;
   }, [overlaps]);
 
+  // Tournament time: the real span once every event has a start; until
+  // then, the span the auto-schedule plan would produce.
   const tournamentTotalMinutes = useMemo(() => {
     if (rows.length === 0) return 0;
-    // Union-find over events. Two events merged if they share a court.
-    const parent = new Map<string, string>();
-    for (const r of rows) parent.set(r.event.id, r.event.id);
-    const find = (x: string): string => {
-      const p = parent.get(x) ?? x;
-      if (p === x) return x;
-      const root = find(p);
-      parent.set(x, root);
-      return root;
-    };
-    const union = (a: string, b: string) => {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra !== rb) parent.set(ra, rb);
-    };
-    for (let i = 0; i < rows.length; i++) {
-      for (let j = i + 1; j < rows.length; j++) {
-        const ci = new Set(rows[i].courtNumbers);
-        const overlap = rows[j].courtNumbers.some((c) => ci.has(c));
-        if (overlap) union(rows[i].event.id, rows[j].event.id);
-      }
+    if (rows.every((r) => r.scheduledStart && r.scheduledEnd)) {
+      const start = Math.min(...rows.map((r) => r.scheduledStart!.getTime()));
+      const end = Math.max(...rows.map((r) => r.scheduledEnd!.getTime()));
+      return Math.round((end - start) / 60_000);
     }
-    const clusterMinutes = new Map<string, number>();
-    for (const r of rows) {
-      const root = find(r.event.id);
-      clusterMinutes.set(
-        root,
-        (clusterMinutes.get(root) ?? 0) + r.totalMinutes,
-      );
-    }
-    return Math.max(...clusterMinutes.values());
-  }, [rows]);
+    return planSpanMinutes;
+  }, [rows, planSpanMinutes]);
 
   // ─── Schedule mutations ────────────────────────────────────────────
   // Optimistic local-state updates keep the UI snappy without a full
@@ -418,99 +505,136 @@ export default function SchedulePage() {
     );
   };
 
-  // Auto-schedule walks each court-cluster in court-number order and
-  // packs events back-to-back starting at the anchor. Different
-  // clusters all start at the same anchor (parallel tracks).
+  // Auto-schedule: walk events in the organizer's order and give each the
+  // earliest start where the courts it actually needs fit alongside what's
+  // already running (and no player is double-booked). Writes the start
+  // times AND each event's court slice (event_courts) so the calendar,
+  // the conflicts panel and day-of dispatch all agree.
   const onAutoSchedule = async () => {
+    setConfirmAuto(false);
     setError(null);
-    const anchorIso = fromLocalInput(anchorLocal);
-    if (!anchorIso) {
+    if (plan.length === 0) {
       setError("Pick a start date/time first.");
       return;
     }
-    if (rows.length === 0) return;
     setBusy(true);
-
-    // Cluster events by shared courts (same union-find as the totals).
-    const parent = new Map<string, string>();
-    for (const r of rows) parent.set(r.event.id, r.event.id);
-    const find = (x: string): string => {
-      const p = parent.get(x) ?? x;
-      if (p === x) return x;
-      const root = find(p);
-      parent.set(x, root);
-      return root;
-    };
-    const union = (a: string, b: string) => {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra !== rb) parent.set(ra, rb);
-    };
-    for (let i = 0; i < rows.length; i++) {
-      for (let j = i + 1; j < rows.length; j++) {
-        const ci = new Set(rows[i].courtNumbers);
-        if (rows[j].courtNumbers.some((c) => ci.has(c))) {
-          union(rows[i].event.id, rows[j].event.id);
-        }
-      }
-    }
-
-    // Group rows by cluster root, ordered within a cluster by the
-    // minimum court number (so the schedule is stable + matches the
-    // organizer's mental model of "Court 1 → Court 2 → …").
-    const clusters = new Map<string, EventRow[]>();
-    for (const r of rows) {
-      const root = find(r.event.id);
-      const arr = clusters.get(root) ?? [];
-      arr.push(r);
-      clusters.set(root, arr);
-    }
-    const updates: { id: string; scheduled_start_at: string }[] = [];
-    const anchorMs = new Date(anchorIso).getTime();
-    for (const cluster of clusters.values()) {
-      cluster.sort((a, b) => {
-        const ca = a.courtNumbers[0] ?? 1e9;
-        const cb = b.courtNumbers[0] ?? 1e9;
-        if (ca !== cb) return ca - cb;
-        // Tie-break by creation order so reruns are deterministic.
-        return a.event.created_at.localeCompare(b.event.created_at);
-      });
-      let cursorMs = anchorMs;
-      const bufferMs =
-        Math.max(0, parseInt(bufferLocal || "0", 10)) * 60_000;
-      cluster.forEach((r, i) => {
-        // First event in the cluster starts at the anchor; each
-        // subsequent event is preceded by the buffer (court
-        // turnover, announcements, etc.).
-        if (i > 0) cursorMs += bufferMs;
-        const iso = new Date(cursorMs).toISOString();
-        updates.push({ id: r.event.id, scheduled_start_at: iso });
-        cursorMs += r.totalMinutes * 60_000;
-      });
-    }
-
-    // Run updates in parallel — they're on disjoint rows.
-    const results = await Promise.all(
-      updates.map((u) =>
+    const ids = plan.map((p) => p.id);
+    const startResults = await Promise.all(
+      plan.map((p) =>
         supabase
           .from("events")
-          .update({ scheduled_start_at: u.scheduled_start_at })
-          .eq("id", u.id),
+          .update({ scheduled_start_at: new Date(p.startMs).toISOString() })
+          .eq("id", p.id),
       ),
     );
-    const firstErr = results.find((r) => r.error)?.error;
+    const firstErr = startResults.find((r) => r.error)?.error;
     if (firstErr) {
       setError(firstErr.message);
       setBusy(false);
       return;
     }
+    // Replace court allocations with the packed slices.
+    const { error: delErr } = await supabase.from("event_courts").delete().in("event_id", ids);
+    if (delErr) {
+      setError(`Start times saved, but couldn't reset court allocations: ${delErr.message}`);
+      setBusy(false);
+      return;
+    }
+    const courtRows = plan.flatMap((p) => p.courts.map((c) => ({ event_id: p.id, court_number: c })));
+    const { error: insErr } = await supabase.from("event_courts").insert(courtRows);
+    if (insErr) {
+      setError(`Start times saved, but couldn't assign courts: ${insErr.message}`);
+      setBusy(false);
+      return;
+    }
     setEvents((prev) =>
       prev.map((e) => {
-        const u = updates.find((x) => x.id === e.id);
-        return u ? { ...e, scheduled_start_at: u.scheduled_start_at } : e;
+        const p = plan.find((x) => x.id === e.id);
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
       }),
     );
+    setEventCourts((prev) => [
+      ...prev.filter((ec) => !ids.includes(ec.event_id)),
+      ...(courtRows.map((r) => ({ ...r, created_at: new Date().toISOString() })) as EventCourt[]),
+    ]);
     setBusy(false);
+  };
+
+  // Reorder: put `eventId` at index `toIdx`; every event in the tournament
+  // gets a dense 1..n order so the result is unambiguous. Used by ▲▼ and by
+  // drag-and-drop. Optimistic — the plan panel recalculates instantly.
+  const reorderTo = async (eventId: string, toIdx: number) => {
+    const idx = events.findIndex((e) => e.id === eventId);
+    if (idx < 0 || toIdx < 0 || toIdx >= events.length || toIdx === idx) return;
+    const next = [...events];
+    const [moved] = next.splice(idx, 1);
+    next.splice(toIdx, 0, moved);
+    const renumbered = next.map((e, i) => ({ ...e, schedule_order: i + 1 }));
+    setEvents(renumbered);
+    setError(null);
+    const results = await Promise.all(
+      renumbered.map((e) =>
+        untyped.from("events").update({ schedule_order: e.schedule_order }).eq("id", e.id),
+      ),
+    );
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) setError(`Order saved locally but not on the server: ${firstErr.message}`);
+  };
+  const onMove = (eventId: string, dir: -1 | 1) => {
+    const idx = events.findIndex((e) => e.id === eventId);
+    return reorderTo(eventId, idx + dir);
+  };
+
+  // Inline setup edits — the same columns Edit event writes, saved one field
+  // at a time with optimistic local state (the estimate + plan recompute
+  // from `events` immediately) and rollback on failure.
+  type SetupPatch = Partial<
+    Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds"> & {
+      playoff_seeding: "overall" | "cross_pool";
+    }
+  >;
+  const onPatchEvent = async (eventId: string, patch: SetupPatch) => {
+    const before = events.find((e) => e.id === eventId);
+    if (!before) return;
+    setRowErr((m) => ({ ...m, [eventId]: "" }));
+    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, ...patch } : e)));
+    // playoff_seeding is newer than the generated types → untyped write.
+    const { error: updErr } = await untyped.from("events").update(patch).eq("id", eventId);
+    if (updErr) {
+      setEvents((prev) => prev.map((e) => (e.id === eventId ? before : e)));
+      setRowErr((m) => ({ ...m, [eventId]: `Couldn't save: ${updErr.message}` }));
+    }
+  };
+
+  // Toggle one court for an event (mirrors the tournament page's pills).
+  const onToggleCourt = async (eventId: string, court: number) => {
+    const has = eventCourts.some((ec) => ec.event_id === eventId && ec.court_number === court);
+    setRowErr((m) => ({ ...m, [eventId]: "" }));
+    if (has) {
+      setEventCourts((prev) => prev.filter((ec) => !(ec.event_id === eventId && ec.court_number === court)));
+      const { error: delErr } = await supabase
+        .from("event_courts")
+        .delete()
+        .eq("event_id", eventId)
+        .eq("court_number", court);
+      if (delErr) {
+        setEventCourts((prev) => [
+          ...prev,
+          { event_id: eventId, court_number: court, created_at: new Date().toISOString() } as EventCourt,
+        ]);
+        setRowErr((m) => ({ ...m, [eventId]: `Couldn't release court ${court}: ${delErr.message}` }));
+      }
+    } else {
+      const optimistic = { event_id: eventId, court_number: court, created_at: new Date().toISOString() } as EventCourt;
+      setEventCourts((prev) => [...prev, optimistic]);
+      const { error: insErr } = await supabase
+        .from("event_courts")
+        .insert({ event_id: eventId, court_number: court });
+      if (insErr) {
+        setEventCourts((prev) => prev.filter((ec) => ec !== optimistic));
+        setRowErr((m) => ({ ...m, [eventId]: `Couldn't assign court ${court}: ${insErr.message}` }));
+      }
+    }
   };
 
   const onClearSchedule = async () => {
@@ -553,8 +677,40 @@ export default function SchedulePage() {
     setBufferLocal(String(value));
   };
 
+  const onToggleLock = async () => {
+    if (!tournament) return;
+    setError(null);
+    const next = locked ? null : new Date().toISOString();
+    const { error: updErr } = await untyped
+      .from("tournaments")
+      .update({ schedule_locked_at: next })
+      .eq("id", tournament.id);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setTournament({ ...tournament, schedule_locked_at: next });
+  };
+
+  // A row as a fixed placement for the cascade (its phases → segments).
+  const placementFor = (r: EventRow, startMs: number): Placement => {
+    const poolCourts = r.courtNumbers.slice(0, Math.max(1, Math.min(r.courtNumbers.length || 1, r.courtsNeeded)));
+    const pc = poolCourts.length ? poolCourts : [1];
+    const poolEnd = startMs + r.poolMinutes * 60_000;
+    const segments: PlacedSegment[] = [{ kind: "pool", startMs, endMs: poolEnd, courts: pc }];
+    if (r.medalMinutes > 0) {
+      segments.push({ kind: "medal" as const, startMs: poolEnd, endMs: poolEnd + r.medalMinutes * 60_000, courts: pc.slice(0, Math.max(1, r.medalCourtsNeeded)) });
+    }
+    return { id: r.event.id, startMs, endMs: startMs + r.totalMinutes * 60_000, courts: r.courtNumbers, segments, heldBy: null };
+  };
+
+  // Manual start change. Then CASCADE: every event after this one in run
+  // order is re-placed with the same rules as Auto-schedule, treating this
+  // event and everything before it as fixed. Events that fit alongside stay
+  // alongside; the next non-concurrent one follows at end + buffer.
   const onSetEventStart = async (eventId: string, localValue: string) => {
     setError(null);
+    setCascadeNote(null);
     const iso = localValue ? fromLocalInput(localValue) : null;
     const { error: updErr } = await supabase
       .from("events")
@@ -565,6 +721,77 @@ export default function SchedulePage() {
       return;
     }
     updateLocalEventScheduled(eventId, iso);
+    if (!iso || locked) return;
+
+    const idx = rows.findIndex((r) => r.event.id === eventId);
+    const later = rows.slice(idx + 1);
+    const venueCourts = tournament?.locations?.court_count ?? 0;
+    if (idx < 0 || later.length === 0 || venueCourts < 1) return;
+    const newStartMs = new Date(iso).getTime();
+    const fixed: Placement[] = [];
+    const fixedPlayers = new Map<string, ReadonlySet<string>>();
+    rows.slice(0, idx + 1).forEach((r) => {
+      const startMs = r.event.id === eventId ? newStartMs : r.scheduledStart?.getTime();
+      if (startMs == null) return;
+      fixed.push(placementFor(r, startMs));
+      fixedPlayers.set(r.event.id, playersByEvent.get(r.event.id) ?? new Set<string>());
+    });
+    const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
+    const moved = packSchedule(
+      later.map((r, i) => ({
+        id: r.event.id,
+        order: i,
+        segments: [
+          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
+          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
+        ],
+        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
+      })),
+      newStartMs,
+      bufferMs,
+      venueCourts,
+      fixed,
+      fixedPlayers,
+    );
+    const changed = moved.filter((p) => {
+      const r = later.find((x) => x.event.id === p.id);
+      return !r?.scheduledStart || r.scheduledStart.getTime() !== p.startMs || fmtCourtRange(r.courtNumbers) !== fmtCourtRange(p.courts);
+    });
+    if (changed.length === 0) return;
+    setBusy(true);
+    const results = await Promise.all(
+      changed.map((p) => supabase.from("events").update({ scheduled_start_at: new Date(p.startMs).toISOString() }).eq("id", p.id)),
+    );
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      setError(`Start saved, but later events couldn't be moved: ${firstErr.message}`);
+      setBusy(false);
+      return;
+    }
+    const ids = changed.map((p) => p.id);
+    const { error: delErr } = await supabase.from("event_courts").delete().in("event_id", ids);
+    const courtRows = changed.flatMap((p) => p.courts.map((c) => ({ event_id: p.id, court_number: c })));
+    const { error: insErr } = delErr ? { error: delErr } : await supabase.from("event_courts").insert(courtRows);
+    setEvents((prev) =>
+      prev.map((e) => {
+        const p = changed.find((x) => x.id === e.id);
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
+      }),
+    );
+    if (!insErr) {
+      setEventCourts((prev) => [
+        ...prev.filter((ec) => !ids.includes(ec.event_id)),
+        ...(courtRows.map((r) => ({ ...r, created_at: new Date().toISOString() })) as EventCourt[]),
+      ]);
+    } else {
+      setError(`Later events moved, but their courts couldn't be updated: ${insErr.message}`);
+    }
+    setCascadeNote(
+      `Moved ${changed.length} later event${changed.length === 1 ? "" : "s"}: ${changed
+        .map((p) => `${later.find((x) => x.event.id === p.id)?.event.name ?? p.id} → ${fmtTime(new Date(p.startMs))}`)
+        .join(", ")}.`,
+    );
+    setBusy(false);
   };
 
   if (!org) return null;
@@ -688,8 +915,8 @@ export default function SchedulePage() {
             />
           </label>
           <button
-            onClick={onAutoSchedule}
-            disabled={busy || !anchorLocal}
+            onClick={() => setConfirmAuto(true)}
+            disabled={frozen || !anchorLocal}
             style={{
               padding: "8px 16px",
               background: busy || !anchorLocal ? inkMuted : courtBlue,
@@ -701,13 +928,13 @@ export default function SchedulePage() {
               cursor: busy || !anchorLocal ? "not-allowed" : "pointer",
               fontFamily: bodyFontStack,
             }}
-            title="Pack each court-cluster back-to-back starting at the chosen time. Parallel clusters all start at the anchor."
+            title="Walks events in the order below. Events run side by side when the courts they actually need fit; otherwise the next one follows after the buffer. Replaces court allocations with each event's slice."
           >
             {busy ? "Scheduling…" : "Auto-schedule"}
           </button>
           <button
             onClick={onClearSchedule}
-            disabled={busy || !rows.some((r) => r.scheduledStart)}
+            disabled={frozen || !rows.some((r) => r.scheduledStart)}
             style={{
               padding: "8px 16px",
               background: "#ffffff",
@@ -726,6 +953,24 @@ export default function SchedulePage() {
           >
             Clear schedule
           </button>
+          <button
+            onClick={() => void onToggleLock()}
+            disabled={busy}
+            style={{
+              padding: "8px 16px",
+              background: locked ? warnBg : "#ffffff",
+              color: locked ? warnFg : inkSoft,
+              border: `1px solid ${locked ? warnFg : rule}`,
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: bodyFontStack,
+            }}
+            title={locked ? "Unlock to change start times, order, courts or setup." : "Freeze the schedule so nothing moves on game day."}
+          >
+            {locked ? "🔒 Unlock schedule" : "🔓 Lock schedule"}
+          </button>
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 11, color: inkMuted }}>
             You can also edit any event's start time directly in the
@@ -734,13 +979,101 @@ export default function SchedulePage() {
         </div>
       )}
 
+      {locked && tournament.schedule_locked_at && (
+        <div
+          role="status"
+          style={{ marginTop: 12, padding: "10px 12px", background: warnBg, border: `1px solid ${warnFg}`, borderRadius: 6, fontSize: 13, color: warnFg, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+        >
+          <span>
+            <strong>Schedule locked</strong> {fmtDayHeading(new Date(tournament.schedule_locked_at))} at {fmtTime(new Date(tournament.schedule_locked_at))}. Start times, order, courts and setup can't change until you unlock.
+          </span>
+          <button onClick={() => void onToggleLock()} disabled={busy} style={{ ...detailsBtnStyle, color: warnFg, borderColor: warnFg, minHeight: 36 }}>
+            Unlock
+          </button>
+        </div>
+      )}
+      {cascadeNote && !locked && (
+        <div role="status" style={{ marginTop: 12, padding: "8px 12px", background: cream, border: `1px solid ${rule}`, borderRadius: 6, fontSize: 12, color: inkSoft }}>
+          {cascadeNote}
+        </div>
+      )}
+
+      {plan.length > 0 && !locked && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 12px",
+            background: cream,
+            border: `1px solid ${creamDeep}`,
+            borderRadius: 6,
+            fontSize: 12,
+            color: inkSoft,
+            lineHeight: 1.6,
+          }}
+        >
+          <strong style={{ color: ink }}>Auto-schedule plan</strong> — {fmtDuration(planSpanMinutes)} from{" "}
+          {fmtTime(new Date(plan[0].startMs))}, in the order below, using the courts each event can actually keep busy.
+          <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
+            {rows.map((r) => {
+              const p = plan.find((x) => x.id === r.event.id);
+              if (!p) return null;
+              const alongside = plan.filter((q) => q.id !== p.id && q.startMs < p.endMs && q.endMs > p.startMs);
+              const reason = planReason(p, rows);
+              return (
+                <li key={p.id} style={{ marginBottom: 2 }}>
+                  <strong style={{ color: ink }}>{fmtTime(new Date(p.startMs))}</strong> {r.event.name}
+                  <span style={{ color: inkMuted }}>
+                    {p.segments.map((g) => (
+                      <span key={g.kind}>
+                        {" "}· {g.kind === "pool" ? "pool" : "medal"} {fmtTime(new Date(g.startMs))}–{fmtTime(new Date(g.endMs))} courts {fmtCourtRange(g.courts)}
+                      </span>
+                    ))}
+                    {alongside.length > 0 && (
+                      <> · alongside {alongside.map((q) => rows.find((x) => x.event.id === q.id)?.event.name ?? q.id).join(", ")}</>
+                    )}
+                  </span>
+                  {reason && (
+                    <span style={{ marginLeft: 6, padding: "1px 6px", background: warnBg, color: warnFg, borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                      {reason}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {planGroups.length === 0 && (
+            <div style={{ marginTop: 4 }}>No two events fit side by side with {tournament.locations?.court_count} courts and these players — they run one after another.</div>
+          )}
+        </div>
+      )}
+
+      {confirmAuto && (
+        <ConfirmModal
+          title="Auto-schedule these events?"
+          destructive={false}
+          confirmLabel="Auto-schedule"
+          onCancel={() => setConfirmAuto(false)}
+          onConfirm={onAutoSchedule}
+          body={
+            <div style={{ fontSize: 13, color: inkSoft, lineHeight: 1.6 }}>
+              <p style={{ margin: "0 0 8px" }}>
+                Sets a start time for all {plan.length} events in the order shown, running events side by side where their courts fit ({fmtDuration(planSpanMinutes)} total).
+              </p>
+              <p style={{ margin: 0 }}>
+                <strong style={{ color: ink }}>Court allocations will be replaced</strong> with each event's slice for its window (e.g. courts 1–4 for one event, 5–8 for the other). You can still adjust courts on the tournament page afterwards.
+              </p>
+            </div>
+          }
+        />
+      )}
+
       {rows.length === 0 ? (
         <Empty>No events yet. Add one to start scheduling.</Empty>
       ) : (
         <>
         <div className="no-print">
           <button
-            onClick={() => window.print()}
+            onClick={() => setPrinting(true)}
             style={{
               marginTop: 16,
               padding: "8px 16px",
@@ -773,7 +1106,7 @@ export default function SchedulePage() {
             <Stat
               label="Tournament time"
               value={fmtDuration(tournamentTotalMinutes)}
-              sub="Longest court-cluster — events on disjoint courts run in parallel."
+              sub={rows.every((r) => r.scheduledStart) ? "First start to last end of the current schedule." : "If auto-scheduled now — events run side by side where the courts they need fit."}
               emphasize
             />
             <Stat
@@ -828,9 +1161,41 @@ export default function SchedulePage() {
             </thead>
             <tbody>
               {rows.map((r) => (
+                <Fragment key={r.event.id}>
                 <tr
-                  key={r.event.id}
-                  style={{ borderBottom: `1px solid ${ruleSoft}` }}
+                  draggable={!frozen}
+                  onDragStart={(e) => {
+                    setDragId(r.event.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    e.dataTransfer.setData("text/plain", r.event.id);
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragId || dragId === r.event.id) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                    if (dragOverId !== r.event.id) setDragOverId(r.event.id);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverId === r.event.id) setDragOverId(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const from = dragId ?? e.dataTransfer.getData("text/plain");
+                    const toIdx = rows.findIndex((x) => x.event.id === r.event.id);
+                    setDragId(null);
+                    setDragOverId(null);
+                    if (from && toIdx >= 0) void reorderTo(from, toIdx);
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setDragOverId(null);
+                  }}
+                  style={{
+                    borderBottom: openDetails.has(r.event.id) ? "none" : `1px solid ${ruleSoft}`,
+                    boxShadow: dragOverId === r.event.id ? `inset 0 3px 0 ${courtBlue}` : undefined,
+                    opacity: dragId === r.event.id ? 0.5 : 1,
+                    background: dragOverId === r.event.id ? cream : undefined,
+                  }}
                 >
                   <td style={tdStyle}>
                     <div
@@ -841,6 +1206,20 @@ export default function SchedulePage() {
                         flexWrap: "wrap",
                       }}
                     >
+                      <span
+                        aria-hidden
+                        title="Drag to reorder"
+                        style={{
+                          cursor: frozen ? "default" : "grab",
+                          color: inkMuted,
+                          fontSize: 14,
+                          lineHeight: 1,
+                          padding: "8px 4px",
+                          userSelect: "none",
+                        }}
+                      >
+                        ⋮⋮
+                      </span>
                       <Link
                         to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${r.event.id}`}
                         style={{
@@ -855,6 +1234,37 @@ export default function SchedulePage() {
                         conflicts={overlapsByEventId.get(r.event.id) ?? []}
                         thisEventId={r.event.id}
                       />
+                      <span style={{ display: "inline-flex", gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={() => void onMove(r.event.id, -1)}
+                          disabled={frozen || rows[0]?.event.id === r.event.id}
+                          aria-label={`Move ${r.event.name} up`}
+                          title="Move up (runs earlier)"
+                          style={moveBtnStyle}
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void onMove(r.event.id, 1)}
+                          disabled={frozen || rows[rows.length - 1]?.event.id === r.event.id}
+                          aria-label={`Move ${r.event.name} down`}
+                          title="Move down (runs later)"
+                          style={moveBtnStyle}
+                        >
+                          ▼
+                        </button>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleDetails(r.event.id)}
+                        aria-expanded={openDetails.has(r.event.id)}
+                        aria-controls={`estimate-${r.event.id}`}
+                        style={detailsBtnStyle}
+                      >
+                        {openDetails.has(r.event.id) ? "Hide setup ▴" : "Details & setup ▾"}
+                      </button>
                     </div>
                     <div
                       style={{ fontSize: 11, color: inkMuted, marginTop: 2 }}
@@ -903,7 +1313,15 @@ export default function SchedulePage() {
                     <CourtPills
                       total={courtCount}
                       assigned={r.courtNumbers}
+                      onToggle={frozen ? undefined : (c) => void onToggleCourt(r.event.id, c)}
                     />
+                    <div
+                      style={{ fontSize: 10, color: inkMuted, marginTop: 2 }}
+                      title={`${r.event.pool_count} pool${r.event.pool_count === 1 ? "" : "s"} × floor(${r.teamsPerPool} teams ÷ 2) matches at once — the most courts this event can keep busy${r.teamCount < 2 ? " (planning on max teams)" : ""}.`}
+                    >
+                      needs {r.courtsNeeded} of {courtCount}
+                      {r.medalCourtsNeeded > 0 ? ` · medal round ${r.medalCourtsNeeded}` : ""}
+                    </div>
                   </td>
                   <td
                     style={{
@@ -955,7 +1373,7 @@ export default function SchedulePage() {
                       onChange={(e) =>
                         void onSetEventStart(r.event.id, e.target.value)
                       }
-                      disabled={busy}
+                      disabled={frozen}
                       style={{
                         padding: "4px 6px",
                         border: `1px solid ${rule}`,
@@ -975,6 +1393,37 @@ export default function SchedulePage() {
                     {r.scheduledEnd ? fmtTime(r.scheduledEnd) : "—"}
                   </td>
                 </tr>
+                {openDetails.has(r.event.id) && (
+                  <tr style={{ borderBottom: `1px solid ${ruleSoft}` }}>
+                    <td colSpan={8} style={{ padding: "0 12px 12px" }}>
+                      {(() => {
+                        const p = plan.find((x) => x.id === r.event.id);
+                        const reason = p ? planReason(p, rows) : null;
+                        return reason ? (
+                          <div style={{ margin: "8px 0", fontSize: 12, color: warnFg }}>
+                            In the auto-schedule plan this event {reason}.
+                          </div>
+                        ) : null;
+                      })()}
+                      <SetupPanel
+                        row={r}
+                        courtCount={courtCount}
+                        busy={frozen}
+                        error={rowErr[r.event.id] ?? ""}
+                        onPatch={(patch) => void onPatchEvent(r.event.id, patch)}
+                        onToggleCourt={(c) => void onToggleCourt(r.event.id, c)}
+                      />
+                      {r.teamCount >= 2 ? (
+                        <EstimateDetails id={`estimate-${r.event.id}`} row={r} />
+                      ) : (
+                        <div id={`estimate-${r.event.id}`} style={{ fontSize: 12, color: inkMuted, padding: "8px 0 0" }}>
+                          Fewer than 2 teams registered — the plan uses Max teams ({r.planTeams}) for this event until teams sign up.
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -991,109 +1440,43 @@ export default function SchedulePage() {
               lineHeight: 1.6,
             }}
           >
-            <strong>How "Tournament time" is calculated.</strong> Events
-            that share at least one court can't run fully in parallel —
-            they're grouped into a court-cluster and their durations sum.
-            Events on disjoint courts run truly in parallel. The
-            tournament time is the longest of these clusters. If you want
-            to compress further, give each event its own slice of courts
-            on the tournament page.
+            <strong>How auto-schedule works.</strong> Events run in the
+            order shown (drag the ⋮⋮ handle, or use ▲▼). Each event needs only the courts it can
+            keep busy — a pool of 5 teams plays 2 matches at once, so two
+            5-team pools need 4 courts, not 8. Events whose needs fit within
+            the venue run side by side; the next one otherwise starts after
+            the previous ends plus the buffer. A player in two events is
+            never double-booked. The medal round is its own phase on fewer
+            courts (one per medal match), so the next event can start on the
+            courts pool play released while a bracket finishes. Auto-schedule
+            also gives each event its own slice of court numbers.
           </div>
             </>
           )}
         </div>
         </>
       )}
-      {/* Print output is a dedicated read-only table, not whichever
-          screen view (editable table or absolutely-positioned court
-          timeline) happens to be open — both are unreliable to
-          paginate. Hidden on screen, shown only under @media print. */}
-      {rows.length > 0 && (
-        <PrintScheduleSheet tournamentName={tournament.name} rows={rows} />
+      {printing && (
+        <SchedulePrintModal
+          tournamentName={tournament.name}
+          startsAt={tournament.starts_at}
+          endsAt={tournament.ends_at}
+          venueName={tournament.location_name ?? null}
+          courtCount={courtCount}
+          rows={rows.map((r) => ({
+            id: r.event.id,
+            name: r.event.name,
+            formatLine: `${r.event.format} · ${r.event.pool_count > 1 ? `${r.event.pool_count} pools of ${r.teamsPerPool}` : "single pool"}${r.event.play_each_team_times > 1 ? ` · play ${r.event.play_each_team_times}×` : ""} · ${r.event.points_to_win} win by ${r.event.win_by}${r.event.teams_advancing_to_playoff > 0 ? ` · top ${r.event.teams_advancing_to_playoff}` : ""}`,
+            teamCount: r.teamCount,
+            totalMinutes: r.totalMinutes,
+            start: r.scheduledStart,
+            end: r.scheduledEnd,
+            courtNumbers: r.courtNumbers,
+            phases: r.phases,
+          }))}
+          onClose={() => setPrinting(false)}
+        />
       )}
-      <style>{`
-        .print-only { display: none; }
-        @media print {
-          .print-only { display: block; }
-          .schedule-print-row { break-inside: avoid; page-break-inside: avoid; }
-          @page { size: letter; margin: 0.5in; }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// Read-only schedule printout: every scheduled event in start-time order,
-// then anything not yet scheduled. Plain table so browsers repeat the
-// header row and paginate cleanly across sheets.
-function PrintScheduleSheet({
-  tournamentName,
-  rows,
-}: {
-  tournamentName: string;
-  rows: EventRow[];
-}) {
-  const sorted = useMemo(() => {
-    const scheduled = rows
-      .filter((r) => r.scheduledStart)
-      .sort((a, b) => a.scheduledStart!.getTime() - b.scheduledStart!.getTime());
-    const unscheduled = rows.filter((r) => !r.scheduledStart);
-    return [...scheduled, ...unscheduled];
-  }, [rows]);
-
-  const printedOn = new Date().toLocaleString(undefined, {
-    dateStyle: "long",
-    timeStyle: "short",
-  });
-
-  return (
-    <div className="print-only">
-      <h1
-        style={{
-          margin: "0 0 4px",
-          fontSize: 20,
-          fontFamily: headingFontStack,
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
-        {tournamentName} — Schedule
-      </h1>
-      <p style={{ margin: "0 0 16px", fontSize: 12, color: inkMuted }}>
-        Printed {printedOn}
-      </p>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-        <thead>
-          <tr style={{ borderBottom: "2px solid #000" }}>
-            <th style={thStyle}>Event</th>
-            <th style={thStyle}>Courts</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>Teams</th>
-            <th style={thStyle}>Start</th>
-            <th style={thStyle}>End</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r) => (
-            <tr
-              key={r.event.id}
-              className="schedule-print-row"
-              style={{ borderBottom: "1px solid #ccc" }}
-            >
-              <td style={tdStyle}>{r.event.name}</td>
-              <td style={tdStyle}>
-                {r.courtNumbers.length > 0 ? r.courtNumbers.join(", ") : "—"}
-              </td>
-              <td style={{ ...tdStyle, textAlign: "right" }}>{r.teamCount}</td>
-              <td style={tdStyle}>
-                {r.scheduledStart ? fmtTime(r.scheduledStart) : "Not scheduled"}
-              </td>
-              <td style={tdStyle}>
-                {r.scheduledEnd ? fmtTime(r.scheduledEnd) : "—"}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -1106,12 +1489,16 @@ function PrintScheduleSheet({
 // look: one pill per court (1..total). Assigned courts render
 // solid-blue; unassigned render outlined-gray. Numbers-only so the
 // row stays compact even at 16 courts.
+// Court pills. With `onToggle` they're buttons that assign / release a
+// court for the event right here (same write as the tournament page).
 function CourtPills({
   total,
   assigned,
+  onToggle,
 }: {
   total: number;
   assigned: number[];
+  onToggle?: (court: number) => void;
 }) {
   const claimed = new Set(assigned);
   return (
@@ -1121,29 +1508,205 @@ function CourtPills({
         flexWrap: "wrap",
         gap: 4,
       }}
+      role={onToggle ? "group" : undefined}
+      aria-label={onToggle ? "Courts for this event — click to toggle" : undefined}
     >
       {Array.from({ length: total }, (_, i) => i + 1).map((n) => {
         const mine = claimed.has(n);
-        return (
-          <span
+        const style: CSSProperties = {
+          minWidth: onToggle ? 32 : 22,
+          minHeight: onToggle ? 32 : undefined,
+          padding: "2px 6px",
+          background: mine ? courtBlue : "#ffffff",
+          color: mine ? "#ffffff" : inkMuted,
+          border: `1px solid ${mine ? courtBlue : rule}`,
+          borderRadius: 4,
+          fontSize: 11,
+          fontWeight: 500,
+          textAlign: "center",
+          lineHeight: 1.4,
+          fontFamily: bodyFontStack,
+          cursor: onToggle ? "pointer" : undefined,
+        };
+        return onToggle ? (
+          <button
             key={n}
-            style={{
-              minWidth: 22,
-              padding: "2px 6px",
-              background: mine ? courtBlue : "#ffffff",
-              color: mine ? "#ffffff" : inkMuted,
-              border: `1px solid ${mine ? courtBlue : rule}`,
-              borderRadius: 4,
-              fontSize: 11,
-              fontWeight: 500,
-              textAlign: "center",
-              lineHeight: 1.4,
-            }}
+            type="button"
+            aria-pressed={mine}
+            title={mine ? `Release court ${n}` : `Assign court ${n}`}
+            onClick={() => onToggle(n)}
+            style={style}
           >
+            {n}
+          </button>
+        ) : (
+          <span key={n} style={style}>
             {n}
           </span>
         );
       })}
+    </div>
+  );
+}
+
+// Inline event setup — courts, pools, playoff — with the same rules as Edit
+// event (multi-pool from 8 teams, smallest pool ≥ 4; 2-round playoffs are
+// top-4 only; single-round needs an even Top-N). Saves per field.
+function SetupPanel({
+  row,
+  courtCount,
+  busy,
+  error,
+  onPatch,
+  onToggleCourt,
+}: {
+  row: EventRow;
+  courtCount: number;
+  busy: boolean;
+  error: string;
+  onPatch: (
+    patch: Partial<
+      Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds"> & {
+        playoff_seeding: "overall" | "cross_pool";
+      }
+    >,
+  ) => void;
+  onToggleCourt: (court: number) => void;
+}) {
+  const { event } = row;
+  const teams = row.planTeams;
+  const maxPools = teams >= 8 ? Math.max(1, Math.floor(teams / 4)) : 1;
+  const poolOptions = Array.from({ length: Math.max(maxPools, event.pool_count) }, (_, i) => i + 1);
+  const advancing = event.teams_advancing_to_playoff;
+  const rounds = event.playoff_rounds;
+  const advancingOptions = [0, 2, 4, 6, 8, 10, 12, 16].filter((n) => n === 0 || n <= Math.max(teams, advancing));
+  if (!advancingOptions.includes(advancing)) advancingOptions.push(advancing);
+  advancingOptions.sort((a, b) => a - b);
+  const warning =
+    advancing === 0
+      ? null
+      : rounds === 1 && advancing % 2 !== 0
+        ? "Single-round playoffs need an even Top-N (pairs play for each medal slot)."
+        : rounds === 2 && advancing !== 4
+          ? "2-round playoffs (semis + final + bronze) support Top-4 only."
+          : null;
+  const label: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft };
+  const select: CSSProperties = {
+    padding: "8px 10px",
+    border: `1px solid ${rule}`,
+    borderRadius: 6,
+    fontSize: 13,
+    fontFamily: bodyFontStack,
+    background: "#ffffff",
+    minHeight: 40,
+  };
+  return (
+    <div
+      style={{
+        marginBottom: 8,
+        padding: 12,
+        background: cream,
+        border: `1px solid ${creamDeep}`,
+        borderRadius: 6,
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, alignItems: "end" }}>
+        <div style={{ ...label, gridColumn: "1 / -1" }}>
+          <span>Courts <span style={{ color: inkMuted }}>· click to assign or release · needs {row.courtsNeeded} of {courtCount}</span></span>
+          <CourtPills total={courtCount} assigned={row.courtNumbers} onToggle={busy ? undefined : onToggleCourt} />
+        </div>
+        <label style={label}>
+          <span>Pools <span style={{ color: inkMuted }}>· {teams} teams{row.teamCount < 2 ? " (max)" : ""}</span></span>
+          <select
+            value={event.pool_count}
+            disabled={busy}
+            onChange={(e) => onPatch({ pool_count: parseInt(e.target.value, 10) })}
+            style={select}
+            title={maxPools === 1 ? "Multiple pools need at least 8 teams (smallest pool holds 4)." : `Up to ${maxPools} pools for ${teams} teams (smallest pool ≥ 4).`}
+          >
+            {poolOptions.map((n) => (
+              <option key={n} value={n} disabled={n > maxPools}>
+                {n} {n === 1 ? "pool" : "pools"}{n > maxPools ? " — too few teams" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={label}>
+          <span>Play each opponent</span>
+          <select
+            value={event.play_each_team_times}
+            disabled={busy}
+            onChange={(e) => onPatch({ play_each_team_times: parseInt(e.target.value, 10) })}
+            style={select}
+          >
+            <option value={1}>1 time</option>
+            <option value={2}>2 times</option>
+            <option value={3}>3 times</option>
+          </select>
+        </label>
+        <label style={label}>
+          <span>Playoff — teams advancing</span>
+          <select
+            value={advancing}
+            disabled={busy}
+            onChange={(e) => {
+              const n = parseInt(e.target.value, 10);
+              // Leaving top-4 makes a 2-round bracket invalid — drop to 1 round.
+              onPatch(n !== 4 && rounds === 2 ? { teams_advancing_to_playoff: n, playoff_rounds: 1 } : { teams_advancing_to_playoff: n });
+            }}
+            style={select}
+          >
+            {advancingOptions.map((n) => (
+              <option key={n} value={n}>
+                {n === 0 ? "No playoff" : `Top ${n}`}
+              </option>
+            ))}
+          </select>
+        </label>
+        {event.pool_count === 2 && advancing === 4 && rounds === 1 && (
+          <label style={label}>
+            <span>Medal seeding</span>
+            <select
+              value={event.playoff_seeding ?? "overall"}
+              disabled={busy}
+              onChange={(e) => onPatch({ playoff_seeding: e.target.value as "overall" | "cross_pool" })}
+              style={select}
+              title="Cross-pool: Pool 1 winner v Pool 2 winner for gold; the two runners-up for bronze."
+            >
+              <option value="overall">Overall standings (1v2 gold, 3v4 bronze)</option>
+              <option value="cross_pool">Cross-pool (pool winners → gold, runners-up → bronze)</option>
+            </select>
+          </label>
+        )}
+        <label style={label}>
+          <span>Playoff rounds</span>
+          <select
+            value={rounds}
+            disabled={busy || advancing === 0}
+            onChange={(e) => onPatch({ playoff_rounds: parseInt(e.target.value, 10) })}
+            style={select}
+            title={advancing !== 4 ? "2 rounds (semis + final + bronze) is available for Top-4 only." : undefined}
+          >
+            <option value={1}>1 round (pairwise medal matches)</option>
+            <option value={2} disabled={advancing !== 4}>
+              2 rounds (semis + final + bronze){advancing !== 4 ? " — Top-4 only" : ""}
+            </option>
+          </select>
+        </label>
+      </div>
+      {warning && (
+        <div style={{ marginTop: 8, padding: "6px 10px", background: warnBg, color: warnFg, borderRadius: 4, fontSize: 12 }}>
+          {warning}
+        </div>
+      )}
+      {error && (
+        <div style={{ marginTop: 8, padding: "6px 10px", background: dangerBg, color: dangerFg, borderRadius: 4, fontSize: 12 }}>
+          {error}
+        </div>
+      )}
+      <div style={{ marginTop: 8, fontSize: 11, color: inkMuted }}>
+        Format changes apply to matches generated from now on. Existing matches keep their pairings — reset and regenerate on the event console. Scoring, minutes per game and fees stay on Edit event.
+      </div>
     </div>
   );
 }
@@ -1338,8 +1901,11 @@ function DayTimeline({
   for (let t = minMs; t <= maxMs; t += 3600_000) hourTicks.push(t);
 
   const courts = Array.from({ length: courtCount }, (_, i) => i + 1);
-  const eventsOnCourt = (court: number) =>
-    rows.filter((r) => r.courtNumbers.includes(court));
+  // Blocks are PHASES: pool play on its courts, then the medal round on
+  // the (fewer) courts it actually uses — so a bracket leaves the other
+  // columns free for whatever starts next.
+  const blocksOnCourt = (court: number) =>
+    rows.flatMap((r) => r.phases.filter((ph) => ph.courts.includes(court)).map((ph) => ({ row: r, phase: ph })));
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -1402,7 +1968,7 @@ function DayTimeline({
 
         {/* One column per court */}
         {courts.map((court) => {
-          const events = eventsOnCourt(court);
+          const events = blocksOnCourt(court);
           return (
             <div
               key={court}
@@ -1473,9 +2039,9 @@ function DayTimeline({
                     No events
                   </div>
                 ) : (
-                  events.map((r) => {
-                    const start = r.scheduledStart!.getTime();
-                    const end = r.scheduledEnd!.getTime();
+                  events.map(({ row: r, phase: ph }) => {
+                    const start = ph.start.getTime();
+                    const end = ph.end.getTime();
                     const top = ((start - minMs) / 60_000) * PIXELS_PER_MIN;
                     const height = Math.max(
                       MIN_BLOCK_PX,
@@ -1483,23 +2049,21 @@ function DayTimeline({
                     );
                     const color =
                       colorByEvent.get(r.event.id) ?? EVENT_PALETTE[0];
+                    const isMedal = ph.kind === "medal";
                     return (
                       <div
-                        key={r.event.id}
-                        title={`${r.event.name} — ${fmtRange(
-                          r.scheduledStart!,
-                          r.scheduledEnd!,
-                        )}`}
+                        key={`${r.event.id}-${ph.kind}`}
+                        title={`${r.event.name} — ${isMedal ? "medal round" : "pool play"} ${fmtRange(ph.start, ph.end)}`}
                         style={{
                           position: "absolute",
                           top: top + 2,
                           left: 2,
                           right: 2,
                           height: Math.max(MIN_BLOCK_PX - 4, height - 4),
-                          background: color.bg,
-                          border: `1px solid ${color.border}`,
+                          background: isMedal ? "#ffffff" : color.bg,
+                          border: `${isMedal ? 2 : 1}px ${isMedal ? "dashed" : "solid"} ${color.border}`,
                           borderRadius: 4,
-                          color: "#ffffff",
+                          color: isMedal ? color.border : "#ffffff",
                           padding: "4px 6px",
                           fontSize: 11,
                           fontWeight: 500,
@@ -1517,7 +2081,7 @@ function DayTimeline({
                             textOverflow: "ellipsis",
                           }}
                         >
-                          {r.event.name}
+                          {r.event.name}{isMedal ? " · medals" : ""}
                         </div>
                         <div
                           style={{
@@ -1526,8 +2090,8 @@ function DayTimeline({
                             marginTop: 1,
                           }}
                         >
-                          {fmtTime(r.scheduledStart!)}–
-                          {fmtTime(r.scheduledEnd!)}
+                          {fmtTime(ph.start)}–
+                          {fmtTime(ph.end)}
                         </div>
                       </div>
                     );
@@ -1698,6 +2262,101 @@ function fmtRange(start: Date, end: Date): string {
     return `${time(start)} – ${time(end)}`;
   }
   return `${start.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} – ${end.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+}
+
+// The "why is it this long" breakdown for one event — matches, rounds,
+// games per team, utilization, binding constraint, medal structure.
+function EstimateDetails({ id, row }: { id: string; row: EventRow }) {
+  const { estimate: e, event } = row;
+  const pools = Math.max(1, event.pool_count);
+  return (
+    <div
+      id={id}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+        gap: 8,
+        padding: 12,
+        background: bg,
+        border: `1px solid ${rule}`,
+        borderRadius: 6,
+      }}
+    >
+      <Stat
+        label="Pool-play matches"
+        value={e.pool.totalMatches.toLocaleString()}
+        sub={`${pools} pool${pools === 1 ? "" : "s"} × ${e.pool.matchesPerPool} match${e.pool.matchesPerPool === 1 ? "" : "es"} · ${row.teamsPerPool} teams per pool · ${e.courts} court${e.courts === 1 ? "" : "s"}`}
+      />
+      <Stat
+        label="Pool play"
+        value={fmtDuration(e.pool.totalMinutes)}
+        sub={poolPlayExplanation(e, event)}
+      />
+      <Stat label="Games per team" value={String(e.pool.gamesPerTeam)} sub="Pool play only." />
+      <Stat
+        label="Court utilization"
+        value={`${Math.round(e.pool.utilization * 100)}%`}
+        sub={utilizationLabel(e.pool.utilization)}
+      />
+      {e.medal ? (
+        <Stat label="Medal round" value={fmtDuration(e.medal.totalMinutes)} sub={e.medal.summary} />
+      ) : (
+        <Stat label="Medal round" value="—" sub="No playoff configured for this event." />
+      )}
+      <Stat
+        label="Total"
+        value={fmtDuration(e.totalMinutes)}
+        sub="Pool play + medal round, back-to-back. Minutes per game come from the event settings."
+        emphasize
+      />
+    </div>
+  );
+}
+
+const moveBtnStyle: CSSProperties = {
+  minWidth: 44,
+  minHeight: 36,
+  padding: 0,
+  fontSize: 11,
+  color: inkSoft,
+  background: "#ffffff",
+  border: `1px solid ${rule}`,
+  borderRadius: 4,
+  cursor: "pointer",
+  fontFamily: bodyFontStack,
+};
+
+const detailsBtnStyle: CSSProperties = {
+  padding: "2px 8px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: courtBlue,
+  background: "transparent",
+  border: `1px solid ${courtBlue}`,
+  borderRadius: 4,
+  cursor: "pointer",
+  fontFamily: bodyFontStack,
+  minHeight: 24,
+};
+
+// "waits for Womens 2.75+ — 1 shared player" / "courts full until 10:35".
+function planReason(p: Placement, rows: EventRow[]): string | null {
+  const h = p.heldBy;
+  if (!h) return null;
+  const name = (id: string) => rows.find((r) => r.event.id === id)?.event.name ?? "another event";
+  if (h.playerClashes.length > 0) {
+    return `waits for ${h.playerClashes
+      .map((c) => `${name(c.id)} — ${c.shared} shared player${c.shared === 1 ? "" : "s"}`)
+      .join("; ")}`;
+  }
+  return `courts full until ${fmtTime(new Date(p.startMs))} (${h.courtsShort} short at ${fmtTime(new Date(h.atMs))})`;
+}
+
+function fmtCourtRange(courts: number[]): string {
+  if (courts.length === 0) return "—";
+  const sorted = [...courts].sort((a, b) => a - b);
+  const contiguous = sorted.every((c, i) => i === 0 || c === sorted[i - 1] + 1);
+  return contiguous && sorted.length > 1 ? `${sorted[0]}–${sorted[sorted.length - 1]}` : sorted.join(", ");
 }
 
 function Stat({

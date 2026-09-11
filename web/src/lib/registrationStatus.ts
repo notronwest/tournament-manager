@@ -98,3 +98,17 @@ export function regStatusTone(
         : "success";
   }
 }
+
+// How many TEAMS a set of registrations amounts to — the way the roster and
+// is_event_full count: only spot-holding rows; in doubles a confirmed pair is
+// one team and every other spot-holder (seeking / invited / an odd confirmed
+// half) is a team still forming. Singles: one team per player.
+export function teamCountFor(
+  format: string,
+  regs: { status: RegistrationStatus; partner_status: PartnerStatus }[],
+): number {
+  const holding = regs.filter((r) => holdsSpot(r.status));
+  if (format !== "doubles") return holding.length;
+  const confirmed = holding.filter((r) => r.partner_status === "confirmed").length;
+  return Math.floor(confirmed / 2) + (confirmed % 2) + (holding.length - confirmed);
+}

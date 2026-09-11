@@ -202,7 +202,17 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  return jsonResp({ ok: true });
+  // Record the send so the admin pending-invites panel can show "Last sent".
+  // Best-effort: the email is already out, so a failure here must not turn a
+  // successful send into an error for the caller.
+  const sentAt = new Date().toISOString();
+  const { error: stampErr } = await admin
+    .from("partner_invites")
+    .update({ last_sent_at: sentAt })
+    .eq("id", inv.id);
+  if (stampErr) console.error("send-partner-invite: last_sent_at stamp failed", stampErr.message);
+
+  return jsonResp({ ok: true, sentAt });
 });
 
 function jsonResp(body: unknown, status = 200): Response {
