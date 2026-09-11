@@ -4,7 +4,7 @@ import SiteFooter from "../../components/SiteFooter";
 import { supabase } from "../../supabase";
 import {
   compactTierPriceLabel,
-  pickActivePricingTier,
+  deriveRegistrationStatus,
   type PricingTier,
 } from "../../lib/pricingTiers";
 import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
@@ -104,9 +104,12 @@ export default function HomePage() {
       const { data, error: err } = await supabase
         .from("tournaments")
         .select(
-          "id, name, slug, starts_at, ends_at, location_name, location_address, status, organization_id, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at), events (id, min_rating, max_rating, deleted_at)",
+          "id, name, slug, starts_at, ends_at, location_name, location_address, status, organization_id, inter_event_buffer_minutes, registration_opens_at, registration_closes_at, pricing_pattern, description, created_at, updated_at, deleted_at, organizations:organization_id (name, slug), tournament_pricing_tiers (id, sort_order, label, starts_at, ends_at, first_event_fee_cents, additional_event_fee_cents, tournament_id, created_at, updated_at), events (id, min_rating, max_rating, deleted_at)",
         )
-        .eq("status", "published")
+        // A tournament stays listed after registration closes — people
+        // still need to find it (schedule, brackets, directions). Only
+        // drafts, cancelled and completed ones are off the homepage.
+        .in("status", ["published", "closed"])
         .gte("ends_at", todayIso)
         .is("deleted_at", null)
         .is("archived_at", null)
@@ -452,18 +455,22 @@ function TournamentCard({
 
   const dateRange = fmtDateRange(tournament.starts_at, tournament.ends_at);
   const tiers = tournament.tournament_pricing_tiers ?? [];
-  const activeTier = pickActivePricingTier(tiers);
   const priceLabel = compactTierPriceLabel(tiers);
   const stripeColor =
     stripeIdx === 0 ? courtGreen : stripeIdx === 1 ? courtYellow : courtRed;
 
-  // Pill copy — prefer the active tier label (e.g. "Early bird") so
-  // the chip describes *why* this card is interesting. Falls back to
-  // "Registration open" when tiers aren't loaded or the active tier
-  // is unnamed.
-  const pillText = activeTier?.label?.trim()
-    ? activeTier.label
-    : "Registration open";
+  // Pill copy comes from the same registration-status rule the tournament
+  // page uses, so a closed tournament (status 'closed', or published with
+  // its close date passed) reads "Registration Closed" here too, and an
+  // open one names its phase (e.g. "Early Bird Registration Open").
+  const regStatus = deriveRegistrationStatus(tournament, tiers);
+  const pillText = regStatus.label;
+  const pillStyleForTone: CSSProperties =
+    regStatus.tone === "open"
+      ? cardPillStyle
+      : regStatus.tone === "soon"
+        ? { ...cardPillStyle, background: courtYellow, color: ink }
+        : { ...cardPillStyle, background: inkMuted, color: bg };
 
   return (
     <Link
@@ -480,7 +487,7 @@ function TournamentCard({
     >
       <div style={{ ...cardStripeStyle, background: stripeColor }} />
       <div style={cardBodyStyle}>
-        <span style={cardPillStyle}>{pillText}</span>
+        <span style={pillStyleForTone}>{pillText}</span>
         <h3 style={cardH3Style}>{tournament.name}</h3>
         <p
           style={{

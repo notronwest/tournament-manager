@@ -26,6 +26,22 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — HOTFIX 2: closed-registration tournaments vanished from the homepage
+
+Ron: "The tournament should still show even if registration is closed." The homepage grid
+(`pages/public/HomePage.tsx`) listed only `status = 'published'`, so the moment a
+tournament was set to Closed it dropped off bertanderne.com — while its own page, the
+contact page and RLS all already allow `closed`. Now lists `published` + `closed` (still
+not ended, not draft/cancelled/completed), and the card pill uses the shared
+`deriveRegistrationStatus` rule (same as the tournament page) instead of the active tier
+label — so a closed one reads "Registration Closed" (muted), a not-yet-open one
+"Registration Opens Soon", and open ones name their phase. Side effect worth knowing: a
+*published* tournament past its `registration_closes_at` used to show "Registration open"
+on the card; it now correctly says closed. `pricing_pattern` added to the select so the
+phase label resolves. typecheck/build green, 32 tests pass; the 2 HomePage lint errors are
+the pre-existing `{false && (` blocks. Not browser-checked at 390px (no DB from the
+sandbox) — pill text/colour only, layout untouched. Merged + promoted per Ron's ASAP.
+
 ## 2026-09-11 — HOTFIX: Email recipients list short (PB Angels saw 40) — fixed, promoting to PROD
 
 Ron: "email RECIPIENTS for the 5th annual pb angels only shows 40 people." Couldn't
