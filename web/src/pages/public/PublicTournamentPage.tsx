@@ -2055,23 +2055,35 @@ function EventCard({
   const onCancelPending = async () => {
     if (!myStatus?.regId || !me) return;
     setCancelling(true);
-    // Soft-delete the pending reg + cancel any outbound invite for
-    // this event. (If the user paid already and then changes their
-    // mind, that's the manage-page withdraw flow — different path.)
-    // Also serves "leave waitlist": a waitlisted reg is free, so there's
-    // no refund to compute — soft-deleting it removes it from the queue
-    // (promote_from_waitlist filters deleted_at is null; the position gap
-    // it leaves is harmless since promotion orders by position ASC).
-    await supabase
-      .from("event_registrations")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", myStatus.regId);
+    // Soft-delete the pending/waitlisted reg + cancel any outbound invite
+    // for this event. (If the user paid already and then changes their
+    // mind, that's the manage-page withdraw flow — different path.) Also
+    // serves "leave waitlist" for both a free 'waitlisted' queue entry and
+    // a promoted-but-unpaid 'waitlisted_pending_payment' reg. cancel_registration
+    // promotes the next waitlisted player when the removed reg was actually
+    // holding a reserved spot (#771) — a plain 'waitlisted' entry never was.
+    const { data, error: rpcErr } = await supabase.rpc("cancel_registration", {
+      p_reg_id: myStatus.regId,
+    });
+    if (rpcErr) {
+      setFormError(rpcErr.message);
+      setCancelling(false);
+      return;
+    }
     await supabase
       .from("partner_invites")
       .update({ status: "cancelled" })
       .eq("event_id", event.id)
       .eq("inviter_player_id", me.id)
       .eq("status", "pending");
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.promoted_reg_id) {
+      supabase.functions
+        .invoke("send-waitlist-promotion", {
+          body: { regId: row.promoted_reg_id },
+        })
+        .catch(console.error);
+    }
     setCancelling(false);
     await onChanged();
   };
@@ -2172,17 +2184,34 @@ function EventCard({
     // Promoted off the waitlist — a spot is reserved; pay to claim it.
     if (myStatus?.state === "waitlisted_pending_payment") {
       return (
-        <Link
-          to={`/t/${orgSlug}/${tournamentSlug}/checkout`}
-          style={{
-            ...ctaPrimaryStyle,
-            background: courtGreen,
-            textDecoration: "none",
-            whiteSpace: "nowrap",
-          }}
-        >
-          A spot opened — pay to claim →
-        </Link>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Link
+            to={`/t/${orgSlug}/${tournamentSlug}/checkout`}
+            style={{
+              ...ctaPrimaryStyle,
+              background: courtGreen,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            A spot opened — pay to claim →
+          </Link>
+          <button
+            type="button"
+            onClick={() => setConfirmLeaveWaitlist(true)}
+            disabled={cancelling}
+            style={{
+              ...ctaSecondaryStyle,
+              color: dangerFg,
+              boxShadow: `inset 0 0 0 2px ${dangerBg}`,
+              cursor: cancelling ? "not-allowed" : "pointer",
+              whiteSpace: "nowrap",
+              opacity: cancelling ? 0.6 : 1,
+            }}
+          >
+            {cancelling ? "Leaving…" : "Leave waitlist"}
+          </button>
+        </div>
       );
     }
     if (myStatus?.state === "invited" && myStatus.inviteToken) {
@@ -2390,17 +2419,26 @@ function EventCard({
         <ConfirmModal
           title="Leave the waitlist?"
           body={
-            <>
-              You'll lose your place in line for <strong>{event.name}</strong>.
-              {myStatus?.partnerLabel ? (
-                <>
-                  {" "}
-                  Your partner invite to{" "}
-                  <strong>{myStatus.partnerLabel}</strong> will be cancelled.
-                </>
-              ) : null}{" "}
-              You can re-join later, but you'll go to the back of the queue.
-            </>
+            myStatus?.state === "waitlisted_pending_payment" ? (
+              <>
+                Your reserved spot in <strong>{event.name}</strong> will be
+                released to the next waitlisted player. This can't be undone
+                — if you change your mind, you'll go to the back of the
+                queue.
+              </>
+            ) : (
+              <>
+                You'll lose your place in line for <strong>{event.name}</strong>.
+                {myStatus?.partnerLabel ? (
+                  <>
+                    {" "}
+                    Your partner invite to{" "}
+                    <strong>{myStatus.partnerLabel}</strong> will be cancelled.
+                  </>
+                ) : null}{" "}
+                You can re-join later, but you'll go to the back of the queue.
+              </>
+            )
           }
           confirmLabel="Leave waitlist"
           cancelLabel="Stay on waitlist"
