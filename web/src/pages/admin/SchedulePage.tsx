@@ -57,6 +57,7 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
 // lag it, so read it through this widening and write via an untyped client.
 type Event = Database["public"]["Tables"]["events"]["Row"] & {
   schedule_order?: number | null;
+  playoff_seeding?: "overall" | "cross_pool" | null;
 };
 const untyped = supabase as unknown as SupabaseClient;
 
@@ -540,14 +541,17 @@ export default function SchedulePage() {
   // at a time with optimistic local state (the estimate + plan recompute
   // from `events` immediately) and rollback on failure.
   type SetupPatch = Partial<
-    Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds">
+    Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds"> & {
+      playoff_seeding: "overall" | "cross_pool";
+    }
   >;
   const onPatchEvent = async (eventId: string, patch: SetupPatch) => {
     const before = events.find((e) => e.id === eventId);
     if (!before) return;
     setRowErr((m) => ({ ...m, [eventId]: "" }));
     setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, ...patch } : e)));
-    const { error: updErr } = await supabase.from("events").update(patch).eq("id", eventId);
+    // playoff_seeding is newer than the generated types → untyped write.
+    const { error: updErr } = await untyped.from("events").update(patch).eq("id", eventId);
     if (updErr) {
       setEvents((prev) => prev.map((e) => (e.id === eventId ? before : e)));
       setRowErr((m) => ({ ...m, [eventId]: `Couldn't save: ${updErr.message}` }));
@@ -820,26 +824,33 @@ export default function SchedulePage() {
           }}
         >
           <strong style={{ color: ink }}>Auto-schedule plan</strong> — {fmtDuration(planSpanMinutes)} from{" "}
-          {fmtTime(new Date(plan[0].startMs))}, using courts each event can actually keep busy.{" "}
-          {planGroups.length === 0 ? (
-            <>No two events fit side by side with {tournament.locations?.court_count} courts — they run one after another.</>
-          ) : (
-            <>
-              Running together:
-              <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-                {planGroups.map((g, i) => (
-                  <li key={i}>
-                    {g
-                      .map((p) => {
-                        const r = rows.find((x) => x.event.id === p.id);
-                        return r ? `${r.event.name} (${p.courts.length} court${p.courts.length === 1 ? "" : "s"})` : p.id;
-                      })
-                      .join(" + ")}{" "}
-                    · {fmtTime(new Date(Math.min(...g.map((p) => p.startMs))))}–{fmtTime(new Date(Math.max(...g.map((p) => p.endMs))))}
-                  </li>
-                ))}
-              </ul>
-            </>
+          {fmtTime(new Date(plan[0].startMs))}, in the order below, using the courts each event can actually keep busy.
+          <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
+            {rows.map((r) => {
+              const p = plan.find((x) => x.id === r.event.id);
+              if (!p) return null;
+              const alongside = plan.filter((q) => q.id !== p.id && q.startMs < p.endMs && q.endMs > p.startMs);
+              const reason = planReason(p, rows);
+              return (
+                <li key={p.id} style={{ marginBottom: 2 }}>
+                  <strong style={{ color: ink }}>{fmtTime(new Date(p.startMs))}</strong> {r.event.name}
+                  <span style={{ color: inkMuted }}>
+                    {" "}· courts {fmtCourtRange(p.courts)}
+                    {alongside.length > 0 && (
+                      <> · alongside {alongside.map((q) => rows.find((x) => x.event.id === q.id)?.event.name ?? q.id).join(", ")}</>
+                    )}
+                  </span>
+                  {reason && (
+                    <span style={{ marginLeft: 6, padding: "1px 6px", background: warnBg, color: warnFg, borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                      {reason}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {planGroups.length === 0 && (
+            <div style={{ marginTop: 4 }}>No two events fit side by side with {tournament.locations?.court_count} courts and these players — they run one after another.</div>
           )}
         </div>
       )}
@@ -1192,6 +1203,15 @@ export default function SchedulePage() {
                 {openDetails.has(r.event.id) && (
                   <tr style={{ borderBottom: `1px solid ${ruleSoft}` }}>
                     <td colSpan={8} style={{ padding: "0 12px 12px" }}>
+                      {(() => {
+                        const p = plan.find((x) => x.id === r.event.id);
+                        const reason = p ? planReason(p, rows) : null;
+                        return reason ? (
+                          <div style={{ margin: "8px 0", fontSize: 12, color: warnFg }}>
+                            In the auto-schedule plan this event {reason}.
+                          </div>
+                        ) : null;
+                      })()}
                       <SetupPanel
                         row={r}
                         courtCount={courtCount}
@@ -1418,7 +1438,13 @@ function SetupPanel({
   courtCount: number;
   busy: boolean;
   error: string;
-  onPatch: (patch: Partial<Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds">>) => void;
+  onPatch: (
+    patch: Partial<
+      Pick<Event, "pool_count" | "play_each_team_times" | "teams_advancing_to_playoff" | "playoff_rounds"> & {
+        playoff_seeding: "overall" | "cross_pool";
+      }
+    >,
+  ) => void;
   onToggleCourt: (court: number) => void;
 }) {
   const { event } = row;
@@ -1511,6 +1537,21 @@ function SetupPanel({
             ))}
           </select>
         </label>
+        {event.pool_count === 2 && advancing === 4 && rounds === 1 && (
+          <label style={label}>
+            <span>Medal seeding</span>
+            <select
+              value={event.playoff_seeding ?? "overall"}
+              disabled={busy}
+              onChange={(e) => onPatch({ playoff_seeding: e.target.value as "overall" | "cross_pool" })}
+              style={select}
+              title="Cross-pool: Pool 1 winner v Pool 2 winner for gold; the two runners-up for bronze."
+            >
+              <option value="overall">Overall standings (1v2 gold, 3v4 bronze)</option>
+              <option value="cross_pool">Cross-pool (pool winners → gold, runners-up → bronze)</option>
+            </select>
+          </label>
+        )}
         <label style={label}>
           <span>Playoff rounds</span>
           <select
@@ -2170,6 +2211,26 @@ const detailsBtnStyle: CSSProperties = {
   fontFamily: bodyFontStack,
   minHeight: 24,
 };
+
+// "waits for Womens 2.75+ — 1 shared player" / "courts full until 10:35".
+function planReason(p: Placement, rows: EventRow[]): string | null {
+  const h = p.heldBy;
+  if (!h) return null;
+  const name = (id: string) => rows.find((r) => r.event.id === id)?.event.name ?? "another event";
+  if (h.playerClashes.length > 0) {
+    return `waits for ${h.playerClashes
+      .map((c) => `${name(c.id)} — ${c.shared} shared player${c.shared === 1 ? "" : "s"}`)
+      .join("; ")}`;
+  }
+  return `courts full until ${fmtTime(new Date(p.startMs))} (${h.courtsShort} short at ${fmtTime(new Date(h.atMs))})`;
+}
+
+function fmtCourtRange(courts: number[]): string {
+  if (courts.length === 0) return "—";
+  const sorted = [...courts].sort((a, b) => a - b);
+  const contiguous = sorted.every((c, i) => i === 0 || c === sorted[i - 1] + 1);
+  return contiguous && sorted.length > 1 ? `${sorted[0]}–${sorted[sorted.length - 1]}` : sorted.join(", ");
+}
 
 function Stat({
   label,
