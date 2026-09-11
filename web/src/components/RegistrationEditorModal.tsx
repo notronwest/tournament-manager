@@ -29,6 +29,8 @@ import {
   fetchEventRegistrants,
   fetchMoveTargets,
   moveRegistrationToEvent,
+  notifyRegistrationChange,
+  type RegistrationChange,
   type MoveTarget,
   fetchRegPartnerContext,
   pairAndResolveInvites,
@@ -256,7 +258,11 @@ export function RegistrationEditorModal({
         partnerRegId: reg.partnerRegId,
       });
       setMoveConfirm(false);
-      await done();
+      await notifyThenDone({
+        change: "moved",
+        fromEventId: reg.eventId,
+        previousPartnerRegId: reg.partnerRegId,
+      });
     } catch (e) {
       setMoveConfirm(false);
       setMoveError(errMsg(e));
@@ -292,13 +298,39 @@ export function RegistrationEditorModal({
     onClose();
   };
 
+  // Email the people a change affects, then close — unless someone couldn't
+  // be reached, in which case stay open and say so (the change is saved
+  // either way; onChanged has already refreshed the list behind us).
+  const notifyThenDone = async (args: {
+    change: RegistrationChange;
+    fromEventId?: string | null;
+    previousPartnerRegId?: string | null;
+  }) => {
+    await onChanged();
+    try {
+      const res = await notifyRegistrationChange({ registrationId: reg.regId, ...args });
+      if (res.skipped.length > 0) {
+        setError(
+          `Saved. Emailed ${res.emailed.length ? res.emailed.join(", ") : "nobody"}; couldn't email the ${res.skipped
+            .map((s) => `${s.who} (${s.reason})`)
+            .join(", ")}. Let them know another way.`,
+        );
+        return;
+      }
+    } catch (e) {
+      setError(`Saved, but the email didn't go out: ${errMsg(e)}. Let the player know another way.`);
+      return;
+    }
+    onClose();
+  };
+
   const onPairWith = async (c: InviteContact) => {
     if (!c.regId) return;
     setError(null);
     setPairingId(c.inviteId);
     try {
       await pairAndResolveInvites(reg.regId, c.regId, reg.eventId, reg.playerId, c.playerId);
-      await done();
+      await notifyThenDone({ change: "partner_assigned" });
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -337,8 +369,9 @@ export function RegistrationEditorModal({
     setError(null);
     setBusy("unpair");
     try {
-      await unpairRegistration(reg.regId, reg.partnerRegId);
-      await done();
+      const previousPartnerRegId = reg.partnerRegId;
+      await unpairRegistration(reg.regId, previousPartnerRegId);
+      await notifyThenDone({ change: "partner_removed", previousPartnerRegId });
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -374,7 +407,7 @@ export function RegistrationEditorModal({
         ? existing.regId
         : await createPartnerRegistration(reg.eventId, playerId);
       await pairRegistrations(reg.regId, partnerRegId);
-      await done();
+      await notifyThenDone({ change: "partner_assigned" });
     } catch (e) {
       // Surfaces the check_paired_roles_sides trigger message verbatim.
       setError(errMsg(e));

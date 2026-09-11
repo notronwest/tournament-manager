@@ -26,6 +26,18 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Admin change emails UX: registration editor now notifies players (#777 FN merged)
+
+`lib/registrations.notifyRegistrationChange` (invokes notify-registration-change with the
+browser tz) + `RegistrationEditorModal.notifyThenDone`: after **Move to another event**
+(change=moved, fromEventId, previousPartnerRegId), **Pair with** / **Assign partner**
+(partner_assigned) and **Remove partner** (partner_removed, previousPartnerRegId). Best-
+effort by design: the change is saved and the list refreshed BEFORE the email; if the
+function errors or someone has no email, the modal stays open with "Saved, but…" naming
+who wasn't reached; otherwise it closes as before. Settle / Reassign / Withdraw are
+unchanged (out of scope). typecheck/lint/build green. Not exercised against Resend — Ron:
+move a test registration on TEST and check the inbox.
+
 ## 2026-09-11 — BUILDING: email players on admin division / partner changes — [FN] first
 
 Ron: "when an admin updates someone to have a new partner or a new division they should
