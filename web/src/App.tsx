@@ -66,6 +66,7 @@ import TournamentSetupIntakePage from "./pages/public/TournamentSetupIntakePage"
 import AuthConfirmPage from "./pages/public/AuthConfirmPage";
 import SchedulePage from "./pages/admin/SchedulePage";
 import TournamentBriefingPage from "./pages/admin/TournamentBriefingPage";
+import TournamentWaitlistPage from "./pages/admin/TournamentWaitlistPage";
 import OfflineFieldPage from "./pages/admin/tools/OfflineFieldPage";
 import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
@@ -489,6 +490,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/briefing"
           element={<TournamentBriefingPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/waitlist"
+          element={<TournamentWaitlistPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/offline-field"
