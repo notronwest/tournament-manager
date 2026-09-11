@@ -17,9 +17,13 @@ name: Database backup (on demand)
 # private to repository collaborators and expires after RETENTION_DAYS; download
 # it if you need to keep it longer, and treat the file like the database.
 #
-# Restore (worst case, into an EMPTY project): psql "$DB_URL" -f roles.sql
-# -f schema.sql -f data.sql. For a partial fix, open data.sql and copy the
-# rows you need — it is plain SQL.
+# Restore (worst case, into an EMPTY project):
+#   psql "$DB_URL" -f roles.sql -f schema.sql
+#   psql "$DB_URL" -c "set session_replication_role = replica" -f data.sql
+# The second command loads data with FK triggers off — event_registrations
+# references itself (partner_registration_id), so pg_dump warns that a
+# data-only load can fail on ordering otherwise. For a partial fix, open
+# data.sql and copy the rows you need — it is plain SQL (COPY blocks).
 
 on:
   workflow_dispatch:
