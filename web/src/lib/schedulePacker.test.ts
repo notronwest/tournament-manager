@@ -84,12 +84,48 @@ describe("packSchedule", () => {
   });
 });
 
+describe("packSchedule — hold reasons", () => {
+  it("names the event and shared-player count that held an event back", () => {
+    const out = packSchedule(
+      [
+        { id: "womens", order: 1, minutes: 125, courtsNeeded: 3, players: new Set(["sue"]) },
+        { id: "mixed", order: 2, minutes: 80, courtsNeeded: 4, players: new Set(["sue", "tom"]) },
+        { id: "mens", order: 3, minutes: 110, courtsNeeded: 4, players: new Set(["tom2"]) },
+      ],
+      0,
+      15 * 60_000,
+      8,
+    );
+    const mixed = out.find((p) => p.id === "mixed")!;
+    expect(mixed.startMs).toBe(140 * 60_000);
+    expect(mixed.heldBy?.playerClashes).toEqual([{ id: "womens", shared: 1 }]);
+    expect(mixed.heldBy?.courtsShort).toBe(0);
+    const mens = out.find((p) => p.id === "mens")!;
+    expect(mens.startMs).toBe(0);
+    expect(mens.heldBy).toBeNull();
+  });
+
+  it("reports courts short when that is what blocked the earlier slot", () => {
+    const out = packSchedule(
+      [
+        { id: "a", order: 1, minutes: 60, courtsNeeded: 6, players: none },
+        { id: "b", order: 2, minutes: 60, courtsNeeded: 4, players: none },
+      ],
+      0,
+      0,
+      8,
+    );
+    expect(out[1].heldBy?.courtsShort).toBe(2);
+    expect(out[1].heldBy?.playerClashes).toEqual([]);
+  });
+});
+
 describe("parallelGroups", () => {
   it("groups overlapping placements and drops singletons", () => {
     const groups = parallelGroups([
-      { id: "a", startMs: 0, endMs: H, courts: [1] },
-      { id: "b", startMs: 0, endMs: H, courts: [2] },
-      { id: "c", startMs: 2 * H, endMs: 3 * H, courts: [1] },
+      { id: "a", startMs: 0, endMs: H, courts: [1], heldBy: null },
+      { id: "b", startMs: 0, endMs: H, courts: [2], heldBy: null },
+      { id: "c", startMs: 2 * H, endMs: 3 * H, courts: [1], heldBy: null },
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].map((p) => p.id).sort()).toEqual(["a", "b"]);

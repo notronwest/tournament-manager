@@ -20,6 +20,17 @@ export type PackItem = {
   players: ReadonlySet<string>;
 };
 
+// Why an event didn't start at the anchor: what was in the way at the last
+// candidate time we had to skip. `null` when it starts as early as possible.
+export type HoldReason = {
+  // Events whose players overlap this one, with the shared count.
+  playerClashes: { id: string; shared: number }[];
+  // Courts short at that time (0 when players were the only problem).
+  courtsShort: number;
+  // The candidate time that was rejected.
+  atMs: number;
+};
+
 export type Placement = {
   id: string;
   startMs: number;
@@ -27,6 +38,7 @@ export type Placement = {
   // The disjoint slice of court numbers (1-based) this event gets for its
   // window — lowest free courts at that time.
   courts: number[];
+  heldBy: HoldReason | null;
 };
 
 export function packSchedule(
@@ -53,23 +65,29 @@ export function packSchedule(
       .sort((a, b) => a - b);
 
     let chosen: Placement | null = null;
+    let lastRejected: HoldReason | null = null;
     for (const t of candidates) {
       const end = t + durMs;
       const overlapping = placed.filter((p) => p.startMs < end && p.endMs > t);
       const busyCourts = new Set(overlapping.flatMap((p) => p.courts));
-      if (busyCourts.size + need > total) continue;
-      const clash = overlapping.some((p) => {
-        const theirs = playersById.get(p.id);
-        if (!theirs) return false;
-        for (const pl of item.players) if (theirs.has(pl)) return true;
-        return false;
-      });
-      if (clash) continue;
+      const courtsShort = Math.max(0, busyCourts.size + need - total);
+      const playerClashes = overlapping
+        .map((p) => {
+          const theirs = playersById.get(p.id);
+          let shared = 0;
+          if (theirs) for (const pl of item.players) if (theirs.has(pl)) shared++;
+          return { id: p.id, shared };
+        })
+        .filter((c) => c.shared > 0);
+      if (courtsShort > 0 || playerClashes.length > 0) {
+        lastRejected = { playerClashes, courtsShort, atMs: t };
+        continue;
+      }
       const courts: number[] = [];
       for (let c = 1; c <= total && courts.length < need; c++) {
         if (!busyCourts.has(c)) courts.push(c);
       }
-      chosen = { id: item.id, startMs: t, endMs: end, courts };
+      chosen = { id: item.id, startMs: t, endMs: end, courts, heldBy: lastRejected };
       break;
     }
     // Always feasible at the latest end + buffer (nothing overlaps there),
@@ -81,6 +99,7 @@ export function packSchedule(
         startMs: t,
         endMs: t + durMs,
         courts: Array.from({ length: need }, (_, i) => i + 1),
+        heldBy: lastRejected,
       };
     }
     placed.push(chosen);

@@ -820,26 +820,33 @@ export default function SchedulePage() {
           }}
         >
           <strong style={{ color: ink }}>Auto-schedule plan</strong> — {fmtDuration(planSpanMinutes)} from{" "}
-          {fmtTime(new Date(plan[0].startMs))}, using courts each event can actually keep busy.{" "}
-          {planGroups.length === 0 ? (
-            <>No two events fit side by side with {tournament.locations?.court_count} courts — they run one after another.</>
-          ) : (
-            <>
-              Running together:
-              <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
-                {planGroups.map((g, i) => (
-                  <li key={i}>
-                    {g
-                      .map((p) => {
-                        const r = rows.find((x) => x.event.id === p.id);
-                        return r ? `${r.event.name} (${p.courts.length} court${p.courts.length === 1 ? "" : "s"})` : p.id;
-                      })
-                      .join(" + ")}{" "}
-                    · {fmtTime(new Date(Math.min(...g.map((p) => p.startMs))))}–{fmtTime(new Date(Math.max(...g.map((p) => p.endMs))))}
-                  </li>
-                ))}
-              </ul>
-            </>
+          {fmtTime(new Date(plan[0].startMs))}, in the order below, using the courts each event can actually keep busy.
+          <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
+            {rows.map((r) => {
+              const p = plan.find((x) => x.id === r.event.id);
+              if (!p) return null;
+              const alongside = plan.filter((q) => q.id !== p.id && q.startMs < p.endMs && q.endMs > p.startMs);
+              const reason = planReason(p, rows);
+              return (
+                <li key={p.id} style={{ marginBottom: 2 }}>
+                  <strong style={{ color: ink }}>{fmtTime(new Date(p.startMs))}</strong> {r.event.name}
+                  <span style={{ color: inkMuted }}>
+                    {" "}· courts {fmtCourtRange(p.courts)}
+                    {alongside.length > 0 && (
+                      <> · alongside {alongside.map((q) => rows.find((x) => x.event.id === q.id)?.event.name ?? q.id).join(", ")}</>
+                    )}
+                  </span>
+                  {reason && (
+                    <span style={{ marginLeft: 6, padding: "1px 6px", background: warnBg, color: warnFg, borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                      {reason}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {planGroups.length === 0 && (
+            <div style={{ marginTop: 4 }}>No two events fit side by side with {tournament.locations?.court_count} courts and these players — they run one after another.</div>
           )}
         </div>
       )}
@@ -1192,6 +1199,15 @@ export default function SchedulePage() {
                 {openDetails.has(r.event.id) && (
                   <tr style={{ borderBottom: `1px solid ${ruleSoft}` }}>
                     <td colSpan={8} style={{ padding: "0 12px 12px" }}>
+                      {(() => {
+                        const p = plan.find((x) => x.id === r.event.id);
+                        const reason = p ? planReason(p, rows) : null;
+                        return reason ? (
+                          <div style={{ margin: "8px 0", fontSize: 12, color: warnFg }}>
+                            In the auto-schedule plan this event {reason}.
+                          </div>
+                        ) : null;
+                      })()}
                       <SetupPanel
                         row={r}
                         courtCount={courtCount}
@@ -2170,6 +2186,26 @@ const detailsBtnStyle: CSSProperties = {
   fontFamily: bodyFontStack,
   minHeight: 24,
 };
+
+// "waits for Womens 2.75+ — 1 shared player" / "courts full until 10:35".
+function planReason(p: Placement, rows: EventRow[]): string | null {
+  const h = p.heldBy;
+  if (!h) return null;
+  const name = (id: string) => rows.find((r) => r.event.id === id)?.event.name ?? "another event";
+  if (h.playerClashes.length > 0) {
+    return `waits for ${h.playerClashes
+      .map((c) => `${name(c.id)} — ${c.shared} shared player${c.shared === 1 ? "" : "s"}`)
+      .join("; ")}`;
+  }
+  return `courts full until ${fmtTime(new Date(p.startMs))} (${h.courtsShort} short at ${fmtTime(new Date(h.atMs))})`;
+}
+
+function fmtCourtRange(courts: number[]): string {
+  if (courts.length === 0) return "—";
+  const sorted = [...courts].sort((a, b) => a - b);
+  const contiguous = sorted.every((c, i) => i === 0 || c === sorted[i - 1] + 1);
+  return contiguous && sorted.length > 1 ? `${sorted[0]}–${sorted[sorted.length - 1]}` : sorted.join(", ");
+}
 
 function Stat({
   label,
