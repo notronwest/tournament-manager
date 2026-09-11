@@ -42,6 +42,9 @@ export type PendingInvite = {
   inviteeName: string;
   inviteeEmail: string | null;
   createdAt: string;
+  /** Most recent time the invite email went out (initial send or Resend).
+   * Falls back to createdAt for invites that predate the column. */
+  lastSentAt: string;
   /** The inviter's own registration status for this event, e.g. 'paid',
    * 'pending_payment', 'waitlisted', or null if they have no reg row. */
   inviterStatus: string | null;
@@ -81,11 +84,23 @@ export async function fetchPendingPartnerInvites(tournamentId: string): Promise<
 
   const { data: invites, error: iErr } = await supabase
     .from("partner_invites")
-    .select("id, event_id, inviter_player_id, invitee_player_id, invitee_email, created_at")
+    .select("id, event_id, inviter_player_id, invitee_player_id, invitee_email, created_at, last_sent_at")
     .in("event_id", eventIds)
     .eq("status", "pending");
   if (iErr) throw new Error(iErr.message);
-  const rows = invites ?? [];
+  // last_sent_at is newer than the generated types (added by migration
+  // 20260911150000); naming it in the select makes supabase-js type the whole
+  // row as an error, so shape the rows locally. Regenerate types to drop this.
+  type InviteRow = {
+    id: string;
+    event_id: string;
+    inviter_player_id: string;
+    invitee_player_id: string;
+    invitee_email: string | null;
+    created_at: string;
+    last_sent_at: string | null;
+  };
+  const rows = (invites ?? []) as unknown as InviteRow[];
   if (rows.length === 0) return [];
 
   // Names + emails for both parties.
@@ -194,6 +209,7 @@ export async function fetchPendingPartnerInvites(tournamentId: string): Promise<
       inviteeName: nameOf(r.invitee_player_id) || "Unknown",
       inviteeEmail: r.invitee_email,
       createdAt: r.created_at,
+      lastSentAt: r.last_sent_at ?? r.created_at,
       inviterStatus: status,
       inviterPaid: status === "paid",
       resolution,
