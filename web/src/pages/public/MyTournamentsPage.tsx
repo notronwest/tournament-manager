@@ -6,6 +6,11 @@ import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import type { Database } from "../../types/supabase";
 import {
+  regStatusLabel,
+  regStatusTone,
+  type StatusTone as RegTone,
+} from "../../lib/registrationStatus";
+import {
   bg,
   bodyFontStack,
   contentColStyle,
@@ -71,34 +76,28 @@ type RefundRequest = {
   reason: string;
 };
 
+// Label + tone come from the shared lib/registrationStatus helper so this
+// page can never disagree with the roster / admin views again (a waitlisted
+// reg used to fall through to a green "Paid" here). The one local nuance is
+// the refund-requested suffix on a withdrawn reg.
 function statusLabel(reg: EventReg): string {
-  if (reg.status === "cancelled") return "Cancelled";
-  if (reg.status === "withdrawn") {
-    return reg.withdrawal_requested_at
-      ? "Withdrawn · Refund requested"
-      : "Withdrawn";
+  if (reg.status === "withdrawn" && reg.withdrawal_requested_at) {
+    return "Withdrawn · Refund requested";
   }
-  if (reg.status === "refunded") return "Refunded";
-  if (reg.status === "pending_payment") return "Pending payment";
-  if (reg.partner_status === "seeking") return "Paid · Seeking partner";
-  if (reg.partner_status === "pending") return "Paid · Awaiting partner";
-  return "Paid";
+  return regStatusLabel(reg.status, reg.partner_status);
 }
 
 type StatusTone = { color: string; background: string };
 
+const TONE_STYLES: Record<RegTone, StatusTone> = {
+  muted: { color: inkMuted, background: `${inkMuted}18` },
+  warn: { color: warnFg, background: warnBg },
+  info: { color: courtBlue, background: `${courtBlue}18` },
+  success: { color: successFg, background: successBg },
+};
+
 function statusTone(reg: EventReg): StatusTone {
-  if (
-    reg.status === "cancelled" ||
-    reg.status === "withdrawn" ||
-    reg.status === "refunded"
-  )
-    return { color: inkMuted, background: `${inkMuted}18` };
-  if (reg.status === "pending_payment")
-    return { color: warnFg, background: warnBg };
-  if (reg.partner_status === "seeking" || reg.partner_status === "pending")
-    return { color: courtBlue, background: `${courtBlue}18` };
-  return { color: successFg, background: successBg };
+  return TONE_STYLES[regStatusTone(reg.status, reg.partner_status)];
 }
 
 function isWithdrawable(status: RegistrationStatus): boolean {

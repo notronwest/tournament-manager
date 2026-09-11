@@ -48,6 +48,10 @@ type InviteContext = {
   // accepting. Names alone collide in busy tournaments.
   inviter_email: string | null;
   inviter_phone: string | null;
+  // The inviter's live registration status for this event (null if they no
+  // longer hold one). Drives where the invitee lands on accept: a free
+  // 'waitlisted' inviter gets a free 'waitlisted' partner, not a paid spot.
+  inviter_reg_status: Database["public"]["Enums"]["registration_status"] | null;
   event_id: string;
   event_name: string;
   event_format: Database["public"]["Enums"]["event_format"];
@@ -268,6 +272,11 @@ export default function PartnerAcceptPage() {
     //    If they already registered themselves independently, reuse
     //    it; otherwise insert a fresh one with partner_status='solo'
     //    — accept_partner_invite will bump it to 'confirmed'.
+    //    Land next to the inviter: a still-waitlisted (free) inviter gets a
+    //    free waitlisted partner — promote_from_waitlist carries the pair
+    //    over together. A promoted (pay-to-claim) or paid inviter's partner
+    //    takes the reserved spot as pending_payment and pays at checkout.
+    const joinWaitlist = context.inviter_reg_status === "waitlisted";
     const { data: existing } = await supabase
       .from("event_registrations")
       .select("id")
@@ -281,8 +290,8 @@ export default function PartnerAcceptPage() {
         .insert({
           event_id: context.event_id,
           player_id: me.id,
-          event_fee_cents: context.event_fee_cents,
-          status: "pending_payment",
+          event_fee_cents: joinWaitlist ? 0 : context.event_fee_cents,
+          status: joinWaitlist ? "waitlisted" : "pending_payment",
           partner_status: "solo",
         });
       if (insErr) {
@@ -349,8 +358,10 @@ export default function PartnerAcceptPage() {
             <strong>
               {context.inviter_first_name} {context.inviter_last_name}
             </strong>{" "}
-            for <strong>{context.event_name}</strong>. Complete checkout to lock
-            in your spot.
+            for <strong>{context.event_name}</strong>.{" "}
+            {context.inviter_reg_status === "waitlisted"
+              ? "You're on the waitlist together — nothing to pay until a spot opens."
+              : "Complete checkout to lock in your spot."}
           </p>
         </div>
         <div style={whatsNextCard}>
@@ -374,11 +385,19 @@ export default function PartnerAcceptPage() {
               lineHeight: 1.7,
             }}
           >
-            <li>
-              <strong>Complete checkout</strong> to pay and confirm your
-              registration — the banner at the bottom of the tournament page
-              will guide you.
-            </li>
+            {context.inviter_reg_status === "waitlisted" ? (
+              <li>
+                <strong>Watch for a spot to open</strong> — when your team is
+                promoted off the waitlist you'll both be asked to pay to claim
+                it.
+              </li>
+            ) : (
+              <li>
+                <strong>Complete checkout</strong> to pay and confirm your
+                registration — the banner at the bottom of the tournament page
+                will guide you.
+              </li>
+            )}
             <li>Schedule will be posted closer to the event.</li>
             <li>
               You can register for more events in{" "}

@@ -167,7 +167,8 @@ async function handleSucceeded(pi: any) {
 
   // ── Flip the paid registrations ───────────────────────────────────
   // Linked via payment_line_items.event_registration_id. Only flip rows
-  // still pending_payment (idempotent).
+  // still unpaid (idempotent): pending_payment, or waitlisted_pending_payment
+  // for a promoted waitlister paying to claim their reserved spot.
   const { data: lis } = await admin
     .from("payment_line_items")
     .select("event_registration_id")
@@ -179,9 +180,9 @@ async function handleSucceeded(pi: any) {
   if (regIds.length > 0) {
     await admin
       .from("event_registrations")
-      .update({ status: "paid" }) // TODO(Ron): confirm target registration_status value
+      .update({ status: "paid" })
       .in("id", regIds)
-      .eq("status", "pending_payment");
+      .in("status", ["pending_payment", "waitlisted_pending_payment"]);
   }
 
   // ── Redeem coupon (atomic; service_role) ──────────────────────────

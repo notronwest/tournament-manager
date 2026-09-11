@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { LocationPicker } from "../../components/LocationPicker";
 import { ConfirmModal } from "../../components/ConfirmModal";
@@ -290,7 +291,7 @@ export default function TournamentWizardPage() {
           .from("event_registrations")
           .select("id", { count: "exact", head: true })
           .in("event_id", eventIds)
-          .in("status", ["paid", "pending_payment"])
+          .in("status", SPOT_HOLDING_STATUSES)
           .is("deleted_at", null);
         if (cancelled) return;
         setActiveRegCount(count ?? 0);
