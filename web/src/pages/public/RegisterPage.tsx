@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
 import { useAuth } from "../../auth/AuthProvider";
 import {
   emptySelection,
@@ -373,7 +374,7 @@ export default function RegisterPage() {
             // Only ACTIVE regs count as "existing" here. withdraw_self leaves
             // the row in place (status withdrawn/cancelled, deleted_at null),
             // so without this a withdrawn event would reload as "Registered".
-            .in("status", ["paid", "pending_payment"])
+            .in("status", SPOT_HOLDING_STATUSES)
             .is("deleted_at", null),
           supabase
             .from("partner_invites")
