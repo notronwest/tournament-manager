@@ -26,6 +26,20 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — BUILDING: email players on admin division / partner changes — [FN] first
+
+Ron: "when an admin updates someone to have a new partner or a new division they should
+receive an email." Today the registration editor's Move / Assign partner / Remove partner
+are silent. **New [FN] `notify-registration-change`** (this PR): body { registrationId,
+change: moved | partner_assigned | partner_removed, fromEventId?, previousPartnerRegId?,
+timeZone? }. Read-only — the editor does the change, then invokes this to email who's
+affected: moved → the player (old → new division, start time if set, partner situation)
++ the partner they were split from (needs a new partner); partner_assigned → both players;
+partner_removed → both. Players without email are reported as skipped, never an error.
+Org-staff only. Harness (esbuild + stubbed client): all three changes render, recipients
+right, 400 on unknown change, 404 on unknown reg. NEXT: UX PR — hook the three editor
+actions (best-effort: change saves regardless; editor reports if an email didn't go out).
+
 ## 2026-09-11 — PROD DATABASE BACKUP taken before any event merge (#773)
 
 Ron: "make a backup of the database as it stands right now in case the merge goes
