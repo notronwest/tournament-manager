@@ -553,3 +553,47 @@ export async function moveRegistrationToEvent(args: {
   // Surfaces the active-unique violation verbatim if two admins race.
   if (error) throw new Error(error.message);
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Tell the players affected by an ORGANIZER change. The change itself is
+// already saved by the time this runs; the notify-registration-change function
+// only reads state and sends email, so a failure here never undoes anything —
+// callers surface it as "saved, but the email didn't go out".
+// ─────────────────────────────────────────────────────────────────────
+
+export type RegistrationChange = "moved" | "partner_assigned" | "partner_removed";
+
+export type NotifyResult = {
+  emailed: string[];
+  skipped: { who: string; reason: string }[];
+};
+
+export async function notifyRegistrationChange(args: {
+  registrationId: string;
+  change: RegistrationChange;
+  fromEventId?: string | null;
+  previousPartnerRegId?: string | null;
+}): Promise<NotifyResult> {
+  const { data, error } = await supabase.functions.invoke("notify-registration-change", {
+    body: {
+      registrationId: args.registrationId,
+      change: args.change,
+      ...(args.fromEventId ? { fromEventId: args.fromEventId } : {}),
+      ...(args.previousPartnerRegId ? { previousPartnerRegId: args.previousPartnerRegId } : {}),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+  });
+  if (error) {
+    const ctx = (error as { context?: Response })?.context;
+    let detail: string | null = null;
+    if (ctx && typeof ctx.json === "function") {
+      try {
+        detail = ((await ctx.json()) as { error?: string })?.error ?? null;
+      } catch {
+        /* fall through */
+      }
+    }
+    throw new Error(detail ?? (error as { message?: string })?.message ?? "Email failed.");
+  }
+  return (data as NotifyResult) ?? { emailed: [], skipped: [] };
+}
