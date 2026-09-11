@@ -27,6 +27,7 @@ import {
   posthogEvent,
   setPosthogExcluded,
 } from "./posthog";
+import { isOfflineMode } from "./env";
 
 const GA_ID = import.meta.env.VITE_GA_MEASUREMENT_ID as string | undefined;
 const CONSENT_KEY = "wmpc_analytics_consent";
@@ -85,9 +86,11 @@ export function setConsent(value: Consent): void {
 }
 
 // Injects the gtag.js script + bootstraps the dataLayer. Idempotent. Only
-// ever called after consent === "granted".
+// ever called after consent === "granted". Also excluded from the offline
+// build (issue #735: the venue has no Internet, and this is a beacon the
+// director's session would otherwise fail to reach every page load).
 function loadGa(): void {
-  if (loaded || !GA_ID || excluded) return;
+  if (loaded || !GA_ID || excluded || isOfflineMode()) return;
   loaded = true;
 
   const script = document.createElement("script");

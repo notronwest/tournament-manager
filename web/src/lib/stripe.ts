@@ -17,8 +17,15 @@
 // isolated). When the key is missing the promise resolves to null;
 // CheckoutPage/DonatePage detect that and show a configuration message
 // instead of a broken card field.
-
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
+//
+// Imported from "@stripe/stripe-js/pure" (not the default "@stripe/stripe-js")
+// so js.stripe.com is only requested when getStripeForAccount() actually
+// runs — the plain import has a load-on-import side effect that fires the
+// fraud-detection script on every page view, which would breach the offline
+// build's "zero non-localhost requests" bar (issue #735) even on pages that
+// never touch checkout.
+import { loadStripe } from "@stripe/stripe-js/pure";
+import type { Stripe } from "@stripe/stripe-js";
 
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as
   | string

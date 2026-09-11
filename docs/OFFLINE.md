@@ -4,8 +4,9 @@ For running a tournament at a venue with no Internet (see epic
 [#732](https://github.com/notronwest/tournament-manager/issues/732)). This
 doc covers the **runtime** piece — bringing the app + database up locally
 ([#733](https://github.com/notronwest/tournament-manager/issues/733)). Local
-director auth, the asset/network audit, import/export, and print are
-separate cards (#734–#737).
+director auth, the asset/network audit + verification harness, import/export,
+and print were separate cards (#734–#737) — see "Verifying it's actually
+network-clean" below for #735's tools.
 
 ## What this is
 
@@ -61,6 +62,55 @@ without losing anything.
 - As a portable backstop, run `./scripts/offline-backup.sh` periodically
   (e.g. between rounds) — it writes a timestamped `.sql` snapshot to
   `backups/` (gitignored) that you can copy straight to a USB stick.
+
+## Verifying it's actually network-clean (issue #735)
+
+Running offline isn't enough on its own — a stray CDN font, analytics
+beacon, or SDK that still tries to phone home is a hang or a broken page at
+the desk, not an outage anyone notices until it's too late. Two checks:
+
+1. **Bundle grep** — `./scripts/offline-bundle-grep.sh` builds the app in
+   offline mode and greps every JS/CSS file for `http://`/`https://`
+   literals, failing if it finds anything not on its hand-reviewed allowlist
+   (doc-link strings, XML namespace URIs, localhost — never anything the app
+   actually fetches). Run this any time you touch a dependency or an asset
+   before an event.
+2. **Network-down harness** — `web/e2e/offline/network-audit.spec.ts` drives
+   a full mock event (create a tournament + event, seed 4 teams, run the
+   round robin, run the playoff, see medals awarded) while intercepting
+   every request the browser makes and failing if any of them target a host
+   other than `localhost`/`127.0.0.1` — the deterministic equivalent of
+   physically switching Wi-Fi off. Run it against the real offline runtime:
+   ```
+   ./scripts/offline.sh                                   # start it (needs
+                                                            # Docker running)
+   cd web && OFFLINE_BASE_URL=http://localhost:5173 \
+     npm run test:e2e:offline                              # (separate
+                                                            # terminal)
+   ```
+   Adjust `OFFLINE_BASE_URL` if `offline.sh` printed a different port.
+
+Known non-fatal caveats found by the audit, fixed by this card:
+- Google Fonts self-hosted via `@fontsource/*` (was `fonts.googleapis.com`/
+  `fonts.gstatic.com` `<link>`s in `index.html`).
+- `@stripe/stripe-js` switched to its `/pure` entry point so the
+  fraud-detection script only loads if `loadStripe()` is actually called —
+  it never is offline (no `VITE_STRIPE_PUBLISHABLE_KEY` set).
+- GA4/PostHog loaders also explicitly check `isOfflineMode()` now, on top of
+  the existing consent + env-var gating.
+
+Still open, not fixed here (flagged for awareness, not blocking the event):
+- `xlsx`'s package source is a `cdn.sheetjs.com` URL in `package.json` — that
+  resolves at `npm install` time only, never at runtime, so it doesn't touch
+  the network-down bar. Not worth destabilizing a working dependency pin the
+  night before an event.
+- This app has no map/tile library (leaflet/mapbox) anywhere in the
+  codebase — nothing to audit there.
+- The issue's acceptance criteria mentions "consolation/backdraw" rounds;
+  this app's actual bracket model is round-robin pools → a top-N playoff
+  (1 or 2 rounds), with no separate consolation bracket. The harness exercises
+  that real model (round robin, then the playoff round) rather than a feature
+  that doesn't exist.
 
 ## Known judgment calls (unverified — flagged for the Friday dry run)
 
