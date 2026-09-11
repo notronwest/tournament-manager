@@ -26,6 +26,22 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — PROD DATABASE BACKUP taken before any event merge (#773)
+
+Ron: "make a backup of the database as it stands right now in case the merge goes
+haywire." No DB access from the sandbox, so added `.github/workflows/db-backup.yml`
+(workflow_dispatch: target test|prod, retention days) — Supabase CLI `db dump` ×3 (roles,
+schema, data as COPY) with the same secrets migrations.yml uses, gzipped into one artifact.
+GitHub only registers workflows from the default branch, so it merged to main first
+(#773), then ran against PROD: **run 34559402145, artifact `db-backup-PROD-20260911-034148Z`**
+(data.sql 773 KB, schema.sql 225 KB, roles.sql; 200 KB gzipped; expires 2026-10-11).
+Restore notes are in the workflow header — load data.sql with
+`session_replication_role = replica` because event_registrations self-references for
+partners. Also noted: a concurrent session shipped #758/#761/#766 (waitlist pay-to-claim)
+during this one; #766 carried the merge_events migration to PROD, so #769 only shipped the
+page. Merge events (#767/#768) + waitlist view (#757/#759) + briefing (#752/#753) are all
+live on PROD.
+
 ## 2026-09-11 — Merge events UX: `/admin/:org/tournaments/:slug/events/merge` (+ "Merge" link)
 
 [DB] #767 merged → TEST migrate run green (`merge_events` + `merge_events_preview` live on
