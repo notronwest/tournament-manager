@@ -18,9 +18,10 @@ import {
 } from "../../lib/estimator";
 import { SPOT_HOLDING_STATUSES, teamCountFor } from "../../lib/registrationStatus";
 import {
-  courtsNeededFor,
+  medalCourtsNeeded,
   packSchedule,
   parallelGroups,
+  poolCourtsNeeded,
   type Placement,
 } from "../../lib/schedulePacker";
 import { ConfirmModal } from "../../components/ConfirmModal";
@@ -87,14 +88,24 @@ type EventRow = {
   // Teams the plan is based on: registered teams, or max_teams before
   // anyone has signed up.
   planTeams: number;
-  // Courts this event can actually keep busy (pools × floor(teams/2)),
+  // Courts pool play can actually keep busy (pools × floor(teams/2)),
   // capped at the venue. Drives parallel auto-scheduling.
   courtsNeeded: number;
+  // Courts the medal round keeps busy (one per medal match; 0 = no playoff).
+  medalCourtsNeeded: number;
   // Persisted start time on the event, if any. End is computed from
   // start + totalMinutes.
   scheduledStart: Date | null;
   scheduledEnd: Date | null;
+  // The event's two phases as actually placed on courts (when scheduled):
+  // pool play on the lowest `courtsNeeded` of its assigned courts, then the
+  // medal round on the lowest `medalCourtsNeeded` of those. Conflicts and
+  // the calendar work from these, so a bracket only "holds" the courts it
+  // is really using.
+  phases: RowPhase[];
 };
+
+type RowPhase = { kind: "pool" | "medal"; start: Date; end: Date; courts: number[] };
 
 type Overlap =
   | {
@@ -291,16 +302,23 @@ export default function SchedulePage() {
       const { teamsPerPool, pool, medal, totalMinutes } = estimate;
       const planTeams = teamCount >= 2 ? teamCount : Math.max(2, event.max_teams ?? 2);
       const venueCourts = tournament?.locations?.court_count ?? courts;
-      const courtsNeeded = Math.min(
-        Math.max(1, venueCourts),
-        courtsNeededFor(planTeams, event.pool_count, event.teams_advancing_to_playoff),
-      );
+      const courtsNeeded = Math.min(Math.max(1, venueCourts), poolCourtsNeeded(planTeams, event.pool_count));
+      const medalNeed = Math.min(Math.max(1, venueCourts), medalCourtsNeeded(event.teams_advancing_to_playoff));
       const scheduledStart = event.scheduled_start_at
         ? new Date(event.scheduled_start_at)
         : null;
       const scheduledEnd = scheduledStart
         ? new Date(scheduledStart.getTime() + totalMinutes * 60_000)
         : null;
+      const phases: RowPhase[] = [];
+      if (scheduledStart) {
+        const poolEnd = new Date(scheduledStart.getTime() + pool.totalMinutes * 60_000);
+        const poolCourts = courtNumbers.slice(0, Math.max(1, Math.min(courtNumbers.length || 1, courtsNeeded)));
+        phases.push({ kind: "pool", start: scheduledStart, end: poolEnd, courts: poolCourts.length ? poolCourts : [1] });
+        if (medal && medal.totalMinutes > 0) {
+          phases.push({ kind: "medal", start: poolEnd, end: scheduledEnd!, courts: (poolCourts.length ? poolCourts : [1]).slice(0, Math.max(1, medalNeed)) });
+        }
+      }
       return {
         event,
         teamCount,
@@ -314,8 +332,10 @@ export default function SchedulePage() {
         estimate,
         planTeams,
         courtsNeeded,
+        medalCourtsNeeded: medalNeed,
         scheduledStart,
         scheduledEnd,
+        phases,
       };
     });
   }, [events, eventCourts, teamsByEvent, tournament]);
@@ -331,8 +351,10 @@ export default function SchedulePage() {
       rows.map((r, i) => ({
         id: r.event.id,
         order: i,
-        minutes: r.totalMinutes,
-        courtsNeeded: r.courtsNeeded,
+        segments: [
+          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
+          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
+        ],
         players: playersByEvent.get(r.event.id) ?? new Set<string>(),
       })),
       new Date(anchorIso).getTime(),
@@ -381,17 +403,33 @@ export default function SchedulePage() {
         const overlapEnd = Math.min(aEnd, bEnd);
         if (overlapStart >= overlapEnd) continue;
 
-        // Court overlap
-        const aCourts = new Set(a.courtNumbers);
-        const sharedCourts = b.courtNumbers.filter((c) => aCourts.has(c));
-        if (sharedCourts.length > 0) {
+        // Court overlap — per PHASE, so a bracket running on 2 courts only
+        // collides with the next event on those 2 courts, not the whole slice.
+        const courtHits = new Map<number, { start: number; end: number }>();
+        for (const pa of a.phases) {
+          for (const pb of b.phases) {
+            const ws = Math.max(pa.start.getTime(), pb.start.getTime());
+            const we = Math.min(pa.end.getTime(), pb.end.getTime());
+            if (ws >= we) continue;
+            const set = new Set(pa.courts);
+            for (const c of pb.courts) {
+              if (!set.has(c)) continue;
+              const prev = courtHits.get(c);
+              courtHits.set(c, prev ? { start: Math.min(prev.start, ws), end: Math.max(prev.end, we) } : { start: ws, end: we });
+            }
+          }
+        }
+        if (courtHits.size > 0) {
+          const courts = Array.from(courtHits.keys()).sort((x, y) => x - y);
+          const ws = Math.min(...Array.from(courtHits.values()).map((w) => w.start));
+          const we = Math.max(...Array.from(courtHits.values()).map((w) => w.end));
           list.push({
             type: "court",
             a,
             b,
-            courts: sharedCourts,
-            windowStart: new Date(overlapStart),
-            windowEnd: new Date(overlapEnd),
+            courts,
+            windowStart: new Date(ws),
+            windowEnd: new Date(we),
           });
         }
 
@@ -835,7 +873,11 @@ export default function SchedulePage() {
                 <li key={p.id} style={{ marginBottom: 2 }}>
                   <strong style={{ color: ink }}>{fmtTime(new Date(p.startMs))}</strong> {r.event.name}
                   <span style={{ color: inkMuted }}>
-                    {" "}· courts {fmtCourtRange(p.courts)}
+                    {p.segments.map((g) => (
+                      <span key={g.kind}>
+                        {" "}· {g.kind === "pool" ? "pool" : "medal"} {fmtTime(new Date(g.startMs))}–{fmtTime(new Date(g.endMs))} courts {fmtCourtRange(g.courts)}
+                      </span>
+                    ))}
                     {alongside.length > 0 && (
                       <> · alongside {alongside.map((q) => rows.find((x) => x.event.id === q.id)?.event.name ?? q.id).join(", ")}</>
                     )}
@@ -1128,6 +1170,7 @@ export default function SchedulePage() {
                       title={`${r.event.pool_count} pool${r.event.pool_count === 1 ? "" : "s"} × floor(${r.teamsPerPool} teams ÷ 2) matches at once — the most courts this event can keep busy${r.teamCount < 2 ? " (planning on max teams)" : ""}.`}
                     >
                       needs {r.courtsNeeded} of {courtCount}
+                      {r.medalCourtsNeeded > 0 ? ` · medal round ${r.medalCourtsNeeded}` : ""}
                     </div>
                   </td>
                   <td
@@ -1253,8 +1296,10 @@ export default function SchedulePage() {
             5-team pools need 4 courts, not 8. Events whose needs fit within
             the venue run side by side; the next one otherwise starts after
             the previous ends plus the buffer. A player in two events is
-            never double-booked. Auto-schedule also gives each event its
-            own slice of court numbers for its window.
+            never double-booked. The medal round is its own phase on fewer
+            courts (one per medal match), so the next event can start on the
+            courts pool play released while a bracket finishes. Auto-schedule
+            also gives each event its own slice of court numbers.
           </div>
             </>
           )}
@@ -1775,8 +1820,11 @@ function DayTimeline({
   for (let t = minMs; t <= maxMs; t += 3600_000) hourTicks.push(t);
 
   const courts = Array.from({ length: courtCount }, (_, i) => i + 1);
-  const eventsOnCourt = (court: number) =>
-    rows.filter((r) => r.courtNumbers.includes(court));
+  // Blocks are PHASES: pool play on its courts, then the medal round on
+  // the (fewer) courts it actually uses — so a bracket leaves the other
+  // columns free for whatever starts next.
+  const blocksOnCourt = (court: number) =>
+    rows.flatMap((r) => r.phases.filter((ph) => ph.courts.includes(court)).map((ph) => ({ row: r, phase: ph })));
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -1839,7 +1887,7 @@ function DayTimeline({
 
         {/* One column per court */}
         {courts.map((court) => {
-          const events = eventsOnCourt(court);
+          const events = blocksOnCourt(court);
           return (
             <div
               key={court}
@@ -1910,9 +1958,9 @@ function DayTimeline({
                     No events
                   </div>
                 ) : (
-                  events.map((r) => {
-                    const start = r.scheduledStart!.getTime();
-                    const end = r.scheduledEnd!.getTime();
+                  events.map(({ row: r, phase: ph }) => {
+                    const start = ph.start.getTime();
+                    const end = ph.end.getTime();
                     const top = ((start - minMs) / 60_000) * PIXELS_PER_MIN;
                     const height = Math.max(
                       MIN_BLOCK_PX,
@@ -1920,23 +1968,21 @@ function DayTimeline({
                     );
                     const color =
                       colorByEvent.get(r.event.id) ?? EVENT_PALETTE[0];
+                    const isMedal = ph.kind === "medal";
                     return (
                       <div
-                        key={r.event.id}
-                        title={`${r.event.name} — ${fmtRange(
-                          r.scheduledStart!,
-                          r.scheduledEnd!,
-                        )}`}
+                        key={`${r.event.id}-${ph.kind}`}
+                        title={`${r.event.name} — ${isMedal ? "medal round" : "pool play"} ${fmtRange(ph.start, ph.end)}`}
                         style={{
                           position: "absolute",
                           top: top + 2,
                           left: 2,
                           right: 2,
                           height: Math.max(MIN_BLOCK_PX - 4, height - 4),
-                          background: color.bg,
-                          border: `1px solid ${color.border}`,
+                          background: isMedal ? "#ffffff" : color.bg,
+                          border: `${isMedal ? 2 : 1}px ${isMedal ? "dashed" : "solid"} ${color.border}`,
                           borderRadius: 4,
-                          color: "#ffffff",
+                          color: isMedal ? color.border : "#ffffff",
                           padding: "4px 6px",
                           fontSize: 11,
                           fontWeight: 500,
@@ -1954,7 +2000,7 @@ function DayTimeline({
                             textOverflow: "ellipsis",
                           }}
                         >
-                          {r.event.name}
+                          {r.event.name}{isMedal ? " · medals" : ""}
                         </div>
                         <div
                           style={{
@@ -1963,8 +2009,8 @@ function DayTimeline({
                             marginTop: 1,
                           }}
                         >
-                          {fmtTime(r.scheduledStart!)}–
-                          {fmtTime(r.scheduledEnd!)}
+                          {fmtTime(ph.start)}–
+                          {fmtTime(ph.end)}
                         </div>
                       </div>
                     );
