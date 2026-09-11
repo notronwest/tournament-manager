@@ -23,6 +23,7 @@ import {
   parallelGroups,
   poolCourtsNeeded,
   type Placement,
+  type PlacedSegment,
 } from "../../lib/schedulePacker";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -53,6 +54,8 @@ import {
 // joined in on the tournament fetch below.
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
   locations: { court_count: number | null } | null;
+  // Migration 20260911210000 — generated types lag it.
+  schedule_locked_at?: string | null;
 };
 // schedule_order landed in migration 20260911170000; the generated types
 // lag it, so read it through this widening and write via an untyped client.
@@ -367,6 +370,11 @@ export default function SchedulePage() {
     : 0;
   const planGroups = useMemo(() => parallelGroups(plan), [plan]);
   const [confirmAuto, setConfirmAuto] = useState(false);
+  // "Moved 3 later events" after a manual start-time change cascaded.
+  const [cascadeNote, setCascadeNote] = useState<string | null>(null);
+  const locked = !!tournament?.schedule_locked_at;
+  // Everything that edits the schedule is off while busy OR locked.
+  const frozen = busy || locked;
   // Drag-to-reorder (HTML5 DnD; ▲▼ stay for keyboard + touch).
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -667,8 +675,40 @@ export default function SchedulePage() {
     setBufferLocal(String(value));
   };
 
+  const onToggleLock = async () => {
+    if (!tournament) return;
+    setError(null);
+    const next = locked ? null : new Date().toISOString();
+    const { error: updErr } = await untyped
+      .from("tournaments")
+      .update({ schedule_locked_at: next })
+      .eq("id", tournament.id);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setTournament({ ...tournament, schedule_locked_at: next });
+  };
+
+  // A row as a fixed placement for the cascade (its phases → segments).
+  const placementFor = (r: EventRow, startMs: number): Placement => {
+    const poolCourts = r.courtNumbers.slice(0, Math.max(1, Math.min(r.courtNumbers.length || 1, r.courtsNeeded)));
+    const pc = poolCourts.length ? poolCourts : [1];
+    const poolEnd = startMs + r.poolMinutes * 60_000;
+    const segments: PlacedSegment[] = [{ kind: "pool", startMs, endMs: poolEnd, courts: pc }];
+    if (r.medalMinutes > 0) {
+      segments.push({ kind: "medal" as const, startMs: poolEnd, endMs: poolEnd + r.medalMinutes * 60_000, courts: pc.slice(0, Math.max(1, r.medalCourtsNeeded)) });
+    }
+    return { id: r.event.id, startMs, endMs: startMs + r.totalMinutes * 60_000, courts: r.courtNumbers, segments, heldBy: null };
+  };
+
+  // Manual start change. Then CASCADE: every event after this one in run
+  // order is re-placed with the same rules as Auto-schedule, treating this
+  // event and everything before it as fixed. Events that fit alongside stay
+  // alongside; the next non-concurrent one follows at end + buffer.
   const onSetEventStart = async (eventId: string, localValue: string) => {
     setError(null);
+    setCascadeNote(null);
     const iso = localValue ? fromLocalInput(localValue) : null;
     const { error: updErr } = await supabase
       .from("events")
@@ -679,6 +719,77 @@ export default function SchedulePage() {
       return;
     }
     updateLocalEventScheduled(eventId, iso);
+    if (!iso || locked) return;
+
+    const idx = rows.findIndex((r) => r.event.id === eventId);
+    const later = rows.slice(idx + 1);
+    const venueCourts = tournament?.locations?.court_count ?? 0;
+    if (idx < 0 || later.length === 0 || venueCourts < 1) return;
+    const newStartMs = new Date(iso).getTime();
+    const fixed: Placement[] = [];
+    const fixedPlayers = new Map<string, ReadonlySet<string>>();
+    rows.slice(0, idx + 1).forEach((r) => {
+      const startMs = r.event.id === eventId ? newStartMs : r.scheduledStart?.getTime();
+      if (startMs == null) return;
+      fixed.push(placementFor(r, startMs));
+      fixedPlayers.set(r.event.id, playersByEvent.get(r.event.id) ?? new Set<string>());
+    });
+    const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
+    const moved = packSchedule(
+      later.map((r, i) => ({
+        id: r.event.id,
+        order: i,
+        segments: [
+          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
+          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
+        ],
+        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
+      })),
+      newStartMs,
+      bufferMs,
+      venueCourts,
+      fixed,
+      fixedPlayers,
+    );
+    const changed = moved.filter((p) => {
+      const r = later.find((x) => x.event.id === p.id);
+      return !r?.scheduledStart || r.scheduledStart.getTime() !== p.startMs || fmtCourtRange(r.courtNumbers) !== fmtCourtRange(p.courts);
+    });
+    if (changed.length === 0) return;
+    setBusy(true);
+    const results = await Promise.all(
+      changed.map((p) => supabase.from("events").update({ scheduled_start_at: new Date(p.startMs).toISOString() }).eq("id", p.id)),
+    );
+    const firstErr = results.find((r) => r.error)?.error;
+    if (firstErr) {
+      setError(`Start saved, but later events couldn't be moved: ${firstErr.message}`);
+      setBusy(false);
+      return;
+    }
+    const ids = changed.map((p) => p.id);
+    const { error: delErr } = await supabase.from("event_courts").delete().in("event_id", ids);
+    const courtRows = changed.flatMap((p) => p.courts.map((c) => ({ event_id: p.id, court_number: c })));
+    const { error: insErr } = delErr ? { error: delErr } : await supabase.from("event_courts").insert(courtRows);
+    setEvents((prev) =>
+      prev.map((e) => {
+        const p = changed.find((x) => x.id === e.id);
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
+      }),
+    );
+    if (!insErr) {
+      setEventCourts((prev) => [
+        ...prev.filter((ec) => !ids.includes(ec.event_id)),
+        ...(courtRows.map((r) => ({ ...r, created_at: new Date().toISOString() })) as EventCourt[]),
+      ]);
+    } else {
+      setError(`Later events moved, but their courts couldn't be updated: ${insErr.message}`);
+    }
+    setCascadeNote(
+      `Moved ${changed.length} later event${changed.length === 1 ? "" : "s"}: ${changed
+        .map((p) => `${later.find((x) => x.event.id === p.id)?.event.name ?? p.id} → ${fmtTime(new Date(p.startMs))}`)
+        .join(", ")}.`,
+    );
+    setBusy(false);
   };
 
   if (!org) return null;
@@ -803,7 +914,7 @@ export default function SchedulePage() {
           </label>
           <button
             onClick={() => setConfirmAuto(true)}
-            disabled={busy || !anchorLocal}
+            disabled={frozen || !anchorLocal}
             style={{
               padding: "8px 16px",
               background: busy || !anchorLocal ? inkMuted : courtBlue,
@@ -821,7 +932,7 @@ export default function SchedulePage() {
           </button>
           <button
             onClick={onClearSchedule}
-            disabled={busy || !rows.some((r) => r.scheduledStart)}
+            disabled={frozen || !rows.some((r) => r.scheduledStart)}
             style={{
               padding: "8px 16px",
               background: "#ffffff",
@@ -840,6 +951,24 @@ export default function SchedulePage() {
           >
             Clear schedule
           </button>
+          <button
+            onClick={() => void onToggleLock()}
+            disabled={busy}
+            style={{
+              padding: "8px 16px",
+              background: locked ? warnBg : "#ffffff",
+              color: locked ? warnFg : inkSoft,
+              border: `1px solid ${locked ? warnFg : rule}`,
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: busy ? "not-allowed" : "pointer",
+              fontFamily: bodyFontStack,
+            }}
+            title={locked ? "Unlock to change start times, order, courts or setup." : "Freeze the schedule so nothing moves on game day."}
+          >
+            {locked ? "🔒 Unlock schedule" : "🔓 Lock schedule"}
+          </button>
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 11, color: inkMuted }}>
             You can also edit any event's start time directly in the
@@ -848,7 +977,26 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {plan.length > 0 && (
+      {locked && tournament.schedule_locked_at && (
+        <div
+          role="status"
+          style={{ marginTop: 12, padding: "10px 12px", background: warnBg, border: `1px solid ${warnFg}`, borderRadius: 6, fontSize: 13, color: warnFg, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+        >
+          <span>
+            <strong>Schedule locked</strong> {fmtDayHeading(new Date(tournament.schedule_locked_at))} at {fmtTime(new Date(tournament.schedule_locked_at))}. Start times, order, courts and setup can't change until you unlock.
+          </span>
+          <button onClick={() => void onToggleLock()} disabled={busy} style={{ ...detailsBtnStyle, color: warnFg, borderColor: warnFg, minHeight: 36 }}>
+            Unlock
+          </button>
+        </div>
+      )}
+      {cascadeNote && !locked && (
+        <div role="status" style={{ marginTop: 12, padding: "8px 12px", background: cream, border: `1px solid ${rule}`, borderRadius: 6, fontSize: 12, color: inkSoft }}>
+          {cascadeNote}
+        </div>
+      )}
+
+      {plan.length > 0 && !locked && (
         <div
           style={{
             marginTop: 12,
@@ -1013,7 +1161,7 @@ export default function SchedulePage() {
               {rows.map((r) => (
                 <Fragment key={r.event.id}>
                 <tr
-                  draggable={!busy}
+                  draggable={!frozen}
                   onDragStart={(e) => {
                     setDragId(r.event.id);
                     e.dataTransfer.effectAllowed = "move";
@@ -1060,7 +1208,7 @@ export default function SchedulePage() {
                         aria-hidden
                         title="Drag to reorder"
                         style={{
-                          cursor: busy ? "default" : "grab",
+                          cursor: frozen ? "default" : "grab",
                           color: inkMuted,
                           fontSize: 14,
                           lineHeight: 1,
@@ -1088,7 +1236,7 @@ export default function SchedulePage() {
                         <button
                           type="button"
                           onClick={() => void onMove(r.event.id, -1)}
-                          disabled={busy || rows[0]?.event.id === r.event.id}
+                          disabled={frozen || rows[0]?.event.id === r.event.id}
                           aria-label={`Move ${r.event.name} up`}
                           title="Move up (runs earlier)"
                           style={moveBtnStyle}
@@ -1098,7 +1246,7 @@ export default function SchedulePage() {
                         <button
                           type="button"
                           onClick={() => void onMove(r.event.id, 1)}
-                          disabled={busy || rows[rows.length - 1]?.event.id === r.event.id}
+                          disabled={frozen || rows[rows.length - 1]?.event.id === r.event.id}
                           aria-label={`Move ${r.event.name} down`}
                           title="Move down (runs later)"
                           style={moveBtnStyle}
@@ -1163,7 +1311,7 @@ export default function SchedulePage() {
                     <CourtPills
                       total={courtCount}
                       assigned={r.courtNumbers}
-                      onToggle={busy ? undefined : (c) => void onToggleCourt(r.event.id, c)}
+                      onToggle={frozen ? undefined : (c) => void onToggleCourt(r.event.id, c)}
                     />
                     <div
                       style={{ fontSize: 10, color: inkMuted, marginTop: 2 }}
@@ -1223,7 +1371,7 @@ export default function SchedulePage() {
                       onChange={(e) =>
                         void onSetEventStart(r.event.id, e.target.value)
                       }
-                      disabled={busy}
+                      disabled={frozen}
                       style={{
                         padding: "4px 6px",
                         border: `1px solid ${rule}`,
@@ -1258,7 +1406,7 @@ export default function SchedulePage() {
                       <SetupPanel
                         row={r}
                         courtCount={courtCount}
-                        busy={busy}
+                        busy={frozen}
                         error={rowErr[r.event.id] ?? ""}
                         onPatch={(patch) => void onPatchEvent(r.event.id, patch)}
                         onToggleCourt={(c) => void onToggleCourt(r.event.id, c)}

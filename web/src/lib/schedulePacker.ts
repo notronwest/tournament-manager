@@ -56,16 +56,24 @@ export type Placement = {
   heldBy: HoldReason | null;
 };
 
+// `fixed` = placements that must not move (already-scheduled events before
+// the one being edited); they occupy courts and players but are not
+// returned. `fixedPlayers` supplies their rosters for the clash check.
 export function packSchedule(
   items: PackItem[],
   anchorMs: number,
   bufferMs: number,
   courtCount: number,
+  fixed: Placement[] = [],
+  fixedPlayers: Map<string, ReadonlySet<string>> = new Map(),
 ): Placement[] {
   const total = Math.max(1, courtCount);
   const ordered = [...items].sort((a, b) => a.order - b.order);
-  const placed: Placement[] = [];
-  const playersById = new Map(items.map((i) => [i.id, i.players]));
+  const placed: Placement[] = [...fixed];
+  const playersById = new Map<string, ReadonlySet<string>>([
+    ...fixedPlayers,
+    ...items.map((i) => [i.id, i.players] as [string, ReadonlySet<string>]),
+  ]);
 
   // Court numbers busy at time t, from every placed segment.
   const busyAt = (t: number, end: number, except?: string) => {
@@ -159,7 +167,8 @@ export function packSchedule(
     }
     placed.push(chosen);
   }
-  return placed;
+  const fixedIds = new Set(fixed.map((f) => f.id));
+  return placed.filter((p) => !fixedIds.has(p.id));
 }
 
 // Groups of placements that overlap in time — "these run together".
