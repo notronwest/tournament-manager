@@ -26,6 +26,15 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Pairing board: no "Pair with…" without a valid partner (mixed = one man + one woman)
+
+Ron (screenshot): Mixed 2.75-3.25 offered Pair with… for two men. AttendeesPage seekers
+section now filters candidates with `canFormTeam(event, a, b)` — mixed requires M+F, an
+unknown gender can fill either side, other divisions unchanged — and the disabled reason
+says "Needs a woman — none looking" / "Needs a man — none looking" (or the existing "No one
+else is looking"). The PairSeekersModal receives only compatible candidates. typecheck/
+lint/build green.
+
 ## 2026-09-11 — Merge events preview: teams not players; "unpaired players move too" spelled out
 
 Ron (screenshot, mid-merge on PROD): cards read "11 registered · cap 12" — registrations
