@@ -176,14 +176,21 @@ Deno.serve(async (req: Request) => {
     };
 
     // ── 3. Tournament + authorization ───────────────────────────────
-    const { data: t, error: tErr } = await admin
+    // The venue lives in the saved org location (tournaments.location_id →
+    // locations) for every tournament created through the wizard; the
+    // free-text location_name / location_address columns are the legacy
+    // fallback. Read both and prefer the saved location, like the public page.
+    const { data: tRow, error: tErr } = await admin
       .from("tournaments")
-      .select("id, name, slug, organization_id, starts_at, ends_at, location_name, location_address")
+      .select(
+        "id, name, slug, organization_id, starts_at, ends_at, location_name, location_address, locations(name, address, address_line2, city, state, postal_code)",
+      )
       .eq("id", body.tournamentId)
       .is("deleted_at", null)
       .maybeSingle();
     if (tErr) throw new Error(`tournament: ${tErr.message}`);
-    if (!t) return json({ error: "tournament_not_found" }, 404);
+    if (!tRow) return json({ error: "tournament_not_found" }, 404);
+    const t = withVenue(tRow as TournamentRow);
     if (!(await isOrgStaff(admin, t.organization_id, authUserId))) {
       return json({ error: "forbidden_org_staff_only" }, 403);
     }
@@ -429,6 +436,54 @@ Deno.serve(async (req: Request) => {
 const P = `margin:0 0 14px;font-size:15px;color:#4a5159;line-height:1.6;`;
 const H2 = `margin:26px 0 10px;font-size:13px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#14181f;`;
 const LI = `margin:0 0 8px;font-size:15px;color:#4a5159;line-height:1.55;`;
+
+type SavedLocation = {
+  name: string;
+  address: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+};
+
+type TournamentRow = {
+  id: string;
+  name: string;
+  slug: string;
+  organization_id: string;
+  starts_at: string;
+  ends_at: string;
+  location_name: string | null;
+  location_address: string | null;
+  locations: SavedLocation | SavedLocation[] | null;
+};
+
+// "12 Court St, Portsmouth, NH 03801" from the structured columns; mirrors
+// composeLocationAddress on the public tournament page.
+function composeLocationAddress(loc: SavedLocation): string | null {
+  const parts: string[] = [];
+  if (loc.address) parts.push(loc.address);
+  if (loc.address_line2) parts.push(loc.address_line2);
+  const stateZip =
+    loc.state && loc.postal_code ? `${loc.state} ${loc.postal_code}` : (loc.state ?? loc.postal_code ?? null);
+  const cityStateZip = [loc.city, stateZip].filter(Boolean).join(", ");
+  if (cityStateZip) parts.push(cityStateZip);
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+// Resolve the venue once: the saved location wins, the legacy free-text
+// columns are the fallback. Everything downstream keeps reading
+// location_name / location_address.
+function withVenue(t: TournamentRow): Omit<TournamentRow, "locations"> {
+  const { locations, ...rest } = t;
+  const loc = Array.isArray(locations) ? (locations[0] ?? null) : locations;
+  if (!loc) return rest;
+  return {
+    ...rest,
+    location_name: loc.name || rest.location_name,
+    location_address: composeLocationAddress(loc) ?? rest.location_address,
+  };
+}
 
 function renderBriefing(args: {
   rec: Recipient;
