@@ -156,6 +156,21 @@ describe("pool/medal court needs", () => {
   });
 });
 
+describe("packSchedule — cascade around fixed placements", () => {
+  it("places later events after a fixed earlier one and never returns the fixed one", () => {
+    const fixed = packSchedule([one("first", 1, 60, 8)], 0, 0, 8);
+    const out = packSchedule([one("second", 2, 60, 8), one("third", 3, 60, 4)], 0, 15 * 60_000, 8, fixed);
+    expect(out.map((p) => p.id)).toEqual(["second", "third"]);
+    expect(out[0].startMs).toBe(75 * 60_000);
+    expect(out[1].startMs).toBe(150 * 60_000);
+  });
+  it("respects a fixed event's players", () => {
+    const fixed = packSchedule([one("a", 1, 60, 2, new Set(["sue"]))], 0, 0, 8);
+    const out = packSchedule([one("b", 2, 60, 2, new Set(["sue"]))], 0, 0, 8, fixed, new Map([["a", new Set(["sue"])]]));
+    expect(out[0].startMs).toBe(H);
+  });
+});
+
 describe("parallelGroups", () => {
   it("groups overlapping placements and drops singletons", () => {
     const groups = parallelGroups([
