@@ -26,6 +26,23 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Waitlist view PROMOTED → PROD (#760); BUILDING merge events — [DB] first
+
+#757 + #759 promoted via #760 (merge `f725b54`), PROD edge-functions green.
+Ron: "merge two events — move all teams into the same event — and rename it."
+**[DB] `20260911040000_merge_events.sql`** (this PR, schema first per MIGRATIONS.md):
+`merge_events_preview(src, tgt)` (org staff; counts, format/gender/fee match flags, players
+ACTIVE in both = blockers) and `merge_events(src, tgt, new_name)` (org admin; one
+transaction: locks both events, refuses same/different-tournament/format-mismatch/any
+matches/player conflicts; cancels source waitlist rows for players already live in the
+target; appends the rest of the source queue after the target's; moves every non-deleted
+source reg as-is so pairs + payment records stay intact; partner invites follow; source
+event_courts dropped; optional rename; source soft-deleted; returns counts). Both
+SECURITY DEFINER with has_org_role checks, granted to authenticated. Could not run SQL
+locally (no Postgres in the sandbox) — the migrate workflow on merge is the first real run.
+NEXT: UX PR — `/events/merge?source=` page (pick keep/merge-away, preview, blockers,
+rename, ConfirmModal → rpc via the untyped client since types aren't regenerated).
+
 ## 2026-09-11 — Waitlist view UX: `/admin/:org/tournaments/:slug/waitlist` (+ Waitlisted stat)
 
 [FN] offer-waitlist-spot merged (#757). This UX PR adds `pages/admin/TournamentWaitlistPage.tsx`:
