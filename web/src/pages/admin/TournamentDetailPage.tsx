@@ -90,6 +90,7 @@ export default function TournamentDetailPage() {
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [eventCourts, setEventCourts] = useState<EventCourt[]>([]);
   const [totalPlayers, setTotalPlayers] = useState<number | null>(null);
+  const [waitlisted, setWaitlisted] = useState<number>(0);
   const [openChangeRequestCount, setOpenChangeRequestCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +147,7 @@ export default function TournamentDetailPage() {
         .order("created_at", { ascending: true }),
       supabase
         .from("event_registrations")
-        .select("event_id, player_id, events!inner(tournament_id)")
+        .select("event_id, player_id, status, events!inner(tournament_id)")
         .eq("events.tournament_id", tData.id)
         .is("deleted_at", null),
       supabase
@@ -263,6 +264,13 @@ export default function TournamentDetailPage() {
     // Player count: distinct player_id across all event_registrations
     // for this tournament.
     setTotalPlayers(new Set(regs.map((r) => r.player_id)).size);
+    setWaitlisted(
+      new Set(
+        regs
+          .filter((r) => r.status === "waitlisted" || r.status === "waitlisted_pending_payment")
+          .map((r) => r.player_id),
+      ).size,
+    );
 
     const regsByEvent = new Map<string, number>();
     for (const r of regs) {
@@ -745,6 +753,11 @@ export default function TournamentDetailPage() {
           }
         />
         <Stat label="Events" value={events.length} />
+        <Stat
+          label="Waitlisted"
+          value={waitlisted}
+          to={`/admin/${org.slug}/tournaments/${t.slug}/waitlist`}
+        />
         <Stat
           label="Change requests"
           value={
