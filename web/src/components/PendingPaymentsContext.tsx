@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { supabase } from "../supabase";
+import { PAYABLE_STATUSES } from "../lib/registrationStatus";
 import { useAuth } from "../auth/AuthProvider";
 import { computeLineItems } from "../lib/pricing";
 import { pickActivePricingTier, type PricingTier } from "../lib/pricingTiers";
@@ -99,7 +100,7 @@ export function PendingPaymentsProvider({
          )`,
       )
       .eq("player_id", me.id)
-      .eq("status", "pending_payment")
+      .in("status", PAYABLE_STATUSES)
       .is("deleted_at", null);
     if (error || !data) {
       setGroups([]);

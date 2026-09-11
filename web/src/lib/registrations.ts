@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import { SPOT_HOLDING_STATUSES } from "./registrationStatus";
 import type { Database } from "../types/supabase";
 import { checkEligibility } from "./eligibility";
 
@@ -496,7 +497,7 @@ export async function fetchMoveTargets(
         .from("event_registrations")
         .select("event_id")
         .eq("player_id", playerId)
-        .in("status", ["pending_payment", "paid"])
+        .in("status", SPOT_HOLDING_STATUSES)
         .is("deleted_at", null),
     ]);
   if (eErr) throw new Error(eErr.message);
