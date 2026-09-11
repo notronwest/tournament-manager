@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useState,
@@ -9,10 +10,13 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
-  estimateMedalRound,
-  estimatePoolPlay,
+  estimateEvent,
   fmtDuration,
+  poolPlayExplanation,
+  utilizationLabel,
+  type EventEstimate,
 } from "../../lib/estimator";
+import { SPOT_HOLDING_STATUSES, teamCountFor } from "../../lib/registrationStatus";
 import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
 import type { Database } from "../../types/supabase";
 import {
@@ -54,6 +58,8 @@ type EventRow = {
   medalMinutes: number;
   totalMinutes: number;
   poolBindingConstraint: "court" | "team";
+  // Full breakdown for the per-row Details disclosure.
+  estimate: EventEstimate;
   // Persisted start time on the event, if any. End is computed from
   // start + totalMinutes.
   scheduledStart: Date | null;
@@ -170,10 +176,13 @@ export default function SchedulePage() {
           .from("event_courts")
           .select("*, events!inner(tournament_id)")
           .eq("events.tournament_id", t.id),
+        // Spot-holding registrations only (paid / pending / promoted off the
+        // waitlist) — a free waitlister isn't a team to schedule around.
         supabase
           .from("event_registrations")
-          .select("event_id, player_id, events!inner(tournament_id)")
+          .select("event_id, player_id, status, partner_status, events!inner(tournament_id)")
           .eq("events.tournament_id", t.id)
+          .in("status", SPOT_HOLDING_STATUSES)
           .is("deleted_at", null),
       ]);
       if (cancelled) return;
@@ -202,12 +211,25 @@ export default function SchedulePage() {
       // a player registered in two events scheduled at the same time.
       const counts = new Map<string, number>();
       const players = new Map<string, Set<string>>();
-      type RegRow = { event_id: string; player_id: string };
+      type RegRow = {
+        event_id: string;
+        player_id: string;
+        status: Database["public"]["Enums"]["registration_status"];
+        partner_status: Database["public"]["Enums"]["partner_status"];
+      };
+      const regsByEvent = new Map<string, RegRow[]>();
       for (const r of (regsRes.data ?? []) as unknown as RegRow[]) {
-        counts.set(r.event_id, (counts.get(r.event_id) ?? 0) + 1);
+        const list = regsByEvent.get(r.event_id) ?? [];
+        list.push(r);
+        regsByEvent.set(r.event_id, list);
         const set = players.get(r.event_id) ?? new Set<string>();
         set.add(r.player_id);
         players.set(r.event_id, set);
+      }
+      // Teams, not registrations: a confirmed pair is one team; a seeker is
+      // a team still forming (same count the roster + capacity check use).
+      for (const ev of evRes.data ?? []) {
+        counts.set(ev.id, teamCountFor(ev.format, regsByEvent.get(ev.id) ?? []));
       }
       setTeamsByEvent(counts);
       setPlayersByEvent(players);
@@ -226,38 +248,17 @@ export default function SchedulePage() {
       courtsByEvent.set(ec.event_id, arr);
     }
     return events.map((event) => {
-      const regCount = teamsByEvent.get(event.id) ?? 0;
-      const teamCount =
-        event.format === "doubles" ? Math.floor(regCount / 2) : regCount;
-      const teamsPerPool =
-        event.pool_count > 0
-          ? Math.max(2, Math.ceil(teamCount / event.pool_count))
-          : Math.max(2, teamCount);
+      const teamCount = teamsByEvent.get(event.id) ?? 0;
       const courtNumbers = (courtsByEvent.get(event.id) ?? []).sort(
         (a, b) => a - b,
       );
       // Fall back to 1 court when an event hasn't claimed any — the
       // estimate still renders, just pessimistically.
       const courts = Math.max(1, courtNumbers.length);
-
-      const pool = estimatePoolPlay({
-        courts,
-        pools: event.pool_count,
-        teamsPerPool,
-        minutesPerGame: event.pool_minutes_per_game,
-        playEachOpponentTimes: event.play_each_team_times,
-      });
-      const medal =
-        event.teams_advancing_to_playoff > 0
-          ? estimateMedalRound({
-              courts,
-              teamsAdvancing: event.teams_advancing_to_playoff,
-              rounds: (event.playoff_rounds as 1 | 2) ?? 1,
-              format: event.medal_match_format,
-              minutesPerGame: event.medal_minutes_per_game,
-            })
-          : null;
-      const totalMinutes = pool.totalMinutes + (medal?.totalMinutes ?? 0);
+      // One adapter for every view (schedule table, calendar, tournament
+      // event cards) so they can never disagree on an end time.
+      const estimate = estimateEvent(event, teamCount, courts);
+      const { teamsPerPool, pool, medal, totalMinutes } = estimate;
       const scheduledStart = event.scheduled_start_at
         ? new Date(event.scheduled_start_at)
         : null;
@@ -274,11 +275,23 @@ export default function SchedulePage() {
         medalMinutes: medal?.totalMinutes ?? 0,
         totalMinutes,
         poolBindingConstraint: pool.bindingConstraint,
+        estimate,
         scheduledStart,
         scheduledEnd,
       };
     });
   }, [events, eventCourts, teamsByEvent]);
+
+  // Per-row "Details" disclosure — the estimator breakdown that used to live
+  // on the retired stand-alone RR estimator tool.
+  const [openDetails, setOpenDetails] = useState<Set<string>>(new Set());
+  const toggleDetails = (id: string) =>
+    setOpenDetails((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   // Tournament total = longest path through the court graph.
   // Two events that share at least one court can't run fully in
@@ -828,9 +841,9 @@ export default function SchedulePage() {
             </thead>
             <tbody>
               {rows.map((r) => (
+                <Fragment key={r.event.id}>
                 <tr
-                  key={r.event.id}
-                  style={{ borderBottom: `1px solid ${ruleSoft}` }}
+                  style={{ borderBottom: openDetails.has(r.event.id) ? "none" : `1px solid ${ruleSoft}` }}
                 >
                   <td style={tdStyle}>
                     <div
@@ -855,6 +868,17 @@ export default function SchedulePage() {
                         conflicts={overlapsByEventId.get(r.event.id) ?? []}
                         thisEventId={r.event.id}
                       />
+                      {r.teamCount >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleDetails(r.event.id)}
+                          aria-expanded={openDetails.has(r.event.id)}
+                          aria-controls={`estimate-${r.event.id}`}
+                          style={detailsBtnStyle}
+                        >
+                          {openDetails.has(r.event.id) ? "Hide details ▴" : "Details ▾"}
+                        </button>
+                      )}
                     </div>
                     <div
                       style={{ fontSize: 11, color: inkMuted, marginTop: 2 }}
@@ -975,6 +999,14 @@ export default function SchedulePage() {
                     {r.scheduledEnd ? fmtTime(r.scheduledEnd) : "—"}
                   </td>
                 </tr>
+                {openDetails.has(r.event.id) && r.teamCount >= 2 && (
+                  <tr style={{ borderBottom: `1px solid ${ruleSoft}` }}>
+                    <td colSpan={8} style={{ padding: "0 12px 12px" }}>
+                      <EstimateDetails id={`estimate-${r.event.id}`} row={r} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -1699,6 +1731,68 @@ function fmtRange(start: Date, end: Date): string {
   }
   return `${start.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} – ${end.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
 }
+
+// The "why is it this long" breakdown for one event — matches, rounds,
+// games per team, utilization, binding constraint, medal structure.
+function EstimateDetails({ id, row }: { id: string; row: EventRow }) {
+  const { estimate: e, event } = row;
+  const pools = Math.max(1, event.pool_count);
+  return (
+    <div
+      id={id}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+        gap: 8,
+        padding: 12,
+        background: bg,
+        border: `1px solid ${rule}`,
+        borderRadius: 6,
+      }}
+    >
+      <Stat
+        label="Pool-play matches"
+        value={e.pool.totalMatches.toLocaleString()}
+        sub={`${pools} pool${pools === 1 ? "" : "s"} × ${e.pool.matchesPerPool} match${e.pool.matchesPerPool === 1 ? "" : "es"} · ${row.teamsPerPool} teams per pool · ${e.courts} court${e.courts === 1 ? "" : "s"}`}
+      />
+      <Stat
+        label="Pool play"
+        value={fmtDuration(e.pool.totalMinutes)}
+        sub={poolPlayExplanation(e, event)}
+      />
+      <Stat label="Games per team" value={String(e.pool.gamesPerTeam)} sub="Pool play only." />
+      <Stat
+        label="Court utilization"
+        value={`${Math.round(e.pool.utilization * 100)}%`}
+        sub={utilizationLabel(e.pool.utilization)}
+      />
+      {e.medal ? (
+        <Stat label="Medal round" value={fmtDuration(e.medal.totalMinutes)} sub={e.medal.summary} />
+      ) : (
+        <Stat label="Medal round" value="—" sub="No playoff configured for this event." />
+      )}
+      <Stat
+        label="Total"
+        value={fmtDuration(e.totalMinutes)}
+        sub="Pool play + medal round, back-to-back. Minutes per game come from the event settings."
+        emphasize
+      />
+    </div>
+  );
+}
+
+const detailsBtnStyle: CSSProperties = {
+  padding: "2px 8px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: courtBlue,
+  background: "transparent",
+  border: `1px solid ${courtBlue}`,
+  borderRadius: 4,
+  cursor: "pointer",
+  fontFamily: bodyFontStack,
+  minHeight: 24,
+};
 
 function Stat({
   label,
