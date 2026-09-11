@@ -1802,6 +1802,13 @@ export type Database = {
         Args: { p_invite_id: string }
         Returns: undefined
       }
+      cancel_registration: {
+        Args: { p_reg_id: string }
+        Returns: {
+          promoted_player_id: string
+          promoted_reg_id: string
+        }[]
+      }
       compute_checkout_total: {
         Args: { p_player_id: string; p_tournament_id: string }
         Returns: Json
