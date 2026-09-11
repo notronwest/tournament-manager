@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { PAYABLE_STATUSES } from "../../lib/registrationStatus";
 import { useAuth } from "../../auth/AuthProvider";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import HelpButton from "../../components/HelpButton";
@@ -72,7 +73,9 @@ type PendingRow = {
 
 // Checkout page at /t/:orgSlug/:tournamentSlug/checkout.
 //
-// Reads the user's pending_payment registrations for THIS tournament,
+// Reads the user's unpaid registrations (pending_payment, plus
+// waitlisted_pending_payment — a promoted waitlister paying to claim their
+// reserved spot) for THIS tournament,
 // renders them as a review + sticky order summary, and on Pay flips
 // each pending reg → 'paid' (with the computed cents snapshotted)
 // and fires partner-invite emails for doubles regs.
@@ -240,7 +243,7 @@ export default function CheckoutPage() {
          event:events!event_id (id, name, format, event_fee_cents)`,
       )
       .eq("player_id", me.id)
-      .eq("status", "pending_payment")
+      .in("status", PAYABLE_STATUSES)
       .is("deleted_at", null);
     if (regsErr) {
       setError("We couldn't load your registrations. Please refresh and try again.");

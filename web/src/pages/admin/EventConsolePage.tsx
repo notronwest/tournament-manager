@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
@@ -165,10 +166,14 @@ export default function EventConsolePage() {
     setEvent(ev as Event);
 
     const [regsRes, matchesRes] = await Promise.all([
+      // Only spot-holding regs become bracket teams. Without the status
+      // filter withdrawn / cancelled / refunded / free-waitlisted rows were
+      // all counted ("Teams (15 / 12)" on a 12-team event).
       supabase
         .from("event_registrations")
         .select("*")
         .eq("event_id", eventId)
+        .in("status", SPOT_HOLDING_STATUSES)
         .is("deleted_at", null)
         .order("registered_at", { ascending: true }),
       supabase
