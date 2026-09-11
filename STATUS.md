@@ -26,6 +26,21 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Merge events preview: teams not players; "unpaired players move too" spelled out
+
+Ron (screenshot, mid-merge on PROD): cards read "11 registered · cap 12" — registrations
+against a TEAM cap; real state was 6 teams (+1 forming) and 1 team (+1 forming). Fix is
+client-only (no migration): MergeEventsPage now also calls the `event_roster` RPC for both
+events and computes teams the same way the public page / Teams tab do (confirmed pairs ÷ 2 +
+pending inviters + seekers nobody has spoken for), which after the other session's parity
+migration includes promoted-but-unpaid waitlisters. Cards: "N teams (+M forming) · P players
+· limit L teams" (singles: players). A sentence under the cards says everything moves —
+complete teams, unpaired players, pending invites, waitlist — and partners stay paired; the
+ConfirmModal counts teams/forming/players and says "Unpaired players move too". The SQL
+already moved every non-deleted registration; this is presentation. typecheck/lint/build
+green. Note: Ron is actively merging Womens 3.5-4.0+ → 2.75-3.25 on PROD (PROD backup taken
+03:41Z, artifact db-backup-PROD-20260911-034148Z).
+
 ## 2026-09-11 — Pending partner invites: resolution detection, duplicate matching, remove
 
 Ron (with screenshots): the panel listed invites that were done (inviter withdrawn, partner

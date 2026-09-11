@@ -63,6 +63,11 @@ type Preview = {
   conflicts: { player_id: string; name: string }[];
 };
 
+// Team math identical to the public page and the Teams tab: complete teams are
+// confirmed pairs, "forming" is a pending inviter or a seeker nobody has
+// spoken for yet. Singles: one player = one team.
+type TeamCounts = { teams: number; forming: number; players: number };
+
 type MergeResult = {
   target_event_id: string;
   target_name: string;
@@ -112,6 +117,7 @@ export default function MergeEventsPage() {
     error: string | null;
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [teamCounts, setTeamCounts] = useState<{ key: string; bySide: Record<string, TeamCounts> } | null>(null);
 
   const [confirming, setConfirming] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -165,26 +171,44 @@ export default function MergeEventsPage() {
     let cancelled = false;
     (async () => {
       setPreviewLoading(true);
-      const { data, error } = await untyped.rpc("merge_events_preview", {
-        p_source_event_id: src,
-        p_target_event_id: tgt,
-      });
+      const [{ data, error }, rosterRes] = await Promise.all([
+        untyped.rpc("merge_events_preview", { p_source_event_id: src, p_target_event_id: tgt }),
+        supabase.rpc("event_roster", { p_event_ids: [src, tgt] }),
+      ]);
       if (cancelled) return;
       setPreviewState(
         error
           ? { key: pairKey, data: null, error: friendlyError(error.message) }
           : { key: pairKey, data: data as Preview, error: null },
       );
+      const bySide: Record<string, TeamCounts> = {};
+      for (const id of [src, tgt]) {
+        const rows = (rosterRes.data ?? []).filter((r) => r.event_id === id);
+        const fmt = events.find((e) => e.id === id)?.format;
+        if (fmt === "doubles") {
+          const confirmed = rows.filter((r) => r.partner_status === "confirmed").length;
+          const forming =
+            rows.filter((r) => r.partner_status === "pending").length +
+            rows.filter((r) => r.partner_status === "seeking" && r.pending_partner_reg_id === null).length;
+          bySide[id] = { teams: Math.floor(confirmed / 2), forming, players: rows.length };
+        } else {
+          bySide[id] = { teams: rows.length, forming: 0, players: rows.length };
+        }
+      }
+      setTeamCounts({ key: pairKey, bySide });
       setPreviewLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [pairKey]);
+  }, [pairKey, events]);
 
   const preview = previewState && previewState.key === pairKey ? previewState.data : null;
   const previewError = previewState && previewState.key === pairKey ? previewState.error : null;
   const newName = typedName ?? target?.name ?? "";
+  const counts = teamCounts && teamCounts.key === pairKey ? teamCounts.bySide : null;
+  const srcCounts = counts && sourceId ? counts[sourceId] ?? null : null;
+  const tgtCounts = counts && targetId ? counts[targetId] ?? null : null;
 
   const blockers: string[] = [];
   if (preview) {
@@ -318,9 +342,14 @@ export default function MergeEventsPage() {
       {preview && source && target && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginBottom: 16 }}>
-            <SideCard title="Merging away" side={preview.source} />
-            <SideCard title="Keeping" side={preview.target} />
+            <SideCard title="Merging away" side={preview.source} counts={srcCounts} />
+            <SideCard title="Keeping" side={preview.target} counts={tgtCounts} />
           </div>
+          <p style={{ fontSize: 13, color: inkSoft, margin: "-4px 0 16px", lineHeight: 1.5 }}>
+            Everything in {source.name} moves: complete teams, players still looking for a partner,
+            pending partner invites, and anyone on its waitlist (they join the end of {target.name}'s
+            queue). Partners stay paired.
+          </p>
 
           {blockers.length > 0 && (
             <div style={{ ...statusPanelStyle("danger"), marginBottom: 16 }} role="alert">
@@ -387,9 +416,9 @@ export default function MergeEventsPage() {
           destructive
           body={
             <>
-              Move <strong>{preview.source.registrations}</strong> registration{preview.source.registrations === 1 ? "" : "s"}
-              {preview.source.waitlisted > 0 && <> and {preview.source.waitlisted} waitlisted</>} from <strong>{source.name}</strong> into{" "}
-              <strong>{newName.trim() || target.name}</strong>, then remove {source.name}? This can't be undone.
+              Move {srcCounts ? describeCounts(srcCounts, source.format) : `${preview.source.registrations} registration${preview.source.registrations === 1 ? "" : "s"}`}
+              {preview.source.waitlisted > 0 && <> plus {preview.source.waitlisted} on the waitlist</>} from <strong>{source.name}</strong> into{" "}
+              <strong>{newName.trim() || target.name}</strong>, then remove {source.name}? Unpaired players move too. This can't be undone.
             </>
           }
           confirmLabel="Merge now"
@@ -404,7 +433,15 @@ export default function MergeEventsPage() {
   );
 }
 
-function SideCard({ title, side }: { title: string; side: Side }) {
+function describeCounts(c: TeamCounts, format: string): string {
+  if (format !== "doubles") return `${c.players} player${c.players === 1 ? "" : "s"}`;
+  const parts = [`${c.teams} complete team${c.teams === 1 ? "" : "s"}`];
+  if (c.forming > 0) parts.push(`${c.forming} forming`);
+  return `${parts.join(" + ")} (${c.players} player${c.players === 1 ? "" : "s"})`;
+}
+
+function SideCard({ title, side, counts }: { title: string; side: Side; counts: TeamCounts | null }) {
+  const isDoubles = side.format === "doubles";
   return (
     <div style={{ border: `1px solid ${rule}`, borderRadius: 12, padding: 16, background: cream }}>
       <div style={{ ...fieldLabel, marginBottom: 4 }}>{title}</div>
@@ -413,9 +450,27 @@ function SideCard({ title, side }: { title: string; side: Side }) {
         {side.format} · {side.gender} · {fmtMoney(side.fee_cents)}
       </div>
       <div style={{ borderTop: `1px solid ${ruleSoft}`, marginTop: 10, paddingTop: 10, fontSize: 14 }}>
-        <strong>{side.registrations}</strong> registered
+        {counts ? (
+          isDoubles ? (
+            <>
+              <strong>{counts.teams}</strong> team{counts.teams === 1 ? "" : "s"}
+              {counts.forming > 0 && <span style={{ color: "#b45309" }}> (+{counts.forming} forming)</span>}
+              <span style={{ color: inkMuted }}> · {counts.players} player{counts.players === 1 ? "" : "s"}</span>
+            </>
+          ) : (
+            <>
+              <strong>{counts.players}</strong> player{counts.players === 1 ? "" : "s"}
+            </>
+          )
+        ) : (
+          <>
+            <strong>{side.registrations}</strong> registered
+          </>
+        )}
         {side.waitlisted > 0 && <> · <strong>{side.waitlisted}</strong> waitlisted</>}
-        {side.max_teams != null && <span style={{ color: inkMuted }}> · cap {side.max_teams}</span>}
+        {side.max_teams != null && (
+          <span style={{ color: inkMuted }}> · limit {side.max_teams} {isDoubles ? "teams" : "players"}</span>
+        )}
         {side.matches > 0 && <span style={{ color: "#b91c1c" }}> · bracket drawn</span>}
       </div>
     </div>
