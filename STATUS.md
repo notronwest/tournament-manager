@@ -26,6 +26,48 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Admin change emails UX: registration editor now notifies players (#777 FN merged)
+
+`lib/registrations.notifyRegistrationChange` (invokes notify-registration-change with the
+browser tz) + `RegistrationEditorModal.notifyThenDone`: after **Move to another event**
+(change=moved, fromEventId, previousPartnerRegId), **Pair with** / **Assign partner**
+(partner_assigned) and **Remove partner** (partner_removed, previousPartnerRegId). Best-
+effort by design: the change is saved and the list refreshed BEFORE the email; if the
+function errors or someone has no email, the modal stays open with "Saved, but…" naming
+who wasn't reached; otherwise it closes as before. Settle / Reassign / Withdraw are
+unchanged (out of scope). typecheck/lint/build green. Not exercised against Resend — Ron:
+move a test registration on TEST and check the inbox.
+
+## 2026-09-11 — BUILDING: email players on admin division / partner changes — [FN] first
+
+Ron: "when an admin updates someone to have a new partner or a new division they should
+receive an email." Today the registration editor's Move / Assign partner / Remove partner
+are silent. **New [FN] `notify-registration-change`** (this PR): body { registrationId,
+change: moved | partner_assigned | partner_removed, fromEventId?, previousPartnerRegId?,
+timeZone? }. Read-only — the editor does the change, then invokes this to email who's
+affected: moved → the player (old → new division, start time if set, partner situation)
++ the partner they were split from (needs a new partner); partner_assigned → both players;
+partner_removed → both. Players without email are reported as skipped, never an error.
+Org-staff only. Harness (esbuild + stubbed client): all three changes render, recipients
+right, 400 on unknown change, 404 on unknown reg. NEXT: UX PR — hook the three editor
+actions (best-effort: change saves regardless; editor reports if an email didn't go out).
+
+## 2026-09-11 — PROD DATABASE BACKUP taken before any event merge (#773)
+
+Ron: "make a backup of the database as it stands right now in case the merge goes
+haywire." No DB access from the sandbox, so added `.github/workflows/db-backup.yml`
+(workflow_dispatch: target test|prod, retention days) — Supabase CLI `db dump` ×3 (roles,
+schema, data as COPY) with the same secrets migrations.yml uses, gzipped into one artifact.
+GitHub only registers workflows from the default branch, so it merged to main first
+(#773), then ran against PROD: **run 34559402145, artifact `db-backup-PROD-20260911-034148Z`**
+(data.sql 773 KB, schema.sql 225 KB, roles.sql; 200 KB gzipped; expires 2026-10-11).
+Restore notes are in the workflow header — load data.sql with
+`session_replication_role = replica` because event_registrations self-references for
+partners. Also noted: a concurrent session shipped #758/#761/#766 (waitlist pay-to-claim)
+during this one; #766 carried the merge_events migration to PROD, so #769 only shipped the
+page. Merge events (#767/#768) + waitlist view (#757/#759) + briefing (#752/#753) are all
+live on PROD.
+
 ## 2026-09-11 — Merge events UX: `/admin/:org/tournaments/:slug/events/merge` (+ "Merge" link)
 
 [DB] #767 merged → TEST migrate run green (`merge_events` + `merge_events_preview` live on
