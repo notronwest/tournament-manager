@@ -120,6 +120,13 @@ function ComposeTab({
     () => (contacts ?? []).filter((c) => c.email && !c.unsubscribed),
     [contacts],
   );
+  // Why someone on the contact list isn't a recipient — shown so a short list
+  // is explainable rather than mysterious.
+  const noEmailCount = useMemo(() => (contacts ?? []).filter((c) => !c.email).length, [contacts]);
+  const unsubscribedCount = useMemo(
+    () => (contacts ?? []).filter((c) => c.email && c.unsubscribed).length,
+    [contacts],
+  );
 
   const matched = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -207,6 +214,14 @@ function ComposeTab({
                   <span style={{ color: inkMuted }}> · {emailable.length} total emailable</span>
                 )}
                 {excluded.size > 0 && <span style={{ color: inkMuted }}> · {excluded.size} removed</span>}
+                {(noEmailCount > 0 || unsubscribedCount > 0) && (
+                  <div style={{ fontSize: 12, color: inkMuted, marginTop: 4 }}>
+                    Not included:
+                    {noEmailCount > 0 && <> {noEmailCount} contact{noEmailCount === 1 ? "" : "s"} with no email address</>}
+                    {noEmailCount > 0 && unsubscribedCount > 0 && <>,</>}
+                    {unsubscribedCount > 0 && <> {unsubscribedCount} unsubscribed</>}
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 {excluded.size > 0 && (
