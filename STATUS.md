@@ -48,6 +48,17 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Invites after close, UX half: event card keeps a registrant's actions when closed
+
+PublicTournamentPage.EventCard.renderAction: the `if (!registrationOpen) return null` moved
+from the top of the function to just before the Register / Join-waitlist branches. So with
+registration closed, a player who already holds a registration still sees "You're invited",
+"Pay now", "A spot opened — pay to claim", "Leave waitlist", "Cancel Registration" and
+"Manage"; someone with no registration sees nothing (as before). Pairs with the [FN] guard
+change so the checkout those CTAs lead to succeeds on a closed tournament. typecheck/build
+green (node_modules reinstalled for #843's font packages), 56 tests pass; the page's one lint
+error (line 574) is pre-existing.
+
 ## 2026-09-11 — Invites stay acceptable after registration closes — [FN] first, then UX
 
 Ron: "allow people who have been invited to accept the invitation (if it's still valid)
