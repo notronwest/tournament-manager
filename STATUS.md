@@ -26,6 +26,28 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — BUILDING: player briefing email (start times + know-before-you-go) — [FN] first
+
+Ron: set start times per bracket and email every attendee their start times plus
+instructions (waiver, arrive 30 min early, 10-min first-game / 3-min match warm-ups, bring
+water). **Start times already exist**: `events.scheduled_start_at`, set per event on the
+tournament's **Schedule** page (datetime per row, auto-build, clear) — no migration needed.
+**New edge function `send-tournament-briefing`** (this [FN] PR, ships before the UX per
+FUNCTIONS.md): one email per registered player of ONE tournament listing *their* events
+with day + start time (or "to be announced"), partner name, waitlist position, pending-
+payment nudge; "be checked in by {first start − 30 min}"; waiver (link if given, else at
+check-in); check-in; warm-up rules; stay near your court; what to bring; organizer notes;
+Google Maps link; CTA to the public page. Modes: `preview` (returns HTML for the first
+player), `test` (sends the sample to the signed-in organizer), `send` (Resend batch, logged
+to contact_broadcasts/recipients so it shows on Email → History). Service email: goes to
+every active registrant incl. waitlisted and unsubscribed, no unsubscribe link. Times are
+formatted in the IANA zone the caller passes (no tz on record) and the email names it.
+Verified with a Node harness (esbuild bundle + stubbed supabase client): 15/15 content
+checks, 400 without consent, tz fallback, 404 unknown tournament; screenshot at 390px.
+NEXT: UX PR — `/admin/:org/tournaments/:slug/briefing` page (preview iframe, test-send,
+send with ConfirmModal, "events missing a start time" warning) + link on the detail page.
+Then the waitlist view (issue to file).
+
 ## 2026-09-11 — HOTFIX 2: closed-registration tournaments vanished from the homepage
 
 Ron: "The tournament should still show even if registration is closed." The homepage grid
