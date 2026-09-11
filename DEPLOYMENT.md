@@ -97,6 +97,31 @@ fails closed and wedges the pipeline.
 
 Runbook: [`supabase/MIGRATIONS.md`](./supabase/MIGRATIONS.md)
 
+**Per-project prerequisites this workflow can't set up on its own** (each new
+Supabase project — TEST, PROD, or any future one — needs both, once):
+
+- **`pg_net` extension.** Ships available on Supabase (0.20.0) but not
+  auto-created; `20260911220000_install_pg_net_extension.sql` creates it going
+  forward on TEST/PROD, but a brand-new project needs the migration history
+  replayed (or the extension created by hand) before `net.http_post` triggers
+  will work. Confirm with `select extname from pg_extension where
+  extname='pg_net'`. Missing this was silent for months — `handle_user_email_confirmed`
+  and `notify_quote_customer_revision` both swallow the failure into a
+  `RAISE WARNING` rather than an error (issue #785).
+- **`app.settings.supabase_url` database setting.** Read at runtime by the
+  same two triggers to build the edge-function URL they call. This is a
+  one-time **manual** step per project — run by hand in the Supabase SQL
+  editor, not a migration (the value differs per project and `ALTER DATABASE`
+  needs privileges beyond the migration role):
+  ```sql
+  ALTER DATABASE postgres
+    SET "app.settings.supabase_url" = 'https://<project-ref>.supabase.co';
+  ```
+  Confirm with `select current_setting('app.settings.supabase_url', true)`.
+  If unset, the triggers no-op with a `WARNING` instead of failing the
+  transaction — so a missing setting doesn't break signup/quote flows, it
+  just silently drops the notification email.
+
 ### edge-functions — supabase-edge-functions
 
 `.github/workflows/edge-functions.yml`, same branch→target routing and the same

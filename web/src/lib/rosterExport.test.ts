@@ -30,7 +30,7 @@ const invites: PendingInvite[] = [
     inviteId: "i1", eventId: "e1", eventName: "Mixed 3.5",
     inviterPlayerId: "t", inviterRegId: "r4", inviteePlayerId: "d",
     inviterName: "Alan Turing", inviteeName: "Dana Reyes", inviteeEmail: "dana@x.com",
-    createdAt: "2026-08-01T00:00:00Z", inviterStatus: "paid", inviterPaid: true,
+    createdAt: "2026-08-01T00:00:00Z", lastSentAt: "2026-08-01T00:00:00Z", inviterStatus: "paid", inviterPaid: true,
     resolution: { kind: "open" },
   },
 ];

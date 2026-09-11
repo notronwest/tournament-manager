@@ -58,6 +58,7 @@ import PartnerAcceptPage from "./pages/public/PartnerAcceptPage";
 import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import TournamentContactPage from "./pages/public/TournamentContactPage";
+import StartTimesPage from "./pages/public/StartTimesPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
@@ -69,7 +70,6 @@ import TournamentBriefingPage from "./pages/admin/TournamentBriefingPage";
 import TournamentWaitlistPage from "./pages/admin/TournamentWaitlistPage";
 import MergeEventsPage from "./pages/admin/MergeEventsPage";
 import OfflineFieldPage from "./pages/admin/tools/OfflineFieldPage";
-import RoundRobinEstimatorPage from "./pages/admin/tools/RoundRobinEstimatorPage";
 import SeedEventPage from "./pages/admin/tools/SeedEventPage";
 import SeedScenariosPage from "./pages/admin/tools/SeedScenariosPage";
 import TestPlayersPage from "./pages/admin/tools/TestPlayersPage";
@@ -212,6 +212,10 @@ export default function App() {
         }
       />
       {/* Public contact page — anonymous-readable, no auth required. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/start-times"
+        element={<StartTimesPage />}
+      />
       <Route
         path="/t/:orgSlug/:tournamentSlug/contact"
         element={<TournamentContactPage />}
@@ -397,14 +401,6 @@ export default function App() {
         <Route
           path="settings/danger"
           element={<OrgDangerZonePage />}
-        />
-        <Route
-          path="tools/round-robin"
-          element={
-            <RequirePlatformAdmin>
-              <RoundRobinEstimatorPage />
-            </RequirePlatformAdmin>
-          }
         />
         <Route
           path="tools/seed-event"

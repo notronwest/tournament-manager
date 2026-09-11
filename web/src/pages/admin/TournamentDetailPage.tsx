@@ -10,7 +10,8 @@ import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { eligibilityChips } from "../../lib/eligibility";
-import { estimateMedalRound, estimatePoolPlay } from "../../lib/estimator";
+import { estimateEvent } from "../../lib/estimator";
+import { teamCountFor } from "../../lib/registrationStatus";
 import {
   compactTierPriceLabel,
   type PricingTier,
@@ -147,7 +148,7 @@ export default function TournamentDetailPage() {
         .order("created_at", { ascending: true }),
       supabase
         .from("event_registrations")
-        .select("event_id, player_id, status, events!inner(tournament_id)")
+        .select("event_id, player_id, status, partner_status, events!inner(tournament_id)")
         .eq("events.tournament_id", tData.id)
         .is("deleted_at", null),
       supabase
@@ -272,9 +273,11 @@ export default function TournamentDetailPage() {
       ).size,
     );
 
-    const regsByEvent = new Map<string, number>();
+    const regsByEvent = new Map<string, typeof regs>();
     for (const r of regs) {
-      regsByEvent.set(r.event_id, (regsByEvent.get(r.event_id) ?? 0) + 1);
+      const list = regsByEvent.get(r.event_id) ?? [];
+      list.push(r);
+      regsByEvent.set(r.event_id, list);
     }
     const courtsByEvent = new Map<string, number[]>();
     for (const c of courts) {
@@ -284,9 +287,8 @@ export default function TournamentDetailPage() {
     }
 
     const summaries: EventSummary[] = evs.map((event) => {
-      const regCount = regsByEvent.get(event.id) ?? 0;
-      const teamCount =
-        event.format === "doubles" ? Math.floor(regCount / 2) : regCount;
+      // Teams that hold a spot (same count as the roster + Schedule page).
+      const teamCount = teamCountFor(event.format, regsByEvent.get(event.id) ?? []);
       const courtNumbers = (courtsByEvent.get(event.id) ?? []).sort(
         (a, b) => a - b,
       );
@@ -1130,29 +1132,7 @@ function EventCard({
     : null;
   const scheduledEnd = (() => {
     if (!scheduledStart || teamCount < 2) return null;
-    const courtsForEvent = Math.max(1, courtNumbers.length);
-    const teamsPerPool =
-      event.pool_count > 0
-        ? Math.max(2, Math.ceil(teamCount / event.pool_count))
-        : Math.max(2, teamCount);
-    const pool = estimatePoolPlay({
-      courts: courtsForEvent,
-      pools: event.pool_count,
-      teamsPerPool,
-      minutesPerGame: event.pool_minutes_per_game,
-      playEachOpponentTimes: event.play_each_team_times,
-    });
-    const medal =
-      event.teams_advancing_to_playoff > 0
-        ? estimateMedalRound({
-            courts: courtsForEvent,
-            teamsAdvancing: event.teams_advancing_to_playoff,
-            rounds: (event.playoff_rounds as 1 | 2) ?? 1,
-            format: event.medal_match_format,
-            minutesPerGame: event.medal_minutes_per_game,
-          })
-        : null;
-    const totalMinutes = pool.totalMinutes + (medal?.totalMinutes ?? 0);
+    const { totalMinutes } = estimateEvent(event, teamCount, courtNumbers.length);
     return new Date(scheduledStart.getTime() + totalMinutes * 60_000);
   })();
 

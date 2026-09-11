@@ -26,6 +26,44 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Public start times: /t/:org/:slug/start-times page + header button + time on each event card
+
+Ron: "very clear and easy to see link on the tournament home page for start times; a page
+that lists those times; start times on each event." New public `pages/public/StartTimesPage`
+(route `/t/:orgSlug/:tournamentSlug/start-times`, works under the custom domain too):
+events grouped by local day, ordered by time, "Time to be announced" group for unscheduled,
+header band with dates/venue and "arrive 30 minutes before your first start time", note that
+times are the device's zone. PublicTournamentPage: a solid ink/yellow pill button "🕘 Start
+times" in the header action row (44px tap target) ahead of "Contact organizers", and each
+EventCard shows "🕘 Sat, Sep 19 · 9:00 AM" (or "Start time to be announced") under its title.
+Reads `events.scheduled_start_at` set on the admin Schedule page; public RLS already allows
+it. typecheck/build green; the one lint error in PublicTournamentPage (line 574, setState in
+effect) is pre-existing. Not browser-rendered — layout mirrors TournamentContactPage.
+
+## 2026-09-11 — Pairing board: no "Pair with…" without a valid partner (mixed = one man + one woman)
+
+Ron (screenshot): Mixed 2.75-3.25 offered Pair with… for two men. AttendeesPage seekers
+section now filters candidates with `canFormTeam(event, a, b)` — mixed requires M+F, an
+unknown gender can fill either side, other divisions unchanged — and the disabled reason
+says "Needs a woman — none looking" / "Needs a man — none looking" (or the existing "No one
+else is looking"). The PairSeekersModal receives only compatible candidates. typecheck/
+lint/build green.
+
+## 2026-09-11 — Merge events preview: teams not players; "unpaired players move too" spelled out
+
+Ron (screenshot, mid-merge on PROD): cards read "11 registered · cap 12" — registrations
+against a TEAM cap; real state was 6 teams (+1 forming) and 1 team (+1 forming). Fix is
+client-only (no migration): MergeEventsPage now also calls the `event_roster` RPC for both
+events and computes teams the same way the public page / Teams tab do (confirmed pairs ÷ 2 +
+pending inviters + seekers nobody has spoken for), which after the other session's parity
+migration includes promoted-but-unpaid waitlisters. Cards: "N teams (+M forming) · P players
+· limit L teams" (singles: players). A sentence under the cards says everything moves —
+complete teams, unpaired players, pending invites, waitlist — and partners stay paired; the
+ConfirmModal counts teams/forming/players and says "Unpaired players move too". The SQL
+already moved every non-deleted registration; this is presentation. typecheck/lint/build
+green. Note: Ron is actively merging Womens 3.5-4.0+ → 2.75-3.25 on PROD (PROD backup taken
+03:41Z, artifact db-backup-PROD-20260911-034148Z).
+
 ## 2026-09-11 — Pending partner invites: resolution detection, duplicate matching, remove
 
 Ron (with screenshots): the panel listed invites that were done (inviter withdrawn, partner

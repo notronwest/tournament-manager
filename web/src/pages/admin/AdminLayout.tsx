@@ -410,9 +410,6 @@ export default function AdminLayout() {
           {/* Dev/test tools — platform-admin only (not for org admins). */}
           {isPlatformAdmin === true && (
             <>
-              <SideLink to={`/admin/${org.slug}/tools/round-robin`} onNavigate={closeDrawer}>
-                RR estimator
-              </SideLink>
               <SideLink to={`/admin/${org.slug}/tools/seed-event`} onNavigate={closeDrawer}>
                 Seed test data
               </SideLink>
