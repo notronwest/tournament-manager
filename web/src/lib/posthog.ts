@@ -20,6 +20,7 @@
 // trackPageView() / trackEvent().
 
 import type { PostHog } from "posthog-js";
+import { isOfflineMode } from "./env";
 
 const KEY = import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined;
 const HOST =
@@ -44,8 +45,10 @@ export function posthogConfigured(): boolean {
 // Initialise PostHog. Idempotent. Only ever called after consent === "granted".
 // posthog-js is DYNAMICALLY imported here so it ships as a separate chunk loaded
 // only on consent — the main bundle (and visitors who decline) never pay for it.
+// Also excluded from the offline build (issue #735) -- the venue has no
+// Internet, so this dynamic import's fetch would just fail at the desk.
 export async function loadPostHog(): Promise<void> {
-  if (ph || loading || !KEY || excluded) return;
+  if (ph || loading || !KEY || excluded || isOfflineMode()) return;
   loading = true;
 
   const { default: posthog } = await import("posthog-js");

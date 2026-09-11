@@ -5,6 +5,28 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-11 — Builder: offer-waitlist-spot promotes the confirmed partner too (#770), PR #788 open
+
+Built issue #770: offering a waitlist spot to one half of a confirmed doubles
+team only promoted/emailed that one player, leaving the partner stranded
+waitlisted while their teammate went pay-to-claim — the state that stranded
+Tawnya Lopez, PB Angels, 2026-09-10. `supabase/functions/offer-waitlist-spot`
+now mirrors `promote_from_waitlist` (DB, #758): when the offered registration
+has a confirmed partner still `waitlisted`, the partner is promoted to
+`waitlisted_pending_payment` and emailed in the same call; a solo player or a
+partner already paid/pending is unaffected. No migration or UX change needed
+(existing "pay to claim" UI already reads registration status). Single PR,
+`edge-function` label, deploys on merge. Verified via standalone `tsc --strict`
+on the function file (Deno import excluded) + `web/` typecheck/build/lint
+(unaffected, no web files touched).
+
+**Not verified:** against a live doubles waitlist / Resend from the sandbox —
+no edge-function test harness in this repo. The PR's scripted steps are the
+real check.
+
+**Next:** Ron review + merge PR #788, validate on TEST (edge functions deploy
+on merge, no PR preview for server-only changes).
+
 ## 2026-09-09 — Builder: offline field import/export (#736), PR #740 open
 
 Built issue #736 (part of the offline-tournament epic #732): a new "Offline
