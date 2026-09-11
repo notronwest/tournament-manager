@@ -41,7 +41,37 @@ type Tournament = {
   ends_at: string;
   location_name: string | null;
   location_address: string | null;
+  // Saved org venue (tournaments.location_id → locations). Wins over the
+  // legacy free-text columns above, which are empty for wizard-made
+  // tournaments.
+  locations: SavedLocation | SavedLocation[] | null;
 };
+
+type SavedLocation = {
+  name: string;
+  address: string | null;
+  address_line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+};
+
+function composeLocationAddress(loc: SavedLocation): string | null {
+  const parts: string[] = [];
+  if (loc.address) parts.push(loc.address);
+  if (loc.address_line2) parts.push(loc.address_line2);
+  const stateZip =
+    loc.state && loc.postal_code ? `${loc.state} ${loc.postal_code}` : (loc.state ?? loc.postal_code ?? null);
+  const cityStateZip = [loc.city, stateZip].filter(Boolean).join(", ");
+  if (cityStateZip) parts.push(cityStateZip);
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+function venueLine(t: Tournament): string {
+  const loc = Array.isArray(t.locations) ? (t.locations[0] ?? null) : t.locations;
+  if (loc) return [loc.name, composeLocationAddress(loc)].filter(Boolean).join(", ");
+  return [t.location_name, t.location_address].filter(Boolean).join(", ");
+}
 
 export default function StartTimesPage() {
   const { orgSlug, tournamentSlug } = useParams<{ orgSlug: string; tournamentSlug: string }>();
@@ -68,7 +98,9 @@ export default function StartTimesPage() {
       }
       const { data: t, error: tErr } = await supabase
         .from("tournaments")
-        .select("id, name, slug, starts_at, ends_at, location_name, location_address")
+        .select(
+          "id, name, slug, starts_at, ends_at, location_name, location_address, locations(name, address, address_line2, city, state, postal_code)",
+        )
         .eq("organization_id", org.id)
         .eq("slug", tournamentSlug)
         .is("deleted_at", null)
@@ -142,7 +174,7 @@ export default function StartTimesPage() {
   }
 
   const scheduledCount = events.length - groups.tba.length;
-  const where = [tournament.location_name, tournament.location_address].filter(Boolean).join(", ");
+  const where = venueLine(tournament);
 
   return (
     <main style={pageWrapStyle}>
