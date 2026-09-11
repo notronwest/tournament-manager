@@ -26,6 +26,20 @@ tournaments/events from the file.
 **Next:** Ron review + merge PR #740; once #738 (local Postgres runtime)
 lands, do a real offline dry run importing a field file end-to-end.
 
+## 2026-09-11 — Public start times: /t/:org/:slug/start-times page + header button + time on each event card
+
+Ron: "very clear and easy to see link on the tournament home page for start times; a page
+that lists those times; start times on each event." New public `pages/public/StartTimesPage`
+(route `/t/:orgSlug/:tournamentSlug/start-times`, works under the custom domain too):
+events grouped by local day, ordered by time, "Time to be announced" group for unscheduled,
+header band with dates/venue and "arrive 30 minutes before your first start time", note that
+times are the device's zone. PublicTournamentPage: a solid ink/yellow pill button "🕘 Start
+times" in the header action row (44px tap target) ahead of "Contact organizers", and each
+EventCard shows "🕘 Sat, Sep 19 · 9:00 AM" (or "Start time to be announced") under its title.
+Reads `events.scheduled_start_at` set on the admin Schedule page; public RLS already allows
+it. typecheck/build green; the one lint error in PublicTournamentPage (line 574, setState in
+effect) is pre-existing. Not browser-rendered — layout mirrors TournamentContactPage.
+
 ## 2026-09-11 — Pairing board: no "Pair with…" without a valid partner (mixed = one man + one woman)
 
 Ron (screenshot): Mixed 2.75-3.25 offered Pair with… for two men. AttendeesPage seekers
