@@ -40,6 +40,7 @@ import {
 } from "../../lib/checkin";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
+import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
 import { pairRegistrations } from "../../lib/registrations";
 import { BracketView } from "../../components/BracketView";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1682,6 +1683,7 @@ function RoundRobinSection({
                 match={m}
                 index={i + 1}
                 teamByAnyRegId={teamByAnyRegId}
+                event={event}
                 onSaved={onChange}
               />
             ))}
@@ -1741,11 +1743,13 @@ function MatchRow({
   match,
   index,
   teamByAnyRegId,
+  event,
   onSaved,
 }: {
   match: Match;
   index: number;
   teamByAnyRegId: Map<string, Team>;
+  event: Event;
   onSaved: () => Promise<void>;
 }) {
   const teamA = match.team_a_reg_id
@@ -1771,16 +1775,17 @@ function MatchRow({
     setErr(null);
     const a = scoreA === "" ? null : parseInt(scoreA, 10);
     const b = scoreB === "" ? null : parseInt(scoreB, 10);
-    if (a === null || b === null || Number.isNaN(a) || Number.isNaN(b)) {
+    if (a === null || b === null) {
       setErr("Both scores required.");
       return;
     }
-    if (a < 0 || b < 0) {
-      setErr("Scores can't be negative.");
-      return;
-    }
-    if (a === b) {
-      setErr("Scores can't be tied.");
+    // Same rule check as the court cards (reach the target, win by the
+    // margin) — round-robin resolves the target from the event, playoff
+    // matches from their own row config. No modal here: this is a dense
+    // admin grid that also edits/clears finished scores inline.
+    const result = validateScore(a, b, resolveScoreRules(match, event));
+    if (!result.ok) {
+      setErr(result.error);
       return;
     }
     setBusy(true);
@@ -2413,6 +2418,7 @@ function PlayoffSection({
                         match={m}
                         index={i + 1}
                         teamByAnyRegId={teamByAnyRegId}
+                        event={event}
                         onSaved={onChange}
                       />
                     ))}
