@@ -1060,3 +1060,22 @@ compose the address the way the public tournament page does (`composeLocationAdd
 the legacy columns stay as the fallback. Briefing harness (stubbed client) confirms the
 intro "at <venue>" line, the "Where" block and the Maps link with the composed address.
 web typecheck + lint + FN tsc clean. Ships as one PR (function + page are independent).
+
+## 2026-09-11 — Pool distribution/reassignment locked once games exist (data-integrity guard)
+
+Redistributing pools rewrites each team's `pool_index`, but generated matches already
+reference those teams and their pool assignment — so re-pooling (or moving one team's pool)
+*after* games are created corrupts the bracket/standings. In `EventConsolePage.tsx`
+`TeamsSection`: `distributePools` now early-returns with an error when `hasMatches` and routes
+its writes through a new pure `planPoolDistribution()` (in `poolDistribution.ts`) that returns an
+empty plan whenever games exist; both pool buttons get `|| hasMatches` on `disabled` + a
+"Locked — reset all matches first" title. Applied the **same guard to the per-team Pool
+dropdown** (`onSetPool`) — same corruption vector — blocking the handler and disabling the
+`<select>`. Seed drag-reorder left unguarded on purpose (matches key off registration ids, not
+seeds; reseeding is reversible/cosmetic). Extracted `snakePoolIndex`+planner and added
+`poolDistribution.test.ts` (7 cases, headline = no-op when matches exist). typecheck clean,
+vitest 7/7; no CI runs eslint/tsc/vitest on web (Pages builds `vite build` only). Productized
+just this guard out of a larger mixed local diff on the offline laptop — partner-B add / playoff
+preview / H2H tiebreak already have their own branches. Shipped in PR #875 (Closes #876),
+squash-merged to `main` → **TEST**. **Next:** validate on test.bertanderne.com, then promote to
+PROD via a `main`→`production` PR.
