@@ -636,26 +636,32 @@ function CourtCard({
           }}
         >
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min="0"
+            pattern="[0-9]*"
             value={scoreA}
-            onChange={(e) => setScoreA(e.target.value)}
+            onChange={(e) => setScoreA(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
             disabled={busy}
             style={bigScoreInput}
-            placeholder="A"
+            aria-label={`${teamLabel(assigned.team_a_reg_id)} score`}
             autoFocus
           />
           <span style={{ color: inkMuted, fontSize: 18 }}>–</span>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min="0"
+            pattern="[0-9]*"
             value={scoreB}
-            onChange={(e) => setScoreB(e.target.value)}
+            onChange={(e) => setScoreB(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
             disabled={busy}
             style={bigScoreInput}
-            placeholder="B"
+            aria-label={`${teamLabel(assigned.team_b_reg_id)} score`}
           />
         </div>
 
