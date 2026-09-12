@@ -8,6 +8,11 @@ director auth, the asset/network audit + verification harness, import/export,
 and print were separate cards (#734–#737) — see "Verifying it's actually
 network-clean" below for #735's tools.
 
+**Running an actual event?** This doc is the technical reference — for the
+step-by-step checklist to follow before and during a tournament, see
+[`docs/runbooks/TOURNAMENT-PREP.md`](./runbooks/TOURNAMENT-PREP.md) and
+[`docs/runbooks/TOURNAMENT-DAY.md`](./runbooks/TOURNAMENT-DAY.md).
+
 ## What this is
 
 The app is Supabase-native — hosted Postgres, Auth, and API. Offline mode
