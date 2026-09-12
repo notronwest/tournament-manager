@@ -13,6 +13,10 @@ import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
+  planPoolDistribution,
+  type PoolPattern,
+} from "./poolDistribution";
+import {
   PlayerPicker,
   emptySelection,
   persistPlayerSelection,
@@ -894,6 +898,15 @@ function TeamsSection({
 
   const onSetPool = async (team: Team, poolIndex: number | null) => {
     setError(null);
+    // Same corruption vector as distributePools: matches reference each team's
+    // pool assignment, so moving a team between pools after games exist strands
+    // its generated matches. Reset all matches first.
+    if (hasMatches) {
+      setError(
+        "Games are already created — reset all matches before changing a team's pool.",
+      );
+      return;
+    }
     const ids = [team.captainRegId];
     if (team.partnerRegId) ids.push(team.partnerRegId);
     const { error: updErr } = await supabase
@@ -979,30 +992,36 @@ function TeamsSection({
   //
   // Unseeded teams sort last (1e9 sentinel) and continue whichever
   // pattern was chosen.
-  type PoolPattern = "alternate" | "snake";
-
   const distributePools = async (pattern: PoolPattern) => {
     setError(null);
     if (event.pool_count < 2) return;
+    // Pools can't be redistributed once games exist — the matches reference
+    // these teams and their pool assignment, so re-pooling would corrupt the
+    // bracket. Clear matches first (Reset all matches).
+    if (hasMatches) {
+      setError(
+        "Games are already created — reset all matches before redistributing pools.",
+      );
+      return;
+    }
     setBusy(true);
-    const sorted = teams
-      .slice()
-      .sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
+    // planPoolDistribution owns the seeded ordering AND the once-games-exist
+    // lock, so it returns an empty plan (no writes) if hasMatches is ever true.
+    const plan = planPoolDistribution({
+      teams,
+      poolCount: event.pool_count,
+      pattern,
+      hasMatches,
+    });
 
     // Parallel UPDATEs — same pattern as persistOrder. Partial-failure
     // semantics still TODO via a transactional RPC.
-    const writes = sorted.map((team, i) => {
-      const ids = [team.captainRegId];
-      if (team.partnerRegId) ids.push(team.partnerRegId);
-      const poolIndex =
-        pattern === "alternate"
-          ? (i % event.pool_count) + 1
-          : snakePoolIndex(i, event.pool_count);
-      return supabase
+    const writes = plan.map(({ ids, poolIndex }) =>
+      supabase
         .from("event_registrations")
         .update({ pool_index: poolIndex })
-        .in("id", ids);
-    });
+        .in("id", ids),
+    );
     const results = await Promise.all(writes);
     const firstErr = results.find((r) => r.error)?.error;
     if (firstErr) {
@@ -1046,17 +1065,29 @@ function TeamsSection({
               <>
                 <button
                   onClick={() => distributePools("alternate")}
-                  disabled={busy || savingOrder || teams.length === 0}
+                  disabled={
+                    busy || savingOrder || teams.length === 0 || hasMatches
+                  }
                   style={tinyPrimaryBtn}
-                  title="Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, seed 3 → pool 1, etc."
+                  title={
+                    hasMatches
+                      ? "Locked — games already created. Reset all matches first to redistribute pools."
+                      : "Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, seed 3 → pool 1, etc."
+                  }
                 >
                   Distribute: alternate
                 </button>
                 <button
                   onClick={() => distributePools("snake")}
-                  disabled={busy || savingOrder || teams.length === 0}
+                  disabled={
+                    busy || savingOrder || teams.length === 0 || hasMatches
+                  }
                   style={tinySecondaryBtn}
-                  title="Snake-draft teams for competitive balance: 1,2,2,1,1,2,2,1. Keeps the average seed equal across pools."
+                  title={
+                    hasMatches
+                      ? "Locked — games already created. Reset all matches first to redistribute pools."
+                      : "Snake-draft teams for competitive balance: 1,2,2,1,1,2,2,1. Keeps the average seed equal across pools."
+                  }
                 >
                   Snake draft
                 </button>
@@ -1274,6 +1305,12 @@ function TeamsSection({
                           <td style={tdStyle}>
                             <select
                               value={team.poolIndex ?? ""}
+                              disabled={hasMatches}
+                              title={
+                                hasMatches
+                                  ? "Locked — games already created. Reset all matches first to change pools."
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 onSetPool(
                                   team,
@@ -2334,13 +2371,6 @@ function buildTeams(regs: EventRegistration[], players: Player[]): Team[] {
 // Snake-draft pool index for the i-th team across `poolCount` pools.
 // Pattern for 2 pools: 1,2,2,1,1,2,2,1; for 3 pools: 1,2,3,3,2,1,1,2,3.
 // Returns a 1-based pool index.
-function snakePoolIndex(i: number, poolCount: number): number {
-  const round = Math.floor(i / poolCount);
-  const within = i % poolCount;
-  const idx = round % 2 === 0 ? within : poolCount - 1 - within;
-  return idx + 1;
-}
-
 function computeStandings(teams: Team[], rrMatches: Match[]): Standing[] {
   const byCap = new Map<string, Standing>();
   for (const t of teams) {
