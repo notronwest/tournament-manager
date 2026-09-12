@@ -29,7 +29,14 @@ type Team = {
   partnerRegId: string | null;
   player1: string;
   player2: string | null;
+  poolIndex: number | null;
 };
+
+// Pool labels are A, B, C … (1-based pool_index) to match the rest of the UI.
+function poolLetter(index: number | null | undefined): string | null {
+  if (index == null) return null;
+  return String.fromCharCode("A".charCodeAt(0) + index - 1);
+}
 
 // Printable scorecards: one card per match, three cards per US-Letter
 // page. Layout matches the standard pickleball scorecard (1 game to 11
@@ -264,6 +271,13 @@ export default function ScorecardsPage() {
               teamB={
                 m.team_b_reg_id ? teamByAnyRegId.get(m.team_b_reg_id) : null
               }
+              // Show the pool on multi-pool events so a stack of round-robin
+              // scorecards can be sorted/handed out by pool.
+              pool={
+                event.pool_count > 1 && m.stage === "round_robin" && m.team_a_reg_id
+                  ? poolLetter(teamByAnyRegId.get(m.team_a_reg_id)?.poolIndex)
+                  : null
+              }
               // Per-match config wins when set (playoff matches get
               // their format/points/win-by copied from event.medal_*
               // at generation time, then can be edited per-match in
@@ -288,6 +302,7 @@ export default function ScorecardsPage() {
 
 function Scorecard({
   matchLabel,
+  pool,
   teamA,
   teamB,
   pointsToWin,
@@ -297,6 +312,7 @@ function Scorecard({
 }: {
   match: Match;
   matchLabel: string;
+  pool: string | null;
   teamA: Team | null | undefined;
   teamB: Team | null | undefined;
   pointsToWin: number;
@@ -316,6 +332,12 @@ function Scorecard({
       <div className="scorecard-meta">
         <div>
           <strong>Match:</strong> {matchLabel}
+          {pool ? (
+            <>
+              {" "}
+              &middot; <strong>Pool {pool}</strong>
+            </>
+          ) : null}
         </div>
         <div>
           <strong>Court:</strong>
@@ -432,6 +454,7 @@ function buildTeamLookup(
       partnerRegId: partnerReg?.id ?? null,
       player1: `${captain.first_name} ${captain.last_name}`,
       player2: partner ? `${partner.first_name} ${partner.last_name}` : null,
+      poolIndex: captainReg.pool_index,
     };
     lookup.set(captainReg.id, team);
     if (partnerReg) lookup.set(partnerReg.id, team);
