@@ -5,6 +5,34 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-11 — Playoff bracket PREVIEW before generating (#869 open)
+
+Productized the playoff-preview prototype Ron built + verified live on his
+offline laptop during the PB Angels dry run. "Generate playoff bracket" (Event
+Console → Playoff) now opens a `ConfirmModal` preview instead of generating
+immediately: final standings (top-N highlighted + ✓), "Advancing to the
+playoff" with per-qualifier reasons (overall rank+record, or pool finish for
+cross-pool), and "Proposed matchups" with seed numbers + Gold/Silver·Bronze/4th·
+Semifinal labels. Confirm runs the existing `onGenerate` unchanged; "Go back"
+cancels. Seed selection + first-round pairing extracted to
+`web/src/lib/playoffSeeding.ts` and used by BOTH preview and generation so they
+can't drift; unit test `playoffSeeding.test.ts` added (9 cases). Reproduced
+cleanly off `main` — the laptop prototype was mixed with unrelated uncommitted
+changes (TeamsSection partner logic, CourtManager pages, seed.sql), left out.
+
+**Bug found + fixed while extracting:** the prototype preview filtered pools
+`poolIndex === 0/1`, but pools are stored 1-indexed (pool 1 = A, pool 2 = B) —
+what `onGenerate` already assumed. Cross-pool preview would have shown "not
+enough teams." Shared helper is correct for both. The dry run used *overall*
+seeding, so this path was never exercised live.
+
+Verified: `tsc -b` clean, unit suite 65/65, new files lint-clean (2 pre-existing
+`set-state-in-effect` eslint errors on `main` untouched).
+
+**Next:** Ron review + merge #869 → TEST; validate (esp. a real cross-pool
+event, which the dry run didn't cover), then promote `main`→`production`. Glance
+at the PR preview deploy too (separate env-var scope).
+
 ## 2026-09-11 — Builder: offer-waitlist-spot promotes the confirmed partner too (#770), PR #788 open
 
 Built issue #770: offering a waitlist spot to one half of a confirmed doubles
