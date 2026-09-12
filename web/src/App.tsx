@@ -41,6 +41,7 @@ import TournamentWizardPage from "./pages/admin/TournamentWizardPage";
 import EventConsolePage from "./pages/admin/EventConsolePage";
 import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
+import PoolSheetsPage from "./pages/admin/PoolSheetsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
 import DonatePage from "./pages/public/DonatePage";
@@ -523,6 +524,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/events/:eventId/scorecards"
           element={<ScorecardsPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId/pool-sheets"
+          element={<PoolSheetsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/events/:eventId/pair-teams"

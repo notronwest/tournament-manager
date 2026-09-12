@@ -471,6 +471,24 @@ export default function EventConsolePage() {
                 Pair teams
               </Link>
             )}
+            {teams.length > 0 && (
+              <Link
+                to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/pool-sheets`}
+                style={{
+                  padding: "8px 16px",
+                  background: "#ffffff",
+                  color: courtBlue,
+                  textDecoration: "none",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  border: `1px solid ${courtBlue}`,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Print pool sheets
+              </Link>
+            )}
             {matches.length > 0 && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/scorecards`}
