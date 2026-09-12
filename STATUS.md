@@ -5,6 +5,46 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-11 — Offline runtime hardened: fresh machine goes offline with one clean command (epic #732)
+
+Fixed the two blockers hit live tonight setting up Ron's tournament laptop, so
+a fresh checkout runs `bash scripts/offline.sh` and comes up clean with **no
+manual config edits**:
+
+1. **Missing web deps.** `scripts/offline.sh` now installs `web/node_modules`
+   before launching Vite (`ensure_web_deps` → `npm ci`, guarded by a
+   lockfile-hash stamp so reruns at the venue are instant and never needlessly
+   wipe deps). A checkout predating the self-hosted `@fontsource/*` fonts
+   (#735/#843) used to die at Vite import time — no longer.
+2. **Inbucket port bug.** `[inbucket] enabled = false` is now committed in
+   `supabase/config.toml` (with a comment explaining why). The pinned Supabase
+   CLI (v2.105.0) can't publish inbucket's port and aborts the whole
+   `supabase start`; this app never uses the local dev inbox, so it's off for
+   good — CLI-version-independent, no venue-side edit. (Tonight's live
+   workaround was the same toggle, uncommitted, on the shared `main` checkout.)
+
+New verification harness (#735): `scripts/offline-verify.sh` runs the whole
+check in one command — bundle grep + clean-checkout `npm ci` + real
+`supabase start` via `offline.sh` + **first-paint with the network simulated
+down** (new `web/e2e/offline/first-paint.spec.ts`, non-destructive). `--full`
+also runs the existing full mock-event `network-audit.spec.ts` (which writes to
+the local DB — don't use against a live event). Docs updated: `docs/OFFLINE.md`
+(one-time setup now just "run offline.sh once online"; new harness section) and
+`DEPLOYMENT.md` ("Does NOT deploy" now lists the offline tooling). `.gitignore`
+now covers `supabase/.branches/` and `web/test-results/`.
+
+**Verified:** clean-checkout `npm ci` + `build:offline` (fonts resolve, no
+import error); `ensure_web_deps` stamp idempotency (install → instant no-op →
+reinstall on drift); `offline-verify.sh` green end-to-end against the running
+local stack (bundle grep, npm ci, runtime up on :5174, first-paint offline);
+`typecheck` + `eslint` clean. **Not verified against a fully fresh
+`supabase start`** — the local stack is a singleton by `project_id` and was up
+for tonight's live setup, so I didn't cycle it; the running stack already has
+inbucket disabled and came up clean (no `:54324` container), which is the same
+committed config. Run `scripts/offline-verify.sh --full` on a clean clone at
+the Friday dry-run to close that gap.
+
+**Branch:** `fix/offline-runtime-hardening` (worktree) → PR.
 ## 2026-09-14 — SYNCED Pickleball Angels results from the offline laptop DB → PROD (+ session recap 09-10→09-14)
 
 **Sync (today).** Sat Sep 12 ran on the offline stack; PROD had 0 matches. Started Docker +
