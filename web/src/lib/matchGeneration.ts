@@ -1,4 +1,5 @@
 import type { Database } from "../types/supabase";
+import { buildSingleElimBracket } from "./playoffBracket";
 
 // Match-generation is the source of bug #993: the round-robin and playoff
 // generate paths INSERTed a fresh set of rows without first clearing the
@@ -132,9 +133,12 @@ export interface PlayoffSeedTeam {
 // Builds the playoff match rows from the already-seeded `top` teams.
 // R=1: pairwise medal matches (seed1 v seed2), (seed3 v seed4), … — one
 // row per pair, each carrying medalConfig.
-// R=2 (N=4): two semis (1v4, 2v3) carrying semiConfig, plus round-2 gold +
-// bronze placeholders (empty slots, filled by feedForwardPlayoffWinners)
-// carrying medalConfig.
+// R>=2: a single-elimination bracket from playoffBracket.buildSingleElimBracket
+// (Top-4 → 2 rounds: semis → final + bronze; Top-6/8 → 3 rounds: play-in/
+// quarters → semis → final + bronze). Seeding, byes, and bronze routing live
+// in playoffBracket.ts; here each 1-based seed maps to a team reg id, byes /
+// downstream placeholders stay empty (filled by feedForwardPlayoffWinners),
+// the final round carries medalConfig and earlier rounds semiConfig.
 export function buildPlayoffRows(
   event: PlayoffEvent,
   top: PlayoffSeedTeam[],
@@ -167,46 +171,20 @@ export function buildPlayoffRows(
       });
     }
   } else {
-    rows.push({
-      event_id: event.id,
-      stage: "playoff",
-      round: 1,
-      position: 0,
-      team_a_reg_id: top[0].captainRegId,
-      team_b_reg_id: top[3].captainRegId,
-      status: "pending",
-      ...semiConfig,
-    });
-    rows.push({
-      event_id: event.id,
-      stage: "playoff",
-      round: 1,
-      position: 1,
-      team_a_reg_id: top[1].captainRegId,
-      team_b_reg_id: top[2].captainRegId,
-      status: "pending",
-      ...semiConfig,
-    });
-    rows.push({
-      event_id: event.id,
-      stage: "playoff",
-      round: 2,
-      position: 0,
-      team_a_reg_id: null,
-      team_b_reg_id: null,
-      status: "pending",
-      ...medalConfig,
-    });
-    rows.push({
-      event_id: event.id,
-      stage: "playoff",
-      round: 2,
-      position: 1,
-      team_a_reg_id: null,
-      team_b_reg_id: null,
-      status: "pending",
-      ...medalConfig,
-    });
+    const seedReg = (seed: number | null) =>
+      seed == null ? null : top[seed - 1].captainRegId;
+    for (const b of buildSingleElimBracket(top.length)) {
+      rows.push({
+        event_id: event.id,
+        stage: "playoff",
+        round: b.round,
+        position: b.position,
+        team_a_reg_id: seedReg(b.seedA),
+        team_b_reg_id: seedReg(b.seedB),
+        status: "pending",
+        ...(b.round === event.playoff_rounds ? medalConfig : semiConfig),
+      });
+    }
   }
   return rows;
 }
