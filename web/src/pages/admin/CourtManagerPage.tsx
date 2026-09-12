@@ -660,6 +660,7 @@ function CourtCard({
             pattern="[0-9]*"
             value={scoreA}
             onChange={(e) => setScoreA(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
             disabled={busy}
             style={bigScoreInput}
             aria-label={`${teamLabel(assigned.team_a_reg_id)} score`}
@@ -672,6 +673,7 @@ function CourtCard({
             pattern="[0-9]*"
             value={scoreB}
             onChange={(e) => setScoreB(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
             disabled={busy}
             style={bigScoreInput}
             aria-label={`${teamLabel(assigned.team_b_reg_id)} score`}
