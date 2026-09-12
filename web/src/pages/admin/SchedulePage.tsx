@@ -25,6 +25,7 @@ import {
   type Placement,
   type PlacedSegment,
 } from "../../lib/schedulePacker";
+import { bracketRoundsForN } from "../../lib/playoffBracket";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { SchedulePrintModal } from "../../components/SchedulePrintModal";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1582,13 +1583,16 @@ function SetupPanel({
   const advancingOptions = [0, 2, 4, 6, 8, 10, 12, 16].filter((n) => n === 0 || n <= Math.max(teams, advancing));
   if (!advancingOptions.includes(advancing)) advancingOptions.push(advancing);
   advancingOptions.sort((a, b) => a - b);
+  const bracketR = bracketRoundsForN(advancing);
   const warning =
     advancing === 0
       ? null
       : rounds === 1 && advancing % 2 !== 0
         ? "Single-round playoffs need an even Top-N (pairs play for each medal slot)."
-        : rounds === 2 && advancing !== 4
-          ? "2-round playoffs (semis + final + bronze) support Top-4 only."
+        : rounds >= 2 && bracketR !== rounds
+          ? bracketR == null
+            ? `A single-elimination bracket isn't supported for Top-${advancing} — use 1 round (pairwise), or set Top-4/6/8.`
+            : `Top-${advancing} is a ${bracketR}-round bracket — pick ${bracketR} rounds (or 1 round for pairwise).`
           : null;
   const label: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft };
   const select: CSSProperties = {
@@ -1651,8 +1655,15 @@ function SetupPanel({
             disabled={busy}
             onChange={(e) => {
               const n = parseInt(e.target.value, 10);
-              // Leaving top-4 makes a 2-round bracket invalid — drop to 1 round.
-              onPatch(n !== 4 && rounds === 2 ? { teams_advancing_to_playoff: n, playoff_rounds: 1 } : { teams_advancing_to_playoff: n });
+              // Bracket round count follows from N (Top-4 → 2, Top-6/8 → 3).
+              // When already in a bracket, re-derive it for the new N; if the
+              // new N can't form a bracket, fall back to pairwise (1 round).
+              if (rounds >= 2) {
+                const bR = bracketRoundsForN(n);
+                onPatch({ teams_advancing_to_playoff: n, playoff_rounds: bR ?? 1 });
+              } else {
+                onPatch({ teams_advancing_to_playoff: n });
+              }
             }}
             style={select}
           >
@@ -1685,11 +1696,14 @@ function SetupPanel({
             disabled={busy || advancing === 0}
             onChange={(e) => onPatch({ playoff_rounds: parseInt(e.target.value, 10) })}
             style={select}
-            title={advancing !== 4 ? "2 rounds (semis + final + bronze) is available for Top-4 only." : undefined}
+            title="1 round pairs seeds for each medal. A single-elim bracket needs Top-4 (2 rounds) or Top-6/8 (3 rounds)."
           >
             <option value={1}>1 round (pairwise medal matches)</option>
             <option value={2} disabled={advancing !== 4}>
-              2 rounds (semis + final + bronze){advancing !== 4 ? " — Top-4 only" : ""}
+              2 rounds — bracket (semifinals → final + bronze){advancing !== 4 ? " — Top-4" : ""}
+            </option>
+            <option value={3} disabled={bracketR !== 3}>
+              3 rounds — bracket ({advancing === 6 ? "play-in" : "quarterfinals"} → semis → final + bronze){bracketR !== 3 ? " — Top-6/8" : ""}
             </option>
           </select>
         </label>

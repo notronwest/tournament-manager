@@ -7,6 +7,8 @@
 // win / win-by (Ron, 2026-09-11). The primitive functions take numbers +
 // enums so they unit-test cleanly; estimateEvent adapts an events row.
 
+import { bracketRoundsForN, buildSingleElimBracket } from "./playoffBracket";
+
 // ─────────────────────────────────────────────────────────────────────
 // Pool play
 // ─────────────────────────────────────────────────────────────────────
@@ -117,13 +119,15 @@ export function estimatePoolPlay(i: PoolPlayInputs): PoolPlayResult {
 export type MedalInputs = {
   courts: number;
   teamsAdvancing: number;
-  rounds: 1 | 2;
+  // 1 = pairwise medal matches; >= 2 = single-elimination bracket (the exact
+  // round count and shape are derived from teamsAdvancing, not trusted here).
+  rounds: number;
   // The final (gold + bronze) — or the only round when rounds === 1.
   format: "single_game" | "best_of_3";
   minutesPerGame: number;
-  // Semifinal round when rounds === 2. Events carry their own semifinal
-  // settings (semifinal_match_format / semifinal_minutes_per_game); when
-  // omitted the medal settings apply to both rounds.
+  // Earlier (quarter/semi) rounds of a bracket. Events carry their own
+  // semifinal settings (semifinal_match_format / semifinal_minutes_per_game);
+  // when omitted the medal settings apply to every round.
   semifinalFormat?: "single_game" | "best_of_3";
   semifinalMinutesPerGame?: number;
 };
@@ -134,47 +138,65 @@ export type MedalResult = {
   summary: string;
 };
 
-// Two supported structures, matching the playoff generator:
+// Two playoff styles, matching the generator (see playoffBracket.ts):
 //   * 1 round: pairwise (1v2, 3v4, …) — N/2 parallel medal matches.
-//   * 2 rounds (top-4 only): semis (1v4, 2v3) → gold + bronze.
-// best_of_3 is planned as worst-case 3 games per match so scheduling
-// has headroom rather than overrunning when matches go to 3.
+//   * >= 2 rounds: single-elimination bracket with a bronze game. The final
+//     round (gold + bronze) runs at the medal format; earlier rounds (quarters
+//     / semis) at the semifinal format. Matches in a round run in parallel
+//     across the courts, so each round costs ceil(matches/courts) × minutes.
+// best_of_3 is planned as worst-case 3 games per match so scheduling has
+// headroom rather than overrunning when matches go to 3.
 export function estimateMedalRound(i: MedalInputs): MedalResult {
   const courts = Math.max(1, i.courts);
   const advancing = Math.max(2, i.teamsAdvancing);
   const minutes = Math.max(1, i.minutesPerGame);
   const gamesPerMatch = i.format === "best_of_3" ? 3 : 1;
   const matchMinutes = gamesPerMatch * minutes;
+  const semiMinutes = Math.max(1, i.semifinalMinutesPerGame ?? minutes);
+  const semiGames = (i.semifinalFormat ?? i.format) === "best_of_3" ? 3 : 1;
+  const semiMatchMinutes = semiGames * semiMinutes;
 
-  let totalMatches: number;
-  let totalMinutes: number;
-  let structure: string;
-
-  if (i.rounds === 1) {
+  if (i.rounds <= 1) {
     const matches = Math.floor(advancing / 2);
-    totalMatches = matches;
-    totalMinutes = Math.ceil(matches / courts) * matchMinutes;
-    structure = `${matches} medal match${matches === 1 ? "" : "es"} in 1 round`;
-  } else {
-    const semis = Math.floor(advancing / 2);
-    const round2 = 2;
-    const semiMinutes = Math.max(1, i.semifinalMinutesPerGame ?? minutes);
-    const semiGames = (i.semifinalFormat ?? i.format) === "best_of_3" ? 3 : 1;
-    totalMatches = semis + round2;
-    totalMinutes =
-      Math.ceil(semis / courts) * semiGames * semiMinutes +
-      Math.ceil(round2 / courts) * matchMinutes;
-    const semiFmt = semiGames === 3 ? "best of 3" : "1 game";
-    const finalFmt = gamesPerMatch === 3 ? "best of 3" : "1 game";
-    structure = `${semis} semis (${semiFmt}, ${semiMinutes} min/game) → gold + bronze (${finalFmt}, ${minutes} min/game)`;
-    return { totalMatches, totalMinutes, summary: `${structure}.` };
+    const totalMinutes = Math.ceil(matches / courts) * matchMinutes;
+    const fmt = gamesPerMatch === 3 ? "best of 3" : "1 game";
+    return {
+      totalMatches: matches,
+      totalMinutes,
+      summary: `${matches} medal match${matches === 1 ? "" : "es"} in 1 round; ${fmt}, ${minutes} min/game.`,
+    };
   }
 
-  const fmt = i.format === "best_of_3" ? "best of 3" : "1 game";
+  // Bracket. Count matches per round from the real bracket shape when N
+  // supports one; otherwise approximate (semis + gold + bronze) so an
+  // out-of-range N still yields a sane estimate rather than throwing.
+  const R = bracketRoundsForN(advancing);
+  let perRound: number[]; // index 0 = round 1
+  if (R != null) {
+    const counts = new Map<number, number>();
+    for (const m of buildSingleElimBracket(advancing)) {
+      counts.set(m.round, (counts.get(m.round) ?? 0) + 1);
+    }
+    perRound = Array.from({ length: R }, (_, k) => counts.get(k + 1) ?? 0);
+  } else {
+    perRound = [Math.floor(advancing / 2), 2]; // semis → final + bronze
+  }
+
+  const rounds = perRound.length;
+  let totalMatches = 0;
+  let totalMinutes = 0;
+  perRound.forEach((count, idx) => {
+    totalMatches += count;
+    const isFinal = idx === rounds - 1;
+    totalMinutes += Math.ceil(count / courts) * (isFinal ? matchMinutes : semiMatchMinutes);
+  });
+
+  const semiFmt = semiGames === 3 ? "best of 3" : "1 game";
+  const finalFmt = gamesPerMatch === 3 ? "best of 3" : "1 game";
   return {
     totalMatches,
     totalMinutes,
-    summary: `${structure}; ${fmt}, ${minutes} min/game.`,
+    summary: `${advancing}-team single-elim bracket, ${rounds} rounds: earlier rounds ${semiFmt} (${semiMinutes} min/game) → gold + bronze ${finalFmt} (${minutes} min/game).`,
   };
 }
 
@@ -242,7 +264,7 @@ export function estimateEvent(
       ? estimateMedalRound({
           courts: courtsForEvent,
           teamsAdvancing: event.teams_advancing_to_playoff,
-          rounds: event.playoff_rounds === 2 ? 2 : 1,
+          rounds: event.playoff_rounds,
           format: event.medal_match_format,
           minutesPerGame: event.medal_minutes_per_game,
           semifinalFormat: event.semifinal_match_format,

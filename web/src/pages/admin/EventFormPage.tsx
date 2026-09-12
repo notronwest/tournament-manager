@@ -14,6 +14,7 @@ type PlayoffSeeding = "overall" | "cross_pool";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
+import { bracketRoundsForN } from "../../lib/playoffBracket";
 import type { Database } from "../../types/supabase";
 import {
   ink,
@@ -426,15 +427,18 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
     return <div style={{ color: inkSoft, fontSize: 14, fontFamily: bodyFontStack }}>Loading…</div>;
   }
 
-  // Surface the most common misconfiguration: top-N must be even when
-  // running a single-round (pairwise) playoff, and 2-round structures
-  // are only supported for top-4 in this build.
+  // Surface the most common misconfiguration: top-N must be even for a
+  // single-round (pairwise) playoff, and a single-elim bracket's round count
+  // is fixed by N (Top-4 → 2 rounds, Top-6/8 → 3).
+  const bracketRounds = bracketRoundsForN(advancingNum);
   const playoffWarning = (() => {
     if (advancingNum === 0) return null;
     if (roundsNum === 1 && advancingNum % 2 !== 0)
       return "Single-round playoffs need an even Top-N (pairs play for each medal slot).";
-    if (roundsNum === 2 && advancingNum !== 4)
-      return "2-round playoffs (semis + final + bronze) currently support Top-4 only.";
+    if (roundsNum >= 2 && bracketRounds !== roundsNum)
+      return bracketRounds == null
+        ? `A single-elimination bracket isn't supported for Top-${advancingNum} — use 1 round (pairwise), or set Top-4/6/8.`
+        : `Top-${advancingNum} is a ${bracketRounds}-round bracket — set rounds to ${bracketRounds} (or 1 for pairwise).`;
     return null;
   })();
 
@@ -914,7 +918,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                 </Field>
                 <Field
                   label="Number of rounds"
-                  hint="1 round = pairs play directly for each medal slot (e.g. top 4: 1v2 gold, 3v4 bronze). 2 rounds = traditional bracket with a bronze game (top 4 only)."
+                  hint="1 round = pairs play directly for each medal slot (e.g. top 4: 1v2 gold, 3v4 bronze). A single-elim bracket with a bronze game: Top-4 is 2 rounds (semis → final), Top-6/8 is 3 rounds (play-in/quarters → semis → final)."
                 >
                   <select
                     value={playoffRounds}
@@ -922,7 +926,12 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                     style={inputStyle}
                   >
                     <option value="1">1 round (pairwise medal matches)</option>
-                    <option value="2">2 rounds (semis + final + bronze)</option>
+                    <option value="2" disabled={advancingNum !== 4}>
+                      2 rounds — bracket (semis → final + bronze){advancingNum !== 4 ? " — Top-4" : ""}
+                    </option>
+                    <option value="3" disabled={bracketRounds !== 3}>
+                      3 rounds — bracket ({advancingNum === 6 ? "play-in" : "quarters"} → semis → final + bronze){bracketRounds !== 3 ? " — Top-6/8" : ""}
+                    </option>
                   </select>
                 </Field>
               </FieldRow>
@@ -967,7 +976,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                   fields are still saved on R=1 events (so toggling
                   rounds back and forth doesn't lose data) but
                   ignored at generation time. */}
-              {roundsNum === 2 && (
+              {roundsNum >= 2 && (
                 <div
                   style={{
                     marginTop: 4,
@@ -986,7 +995,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                       letterSpacing: "0.04em",
                     }}
                   >
-                    Semifinal format
+                    {roundsNum >= 3
+                      ? "Quarterfinal & semifinal format"
+                      : "Semifinal format"}
                   </div>
                   <FieldRow>
                     <Field label="Match format">
@@ -1062,7 +1073,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
                     letterSpacing: "0.04em",
                   }}
                 >
-                  {roundsNum === 2
+                  {roundsNum >= 2
                     ? "Final + bronze format"
                     : "Medal match format"}
                 </div>
