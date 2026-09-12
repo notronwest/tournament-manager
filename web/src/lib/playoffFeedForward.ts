@@ -1,19 +1,22 @@
 import { supabase } from "../supabase";
 import type { Database } from "../types/supabase";
+import { winnerTarget, bronzeTarget, type FeedTarget } from "./playoffBracket";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 
-// After a playoff match is completed, populate the next-round slot(s).
-// Reads the parent event's playoff_rounds + teams_advancing_to_playoff
-// to decide what shape the bracket has, so this works for both
-// pairwise-medal (R=1) and traditional bracket-with-bronze (R=2, N=4)
-// structures.
+// After a playoff match is completed, populate the next-round slot(s). The
+// bracket's topology lives entirely in (round, position) — there's no explicit
+// next-match pointer — so routing is pure position arithmetic driven by the
+// event's playoff_rounds (R). See playoffBracket.ts for the math and tests.
 //
-// Pairwise (R=1): each match is its own medal slot — nothing to do.
-// 2-round bracket with bronze (R=2, N=4): R1 winners feed the gold
-// final; R1 losers feed the bronze game.
-// Legacy fallback: simple winner-only feed-forward into the next round
-// (used by playoff matches generated before the format-config migration).
+//   * Pairwise (R <= 1): each match is its own medal slot — nothing to do.
+//   * Single-elim bracket (R >= 2): the winner advances to floor(position/2)
+//     of the next round (winnerTarget); a semifinal LOSER drops into the
+//     bronze game (bronzeTarget). Earlier-round losers are eliminated.
+//
+// This is the same scheme for Top-4 (R=2), Top-6 and Top-8 (R=3). Each update
+// is guarded by the target match actually existing (maybeSingle), so a bracket
+// that happens to lack a bronze game just no-ops rather than erroring.
 export async function feedForwardPlayoffWinners(
   match: Match,
   winnerRegId: string,
@@ -23,81 +26,37 @@ export async function feedForwardPlayoffWinners(
 
   const { data: event } = await supabase
     .from("events")
-    .select("playoff_rounds, teams_advancing_to_playoff")
+    .select("playoff_rounds")
     .eq("id", match.event_id)
     .maybeSingle();
   if (!event) return;
 
-  // R=1: each match is self-contained.
-  if (event.playoff_rounds <= 1) return;
+  const R = event.playoff_rounds;
+  // R <= 1: pairwise medal matches are self-contained.
+  if (R <= 1) return;
 
-  // R=2, N=4: bronze on round 2 position 1, gold on round 2 position 0.
-  if (event.playoff_rounds === 2 && event.teams_advancing_to_playoff === 4) {
-    if (match.round !== 1) return;
-    const slot: "a" | "b" = match.position % 2 === 0 ? "a" : "b";
-
-    const { data: gold } = await supabase
+  const fill = async (target: FeedTarget | null, regId: string | null) => {
+    if (!target || !regId) return;
+    const { data: next } = await supabase
       .from("matches")
       .select("id")
       .eq("event_id", match.event_id)
       .eq("stage", "playoff")
-      .eq("round", 2)
-      .eq("position", 0)
+      .eq("round", target.round)
+      .eq("position", target.position)
       .maybeSingle();
-    if (gold) {
-      await supabase
-        .from("matches")
-        .update(
-          slot === "a"
-            ? { team_a_reg_id: winnerRegId }
-            : { team_b_reg_id: winnerRegId },
-        )
-        .eq("id", gold.id);
-    }
-
-    if (loserRegId) {
-      const { data: bronze } = await supabase
-        .from("matches")
-        .select("id")
-        .eq("event_id", match.event_id)
-        .eq("stage", "playoff")
-        .eq("round", 2)
-        .eq("position", 1)
-        .maybeSingle();
-      if (bronze) {
-        await supabase
-          .from("matches")
-          .update(
-            slot === "a"
-              ? { team_a_reg_id: loserRegId }
-              : { team_b_reg_id: loserRegId },
-          )
-          .eq("id", bronze.id);
-      }
-    }
-    return;
-  }
-
-  // Legacy single-elim bracket fallback.
-  const nextRound = match.round + 1;
-  const nextPos = Math.floor(match.position / 2);
-  const nextSlot: "a" | "b" = match.position % 2 === 0 ? "a" : "b";
-  const { data: next } = await supabase
-    .from("matches")
-    .select("id")
-    .eq("event_id", match.event_id)
-    .eq("stage", "playoff")
-    .eq("round", nextRound)
-    .eq("position", nextPos)
-    .maybeSingle();
-  if (next) {
+    if (!next) return;
     await supabase
       .from("matches")
       .update(
-        nextSlot === "a"
-          ? { team_a_reg_id: winnerRegId }
-          : { team_b_reg_id: winnerRegId },
+        target.slot === "a"
+          ? { team_a_reg_id: regId }
+          : { team_b_reg_id: regId },
       )
       .eq("id", next.id);
-  }
+  };
+
+  // Winner advances; a semifinal loser drops to the bronze game.
+  await fill(winnerTarget(match.round, match.position, R), winnerRegId);
+  await fill(bronzeTarget(match.round, match.position, R), loserRegId);
 }

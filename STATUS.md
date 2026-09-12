@@ -5,6 +5,47 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-12 — Playoff brackets larger than Top-4 (single-elim Top-6/8), branch `feat/playoff-brackets-top6-top8`
+
+Found in the offline dry run: the playoff generator only supported R=1
+pairwise medal matches (any even N) and a hard-coded R=2 / N=4 "semis + final +
+bronze" — `teams_advancing === 4` was required for 2 rounds everywhere
+(generator guard, Scheduler + event-form dropdowns). Ron wanted real
+single-elimination brackets for **Top-6 and Top-8**, with the round count
+following from N.
+
+Shipped a general single-elim bracket: **Top-4 → 2 rounds, Top-6/8 → 3
+rounds** (Top-6 = seeds 1-2 bye, 4v5 & 3v6 play-in → semis → final + bronze;
+Top-8 = quarters → semis → final + bronze). Standard seeding (1vN, 2v(N-1)…,
+top two in opposite halves), byes pre-placed into the semis, a bronze game
+contested by the two semifinal losers.
+
+- New pure lib **`web/src/lib/playoffBracket.ts`** owns the math (seeding,
+  byes, `winnerTarget`/`bronzeTarget` feed-forward routing, round/label
+  vocabulary). `bracketRoundsForN`: 4→2, 5-8→3, else null — the single source
+  of truth the generator, Scheduler, event form, and estimator all gate on.
+- **`playoffFeedForward.ts`** rewritten generic (winner → floor(pos/2) next
+  round; semifinal loser → bronze), driven purely by `playoff_rounds` — the
+  old N=4 special case is gone but reproduces identically.
+- `EventConsolePage` onGenerate builds from the bracket; **onResetAllScores now
+  restores bye seeds** it would otherwise wipe (this was the subtle
+  correctness trap for Top-6). Labels: `matchLabel` / `playoffStageLabel` /
+  round headings extended (play-in, quarterfinal, semifinal, gold/bronze).
+- Scheduler + event-form rounds dropdowns offer 1 / 2 (Top-4) / 3 (Top-6/8)
+  gated by N, with auto-fix on the Scheduler when N changes. Estimator handles
+  multi-round brackets.
+- **Thorough tests** (`playoffBracket.test.ts`, 20 cases): structure + full
+  play-out for N=4/6/8 including upsets (bottom seed wins gold; a play-in team
+  upsets a bye seed and the right team takes bronze). No DB migration
+  (`playoff_rounds` already allowed 1-4).
+
+Verified: `vitest` 83/83 green, `tsc -b` clean, `vite build` OK. Changed files
+are eslint-clean (the 3 repo-wide `set-state-in-effect` errors pre-date this
+and are not in the diff). **Not verified:** end-to-end on TEST with a live
+8-team event — do that after deploy; it decides medals. NOT needed for the
+Sept 12 PB Angels events (all 1-round pairwise), so this is a feature, not a
+hotfix.
+
 ## 2026-09-11 — Builder: offer-waitlist-spot promotes the confirmed partner too (#770), PR #788 open
 
 Built issue #770: offering a waitlist spot to one half of a confirmed doubles
