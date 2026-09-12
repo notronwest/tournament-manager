@@ -5,6 +5,37 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-12 — In-app printable pool tracking sheets (#884, PR open)
+
+Built the feature Ron asked for live during the Sept 12 tournament: in-app
+generation of printable round-robin **pool tracking sheets**, replacing the
+standalone `backups/scoresheets.html` / `gen_sheets.py`. New "Print pool
+sheets" button in the event-console header opens a landscape print page
+(`/events/:eventId/pool-sheets`, `web/src/pages/admin/PoolSheetsPage.tsx`,
+modeled on `ScorecardsPage`): one page per pool with header (event / pool /
+tournament / date / blank court line), a numbered `T1..Tn` team legend, a
+round-by-round matchup grid with fill-by-hand score boxes, and a standings
+table to tally by hand.
+
+Teams + pool membership read straight from the app —
+`event_registrations.pool_index` (1-based), teams built with the same
+captain-selection + seed→registration sort the console uses to generate
+matches, so `T1..Tn` match the app's numbering. Multi-pool event with any
+unassigned team → notice, not a sheet; single-pool → one "Single Pool"
+sheet. Rounds use the classic **circle method** (verified byte-identical to
+the reference sheet for n=4,5,6). Note: the app stores **no** rounds —
+`onGenerate` writes a flat position-ordered list (`round=1`, `RR-n`) and the
+court manager schedules live — so the circle grouping is a print convenience
+producing the same pairing set. Single-page fit tuned by measuring rendered
+height vs the 7.8in printable area: 2–5 columns + a density tier for 7+ team
+pools; pools of 4–10 fit (10 beats the reference's proven max of 9).
+`typecheck` + `build` green; no migration (frontend read only). Lint: only
+the pre-existing `set-state-in-effect` idiom every sibling page uses.
+
+**Next:** Ron review + merge PR #884 → validate on TEST
+(`test.bertanderne.com`, event console → Print pool sheets), then promote
+`main`→`production` for PROD.
+
 ## 2026-09-11 — Builder: offer-waitlist-spot promotes the confirmed partner too (#770), PR #788 open
 
 Built issue #770: offering a waitlist spot to one half of a confirmed doubles
