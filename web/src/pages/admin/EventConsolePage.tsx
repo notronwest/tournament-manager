@@ -22,6 +22,7 @@ import { eligibilityChips } from "../../lib/eligibility";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { downloadCsv } from "../../lib/rosterExport";
+import { computeStandings } from "../../lib/standings";
 import {
   standingsToRows,
   resultsToCsv,
@@ -2339,53 +2340,6 @@ function snakePoolIndex(i: number, poolCount: number): number {
   const within = i % poolCount;
   const idx = round % 2 === 0 ? within : poolCount - 1 - within;
   return idx + 1;
-}
-
-function computeStandings(teams: Team[], rrMatches: Match[]): Standing[] {
-  const byCap = new Map<string, Standing>();
-  for (const t of teams) {
-    byCap.set(t.captainRegId, {
-      team: t,
-      wins: 0,
-      losses: 0,
-      pf: 0,
-      pa: 0,
-      diff: 0,
-    });
-  }
-
-  for (const m of rrMatches) {
-    if (m.status !== "completed") continue;
-    if (
-      m.team_a_reg_id === null ||
-      m.team_b_reg_id === null ||
-      m.team_a_score === null ||
-      m.team_b_score === null
-    ) {
-      continue;
-    }
-    const a = byCap.get(m.team_a_reg_id);
-    const b = byCap.get(m.team_b_reg_id);
-    if (!a || !b) continue;
-    a.pf += m.team_a_score;
-    a.pa += m.team_b_score;
-    b.pf += m.team_b_score;
-    b.pa += m.team_a_score;
-    if (m.winner_reg_id === m.team_a_reg_id) {
-      a.wins++;
-      b.losses++;
-    } else if (m.winner_reg_id === m.team_b_reg_id) {
-      b.wins++;
-      a.losses++;
-    }
-  }
-
-  const standings = Array.from(byCap.values());
-  for (const s of standings) s.diff = s.pf - s.pa;
-  standings.sort(
-    (x, y) => y.wins - x.wins || y.diff - x.diff || y.pf - x.pf,
-  );
-  return standings;
 }
 
 function capitalize(s: string): string {
