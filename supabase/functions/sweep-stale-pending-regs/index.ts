@@ -7,7 +7,7 @@
 // (→ seeking) and promotes the next waitlisted player per freed spot.
 //
 // Scheduled since 2026-09-11 by the pg_cron job 'sweep-stale-pending-regs'
-// (every 5 min, migration 20260911120000), which runs the SQL function
+// (every 5 min, migration 20260914200000), which runs the SQL function
 // public.sweep_stale_pending_regs directly. This edge function is the
 // MANUAL entry point — it calls the same RPC, so both paths are identical.
 // Idempotent — safe to call as often as you want; only acts on rows that
@@ -57,7 +57,7 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(supabaseUrl, serviceRole);
 
   // ONE implementation: the SQL function public.sweep_stale_pending_regs
-  // (migration 20260911120000) is what the pg_cron job runs every 5 minutes.
+  // (migration 20260914200000) is what the pg_cron job runs every 5 minutes.
   // Calling it here means a manual invocation does exactly what the job does:
   // soft-delete idle pending_payment regs (never admin-invoiced ones), cancel
   // their outbound partner invites, UNPAIR their partner (→ seeking) and
