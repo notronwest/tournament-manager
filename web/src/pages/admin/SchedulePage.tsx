@@ -10,6 +10,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
+  doubleElimCourtsNeeded,
   estimateEvent,
   fmtDuration,
   poolPlayExplanation,
@@ -306,8 +307,9 @@ export default function SchedulePage() {
       const { teamsPerPool, pool, medal, totalMinutes } = estimate;
       const planTeams = teamCount >= 2 ? teamCount : Math.max(2, event.max_teams ?? 2);
       const venueCourts = tournament?.locations?.court_count ?? courts;
-      const courtsNeeded = Math.min(Math.max(1, venueCourts), poolCourtsNeeded(planTeams, event.pool_count));
-      const medalNeed = Math.min(Math.max(1, venueCourts), medalCourtsNeeded(event.teams_advancing_to_playoff));
+      const isDE = (event as { bracket_type?: string }).bracket_type === "double_elim";
+      const courtsNeeded = Math.min(Math.max(1, venueCourts), isDE ? doubleElimCourtsNeeded(planTeams) : poolCourtsNeeded(planTeams, event.pool_count));
+      const medalNeed = Math.min(Math.max(1, venueCourts), isDE ? 1 : medalCourtsNeeded(event.teams_advancing_to_playoff));
       const scheduledStart = event.scheduled_start_at
         ? new Date(event.scheduled_start_at)
         : null;
@@ -1615,6 +1617,12 @@ function SetupPanel({
           <span>Courts <span style={{ color: inkMuted }}>· click to assign or release · needs {row.courtsNeeded} of {courtCount}</span></span>
           <CourtPills total={courtCount} assigned={row.courtNumbers} onToggle={busy ? undefined : onToggleCourt} />
         </div>
+        {(event as { bracket_type?: string }).bracket_type === "double_elim" ? (
+          <div style={{ ...label, gridColumn: "1 / -1", color: inkMuted }}>
+            Double-elimination bracket — seeding and the final format are set on Edit event; pools and Top-N don't apply.
+          </div>
+        ) : (
+          <>
         <label style={label}>
           <span>Pools <span style={{ color: inkMuted }}>· {teams} teams{row.teamCount < 2 ? " (max)" : ""}</span></span>
           <select
@@ -1693,6 +1701,8 @@ function SetupPanel({
             </option>
           </select>
         </label>
+          </>
+        )}
       </div>
       {warning && (
         <div style={{ marginTop: 8, padding: "6px 10px", background: warnBg, color: warnFg, borderRadius: 4, fontSize: 12 }}>

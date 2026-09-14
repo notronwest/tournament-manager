@@ -12,7 +12,12 @@ type Event = Database["public"]["Tables"]["events"]["Row"];
 // `all` is the full list of matches in the parent event; we use it to
 // figure out whether a playoff match is the only one in its round
 // (final), one of two (semis), or one of four (quarters).
+type Labelled = Match & { slot_key?: string | null; label?: string | null };
+
 export function matchLabel(m: Match, all: Match[]): string {
+  // Double elimination rows carry their lib slot key ("W1-1", "L3-2", "F2").
+  const slot = (m as Labelled).slot_key;
+  if (slot) return slot;
   if (m.stage === "round_robin") {
     const rr = all
       .filter((x) => x.stage === "round_robin")
@@ -52,6 +57,9 @@ export function playoffStageLabel(
   event: Pick<Event, "playoff_rounds" | "teams_advancing_to_playoff">,
 ): string | null {
   if (m.stage !== "playoff") return null;
+  // Double elimination rows carry a full label from lib/doubleElim.
+  const stored = (m as Labelled).label;
+  if (stored) return stored;
 
   const sameRound = all.filter(
     (x) => x.stage === "playoff" && x.round === m.round,
@@ -102,6 +110,16 @@ export function playoffStageStyle(
   }
   if (label.startsWith("Bronze")) {
     return { color: "#7c2d12", background: "#fff7ed", border: "#fed7aa" };
+  }
+  // Double elimination
+  if (label.startsWith("Final") || label === "Winners Final") {
+    return { color: "#92400e", background: "#fffbeb", border: "#fde68a" };
+  }
+  if (label.startsWith("Consolation")) {
+    return { color: "#7c2d12", background: "#fff7ed", border: "#fed7aa" };
+  }
+  if (label.startsWith("Winners")) {
+    return { color: "#1e3a8a", background: "#eff6ff", border: "#bfdbfe" };
   }
   if (
     label === "Final" ||

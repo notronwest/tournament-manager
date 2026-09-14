@@ -33,6 +33,13 @@ import {
 import { eligibilityChips } from "../../lib/eligibility";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
+import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
+import { pairRegistrations } from "../../lib/registrations";
+import type { SupabaseClient } from "@supabase/supabase-js";
+// Double-elimination columns (migration 20260914210000) — generated types lag.
+const untyped = supabase as unknown as SupabaseClient;
+type DEEvent = { bracket_type?: string | null; double_elim_final?: "crossover" | "bronze_only" | null };
+const isDoubleElim = (e: { bracket_type?: string | null } | null | undefined) => e?.bracket_type === "double_elim";
 import { downloadCsv } from "../../lib/rosterExport";
 import {
   standingsToRows,
@@ -250,7 +257,7 @@ export default function EventConsolePage() {
   // round. Returns an empty array until the gold match is
   // completed; bronze is added later when its match finishes.
   const medals = useMemo<Medal[]>(
-    () => (event ? computeMedals(event, playoffMatches, teamByAnyRegId) : []),
+    () => (event ? computeMedals(event as typeof event & DEEvent, playoffMatches, teamByAnyRegId) : []),
     [event, playoffMatches, teamByAnyRegId],
   );
 
@@ -491,7 +498,16 @@ export default function EventConsolePage() {
         />
       )}
 
-      {activeTab === "games" && (
+      {activeTab === "games" && isDoubleElim(event) && (
+        <DoubleElimSection
+          event={event as typeof event & DEEvent}
+          teams={teams}
+          teamByAnyRegId={teamByAnyRegId}
+          matches={playoffMatches}
+          onChange={reload}
+        />
+      )}
+      {activeTab === "games" && !isDoubleElim(event) && (
         <>
           <RoundRobinSection
             event={event}
@@ -992,7 +1008,46 @@ function TeamsSection({
   };
 
   const showPoolColumn = event.pool_count > 1;
-  const showSeedColumn = event.pool_count > 1;
+  const isDE = isDoubleElim(event);
+  const showSeedColumn = event.pool_count > 1 || isDE;
+
+  // Double elimination: seeds drive the bracket, so let organizers shuffle
+  // them, and pair everyone still solo/seeking at random (hand-built teams
+  // are never touched — random fills only the loose players).
+  const randomizeSeeds = async () => {
+    if (hasMatches || teams.length < 2) return;
+    const shuffled = teams.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setTeams(shuffled);
+    await persistOrder(shuffled);
+  };
+  const [randomizing, setRandomizing] = useState(false);
+  const loose = teams.filter((t) => t.partnerRegId === null);
+  const randomizeRemaining = async () => {
+    if (!isDoubles || hasMatches) return;
+    setError(null);
+    const pool = loose.slice();
+    if (pool.length < 2) { setError("Fewer than two unpaired players — nothing to pair."); return; }
+    if (pool.length % 2 === 1) { setError(`${pool.length} unpaired players — add or remove one so everyone gets a partner.`); return; }
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    setRandomizing(true);
+    try {
+      for (let i = 0; i < pool.length; i += 2) {
+        await pairRegistrations(pool[i].captainRegId, pool[i + 1].captainRegId);
+      }
+      await onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRandomizing(false);
+    }
+  };
 
   return (
     <section>
@@ -1017,6 +1072,28 @@ function TeamsSection({
               >
                 Saving order…
               </span>
+            )}
+            {isDE && (
+              <>
+                <button
+                  onClick={() => void randomizeSeeds()}
+                  disabled={busy || savingOrder || hasMatches || teams.length < 2}
+                  style={tinySecondaryBtn}
+                  title={hasMatches ? "Locked — bracket already generated. Reset it first." : "Shuffle the seed order. Drag rows to fine-tune."}
+                >
+                  Randomize seeds
+                </button>
+                {isDoubles && (
+                  <button
+                    onClick={() => void randomizeRemaining()}
+                    disabled={busy || randomizing || hasMatches || loose.length < 2}
+                    style={tinyPrimaryBtn}
+                    title={loose.length < 2 ? "Everyone already has a partner." : `Pair the ${loose.length} unpaired players at random. Hand-built teams are not touched.`}
+                  >
+                    {randomizing ? "Pairing…" : `Randomize remaining (${loose.length})`}
+                  </button>
+                )}
+              </>
             )}
             {showPoolColumn && (
               <>
@@ -2234,6 +2311,212 @@ function PlayoffSection({
               }}
             >
               🏆 Champion: {champion.label}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Double elimination
+// ─────────────────────────────────────────────────────────────────────
+
+type DEMatchRow = Match & {
+  bracket?: "winners" | "consolation" | "final" | null;
+  slot_key?: string | null;
+  label?: string | null;
+  if_necessary?: boolean | null;
+};
+
+// Seeded winners + consolation brackets generated from lib/doubleElim. Every
+// match row stores its bracket, slot key, label and where its winner/loser
+// go, so scoring anywhere (console, court managers) feeds forward via
+// feedForwardPlayoffWinners' data-driven branch.
+function DoubleElimSection({
+  event,
+  teams,
+  teamByAnyRegId,
+  matches,
+  onChange,
+}: {
+  event: Event & DEEvent;
+  teams: Team[];
+  teamByAnyRegId: Map<string, Team>;
+  matches: Match[];
+  onChange: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const format = event.double_elim_final ?? "crossover";
+  const isDoubles = event.format === "doubles";
+  const rows = matches as DEMatchRow[];
+
+  const seeded = useMemo(() => teams.slice().sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9)), [teams]);
+  const unseeded = seeded.filter((t) => t.seed == null).length;
+  const unpaired = isDoubles ? teams.filter((t) => t.partnerRegId === null).length : 0;
+  const preview = useMemo(() => (teams.length >= 3 ? buildDoubleElim(teams.length, format) : null), [teams.length, format]);
+
+  const onGenerate = async () => {
+    setError(null);
+    if (teams.length < 3) { setError("Double elimination needs at least 3 teams."); return; }
+    if (unseeded > 0) { setError(`${unseeded} team${unseeded === 1 ? " has" : "s have"} no seed — drag the Teams tab into order or Randomize seeds.`); return; }
+    if (unpaired > 0) { setError(`${unpaired} player${unpaired === 1 ? " is" : "s are"} unpaired — pair them (or Randomize remaining) first.`); return; }
+    setBusy(true);
+    try {
+      const de = buildDoubleElim(teams.length, format);
+      const regOfSeed = (seed: number) => seeded[seed - 1]?.captainRegId ?? null;
+      const poolConfig = {
+        match_format: "single_game" as const,
+        match_points_to_win: event.points_to_win,
+        match_win_by: event.win_by,
+        match_minutes_per_game: event.pool_minutes_per_game,
+      };
+      const medalConfig = {
+        match_format: event.medal_match_format,
+        match_points_to_win: event.medal_points_to_win,
+        match_win_by: event.medal_win_by,
+        match_minutes_per_game: event.medal_minutes_per_game,
+      };
+      const lastL = Math.max(...de.slots.filter((x) => x.bracket === "consolation").map((x) => x.round));
+      const isMedal = (x: Slot) => x.bracket === "final" || (x.bracket === "consolation" && x.round === lastL);
+      const inserts = de.slots.map((x) => ({
+        event_id: event.id,
+        stage: "playoff",
+        round: x.round,
+        position: x.position,
+        bracket: x.bracket,
+        slot_key: x.key,
+        label: x.label,
+        if_necessary: x.ifNecessary,
+        team_a_reg_id: x.a.kind === "seed" ? regOfSeed(x.a.seed) : null,
+        team_b_reg_id: x.b.kind === "seed" ? regOfSeed(x.b.seed) : null,
+        status: "pending",
+        ...(isMedal(x) ? medalConfig : poolConfig),
+      }));
+      const { data: created, error: insErr } = await untyped.from("matches").insert(inserts).select("id, slot_key");
+      if (insErr) throw new Error(insErr.message);
+      const idBySlot = new Map<string, string>((created as { id: string; slot_key: string }[]).map((r) => [r.slot_key, r.id]));
+      // Second pass: wire feeds now that every row has an id.
+      const wiring = de.slots
+        .filter((x) => x.feedsWinnerTo || x.feedsLoserTo)
+        .map((x) =>
+          untyped
+            .from("matches")
+            .update({
+              feeds_winner_to: x.feedsWinnerTo ? idBySlot.get(x.feedsWinnerTo.key) ?? null : null,
+              feeds_winner_side: x.feedsWinnerTo?.side ?? null,
+              feeds_loser_to: x.feedsLoserTo ? idBySlot.get(x.feedsLoserTo.key) ?? null : null,
+              feeds_loser_side: x.feedsLoserTo?.side ?? null,
+            })
+            .eq("id", idBySlot.get(x.key)!),
+        );
+      const results = await Promise.all(wiring);
+      const wErr = results.find((r) => r.error)?.error;
+      if (wErr) throw new Error(wErr.message);
+      await autoTransitionEventStatus(event.id);
+      await onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onReset = async () => {
+    setError(null);
+    setBusy(true);
+    const { error: delErr } = await supabase.from("matches").delete().eq("event_id", event.id);
+    setBusy(false);
+    if (delErr) { setError(delErr.message); return; }
+    await onChange();
+  };
+
+  // Group by bracket, then round.
+  const groups = useMemo(() => {
+    const order: Record<string, number> = { winners: 0, consolation: 1, final: 2 };
+    const m = new Map<string, { bracket: string; round: number; rows: DEMatchRow[] }>();
+    for (const r of rows) {
+      const key = `${r.bracket ?? "winners"}:${r.round}`;
+      const g = m.get(key) ?? { bracket: r.bracket ?? "winners", round: r.round, rows: [] };
+      g.rows.push(r);
+      m.set(key, g);
+    }
+    return Array.from(m.values())
+      .map((g) => ({ ...g, rows: g.rows.sort((a, b) => a.position - b.position) }))
+      .sort((a, b) => (order[a.bracket] ?? 9) - (order[b.bracket] ?? 9) || a.round - b.round);
+  }, [rows]);
+
+  const medals = useMemo(() => computeMedals(event, matches, teamByAnyRegId), [event, matches, teamByAnyRegId]);
+  const slotsByKey = useMemo(() => new Map(preview?.slots.map((x) => [x.key, x]) ?? []), [preview]);
+
+  return (
+    <section>
+      <SectionHeader
+        title="Double elimination"
+        right={
+          rows.length > 0 ? (
+            <div className="no-print" style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => window.print()} style={tinyPrimaryBtn}>Print bracket</button>
+              <button onClick={onReset} disabled={busy} style={tinyDangerBtn}>Reset bracket</button>
+            </div>
+          ) : null
+        }
+      />
+      {error && <ErrorBox message={error} />}
+      {rows.length === 0 ? (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", padding: 12, background: bg, border: `1px solid ${rule}`, borderRadius: 6, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 13, color: inkSoft, flex: "1 1 260px" }}>
+            {teams.length} seeded teams ·{" "}
+            {format === "crossover" ? "crossover final (true double elimination)" : "bronze only (no crossover)"}
+            {preview ? ` · ${preview.slots.filter((x) => !x.ifNecessary).length} matches${format === "crossover" ? " + 1 if necessary" : ""}` : ""}
+            {unseeded > 0 ? ` · ${unseeded} unseeded` : ""}
+            {unpaired > 0 ? ` · ${unpaired} unpaired` : ""}
+          </div>
+          <button onClick={onGenerate} disabled={busy || teams.length < 3} style={primaryBtn(busy || teams.length < 3)}>
+            {busy ? "Generating…" : "Generate bracket"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {groups.map((g) => (
+            <div key={`${g.bracket}-${g.round}`} className="print-round-block">
+              <h3 className="print-round-head" style={{ fontSize: 13, color: inkMuted, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                {g.rows[0]?.label && g.rows.length === 1 ? g.rows[0].label : `${g.bracket === "final" ? "Final" : g.bracket === "winners" ? "Winners bracket" : "Consolation bracket"} · round ${g.round}`}
+              </h3>
+              <table style={tableStyle}>
+                <thead>
+                  <tr style={tableHeadRow}>
+                    <th style={{ ...thStyle, width: 70 }}>#</th>
+                    <th style={thStyle}>Team A</th>
+                    <th style={{ ...thStyle, width: 80, textAlign: "center" }}>Score</th>
+                    <th style={thStyle}>Team B</th>
+                    <th style={{ ...thStyle, width: 100 }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.rows.map((r, i) => (
+                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                  ))}
+                </tbody>
+              </table>
+              {g.rows.some((r) => !r.team_a_reg_id || !r.team_b_reg_id) && slotsByKey.size > 0 && (
+                <div style={{ fontSize: 11, color: inkMuted, marginTop: 4 }}>
+                  {g.rows
+                    .filter((r) => (!r.team_a_reg_id || !r.team_b_reg_id) && r.slot_key && slotsByKey.get(r.slot_key))
+                    .map((r) => {
+                      const x = slotsByKey.get(r.slot_key!)!;
+                      return `${r.slot_key}: ${describeSource(x.a, slotsByKey)} v ${describeSource(x.b, slotsByKey)}`;
+                    })
+                    .join(" · ")}
+                </div>
+              )}
+            </div>
+          ))}
+          {medals.length > 0 && (
+            <div style={{ padding: 16, background: warnBg, border: `1px solid ${courtYellow}`, borderRadius: 6, color: warnFg, fontSize: 14, fontWeight: 500 }}>
+              {medals.map((m) => `${m.place === "gold" ? "🥇" : m.place === "silver" ? "🥈" : "🥉"} ${m.team.label}`).join("   ")}
             </div>
           )}
         </div>
