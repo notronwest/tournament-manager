@@ -58,6 +58,9 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
   const [event, setEvent] = useState<Event | null>(null);
   const [name, setName] = useState("");
   const [format, setFormat] = useState<EventFormat>("doubles");
+  // Round-robin pools → playoff (default) or a seeded double-elimination bracket.
+  const [bracketType, setBracketType] = useState<"round_robin" | "double_elim">("round_robin");
+  const [deFinal, setDeFinal] = useState<"crossover" | "bronze_only">("crossover");
   const [gender, setGender] = useState<EventGender>("mixed");
   const [maxTeams, setMaxTeams] = useState("10");
   const [isPairedRoles, setIsPairedRoles] = useState(false);
@@ -197,6 +200,8 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         }
         setName(ev.name);
         setFormat(ev.format);
+        setBracketType(ev.bracket_type === "double_elim" ? "double_elim" : "round_robin");
+        setDeFinal(((ev as unknown as { double_elim_final?: "crossover" | "bronze_only" }).double_elim_final) ?? "crossover");
         setGender(ev.gender);
         setMaxTeams(String(ev.max_teams ?? 10));
         setIsPairedRoles(ev.is_paired_roles);
@@ -298,7 +303,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
       format,
       gender,
       max_teams: max,
-      bracket_type: "round_robin" as const,
+      bracket_type: bracketType,
       event_fee_cents: Math.round(parseFloat(eventFeeDollars || "0") * 100),
       pool_count: clampInt(poolCount, 1, 1, 16),
       play_each_team_times: clampInt(playEachTeamTimes, 1, 1, 5),
@@ -338,6 +343,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
     const fullPayload = {
       ...payload,
       playoff_seeding: crossPoolAllowed ? playoffSeeding : "overall",
+      double_elim_final: deFinal,
     };
     if (mode === "create") {
       const { data, error: insErr } = await untyped
@@ -488,6 +494,16 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
               >
                 <option value="doubles">Doubles</option>
                 <option value="singles">Singles</option>
+              </select>
+            </Field>
+            <Field label="Tournament style" required hint={bracketType === "double_elim" ? "Seeded bracket: lose once → consolation bracket; lose twice → out." : "Everyone plays their pool, then the top teams play off."}>
+              <select
+                value={bracketType}
+                onChange={(e) => setBracketType(e.target.value as "round_robin" | "double_elim")}
+                style={inputStyle}
+              >
+                <option value="round_robin">Round-robin pools → playoff</option>
+                <option value="double_elim">Double elimination bracket</option>
               </select>
             </Field>
             <Field label="Gender" required>
@@ -703,7 +719,31 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
           </FieldRow>
         </FieldGroup>
 
+        {bracketType === "double_elim" && (
+          <FieldGroup
+            title="Double elimination"
+            subtitle="Teams are seeded on the event console (drag, or randomize). Winners-bracket and consolation games use the scoring settings below; the finals use the medal-match settings."
+          >
+            <FieldRow>
+              <Field
+                label="Final format"
+                hint={
+                  deFinal === "crossover"
+                    ? "Consolation champion plays the winners-bracket champion for gold; if the challenger wins, one more game decides it. Consolation runner-up takes bronze."
+                    : "The Winners Final decides gold and silver. The consolation champion takes bronze."
+                }
+              >
+                <select value={deFinal} onChange={(e) => setDeFinal(e.target.value as "crossover" | "bronze_only")} style={inputStyle}>
+                  <option value="crossover">Crossover final (true double elimination)</option>
+                  <option value="bronze_only">Bronze only (no crossover)</option>
+                </select>
+              </Field>
+            </FieldRow>
+          </FieldGroup>
+        )}
+
         {/* Pool play */}
+        {bracketType === "round_robin" && (
         <FieldGroup
           title="Round-robin pool play"
           subtitle={
@@ -805,6 +845,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
             </Field>
           </FieldRow>
         </FieldGroup>
+        )}
 
         {/* Scoring */}
         <FieldGroup title="Scoring (printed on scorecards)">
@@ -859,6 +900,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
         </FieldGroup>
 
         {/* Playoff */}
+        {bracketType === "round_robin" && (
         <FieldGroup title="Playoff">
           <fieldset
             style={{
@@ -1144,6 +1186,7 @@ export default function EventFormPage({ mode }: { mode: "create" | "edit" }) {
             </div>
           )}
         </FieldGroup>
+        )}
 
         {error && <ErrorBox message={error} />}
 

@@ -1,7 +1,18 @@
 import { supabase } from "../supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../types/supabase";
 
 type Match = Database["public"]["Tables"]["matches"]["Row"];
+// Double-elimination wiring (migration 20260914210000) — generated types lag it.
+type Wired = Match & {
+  bracket?: "winners" | "consolation" | "final" | null;
+  if_necessary?: boolean | null;
+  feeds_winner_to?: string | null;
+  feeds_winner_side?: "a" | "b" | null;
+  feeds_loser_to?: string | null;
+  feeds_loser_side?: "a" | "b" | null;
+};
+const untyped = supabase as unknown as SupabaseClient;
 
 // After a playoff match is completed, populate the next-round slot(s).
 // Reads the parent event's playoff_rounds + teams_advancing_to_playoff
@@ -20,6 +31,30 @@ export async function feedForwardPlayoffWinners(
   loserRegId: string | null,
 ) {
   if (match.stage !== "playoff" || !winnerRegId) return;
+
+  // Data-driven (double elimination): the row says where its winner and
+  // loser go. Crossover final: if the Winners champion (side a) wins F1, the
+  // if-necessary F2 is deleted instead of fed.
+  const w = match as Wired;
+  if (w.bracket) {
+    if (w.bracket === "final" && !w.if_necessary && winnerRegId === match.team_a_reg_id) {
+      await untyped.from("matches").delete().eq("event_id", match.event_id).eq("if_necessary", true);
+      return;
+    }
+    if (w.feeds_winner_to && w.feeds_winner_side) {
+      await supabase
+        .from("matches")
+        .update(w.feeds_winner_side === "a" ? { team_a_reg_id: winnerRegId } : { team_b_reg_id: winnerRegId })
+        .eq("id", w.feeds_winner_to);
+    }
+    if (w.feeds_loser_to && w.feeds_loser_side && loserRegId) {
+      await supabase
+        .from("matches")
+        .update(w.feeds_loser_side === "a" ? { team_a_reg_id: loserRegId } : { team_b_reg_id: loserRegId })
+        .eq("id", w.feeds_loser_to);
+    }
+    return;
+  }
 
   const { data: event } = await supabase
     .from("events")

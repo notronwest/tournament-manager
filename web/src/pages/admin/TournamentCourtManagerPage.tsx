@@ -329,6 +329,12 @@ export default function TournamentCourtManagerPage() {
       const gamesPlayed =
         gamesPlayedByEvent.get(ev.id) ?? new Map<string, number>();
       const busy = busyTeamsByEvent.get(ev.id) ?? new Set<string>();
+      // Double elimination: alternate brackets fairly (fewest completed games first).
+      const doneByBracket = new Map<string, number>();
+      for (const m of matches as (Match & { bracket?: string | null })[]) {
+        if (m.event_id === ev.id && m.bracket && m.status === "completed") doneByBracket.set(m.bracket, (doneByBracket.get(m.bracket) ?? 0) + 1);
+      }
+      const bracketRank = (m: Match & { bracket?: string | null }) => (m.bracket ? doneByBracket.get(m.bracket) ?? 0 : 0);
       const eligible = matches
         .filter(
           (m) =>
@@ -349,12 +355,14 @@ export default function TournamentCourtManagerPage() {
             score: Math.max(lastA, lastB),
             minPlayed: Math.min(playedA, playedB),
             maxPlayed: Math.max(playedA, playedB),
+            bracketRank: bracketRank(m),
           };
         })
         .sort(
           (x, y) =>
             x.minPlayed - y.minPlayed ||
             x.maxPlayed - y.maxPlayed ||
+            x.bracketRank - y.bracketRank ||
             x.score - y.score ||
             x.match.position - y.match.position,
         );

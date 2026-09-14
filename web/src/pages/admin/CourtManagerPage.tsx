@@ -249,6 +249,14 @@ export default function CourtManagerPage() {
   // both teams populated. Playoff matches enter the queue as soon
   // as feedForwardPlayoffWinners fills their team slots.
   const rankedPending = useMemo(() => {
+    // Double elimination: keep the winners and consolation brackets moving
+    // evenly — prefer the bracket that has completed fewer games so far, so
+    // consolation teams never sit while the winners bracket monopolises courts.
+    const doneByBracket = new Map<string, number>();
+    for (const m of matches as (Match & { bracket?: string | null })[]) {
+      if (m.bracket && m.status === "completed") doneByBracket.set(m.bracket, (doneByBracket.get(m.bracket) ?? 0) + 1);
+    }
+    const bracketRank = (m: Match & { bracket?: string | null }) => (m.bracket ? doneByBracket.get(m.bracket) ?? 0 : 0);
     return matches
       .filter(
         (m) =>
@@ -267,12 +275,14 @@ export default function CourtManagerPage() {
           minPlayed: Math.min(playedA, playedB),
           maxPlayed: Math.max(playedA, playedB),
           stageRank: m.stage === "round_robin" ? 0 : 1,
+          bracketRank: bracketRank(m),
         };
       })
       .sort(
         (x, y) =>
           x.minPlayed - y.minPlayed ||
           x.maxPlayed - y.maxPlayed ||
+          x.bracketRank - y.bracketRank ||
           x.stageRank - y.stageRank ||
           x.score - y.score ||
           x.match.round - y.match.round ||

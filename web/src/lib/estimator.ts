@@ -179,6 +179,68 @@ export function estimateMedalRound(i: MedalInputs): MedalResult {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Double elimination — layers from lib/doubleElim, courts capped per layer
+// ─────────────────────────────────────────────────────────────────────
+
+import { buildDoubleElim, playLayers } from "./doubleElim";
+
+// Courts a double-elimination bracket can keep busy at its widest (round 1).
+export function doubleElimCourtsNeeded(teams: number): number {
+  let P = 4;
+  while (P < Math.max(3, teams)) P *= 2;
+  return P / 2;
+}
+
+function estimateDoubleElim(event: EstimableEvent, teamCount: number, courts: number): EventEstimate {
+  const n = Math.max(3, teamCount);
+  const de = buildDoubleElim(n, event.double_elim_final ?? "crossover");
+  const layers = playLayers(de);
+  const poolMin = Math.max(1, event.pool_minutes_per_game);
+  const medalMin = Math.max(1, event.medal_minutes_per_game);
+  const isMedalLayer = (layer: (typeof layers)[number]) =>
+    layer[0].bracket === "final" || (layer[0].bracket === "consolation" && layer[0].round === Math.max(...de.slots.filter((s) => s.bracket === "consolation").map((s) => s.round)));
+  let bracketMinutes = 0;
+  let bracketMatches = 0;
+  let medalMinutes = 0;
+  let medalMatches = 0;
+  let rounds = 0;
+  let widest = 0;
+  for (const layer of layers) {
+    const waves = Math.ceil(layer.length / courts);
+    widest = Math.max(widest, layer.length);
+    rounds += waves;
+    if (isMedalLayer(layer)) {
+      medalMinutes += waves * medalMin;
+      medalMatches += layer.length;
+    } else {
+      bracketMinutes += waves * poolMin;
+      bracketMatches += layer.length;
+    }
+  }
+  const utilization = Math.min(1, ((bracketMatches * poolMin + medalMatches * medalMin)) / ((bracketMinutes + medalMinutes) * courts || 1));
+  const pool: PoolPlayResult = {
+    matchesPerPool: bracketMatches,
+    totalMatches: bracketMatches,
+    gamesPerTeam: Math.round((2 * (bracketMatches + medalMatches)) / n),
+    courtBoundMinutes: bracketMinutes,
+    teamBoundMinutes: bracketMinutes,
+    totalMinutes: bracketMinutes,
+    courtRounds: rounds,
+    bindingConstraint: courts < widest ? "court" : "team",
+    utilization,
+  };
+  const medal: MedalResult = {
+    totalMatches: medalMatches,
+    totalMinutes: medalMinutes,
+    summary:
+      event.double_elim_final === "bronze_only"
+        ? `Winners Final for gold/silver; consolation final for bronze; ${medalMin} min/game.`
+        : `Final (+ if-necessary game) and consolation final; ${medalMin} min/game.`,
+  };
+  return { teamsPerPool: n, courts, pool, medal, totalMinutes: bracketMinutes + medalMinutes };
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Display
 // ─────────────────────────────────────────────────────────────────────
 
@@ -198,6 +260,9 @@ export function fmtDuration(mins: number): string {
 // The subset of an events row the estimate depends on. Kept as a pick so
 // callers can pass a full Row or a hand-built object.
 export type EstimableEvent = {
+  // Round robin pools (default) or a double-elimination bracket.
+  bracket_type?: string | null;
+  double_elim_final?: "crossover" | "bronze_only" | null;
   pool_count: number;
   play_each_team_times: number;
   pool_minutes_per_game: number;
@@ -226,6 +291,9 @@ export function estimateEvent(
   courts: number,
 ): EventEstimate {
   const courtsForEvent = Math.max(1, courts);
+  if (event.bracket_type === "double_elim") {
+    return estimateDoubleElim(event, teamCount, courtsForEvent);
+  }
   const teamsPerPool =
     event.pool_count > 0
       ? Math.max(2, Math.ceil(teamCount / event.pool_count))
