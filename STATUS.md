@@ -1079,3 +1079,33 @@ just this guard out of a larger mixed local diff on the offline laptop — partn
 preview / H2H tiebreak already have their own branches. Shipped in PR #875 (Closes #876),
 squash-merged to `main` → **TEST**. **Next:** validate on test.bertanderne.com, then promote to
 PROD via a `main`→`production` PR.
+
+## 2026-09-13 — End-of-tournament summary report (client-facing wrap-up)
+
+Ron: "build an end-of-tournament summary report I send to the client — every bracket +
+its winners, plus fun stats (players, teams, points, how long it lasted)." New admin page
+`/admin/:orgSlug/tournaments/:slug/summary` ("Summary report" button on the tournament
+home, next to Player briefing). Loads the tournament + its events, spot-holding regs,
+players and matches (paged past the 1000-row cap) and renders a printable sheet:
+masthead (dates/venue), optional note to the client (page-local, not saved), "By the
+numbers" tiles (players, teams, brackets, matches, points, medals, days/hours of play,
+courts used), every bracket with its Gold/Silver/Bronze podium, a Highlights grid
+(highest-scoring match, closest finish, nail-biters, most lopsided, shutouts, most
+dominant pool run, undefeated teams, most matches played, multi-event players, busiest
+court, longest day) and a day-by-day table. Print / Save as PDF (visibility-based print
+CSS in the component, Letter + ½in margins) and Copy-as-text for pasting into email.
+On-screen warning when matches are unscored / podiums undecided.
+- **Data honesty:** matches have no started_at/completed_at, so "how long it lasted" is
+  first score → last score per day (a completed match's `updated_at` = when its score was
+  recorded). Per-match durations would need two timestamp columns + a status trigger on
+  `matches` — flagged as a follow-up migration, not done here.
+- **Refactor:** `buildTeams` / `computeStandings` / medal derivation moved out of
+  `EventConsolePage` into `lib/bracketTeams.ts` (page re-exports the types) so the report
+  decides winners exactly as the console does. Round-robin-only events podium from
+  standings (labelled as such); medal events from the final-round matches.
+- Pure summary math in `lib/tournamentSummary.ts` + 11 vitest cases (74 total pass).
+  typecheck + build clean; lint clean on all touched/new files (27 pre-existing hook-rule
+  errors elsewhere unchanged). Browser-verified via a throwaway fixture harness at 390px
+  (no overflow; day table stacks to cards) and 1100px, plus print-media render.
+- NOT verified against a real tournament on TEST — Ron: open a completed tournament's
+  Summary report on the PR preview and eyeball the podiums vs the event consoles.

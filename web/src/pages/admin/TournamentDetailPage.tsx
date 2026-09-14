@@ -642,6 +642,14 @@ export default function TournamentDetailPage() {
           >
             Player briefing
           </Link>
+          {/* End-of-tournament summary report — brackets + winners + the
+              numbers, printable / save-as-PDF for the client. */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/summary`}
+            style={secondaryLinkBtn}
+          >
+            Summary report
+          </Link>
           <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/offline-field`}
             style={secondaryLinkBtn}
