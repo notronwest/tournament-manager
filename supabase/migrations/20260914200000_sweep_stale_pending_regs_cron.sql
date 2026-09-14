@@ -1,4 +1,4 @@
--- 20260911120000_sweep_stale_pending_regs_cron.sql
+-- 20260914200000_sweep_stale_pending_regs_cron.sql
 --
 -- The stale-pending sweep finally gets a scheduler — and becomes team-safe.
 --

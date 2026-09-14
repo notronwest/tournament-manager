@@ -22,7 +22,7 @@ charging code. Everything else is the proposed architecture.
   Comments already mark where the PaymentIntent + webhook slot in.
 - **`sweep-stale-pending-regs`**: reaps abandoned pending regs. Runs as the
   pg_cron job of the same name every 5 min (SQL `sweep_stale_pending_regs(30)`,
-  migration `20260911120000`); the edge function is the manual entry point and
+  migration `20260914200000`); the edge function is the manual entry point and
   calls the same RPC. Unpairs the partner + promotes the next waitlister.
 
 ## The locked decision (CLAUDE.md #4)

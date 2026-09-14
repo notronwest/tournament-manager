@@ -96,7 +96,7 @@ which means the frontend can deploy while the schema silently doesn't.
 fails closed and wedges the pipeline.
 
 **Scheduled jobs live in the database, not in CI.** `pg_cron` (enabled by
-migration `20260911120000`) runs `sweep-stale-pending-regs` every 5 minutes on
+migration `20260914200000`) runs `sweep-stale-pending-regs` every 5 minutes on
 whichever project the migration applied to — there is no external cron and no
 secret involved. Verify: `select jobname, schedule, active from cron.job;` and
 `select * from cron.job_run_details order by start_time desc limit 10;`. Pause /
