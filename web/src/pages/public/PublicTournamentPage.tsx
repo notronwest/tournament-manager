@@ -22,6 +22,8 @@ import {
   type PricingTier,
 } from "../../lib/pricingTiers";
 import type { Database } from "../../types/supabase";
+import { computeMedals, type Team as BracketTeam } from "../../lib/bracketTeams";
+import { playoffStageLabel } from "../../lib/matchLabel";
 import {
   bg as v5Bg,
   ink,
@@ -30,6 +32,7 @@ import {
   cream,
   creamDeep,
   rule,
+  ruleSoft,
   courtGreen,
   courtYellow,
   courtRed,
@@ -78,7 +81,13 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
 const SECTION_TABS = [
   { key: "details" as const, label: "Details" },
   { key: "register" as const, label: "Events" },
+  { key: "results" as const, label: "Results" },
 ];
+type MatchRow = Database["public"]["Tables"]["matches"]["Row"] & {
+  bracket?: "winners" | "consolation" | "final" | null;
+  label?: string | null;
+  if_necessary?: boolean | null;
+};
 
 function composeLocationAddress(loc: {
   address?: string | null;
@@ -259,7 +268,10 @@ export default function PublicTournamentPage({
   // Public page is split into tabs (Details first, then Register). Built to
   // grow — Schedule / Results land here later. Details = pricing + the info
   // sections; Register = the events list (+ inbound-invite banner).
-  const [tab, setTab] = useState<"details" | "register">("details");
+  const [tab, setTab] = useState<"details" | "register" | "results">("details");
+  // Every match in the tournament (RLS lets the public read them once the
+  // tournament is published) — drives the Results tab.
+  const [matchesByEvent, setMatchesByEvent] = useState<Map<string, MatchRow[]>>(new Map());
 
   // Single source of truth for the page's data. Wrapped in a
   // useCallback + invoked by the useEffect on mount and by the
@@ -350,10 +362,18 @@ export default function PublicTournamentPage({
     // Run in parallel since neither depends on the other.
     if (evs && evs.length > 0) {
       const evIds = evs.map((e) => e.id);
-      const [regsByEventRes, rosterRes] = await Promise.all([
+      const [regsByEventRes, rosterRes, matchesRes] = await Promise.all([
         supabase.rpc("players_registered_for_events", { p_event_ids: evIds }),
         supabase.rpc("event_roster", { p_event_ids: evIds }),
+        supabase.from("matches").select("*").in("event_id", evIds).order("round").order("position"),
       ]);
+      const mByEvent = new Map<string, MatchRow[]>();
+      for (const m of (matchesRes.data ?? []) as MatchRow[]) {
+        const arr = mByEvent.get(m.event_id) ?? [];
+        arr.push(m);
+        mByEvent.set(m.event_id, arr);
+      }
+      setMatchesByEvent(mByEvent);
 
       const grouped = new Map<string, Set<string>>();
       for (const row of regsByEventRes.data ?? []) {
@@ -1192,6 +1212,16 @@ export default function PublicTournamentPage({
         )}
       </section>
       </div>
+      )}
+
+      {tab === "results" && (
+        <div role="tabpanel" id="tournament-panel-results" aria-labelledby="tournament-tab-results">
+          <ResultsPanel
+            events={events}
+            rosterByEvent={rosterByEvent}
+            matchesByEvent={matchesByEvent}
+          />
+        </div>
       )}
 
       {tab === "details" && (
@@ -3579,6 +3609,116 @@ function RosterPanel({
 // ─────────────────────────────────────────────────────────────────────
 // Bits
 // ─────────────────────────────────────────────────────────────────────
+
+// Results: medals per event plus the playoff / bracket matches with scores.
+// Team labels come from the public roster rows (pairs joined with " / ").
+function ResultsPanel({
+  events,
+  rosterByEvent,
+  matchesByEvent,
+}: {
+  events: Event[];
+  rosterByEvent: Map<string, RosterRow[]>;
+  matchesByEvent: Map<string, MatchRow[]>;
+}) {
+  const anyMatches = Array.from(matchesByEvent.values()).some((ms) => ms.length > 0);
+  if (!anyMatches) {
+    return (
+      <div style={{ padding: 20, background: "var(--surface)", border: `1px solid ${rule}`, borderRadius: 8, color: inkMuted, fontSize: 14 }}>
+        No results yet — scores appear here as games are played.
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {events.map((ev) => {
+        const ms = matchesByEvent.get(ev.id) ?? [];
+        if (ms.length === 0) return null;
+        const roster = rosterByEvent.get(ev.id) ?? [];
+        const nameOf = new Map(roster.map((r) => [r.registration_id, `${r.first_name} ${r.last_name}`.trim()]));
+        const partnerOf = new Map(roster.map((r) => [r.registration_id, r.partner_registration_id]));
+        const labelFor = (regId: string) => {
+          const p = partnerOf.get(regId);
+          const a = nameOf.get(regId) ?? "TBD";
+          return p && nameOf.get(p) ? `${a} / ${nameOf.get(p)}` : a;
+        };
+        // Minimal Team objects — computeMedals only reads label / captainRegId.
+        const teamByReg = new Map<string, BracketTeam>();
+        for (const r of roster) {
+          teamByReg.set(r.registration_id, { captainRegId: r.registration_id, partnerRegId: r.partner_registration_id, label: labelFor(r.registration_id) } as unknown as BracketTeam);
+        }
+        const playoff = ms.filter((m) => m.stage === "playoff");
+        const medals = computeMedals(ev as unknown as Parameters<typeof computeMedals>[0], playoff, teamByReg);
+        const rr = ms.filter((m) => m.stage === "round_robin");
+        const rrDone = rr.filter((m) => m.status === "completed").length;
+        const isDE = (ev as { bracket_type?: string }).bracket_type === "double_elim";
+        // Group playoff/bracket matches: by bracket + round for double elim, by round otherwise.
+        const groups = new Map<string, MatchRow[]>();
+        for (const m of playoff) {
+          const key = isDE ? `${m.bracket ?? "winners"}:${m.round}` : `r:${m.round}`;
+          const arr = groups.get(key) ?? [];
+          arr.push(m);
+          groups.set(key, arr);
+        }
+        const order: Record<string, number> = { winners: 0, consolation: 1, final: 2 };
+        const groupList = Array.from(groups.entries()).sort(([a], [b]) => {
+          const [ba, ra] = a.split(":"); const [bb, rb] = b.split(":");
+          return (order[ba] ?? 0) - (order[bb] ?? 0) || Number(ra) - Number(rb);
+        });
+        const groupTitle = (key: string, rows: MatchRow[]) => {
+          const [b, r] = key.split(":");
+          if (!isDE) return rows[0] ? playoffStageLabel(rows[0], playoff, ev)?.replace(/ \d+$/, "") ?? `Round ${r}` : `Round ${r}`;
+          if (rows.length === 1 && rows[0].label) return rows[0].label;
+          return `${b === "final" ? "Final" : b === "winners" ? "Winners bracket" : "Consolation bracket"} · round ${r}`;
+        };
+        return (
+          <section key={ev.id} style={{ padding: 16, background: "var(--surface)", border: `1px solid ${rule}`, borderRadius: 8 }}>
+            <h3 style={{ margin: "0 0 6px", fontSize: 16, fontFamily: headingFontStack }}>{ev.name}</h3>
+            {medals.length > 0 ? (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 14, marginBottom: 10 }}>
+                {medals.map((m) => (
+                  <span key={m.place}>{m.place === "gold" ? "🥇" : m.place === "silver" ? "🥈" : "🥉"} {m.team.label}</span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: inkMuted, marginBottom: 10 }}>
+                {rr.length > 0 ? `Pool play: ${rrDone} of ${rr.length} games played` : "Bracket in progress"}
+              </div>
+            )}
+            {groupList.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                {groupList.map(([key, rows]) => (
+                  <div key={key} style={{ border: `1px solid ${ruleSoft}`, borderRadius: 6, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, color: inkMuted, marginBottom: 4 }}>{groupTitle(key, rows)}</div>
+                    {rows.map((m) => {
+                      const a = m.team_a_reg_id ? labelFor(m.team_a_reg_id) : "TBD";
+                      const b = m.team_b_reg_id ? labelFor(m.team_b_reg_id) : "TBD";
+                      const done = m.status === "completed";
+                      const aWon = done && m.winner_reg_id === m.team_a_reg_id;
+                      const bWon = done && m.winner_reg_id === m.team_b_reg_id;
+                      return (
+                        <div key={m.id} style={{ fontSize: 13, lineHeight: 1.5, display: "flex", justifyContent: "space-between", gap: 8 }}>
+                          <span style={{ minWidth: 0 }}>
+                            <span style={{ fontWeight: aWon ? 700 : 400 }}>{a}</span>
+                            <span style={{ color: inkMuted }}> v </span>
+                            <span style={{ fontWeight: bWon ? 700 : 400 }}>{b}</span>
+                          </span>
+                          <span style={{ color: done ? ink : inkMuted, whiteSpace: "nowrap" }}>
+                            {done ? `${m.team_a_score}–${m.team_b_score}` : m.if_necessary ? "if needed" : "—"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
 
 function Shell({ children }: { children: ReactNode }) {
   return (
