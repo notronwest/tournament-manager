@@ -95,6 +95,13 @@ which means the frontend can deploy while the schema silently doesn't.
 `migration-lint.yml` gates PRs on duplicate versions. An out-of-order timestamp
 fails closed and wedges the pipeline.
 
+**Scheduled jobs live in the database, not in CI.** `pg_cron` (enabled by
+migration `20260911120000`) runs `sweep-stale-pending-regs` every 5 minutes on
+whichever project the migration applied to — there is no external cron and no
+secret involved. Verify: `select jobname, schedule, active from cron.job;` and
+`select * from cron.job_run_details order by start_time desc limit 10;`. Pause /
+retune with `cron.alter_job(...)` (recipe at the top of that migration).
+
 Runbook: [`supabase/MIGRATIONS.md`](./supabase/MIGRATIONS.md)
 
 **Per-project prerequisites this workflow can't set up on its own** (each new

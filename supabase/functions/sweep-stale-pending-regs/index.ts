@@ -2,13 +2,16 @@
 //
 // Silent backstage cleanup for the register-then-checkout flow.
 // Soft-cancels event_registrations rows that have been sitting in
-// status='pending_payment' for longer than the hold window, and
-// flips their partner_invites rows to 'cancelled' too.
+// status='pending_payment' for longer than the hold window, flips
+// their partner_invites rows to 'cancelled', unpairs their partner
+// (→ seeking) and promotes the next waitlisted player per freed spot.
 //
-// Designed to be invoked on a schedule (Supabase Cron / pg_cron /
-// any external cron hitting the function URL). Idempotent — safe
-// to call as often as you want; only acts on rows that have aged
-// past the threshold.
+// Scheduled since 2026-09-11 by the pg_cron job 'sweep-stale-pending-regs'
+// (every 5 min, migration 20260911120000), which runs the SQL function
+// public.sweep_stale_pending_regs directly. This edge function is the
+// MANUAL entry point — it calls the same RPC, so both paths are identical.
+// Idempotent — safe to call as often as you want; only acts on rows that
+// have aged past the threshold. (Before 2026-09-11 nothing invoked it.)
 //
 // The hold window is 30 minutes by default; override via the
 // PENDING_HOLD_MINUTES env var if a tournament's organizer wants
@@ -53,66 +56,25 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(supabaseUrl, serviceRole);
 
-  // Cutoff: anything updated_at older than this is fair game for
-  // cancellation. We use updated_at (not created_at) so a row that
-  // got touched recently — e.g. someone briefly opened the
-  // checkout page and edited something — gets a fresh window.
-  const cutoff = new Date(Date.now() - minutes * 60_000).toISOString();
-
-  // Step 1: collect the regs we're about to cancel. Need them to
-  // mirror-cancel any outbound partner_invites tied to the same
-  // (event, player). Use a separate select instead of a single
-  // UPDATE...RETURNING because we need to look up invites for
-  // each (event_id, player_id) tuple.
-  const { data: regs, error: selErr } = await admin
-    .from("event_registrations")
-    .select("id, event_id, player_id")
-    .eq("status", "pending_payment")
-    .is("deleted_at", null)
-    // Admin-created invoices (register-but-leave-a-balance) are intentional and
-    // persist until the player pays online — never sweep them.
-    .is("admin_invoiced_at", null)
-    .lt("updated_at", cutoff);
-  if (selErr) return jsonResp({ error: selErr.message }, 500);
-  const targetRegs = regs ?? [];
-  if (targetRegs.length === 0) {
-    return jsonResp({
-      ok: true,
-      cancelledRegs: 0,
-      cancelledInvites: 0,
-      holdMinutes: minutes,
-    });
-  }
-
-  // Step 2: soft-delete the regs.
-  const now = new Date().toISOString();
-  const regIds = targetRegs.map((r) => r.id);
-  const { error: regUpdErr } = await admin
-    .from("event_registrations")
-    .update({ deleted_at: now })
-    .in("id", regIds);
-  if (regUpdErr) return jsonResp({ error: regUpdErr.message }, 500);
-
-  // Step 3: cancel any pending partner_invites tied to the same
-  // (event_id, inviter_player_id) tuples — orphan invites are
-  // confusing to the invitee otherwise.
-  let cancelledInvites = 0;
-  for (const r of targetRegs) {
-    const { data, error: invErr } = await admin
-      .from("partner_invites")
-      .update({ status: "cancelled" })
-      .eq("event_id", r.event_id)
-      .eq("inviter_player_id", r.player_id)
-      .eq("status", "pending")
-      .select("id");
-    if (invErr) continue;
-    cancelledInvites += data?.length ?? 0;
-  }
+  // ONE implementation: the SQL function public.sweep_stale_pending_regs
+  // (migration 20260911120000) is what the pg_cron job runs every 5 minutes.
+  // Calling it here means a manual invocation does exactly what the job does:
+  // soft-delete idle pending_payment regs (never admin-invoiced ones), cancel
+  // their outbound partner invites, UNPAIR their partner (→ seeking) and
+  // promote the next waitlisted player into each freed spot.
+  const { data, error } = await admin.rpc("sweep_stale_pending_regs", {
+    p_hold_minutes: minutes,
+  });
+  if (error) return jsonResp({ error: error.message }, 500);
+  const row = Array.isArray(data) ? data[0] : data;
 
   return jsonResp({
     ok: true,
-    cancelledRegs: targetRegs.length,
-    cancelledInvites,
+    cancelledRegs: row?.cancelled_regs ?? 0,
+    cancelledInvites: row?.cancelled_invites ?? 0,
+    unpairedPartners: row?.unpaired_partners ?? 0,
+    promoted: row?.promoted ?? 0,
+    promotedRegIds: row?.promoted_reg_ids ?? [],
     holdMinutes: minutes,
   });
 });
