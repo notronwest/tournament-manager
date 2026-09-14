@@ -10,8 +10,20 @@ import {
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
+import {
+  buildTeams,
+  computeMedals,
+  computeStandings,
+  type Medal,
+  type Team,
+  type Standing,
+} from "../../lib/bracketTeams";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import {
+  planPoolDistribution,
+  type PoolPattern,
+} from "./poolDistribution";
 import {
   PlayerPicker,
   emptySelection,
@@ -54,38 +66,17 @@ type Event = Database["public"]["Tables"]["events"]["Row"];
 
 type TabKey = "settings" | "teams" | "games" | "standings";
 
-export type Medal = {
-  team: { label: string; captainRegId: string };
-  place: "gold" | "silver" | "bronze";
-};
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type EventRegistration =
   Database["public"]["Tables"]["event_registrations"]["Row"];
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 
-export type Team = {
-  // Captain reg id is the canonical id we use in matches. For doubles it
-  // is one of the pair (lowest UUID, deterministic). For singles it's
-  // just the one reg.
-  captainRegId: string;
-  partnerRegId: string | null;
-  captain: Player;
-  partner: Player | null;
-  label: string;
-  registeredAt: string;
-  poolIndex: number | null;
-  seed: number | null;
-};
-
-export type Standing = {
-  team: Team;
-  wins: number;
-  losses: number;
-  pf: number;
-  pa: number;
-  diff: number;
-};
+// Team / Standing / Medal and their builders live in lib/bracketTeams so the
+// tournament summary report computes results exactly as this console does.
+// Re-exported here because resultsExport (and its test) import the types
+// from this page.
+export type { Medal, Team, Standing } from "../../lib/bracketTeams";
 
 // Single-page console for running an event:
 //   1. Add teams (creates players + paired event_registrations)
@@ -258,40 +249,10 @@ export default function EventConsolePage() {
   // (R=2, N=4) since both store the medal matches at the final
   // round. Returns an empty array until the gold match is
   // completed; bronze is added later when its match finishes.
-  const medals = useMemo<Medal[]>(() => {
-    if (event && event.teams_advancing_to_playoff <= 0) return [];
-    if (!event) return [];
-    const R = event.playoff_rounds;
-    const goldMatch = playoffMatches.find(
-      (m) => m.round === R && m.position === 0,
-    );
-    if (!goldMatch || goldMatch.status !== "completed") return [];
-
-    const result: Medal[] = [];
-    if (goldMatch.winner_reg_id) {
-      const goldTeam = teamByAnyRegId.get(goldMatch.winner_reg_id);
-      if (goldTeam) result.push({ team: goldTeam, place: "gold" });
-    }
-    const silverRegId =
-      goldMatch.team_a_reg_id === goldMatch.winner_reg_id
-        ? goldMatch.team_b_reg_id
-        : goldMatch.team_a_reg_id;
-    if (silverRegId) {
-      const silverTeam = teamByAnyRegId.get(silverRegId);
-      if (silverTeam) result.push({ team: silverTeam, place: "silver" });
-    }
-    const bronzeMatch = playoffMatches.find(
-      (m) => m.round === R && m.position === 1,
-    );
-    if (
-      bronzeMatch?.status === "completed" &&
-      bronzeMatch.winner_reg_id
-    ) {
-      const bronzeTeam = teamByAnyRegId.get(bronzeMatch.winner_reg_id);
-      if (bronzeTeam) result.push({ team: bronzeTeam, place: "bronze" });
-    }
-    return result;
-  }, [event, playoffMatches, teamByAnyRegId]);
+  const medals = useMemo<Medal[]>(
+    () => (event ? computeMedals(event, playoffMatches, teamByAnyRegId) : []),
+    [event, playoffMatches, teamByAnyRegId],
+  );
 
   // Reset all match scores in this event back to 'pending' — clear
   // scores, winner, and court, but keep the schedule intact (don't
@@ -894,6 +855,15 @@ function TeamsSection({
 
   const onSetPool = async (team: Team, poolIndex: number | null) => {
     setError(null);
+    // Same corruption vector as distributePools: matches reference each team's
+    // pool assignment, so moving a team between pools after games exist strands
+    // its generated matches. Reset all matches first.
+    if (hasMatches) {
+      setError(
+        "Games are already created — reset all matches before changing a team's pool.",
+      );
+      return;
+    }
     const ids = [team.captainRegId];
     if (team.partnerRegId) ids.push(team.partnerRegId);
     const { error: updErr } = await supabase
@@ -979,30 +949,36 @@ function TeamsSection({
   //
   // Unseeded teams sort last (1e9 sentinel) and continue whichever
   // pattern was chosen.
-  type PoolPattern = "alternate" | "snake";
-
   const distributePools = async (pattern: PoolPattern) => {
     setError(null);
     if (event.pool_count < 2) return;
+    // Pools can't be redistributed once games exist — the matches reference
+    // these teams and their pool assignment, so re-pooling would corrupt the
+    // bracket. Clear matches first (Reset all matches).
+    if (hasMatches) {
+      setError(
+        "Games are already created — reset all matches before redistributing pools.",
+      );
+      return;
+    }
     setBusy(true);
-    const sorted = teams
-      .slice()
-      .sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
+    // planPoolDistribution owns the seeded ordering AND the once-games-exist
+    // lock, so it returns an empty plan (no writes) if hasMatches is ever true.
+    const plan = planPoolDistribution({
+      teams,
+      poolCount: event.pool_count,
+      pattern,
+      hasMatches,
+    });
 
     // Parallel UPDATEs — same pattern as persistOrder. Partial-failure
     // semantics still TODO via a transactional RPC.
-    const writes = sorted.map((team, i) => {
-      const ids = [team.captainRegId];
-      if (team.partnerRegId) ids.push(team.partnerRegId);
-      const poolIndex =
-        pattern === "alternate"
-          ? (i % event.pool_count) + 1
-          : snakePoolIndex(i, event.pool_count);
-      return supabase
+    const writes = plan.map(({ ids, poolIndex }) =>
+      supabase
         .from("event_registrations")
         .update({ pool_index: poolIndex })
-        .in("id", ids);
-    });
+        .in("id", ids),
+    );
     const results = await Promise.all(writes);
     const firstErr = results.find((r) => r.error)?.error;
     if (firstErr) {
@@ -1046,17 +1022,29 @@ function TeamsSection({
               <>
                 <button
                   onClick={() => distributePools("alternate")}
-                  disabled={busy || savingOrder || teams.length === 0}
+                  disabled={
+                    busy || savingOrder || teams.length === 0 || hasMatches
+                  }
                   style={tinyPrimaryBtn}
-                  title="Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, seed 3 → pool 1, etc."
+                  title={
+                    hasMatches
+                      ? "Locked — games already created. Reset all matches first to redistribute pools."
+                      : "Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, seed 3 → pool 1, etc."
+                  }
                 >
                   Distribute: alternate
                 </button>
                 <button
                   onClick={() => distributePools("snake")}
-                  disabled={busy || savingOrder || teams.length === 0}
+                  disabled={
+                    busy || savingOrder || teams.length === 0 || hasMatches
+                  }
                   style={tinySecondaryBtn}
-                  title="Snake-draft teams for competitive balance: 1,2,2,1,1,2,2,1. Keeps the average seed equal across pools."
+                  title={
+                    hasMatches
+                      ? "Locked — games already created. Reset all matches first to redistribute pools."
+                      : "Snake-draft teams for competitive balance: 1,2,2,1,1,2,2,1. Keeps the average seed equal across pools."
+                  }
                 >
                   Snake draft
                 </button>
@@ -1274,6 +1262,12 @@ function TeamsSection({
                           <td style={tdStyle}>
                             <select
                               value={team.poolIndex ?? ""}
+                              disabled={hasMatches}
+                              title={
+                                hasMatches
+                                  ? "Locked — games already created. Reset all matches first to change pools."
+                                  : undefined
+                              }
                               onChange={(e) =>
                                 onSetPool(
                                   team,
@@ -2270,123 +2264,6 @@ function playoffRoundLabel(
 // ─────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────
-
-function buildTeams(regs: EventRegistration[], players: Player[]): Team[] {
-  const playerById = new Map(players.map((p) => [p.id, p]));
-  const regById = new Map(regs.map((r) => [r.id, r]));
-
-  const teams: Team[] = [];
-  const seen = new Set<string>();
-
-  for (const r of regs) {
-    if (seen.has(r.id)) continue;
-    seen.add(r.id);
-
-    let captainReg: EventRegistration = r;
-    let partnerReg: EventRegistration | null = null;
-    if (r.partner_registration_id) {
-      const pr = regById.get(r.partner_registration_id);
-      if (pr) {
-        seen.add(pr.id);
-        // Pick the lower-id reg as the captain so the choice is stable.
-        if (pr.id < captainReg.id) {
-          partnerReg = captainReg;
-          captainReg = pr;
-        } else {
-          partnerReg = pr;
-        }
-      }
-    }
-
-    const captain = playerById.get(captainReg.player_id);
-    if (!captain) continue;
-    const partner = partnerReg
-      ? (playerById.get(partnerReg.player_id) ?? null)
-      : null;
-
-    teams.push({
-      captainRegId: captainReg.id,
-      partnerRegId: partnerReg?.id ?? null,
-      captain,
-      partner,
-      registeredAt: captainReg.registered_at,
-      // Captain's pool wins ties — the partner-link insert sequence
-      // copies it onto the partner row anyway.
-      poolIndex: captainReg.pool_index ?? partnerReg?.pool_index ?? null,
-      seed: captainReg.seed ?? partnerReg?.seed ?? null,
-      label: partner
-        ? `${captain.first_name} ${captain.last_name} / ${partner.first_name} ${partner.last_name}`
-        : `${captain.first_name} ${captain.last_name}`,
-    });
-  }
-
-  // Sort by seed (ascending, unseeded last), then registration order so
-  // the rank column reads top-to-bottom.
-  teams.sort((a, b) => {
-    const sa = a.seed ?? Number.POSITIVE_INFINITY;
-    const sb = b.seed ?? Number.POSITIVE_INFINITY;
-    if (sa !== sb) return sa - sb;
-    return a.registeredAt.localeCompare(b.registeredAt);
-  });
-  return teams;
-}
-
-// Snake-draft pool index for the i-th team across `poolCount` pools.
-// Pattern for 2 pools: 1,2,2,1,1,2,2,1; for 3 pools: 1,2,3,3,2,1,1,2,3.
-// Returns a 1-based pool index.
-function snakePoolIndex(i: number, poolCount: number): number {
-  const round = Math.floor(i / poolCount);
-  const within = i % poolCount;
-  const idx = round % 2 === 0 ? within : poolCount - 1 - within;
-  return idx + 1;
-}
-
-function computeStandings(teams: Team[], rrMatches: Match[]): Standing[] {
-  const byCap = new Map<string, Standing>();
-  for (const t of teams) {
-    byCap.set(t.captainRegId, {
-      team: t,
-      wins: 0,
-      losses: 0,
-      pf: 0,
-      pa: 0,
-      diff: 0,
-    });
-  }
-
-  for (const m of rrMatches) {
-    if (m.status !== "completed") continue;
-    if (
-      m.team_a_reg_id === null ||
-      m.team_b_reg_id === null ||
-      m.team_a_score === null ||
-      m.team_b_score === null
-    ) {
-      continue;
-    }
-    const a = byCap.get(m.team_a_reg_id);
-    const b = byCap.get(m.team_b_reg_id);
-    if (!a || !b) continue;
-    a.pf += m.team_a_score;
-    a.pa += m.team_b_score;
-    b.pf += m.team_b_score;
-    b.pa += m.team_a_score;
-    if (m.winner_reg_id === m.team_a_reg_id) {
-      a.wins++;
-      b.losses++;
-    } else if (m.winner_reg_id === m.team_b_reg_id) {
-      b.wins++;
-      a.losses++;
-    }
-  }
-
-  const standings = Array.from(byCap.values());
-  for (const s of standings) s.diff = s.pf - s.pa;
-  standings.sort(
-    (x, y) => y.wins - x.wins || y.diff - x.diff || y.pf - x.pf,
-  );
-  return standings;
-}
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);

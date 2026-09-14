@@ -1060,3 +1060,52 @@ compose the address the way the public tournament page does (`composeLocationAdd
 the legacy columns stay as the fallback. Briefing harness (stubbed client) confirms the
 intro "at <venue>" line, the "Where" block and the Maps link with the composed address.
 web typecheck + lint + FN tsc clean. Ships as one PR (function + page are independent).
+
+## 2026-09-11 — Pool distribution/reassignment locked once games exist (data-integrity guard)
+
+Redistributing pools rewrites each team's `pool_index`, but generated matches already
+reference those teams and their pool assignment — so re-pooling (or moving one team's pool)
+*after* games are created corrupts the bracket/standings. In `EventConsolePage.tsx`
+`TeamsSection`: `distributePools` now early-returns with an error when `hasMatches` and routes
+its writes through a new pure `planPoolDistribution()` (in `poolDistribution.ts`) that returns an
+empty plan whenever games exist; both pool buttons get `|| hasMatches` on `disabled` + a
+"Locked — reset all matches first" title. Applied the **same guard to the per-team Pool
+dropdown** (`onSetPool`) — same corruption vector — blocking the handler and disabling the
+`<select>`. Seed drag-reorder left unguarded on purpose (matches key off registration ids, not
+seeds; reseeding is reversible/cosmetic). Extracted `snakePoolIndex`+planner and added
+`poolDistribution.test.ts` (7 cases, headline = no-op when matches exist). typecheck clean,
+vitest 7/7; no CI runs eslint/tsc/vitest on web (Pages builds `vite build` only). Productized
+just this guard out of a larger mixed local diff on the offline laptop — partner-B add / playoff
+preview / H2H tiebreak already have their own branches. Shipped in PR #875 (Closes #876),
+squash-merged to `main` → **TEST**. **Next:** validate on test.bertanderne.com, then promote to
+PROD via a `main`→`production` PR.
+
+## 2026-09-13 — End-of-tournament summary report (client-facing wrap-up)
+
+Ron: "build an end-of-tournament summary report I send to the client — every bracket +
+its winners, plus fun stats (players, teams, points, how long it lasted)." New admin page
+`/admin/:orgSlug/tournaments/:slug/summary` ("Summary report" button on the tournament
+home, next to Player briefing). Loads the tournament + its events, spot-holding regs,
+players and matches (paged past the 1000-row cap) and renders a printable sheet:
+masthead (dates/venue), optional note to the client (page-local, not saved), "By the
+numbers" tiles (players, teams, brackets, matches, points, medals, days/hours of play,
+courts used), every bracket with its Gold/Silver/Bronze podium, a Highlights grid
+(highest-scoring match, closest finish, nail-biters, most lopsided, shutouts, most
+dominant pool run, undefeated teams, most matches played, multi-event players, busiest
+court, longest day) and a day-by-day table. Print / Save as PDF (visibility-based print
+CSS in the component, Letter + ½in margins) and Copy-as-text for pasting into email.
+On-screen warning when matches are unscored / podiums undecided.
+- **Data honesty:** matches have no started_at/completed_at, so "how long it lasted" is
+  first score → last score per day (a completed match's `updated_at` = when its score was
+  recorded). Per-match durations would need two timestamp columns + a status trigger on
+  `matches` — flagged as a follow-up migration, not done here.
+- **Refactor:** `buildTeams` / `computeStandings` / medal derivation moved out of
+  `EventConsolePage` into `lib/bracketTeams.ts` (page re-exports the types) so the report
+  decides winners exactly as the console does. Round-robin-only events podium from
+  standings (labelled as such); medal events from the final-round matches.
+- Pure summary math in `lib/tournamentSummary.ts` + 11 vitest cases (74 total pass).
+  typecheck + build clean; lint clean on all touched/new files (27 pre-existing hook-rule
+  errors elsewhere unchanged). Browser-verified via a throwaway fixture harness at 390px
+  (no overflow; day table stacks to cards) and 1100px, plus print-media render.
+- NOT verified against a real tournament on TEST — Ron: open a completed tournament's
+  Summary report on the PR preview and eyeball the podiums vs the event consoles.
