@@ -167,10 +167,16 @@ export function computeStandings(teams: Team[], rrMatches: Match[]): Standing[] 
 // array until the gold match is completed; bronze is added later when its
 // match finishes.
 export function computeMedals(
-  event: { teams_advancing_to_playoff: number; playoff_rounds: number },
+  event: {
+    teams_advancing_to_playoff: number;
+    playoff_rounds: number;
+    bracket_type?: string | null;
+    double_elim_final?: "crossover" | "bronze_only" | null;
+  },
   playoffMatches: Match[],
   teamByReg: Map<string, Team>,
 ): Medal[] {
+  if (event.bracket_type === "double_elim") return computeDoubleElimMedals(event, playoffMatches, teamByReg);
   if (event.teams_advancing_to_playoff <= 0) return [];
   const R = event.playoff_rounds;
   const goldMatch = playoffMatches.find(
@@ -199,4 +205,45 @@ export function computeMedals(
     if (bronzeTeam) result.push({ team: bronzeTeam, place: "bronze" });
   }
   return result;
+}
+
+// Double elimination (matches carry `bracket` / `if_necessary`, see
+// lib/doubleElim + migration 20260914210000):
+//   crossover   — gold/silver from the LAST completed final (F2 if it was
+//                 played, else F1); bronze = loser of the consolation final.
+//   bronze_only — gold/silver from the Winners Final; bronze = winner of the
+//                 consolation final.
+type DEMatch = Match & { bracket?: "winners" | "consolation" | "final" | null; if_necessary?: boolean | null };
+function computeDoubleElimMedals(
+  event: { double_elim_final?: "crossover" | "bronze_only" | null },
+  playoffMatches: Match[],
+  teamByReg: Map<string, Team>,
+): Medal[] {
+  const ms = playoffMatches as DEMatch[];
+  const done = (m: DEMatch | undefined) => m && m.status === "completed" && m.winner_reg_id ? m : undefined;
+  const loserOf = (m: DEMatch) => (m.team_a_reg_id === m.winner_reg_id ? m.team_b_reg_id : m.team_a_reg_id);
+  const push = (out: Medal[], regId: string | null | undefined, place: Medal["place"]) => {
+    const t = regId ? teamByReg.get(regId) : undefined;
+    if (t) out.push({ team: t, place });
+  };
+  const out: Medal[] = [];
+  const format = event.double_elim_final ?? "crossover";
+  const winners = ms.filter((m) => m.bracket === "winners");
+  const wFinal = winners.length ? winners.reduce((a, b) => (b.round > a.round ? b : a)) : undefined;
+  const consolation = ms.filter((m) => m.bracket === "consolation");
+  const lFinal = consolation.length ? consolation.reduce((a, b) => (b.round > a.round ? b : a)) : undefined;
+  if (format === "bronze_only") {
+    const g = done(wFinal);
+    if (g) { push(out, g.winner_reg_id, "gold"); push(out, loserOf(g), "silver"); }
+    const b = done(lFinal);
+    if (b) push(out, b.winner_reg_id, "bronze");
+    return out;
+  }
+  const f2 = done(ms.find((m) => m.bracket === "final" && m.if_necessary));
+  const f1 = done(ms.find((m) => m.bracket === "final" && !m.if_necessary));
+  const last = f2 ?? (f1 && !ms.some((m) => m.bracket === "final" && m.if_necessary && m.status !== "completed") ? f1 : undefined);
+  if (last) { push(out, last.winner_reg_id, "gold"); push(out, loserOf(last), "silver"); }
+  const lf = done(lFinal);
+  if (lf) push(out, loserOf(lf), "bronze");
+  return out;
 }

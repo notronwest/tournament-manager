@@ -58,7 +58,9 @@ export async function autoTransitionEventStatus(eventId: string) {
   let next: EventStatus | null = null;
   const status = ev.status as EventStatus;
 
-  if (status === "draft" && rr.length > 0) {
+  // Any generated matches (round robin, or a double-elimination bracket) make
+  // the event ready to run.
+  if (status === "draft" && matches.length > 0) {
     next = "ready";
   } else if (
     status === "active" &&
