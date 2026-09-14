@@ -5,6 +5,34 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-14 — SYNCED Pickleball Angels results from the offline laptop DB → PROD (+ session recap 09-10→09-14)
+
+**Sync (today).** Sat Sep 12 ran on the offline stack; PROD had 0 matches. Started Docker +
+local Supabase, exported both sides, field-diffed, applied ONE transaction via
+`supabase db query --linked` (PROD pre-state: backups/prod-pre-sync-20260914T142707.tgz):
+99 matches (ids preserved); event statuses (4 complete; Mixed Doubles 3.5 = medal_round — its
+**BRONZE match Sarah Thibault v Cristina Omahen has no score: Ron enters it**); 66 pool_index;
+event_courts (Mixed 2.75 → 5–8, Womens → 3,6,7); 3 new players (Caryn West, Erin Ma, Beth
+Goldenberg) + 8 desk-created regs; 3 desk regs remapped onto PROD seeker rows (Terragni,
+Thoresen, Gagnon — payments kept); 7 PROD regs the desk removed set **withdrawn** (Judy Poulin
+Womens; Mixed 2.75: DeFranc, Duffy, Cogdill×2, French, Walmsley) — **refund decisions: Ron**.
+Skipped the offline paid→pending flip on Nicole Richard. First attempt rolled back on an FK
+order issue (insert new regs with partner null, then link). Procedure saved to memory
+(offline-to-prod-sync). Local stack left running (`supabase stop` is safe; never --no-backup).
+Working tree: Saturday's offline-only edits were **stashed** (superseded by open PRs #865
+#866 #880 #881 #884) — `git stash list` → "offline-only tweaks from the Sep 12 PB Angels event".
+
+**Recap of this session's shipped work (its STATUS entries were lost to a working-tree reset).**
+All promoted to PROD unless noted: waitlist pay-to-claim + status parity (#758/#761→#766);
+pg_net story #785 (Agent Ready); stories #770 #771 (Agent Ready); pair seekers by division
+(#787→#790) + emails both players (#792→#793); pending-invites "Last sent" (#803/#805);
+event-form pool team info (#814); RR estimator moved into Schedule, tool retired (#816);
+schedule reorder + parallel packer by courts needed (#820/#821); inline setup + drag-drop
+(#824); plan hold reasons (#827); cross-pool medal seeding (#830/#831); medal-round phase
+(#834); schedule lock + cascade (#837/#838); formatted print sheet (#841); reopen on deadline
+extend (#861); admin profile RatingPicker (#863). **#784 (pg_cron sweep) still HELD** — 4
+Angels pending regs are now moot (event over): merge after Ron reconciles or accepts.
+
 ## 2026-09-11 — Builder: offer-waitlist-spot promotes the confirmed partner too (#770), PR #788 open
 
 Built issue #770: offering a waitlist spot to one half of a confirmed doubles
