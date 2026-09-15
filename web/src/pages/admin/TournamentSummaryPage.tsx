@@ -187,7 +187,16 @@ export default function TournamentSummaryPage() {
   }, [org, tournamentSlug]);
 
   const summary = useMemo<TournamentSummary | null>(
-    () => (tournament ? buildTournamentSummary({ events, regs, players, matches }) : null),
+    () =>
+      tournament
+        ? buildTournamentSummary({
+            events,
+            regs,
+            players,
+            matches,
+            window: { startsAt: tournament.starts_at, endsAt: tournament.ends_at },
+          })
+        : null,
     [tournament, events, regs, players, matches],
   );
 
@@ -263,6 +272,14 @@ export default function TournamentSummaryPage() {
             Finish scoring in the{" "}
             <Link to={`${base}/courts`} style={{ color: "inherit" }}>court manager</Link>{" "}
             and this page updates on reload.
+          </div>
+        )}
+
+        {summary.lateScores > 0 && (
+          <div style={{ ...statusPanelStyle("info"), marginBottom: 16, fontSize: 13 }} role="status">
+            {summary.lateScores === 1 ? "One score was" : `${summary.lateScores} scores were`} recorded
+            after the tournament ended (late entry). {summary.lateScores === 1 ? "It counts" : "They count"} toward
+            matches, points and podiums but not toward days or hours of play.
           </div>
         )}
 

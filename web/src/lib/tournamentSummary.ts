@@ -110,6 +110,9 @@ export type TournamentSummary = {
   days: DaySummary[];
   // The moment the last score of the tournament was recorded.
   lastResultAt: Date | null;
+  // Scores recorded outside the tournament window (+ grace) and therefore
+  // left out of the day-by-day / hours-of-play figures.
+  lateScores: number;
 };
 
 // What the report masthead needs about the tournament itself.
@@ -129,7 +132,17 @@ export type SummaryInput = {
   matches: Match[];
   // Time zone used to bucket finishes into days; defaults to the browser's.
   timeZone?: string;
+  // The tournament's scheduled window. Scores recorded well outside it
+  // (a bronze match typed in days later) are late data entry, not play:
+  // they still count toward matches / points / podiums but not toward
+  // days or hours of play.
+  window?: { startsAt: string; endsAt: string };
 };
+
+// How far past the scheduled end (or before the start) a recorded score
+// still counts as tournament play — a final that runs late and gets
+// typed in after midnight is play; a score entered two days later isn't.
+const LATE_ENTRY_GRACE_MS = 6 * 60 * 60 * 1000;
 
 const GENDER_LABEL: Record<SummaryEvent["gender"], string> = {
   men: "Men's",
@@ -210,7 +223,7 @@ function joinNames(names: string[], max = 3): string {
 }
 
 export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
-  const { events, regs, players, matches, timeZone } = input;
+  const { events, regs, players, matches, timeZone, window } = input;
 
   const regsByEvent = new Map<string, EventRegistration[]>();
   for (const r of regs) {
@@ -381,11 +394,36 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     };
   });
 
-  // Days of play from recorded finishes.
+  // Days of play from recorded finishes, clipped to the tournament window.
+  const windowStart = window ? new Date(window.startsAt) : null;
+  const windowEnd = window ? new Date(window.endsAt) : null;
+  const haveWindow =
+    !!windowStart && !!windowEnd &&
+    !Number.isNaN(windowStart.getTime()) && !Number.isNaN(windowEnd.getTime());
+  const startDay = haveWindow ? dayKey(windowStart, timeZone) : null;
+  const endDay = haveWindow ? dayKey(windowEnd, timeZone) : null;
+
+  let lateScores = 0;
+  let lastResultAt: Date | null = null;
   const byDay = new Map<string, DaySummary>();
   for (const f of finishes) {
     if (Number.isNaN(f.at.getTime())) continue;
-    const key = dayKey(f.at, timeZone);
+    if (!lastResultAt || f.at > lastResultAt) lastResultAt = f.at;
+    let key = dayKey(f.at, timeZone);
+    if (haveWindow && startDay && endDay) {
+      const t = f.at.getTime();
+      if (
+        t < windowStart.getTime() - LATE_ENTRY_GRACE_MS ||
+        t > windowEnd.getTime() + LATE_ENTRY_GRACE_MS
+      ) {
+        lateScores++;
+        continue;
+      }
+      // Inside the grace period but past midnight → still the last day
+      // (a final scored at 12:30am belongs to the day it was played).
+      if (key < startDay) key = startDay;
+      if (key > endDay) key = endDay;
+    }
     const d = byDay.get(key);
     if (!d) {
       byDay.set(key, {
@@ -408,7 +446,6 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     d.spanMinutes = Math.round((d.lastFinish.getTime() - d.firstFinish.getTime()) / 60000);
   }
   const playMinutes = days.reduce((sum, d) => sum + d.spanMinutes, 0);
-  const lastResultAt = days.length ? days[days.length - 1].lastFinish : null;
 
   const multiEventPlayers = [...eventsPerPlayer.values()].filter((n) => n > 1).length;
 
@@ -546,6 +583,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     highlights,
     days,
     lastResultAt,
+    lateScores,
   };
 }
 
