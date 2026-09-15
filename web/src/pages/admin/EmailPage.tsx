@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { fetchOrgContacts, type OrgContact, type ContactSource } from "../../lib/orgContacts";
+import {
+  MAX_ATTACHMENT_FILES,
+  MAX_ATTACHMENT_TOTAL_BYTES,
+  validateAttachmentSelection,
+  formatBytes,
+  fileToBase64,
+  type AttachmentRejection,
+} from "../../lib/emailAttachments";
 import { EmailHistory } from "./EmailHistory";
 import {
   EMAIL_RE,
@@ -21,6 +29,8 @@ import {
   rule,
   ruleSoft,
   courtGreen,
+  courtBlue,
+  dangerFg,
   bodyFontStack,
   ctaPrimaryStyle,
   ctaPrimaryDisabledStyle,
@@ -29,6 +39,18 @@ import {
   inputStyle,
   statusPanelStyle,
 } from "../../lib/publicTheme";
+
+const FN = "send-contact-broadcast";
+// Recipients per request when attachments force one-at-a-time sending.
+const SEND_WINDOW = 25;
+type BroadcastWindowResult = {
+  broadcastId: string;
+  recipientCount: number;
+  sent: number;
+  failed: number;
+  nextCursor: number | null;
+  detail?: string;
+};
 
 // The Email surface — split out of the old overloaded Contacts screen. Two tabs:
 // Compose (write + pick recipients via filters) and History (delivery status).
@@ -274,8 +296,12 @@ function ComposeTab({
             orgDefaultReplyTo={orgDefaultReplyTo}
             senderEmail={senderEmail}
             canEditDefault={canEditDefault}
-            onSent={(n) => {
-              setSentMsg(`Your message is being sent to ${n} contact${n === 1 ? "" : "s"}. Track it on the History tab.`);
+            onSent={(n, failed) => {
+              setSentMsg(
+                failed > 0
+                  ? `Your message was sent to ${n} contact${n === 1 ? "" : "s"}; ${failed} failed. Track it on the History tab.`
+                  : `Your message is being sent to ${n} contact${n === 1 ? "" : "s"}. Track it on the History tab.`,
+              );
               setExcluded(new Set());
             }}
           />
@@ -299,7 +325,7 @@ function ComposeForm({
   orgDefaultReplyTo: string | null;
   senderEmail: string;
   canEditDefault: boolean;
-  onSent: (n: number) => void;
+  onSent: (n: number, failed: number) => void;
 }) {
   const recipientCount = recipientIds.length;
   const [subject, setSubject] = useState("");
@@ -310,6 +336,43 @@ function ComposeForm({
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+
+  // PDF attachments. With attachments the edge function can't use Resend's
+  // batch endpoint, so it mails one recipient at a time in windows and we
+  // loop until `nextCursor` is null (same shape as SummaryEmailModal).
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachRejections, setAttachRejections] = useState<AttachmentRejection[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [progress, setProgress] = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentBytes = attachments.reduce((sum, f) => sum + f.size, 0);
+
+  const addFiles = (picked: FileList | File[] | null | undefined) => {
+    const files = picked ? Array.from(picked) : [];
+    if (files.length === 0) return;
+    const { accepted, rejected } = validateAttachmentSelection(attachments, files);
+    if (accepted.length > 0) setAttachments((prev) => [...prev, ...accepted]);
+    setAttachRejections(rejected);
+  };
+  const removeAttachment = (name: string) => {
+    setAttachments((prev) => prev.filter((f) => f.name !== name));
+    setAttachRejections([]);
+  };
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (sending || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    if (!dragOver) setDragOver(true);
+  };
+  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setDragOver(false);
+  };
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    setDragOver(false);
+    if (sending) return;
+    e.preventDefault();
+    addFiles(e.dataTransfer.files);
+  };
 
   // Reply-to: club default if set, else the sending admin's email. Editable per send.
   const [replyTo, setReplyTo] = useState((orgDefaultReplyTo || senderEmail).trim());
@@ -349,36 +412,82 @@ function ComposeForm({
   const send = async () => {
     setError(null);
     setSending(true);
-    try {
-      const { data, error: fnErr } = await supabase.functions.invoke("send-contact-broadcast", {
-        body: {
-          organizationId: orgId,
-          subject: subject.trim(),
-          body,
-          consent: true,
-          playerIds: recipientIds,
-          bodyIsHtml,
-          ...(replyToTrimmed ? { replyTo: replyToTrimmed } : {}),
-        },
-      });
-      if (fnErr) {
-        setError(await readFnError(fnErr));
-        return;
-      }
-      const n = (data as { recipientCount?: number })?.recipientCount ?? recipientCount;
+    setProgress(null);
+    const baseBody = {
+      organizationId: orgId,
+      subject: subject.trim(),
+      body,
+      consent: true,
+      playerIds: recipientIds,
+      bodyIsHtml,
+      ...(replyToTrimmed ? { replyTo: replyToTrimmed } : {}),
+    };
+    const finish = (n: number, failed: number) => {
       setSubject("");
       setBody("");
       setConsent(false);
-      onSent(n);
+      setAttachments([]);
+      setAttachRejections([]);
+      onSent(n, failed);
+    };
+    try {
+      if (attachments.length === 0) {
+        // No attachments: one batched call, the function fans out server-side.
+        const { data, error: fnErr } = await supabase.functions.invoke(FN, { body: baseBody });
+        if (fnErr) {
+          setError(await readFnError(fnErr));
+          return;
+        }
+        const n = (data as { recipientCount?: number })?.recipientCount ?? recipientCount;
+        finish(n, 0);
+        return;
+      }
+
+      // With attachments: encode once, then walk the recipient list in windows.
+      const encoded = await Promise.all(
+        attachments.map(async (f) => ({ filename: f.name, contentBase64: await fileToBase64(f) })),
+      );
+      let cursor: number | null = 0;
+      let broadcastId: string | undefined;
+      let sent = 0;
+      let failed = 0;
+      let total = recipientCount;
+      setProgress({ sent, failed, total });
+      while (cursor !== null) {
+        const { data, error: fnErr } = await supabase.functions.invoke(FN, {
+          body: { ...baseBody, attachments: encoded, cursor, limit: SEND_WINDOW, broadcastId },
+        });
+        if (fnErr) {
+          setError(
+            `${await readFnError(fnErr)} — ${sent} of ${total} ${sent === 1 ? "email was" : "emails were"} sent before the error.`,
+          );
+          return;
+        }
+        const r = data as BroadcastWindowResult;
+        sent += r.sent;
+        failed += r.failed;
+        broadcastId = r.broadcastId;
+        cursor = r.nextCursor;
+        total = r.recipientCount ?? total;
+        setProgress({ sent, failed, total });
+      }
+      finish(sent, failed);
     } catch (e) {
       setError((e as { message?: string })?.message ?? "Send failed.");
     } finally {
       setSending(false);
+      setProgress(null);
     }
   };
 
   return (
-    <div style={panelWrap}>
+    <div
+      style={{ ...panelWrap, ...(dragOver ? { borderColor: courtBlue, boxShadow: `inset 0 0 0 1px ${courtBlue}` } : null) }}
+      onDragEnter={onDragOver}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <label style={fieldLabel}>Subject</label>
       <input
         type="text"
@@ -387,15 +496,16 @@ function ComposeForm({
         placeholder="e.g. Summer league sign-ups are open"
         style={{ ...inputStyle, marginBottom: 14 }}
         maxLength={200}
+        disabled={sending}
       />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
         <label style={{ ...fieldLabel, marginBottom: 0 }}>Message</label>
         <div style={{ display: "flex", gap: 4 }} role="tablist" aria-label="Message format">
-          <button type="button" role="tab" aria-selected={!bodyIsHtml} onClick={() => { setBodyIsHtml(false); setShowPreview(false); }} style={modeBtnStyle(!bodyIsHtml)}>
+          <button type="button" role="tab" aria-selected={!bodyIsHtml} disabled={sending} onClick={() => { setBodyIsHtml(false); setShowPreview(false); }} style={modeBtnStyle(!bodyIsHtml)}>
             Plain text
           </button>
-          <button type="button" role="tab" aria-selected={bodyIsHtml} onClick={() => setBodyIsHtml(true)} style={modeBtnStyle(bodyIsHtml)}>
+          <button type="button" role="tab" aria-selected={bodyIsHtml} disabled={sending} onClick={() => setBodyIsHtml(true)} style={modeBtnStyle(bodyIsHtml)}>
             HTML
           </button>
         </div>
@@ -403,6 +513,7 @@ function ComposeForm({
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
+        disabled={sending}
         placeholder={
           bodyIsHtml
             ? "Paste your HTML here — e.g. <h2>Big news</h2><p>…</p>. It's sent inside the club's branded header, footer, and unsubscribe link."
@@ -439,12 +550,87 @@ function ComposeForm({
         </div>
       )}
 
+      {/* Attachments */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+          <label style={{ ...fieldLabel, marginBottom: 0 }} id="broadcast-attachments-label">Attachments (PDF)</label>
+          {attachments.length > 0 && (
+            <span style={{ fontSize: 12, color: inkMuted }}>
+              {attachments.length} of {MAX_ATTACHMENT_FILES} · {formatBytes(attachmentBytes)} of {formatBytes(MAX_ATTACHMENT_TOTAL_BYTES)}
+            </span>
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          multiple
+          hidden
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+        {attachments.length > 0 && (
+          <ul aria-labelledby="broadcast-attachments-label" style={{ listStyle: "none", margin: "0 0 8px", padding: 0, display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {attachments.map((f) => (
+              <li key={f.name} style={attachmentChipStyle}>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13 }}>
+                  {f.name} <span style={{ color: inkMuted }}>· {formatBytes(f.size)}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(f.name)}
+                  disabled={sending}
+                  aria-label={`Remove ${f.name}`}
+                  title="Remove"
+                  style={{ ...chipRemoveStyle, opacity: sending ? 0.4 : 1, cursor: sending ? "default" : "pointer" }}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending || attachments.length >= MAX_ATTACHMENT_FILES}
+          style={{
+            ...ctaSecondaryStyle, padding: "8px 14px", fontSize: 12, minHeight: 44,
+            opacity: sending || attachments.length >= MAX_ATTACHMENT_FILES ? 0.5 : 1,
+            cursor: sending || attachments.length >= MAX_ATTACHMENT_FILES ? "default" : "pointer",
+          }}
+        >
+          Attach PDF…
+        </button>
+        <p style={{ fontSize: 12, color: inkSoft, margin: "8px 0 0", lineHeight: 1.5 }}>
+          Up to {MAX_ATTACHMENT_FILES} PDFs, {formatBytes(MAX_ATTACHMENT_TOTAL_BYTES)} total. With attachments, emails go out one at a time
+          (about 2 per second), so a big list takes a few minutes — keep this page open.
+        </p>
+        {attachRejections.length > 0 && (
+          <div role="alert" style={{ marginTop: 8, fontSize: 12, color: dangerFg, lineHeight: 1.5 }}>
+            {attachRejections.map((r, i) => (
+              <div key={`${r.name}-${i}`}>
+                <strong>{r.name}</strong> — {r.reason}
+              </div>
+            ))}
+            <button type="button" style={{ ...ghostButtonStyle, fontSize: 12, marginTop: 2 }} onClick={() => setAttachRejections([])}>
+              Dismiss
+            </button>
+          </div>
+        )}
+      </div>
+
       <label style={fieldLabel}>Reply-to address</label>
       <input
         type="email"
         value={replyTo}
         onChange={(e) => { setReplyTo(e.target.value); setSavedDefault(false); }}
         placeholder={senderEmail || "replies@yourclub.com"}
+        disabled={sending}
         style={{ ...inputStyle, marginBottom: 6, ...(replyToValid ? null : { borderColor: "#c0392b" }) }}
       />
       <p style={{ fontSize: 12, color: inkSoft, margin: "0 0 6px", lineHeight: 1.5 }}>
@@ -475,13 +661,19 @@ function ComposeForm({
       </div>
 
       <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: inkSoft, marginBottom: 14, cursor: "pointer" }}>
-        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
+        <input type="checkbox" checked={consent} disabled={sending} onChange={(e) => setConsent(e.target.checked)} style={{ width: 16, height: 16, marginTop: 2, flexShrink: 0 }} />
         <span>I have permission to email these contacts. They are members, registrants, or people who opted in to hear from this club.</span>
       </label>
 
       {error && (
         <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }} role="alert">
           {error}
+        </div>
+      )}
+      {progress && sending && (
+        <div style={{ ...statusPanelStyle("info"), marginBottom: 12 }} role="status" aria-live="polite">
+          Sending… {progress.sent} of {progress.total}
+          {progress.failed > 0 ? ` (${progress.failed} failed)` : ""}. Keep this page open.
         </div>
       )}
 
@@ -499,7 +691,12 @@ function ComposeForm({
           destructive={false}
           body={
             <>
-              Send “{subject.trim()}” to <strong>{recipientCount}</strong> contact{recipientCount === 1 ? "" : "s"}? This can't be unsent.
+              Send “{subject.trim()}”
+              {attachments.length > 0 && (
+                <> with <strong>{attachments.length}</strong> PDF{attachments.length === 1 ? "" : "s"} attached</>
+              )}
+              {" "}to <strong>{recipientCount}</strong> contact{recipientCount === 1 ? "" : "s"}? This can't be unsent.
+              {attachments.length > 0 && <> With attachments, sending takes a while — keep this page open until it finishes.</>}
             </>
           }
           confirmLabel="Send now"
@@ -519,4 +716,36 @@ const panelWrap = {
   borderRadius: 12,
   padding: 20,
   background: "#fff",
+} as const;
+
+// Attachment chip: name · size · remove. 44px tall so it's a real touch target
+// at phone width; chips wrap and each is capped to the row so a long filename
+// truncates instead of pushing the remove button off-screen.
+const attachmentChipStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: 4,
+  minHeight: 44,
+  maxWidth: "100%",
+  padding: "0 0 0 12px",
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  background: cream,
+  color: ink,
+} as const;
+
+const chipRemoveStyle = {
+  width: 44,
+  height: 44,
+  flexShrink: 0,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "transparent",
+  border: "none",
+  borderRadius: 8,
+  color: inkSoft,
+  fontSize: 14,
+  lineHeight: 1,
+  fontFamily: bodyFontStack,
 } as const;

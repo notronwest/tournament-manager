@@ -5,6 +5,23 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-15 — PDF attachments on the admin Email page (story #925)
+
+Ron: "attach the pdf to the normal email functionality we have as an admin." Same
+mechanics as the summary email: `send-contact-broadcast` keeps its `/emails/batch`
+path when no attachments, and switches to per-recipient windowed sends
+(`attachments[]`, `cursor`/`limit`/`broadcastId`) when PDFs are attached; the
+attachment validation + paced `sendOne` move to `_shared/attachments.ts` and
+`send-tournament-summary` is refactored onto it. UX: Email page composer gets
+**Attach PDF…** (≤3 files, 5 MB total, chips, inline rejections) and the progress
+loop from `SummaryEmailModal`. Worktrees `feat/broadcast-attachments-fn` (`[FN]`
+first) and `feat/broadcast-attachments-ux`. No new secret.
+Shipped: `[FN]` PR #926 (15dacea: `_shared/attachments.ts`, windowed path in
+`send-contact-broadcast`, summary fn refactored onto the helper) + UX PR (this one:
+`lib/emailAttachments.ts` + 13 tests, EmailPage picker/chips/drag-drop/progress loop).
+Gates green; **not browser-checked at 390px** (composer is behind admin auth; no env
+here). Next: Ron sends himself a test with a PDF from the Email page on PROD.
+
 ## 2026-09-15 — Event morning: offline laptop DB restored to pristine NH Baners snapshot
 
 Ron finished dry-running double elim on the laptop; ran `backups/restore-pristine.sh`
