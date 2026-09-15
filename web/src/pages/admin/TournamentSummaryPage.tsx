@@ -13,6 +13,8 @@ import {
   type TournamentSummary,
 } from "../../lib/tournamentSummary";
 import { TournamentSummaryReport } from "../../components/TournamentSummaryReport";
+import { SummaryEmailModal } from "../../components/SummaryEmailModal";
+import { renderSummaryPdf, summaryPdfFilename } from "../../lib/summaryPdf";
 import { displayHeading, fieldLabel } from "./contactsUi";
 import {
   ink,
@@ -84,6 +86,8 @@ export default function TournamentSummaryPage() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [emailing, setEmailing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!org || !tournamentSlug) return;
@@ -225,6 +229,30 @@ export default function TournamentSummaryPage() {
     window.setTimeout(() => setCopied(null), 4000);
   };
 
+  // Same PDF the email attaches — so what the organizer downloads is exactly
+  // what attendees receive.
+  const downloadPdf = async () => {
+    if (!summary || !header || downloading) return;
+    setDownloading(true);
+    try {
+      const bytes = await renderSummaryPdf({ header, summary, note });
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = summaryPdfFilename(header);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setCopied(e instanceof Error ? `Couldn't build the PDF: ${e.message}` : "Couldn't build the PDF.");
+      window.setTimeout(() => setCopied(null), 6000);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   if (!org) return null;
 
   if (error) {
@@ -252,7 +280,7 @@ export default function TournamentSummaryPage() {
         <p style={{ color: inkSoft, fontSize: 15, margin: "0 0 18px", maxWidth: 620, lineHeight: 1.55 }}>
           The end-of-tournament wrap-up for your client: every bracket and its
           winners, the headline numbers, and the fun facts. Add a note if you
-          like, then save it as a PDF and send it along.
+          like, then download the PDF or email it to every attendee.
         </p>
 
         {(unscored > 0 || undecided.length > 0) && (
@@ -299,19 +327,40 @@ export default function TournamentSummaryPage() {
         </div>
 
         <div style={actionRow}>
-          <button type="button" onClick={() => window.print()} style={ctaPrimaryStyle}>
-            Print / Save as PDF
+          <button type="button" onClick={() => setEmailing(true)} style={ctaPrimaryStyle}>
+            Email to attendees
+          </button>
+          <button
+            type="button"
+            onClick={downloadPdf}
+            disabled={downloading}
+            style={{ ...ctaSecondaryStyle, opacity: downloading ? 0.6 : 1 }}
+          >
+            {downloading ? "Building PDF…" : "Download PDF"}
+          </button>
+          <button type="button" onClick={() => window.print()} style={ctaSecondaryStyle}>
+            Print
           </button>
           <button type="button" onClick={copyText} style={ctaSecondaryStyle}>
             Copy as text
           </button>
           <span style={{ fontSize: 12.5, color: inkSoft }}>
-            {copied ?? 'In the print dialog choose "Save as PDF" to get a file to attach.'}
+            {copied ?? "Attendees get the same PDF as the download, attached to a short email."}
           </span>
         </div>
       </div>
 
       <TournamentSummaryReport header={header} summary={summary} note={note} />
+
+      {emailing && (
+        <SummaryEmailModal
+          tournamentId={tournament.id}
+          header={header}
+          summary={summary}
+          note={note}
+          onClose={() => setEmailing(false)}
+        />
+      )}
 
     </div>
   );

@@ -5,6 +5,36 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-15 — Event morning: offline laptop DB restored to pristine NH Baners snapshot
+
+Ron finished dry-running double elim on the laptop; ran `backups/restore-pristine.sh`
+(snapshot `pa-loaded-pristine.sql`, refreshed 09-14 19:50 after the NH Baners pull).
+Verified after restore: NH Baners 1 event, 12 registrations all paired, 0 seeds,
+0 matches, 0 check-ins, 0 court slices; director org membership intact; app at
+:5173 answers 200. Local DB is at migration head (`20260914220000`). Script's
+"95 registrations" success line is stale copy from the Angels weekend — harmless.
+Next: run the event per the cheat sheet; afterwards "sync the tournament back to
+B&E" (procedure in memory `offline-to-prod-sync`).
+
+**In flight (same day, Ron's ask: "send the summary to attendees as an attachment"):**
+building "Email to attendees" on the Summary report page. Design: client-side
+text PDF via `pdf-lib` (`web/src/lib/summaryPdf.ts`, dynamic import) — also a
+new "Download PDF" button so the file Ron downloads is byte-identical to what
+attendees get; new edge fn `send-tournament-summary` (mirrors
+`send-tournament-briefing`: staff auth, spot-holding registrants deduped by
+email, `contact_broadcasts` logging) sending ONE Resend request per recipient
+with `attachments[]` because `/emails/batch` can't carry attachments, paced for
+Resend's 2 req/s and windowed (`cursor`/`limit`/`broadcastId`, client loops).
+UI: `components/SummaryEmailModal.tsx` (count preview, send-test-to-me, consent,
+confirm, progress). Worktrees `feat/summary-email-fn` (`[FN]` PR first) and
+`feat/summary-email-ux`. No new secret needed (RESEND_* exist on both projects).
+Shipped: story #920; `[FN]` PR #921 (b63c41a) + UX PR (this one): `lib/summaryPdf.ts`
+(pdf-lib 1.17.1, lazy chunk ~438 kB/181 kB gz, WinAnsi-sanitized text, 7 tests),
+`components/SummaryEmailModal.tsx`, Summary page buttons **Email to attendees** /
+**Download PDF** / Print / Copy as text. Not browser-verified end to end (needs a
+logged-in admin on TEST with Resend) — typecheck/135 tests/lint/build green, sample PDF
+eyeballed. Next: Ron sends himself a test from a real tournament on PROD.
+
 ## 2026-09-14 — Double elimination shipped to PROD; day-of PRs merged for tomorrow's NH Baners event; laptop offline stack
 
 **Double elimination (epic built end-to-end, all on PROD):** PRs #902 (pure
