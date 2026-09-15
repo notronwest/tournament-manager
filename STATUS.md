@@ -5,6 +5,52 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-14 — Double elimination shipped to PROD; day-of PRs merged for tomorrow's NH Baners event; laptop offline stack
+
+**Double elimination (epic built end-to-end, all on PROD):** PRs #902 (pure
+`lib/doubleElim.ts` + 17 tests), #903 (`[DB]` migration
+`20260914210000_double_elim.sql` — `events.double_elim_final` enum
+`crossover|bronze_only`, `matches.bracket/slot_key/label/if_necessary/
+feeds_winner_to(+side)/feeds_loser_to(+side)`), #905 (event form "Tournament
+style" round_robin|double_elim + Final format; Teams tab seed randomizers;
+Event console `DoubleElimSection` — Generate inserts slots then wires feeds by
+`slot_key`; data-driven `feedForwardPlayoffWinners` — W-champ wins F1 deletes
+the if-necessary F2; fair court queue via `bracketRank`), #907 (public
+Results tab — medals + playoff/bracket scores), #910 (`BracketView`: zoomable
+0.4–2×, scrollable, real bracket picture; Bracket|Table toggle; click a card to
+score). Design notes in memory `double-elim-design.md`. Ron's call: **offer both**
+finals — crossover (true DE, 2N−2 games +1 if F2) and bronze-only (consolation
+ends at L(2k−3), 2N−4 games).
+
+**Merged today for the event (Builder PRs Ron asked to run "today"):** #880
+`[DB]` `event_registrations.checked_in_at` (renumbered to
+`20260914220000` — the original `20260912…` stamp was behind remote head and
+would have failed closed; TEST migration workflow green), #865 offline
+runtime hardening, #866 assign Player B to a partnerless team, #881 day-of
+check-in screen + printable sheet + Start gate (rebased; kept both import
+groups), #870 score-entry safety (rebased; `MatchRow` now requires `event` —
+added at both `DoubleElimSection` call sites). Typecheck / 125 vitest / build
+green on each. Tracking issues for the Builder PRs' `Closes` check: #912 (#865),
+#913 (#866). Promotion PR main→production follows this entry.
+
+**Laptop / offline for NH Baners:** `backups/pull-live.py` now takes
+`TM_ORG_ID` / `TM_TID` env and clears a same-slug seeded org before load;
+run order in `backups/OFFLINE-CHEATSHEET.md`; `.claude/launch.json` has an
+`offline` config (`scripts/offline.sh`, :5173). Local DB migrated to head
+(`checked_in_at` present; migration is idempotent). Docker reinstalled on the
+new laptop via Homebrew cask.
+
+**Incident (this session):** a failed `cd` into a worktree made a
+`reset --hard` + rebase run in the shared main checkout, wiping its
+*uncommitted* STATUS.md/CLAUDE.md edits (CLAUDE.md is the bootstrap block
+sync — harmless; the STATUS content is re-recorded in this entry). Rule
+re-learned: `cd "$WT" || exit 1` before any destructive git op, and the
+worktree script wants the **repo path**, not its basename.
+
+**Still open / not merged:** Builder PRs #867, #869, #872, #874, #877, #878,
+#884, #885; medal-match score editing for brackets on Edit event; bracket
+rounds on the print sheet; pg_net on PROD (#785).
+
 ## 2026-09-11 — Score-entry safety: valid-score enforcement + confirm modal (#871/#868), PR #870 open
 
 Productized two score-entry safety features Ron applied locally on the offline
