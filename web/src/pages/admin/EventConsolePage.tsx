@@ -40,6 +40,7 @@ import {
 } from "../../lib/checkin";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
+import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
 import { pairRegistrations } from "../../lib/registrations";
 import { BracketView } from "../../components/BracketView";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1682,6 +1683,7 @@ function RoundRobinSection({
                 match={m}
                 index={i + 1}
                 teamByAnyRegId={teamByAnyRegId}
+                event={event}
                 onSaved={onChange}
               />
             ))}
@@ -1741,11 +1743,13 @@ function MatchRow({
   match,
   index,
   teamByAnyRegId,
+  event,
   onSaved,
 }: {
   match: Match;
   index: number;
   teamByAnyRegId: Map<string, Team>;
+  event: Event;
   onSaved: () => Promise<void>;
 }) {
   const teamA = match.team_a_reg_id
@@ -1771,16 +1775,17 @@ function MatchRow({
     setErr(null);
     const a = scoreA === "" ? null : parseInt(scoreA, 10);
     const b = scoreB === "" ? null : parseInt(scoreB, 10);
-    if (a === null || b === null || Number.isNaN(a) || Number.isNaN(b)) {
+    if (a === null || b === null) {
       setErr("Both scores required.");
       return;
     }
-    if (a < 0 || b < 0) {
-      setErr("Scores can't be negative.");
-      return;
-    }
-    if (a === b) {
-      setErr("Scores can't be tied.");
+    // Same rule check as the court cards (reach the target, win by the
+    // margin) — round-robin resolves the target from the event, playoff
+    // matches from their own row config. No modal here: this is a dense
+    // admin grid that also edits/clears finished scores inline.
+    const result = validateScore(a, b, resolveScoreRules(match, event));
+    if (!result.ok) {
+      setErr(result.error);
       return;
     }
     setBusy(true);
@@ -1833,21 +1838,27 @@ function MatchRow({
       >
         <div className="no-print" style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap" }}>
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={scoreA}
-            onChange={(e) => setScoreA(e.target.value)}
+            onChange={(e) => setScoreA(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && onSave()}
             disabled={!canPlay || busy}
             style={scoreInputStyle}
+            aria-label={`${teamA?.label ?? "Team A"} score`}
           />
           <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={scoreB}
-            onChange={(e) => setScoreB(e.target.value)}
+            onChange={(e) => setScoreB(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && onSave()}
             disabled={!canPlay || busy}
             style={scoreInputStyle}
+            aria-label={`${teamB?.label ?? "Team B"} score`}
           />
           <button
             onClick={onSave}
@@ -2413,6 +2424,7 @@ function PlayoffSection({
                         match={m}
                         index={i + 1}
                         teamByAnyRegId={teamByAnyRegId}
+                        event={event}
                         onSaved={onChange}
                       />
                     ))}
@@ -2621,7 +2633,7 @@ function DoubleElimSection({
               </div>
               <table style={tableStyle}>
                 <tbody>
-                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
                 </tbody>
               </table>
             </div>
@@ -2651,7 +2663,7 @@ function DoubleElimSection({
                 </thead>
                 <tbody>
                   {g.rows.map((r, i) => (
-                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
                   ))}
                 </tbody>
               </table>

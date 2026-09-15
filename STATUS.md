@@ -5,6 +5,32 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-11 — Score-entry safety: valid-score enforcement + confirm modal (#871/#868), PR #870 open
+
+Productized two score-entry safety features Ron applied locally on the offline
+laptop from live tournament-desk feedback: score entry accepted physically
+impossible finals (a game to 11 win-by-2 took 9–7, which nobody had won —
+only NaN/negative/tied were checked). New shared, tested helper
+`web/src/lib/scoreValidation.ts`: `resolveScoreRules(match,event)` (per-match
+`points_to_win`/`win_by` win — playoff rows carry their semifinal/medal config
+stamped at bracket generation; round-robin falls back to the event) +
+`validateScore` (reach the target, win by the margin, end by exactly win-by
+past the target; target checks only when a target is known so time-capped
+formats aren't false-rejected). Wired into both Court Manager screens
+(validate → ConfirmModal showing teams/scores/winner before writing) and the
+Games-tab MatchRow (validation inline, no modal). Also folded in the #868
+polish across all three surfaces: `number`→`text inputMode=numeric` + digit
+sanitize + `aria-label`s + Enter-to-submit. Tests: all required cases (11-9 ok,
+11-10/9-7/13-9 rejected, 12-10/15-13 ok) + guards + RR-vs-playoff resolution;
+full suite 71/71, `tsc -b` clean, Pages preview built.
+
+**Scope note:** the offline laptop also had UNRELATED uncommitted edits in
+`EventConsolePage.tsx` (doubles partner-registration fix + playoff-bracket
+preview modal) and `supabase/config.toml`/`seed.sql` — deliberately left out
+of this PR; still uncommitted in the main checkout for separate handling.
+
+**Next:** Ron review + merge PR #870 → TEST, validate at a desk (9–7 rejected,
+valid score confirms the winner), then promote via a `main`→`production` PR.
 ## 2026-09-12 — Day-of player check-in: schema PR #880 + UX PR #881 open
 
 Requested live by Ron during the Pickleball Angels tournament — nothing

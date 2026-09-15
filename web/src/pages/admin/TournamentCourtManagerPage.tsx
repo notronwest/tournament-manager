@@ -16,7 +16,9 @@ import {
   playoffStageStyle,
 } from "../../lib/matchLabel";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
+import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
 import { NoCourtCountNotice } from "../../components/NoCourtCountNotice";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   bg,
   ink,
@@ -869,6 +871,7 @@ function CourtCard({
   const [scoreA, setScoreA] = useState("");
   const [scoreB, setScoreB] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [pendingScore, setPendingScore] = useState<{ a: number; b: number } | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerValue, setPickerValue] = useState("");
   // Local state resets cleanly on assignment change because the parent
@@ -878,24 +881,32 @@ function CourtCard({
     regId ? (teamByAnyRegId.get(regId)?.label ?? "—") : "—";
 
   if (assigned) {
-    const submit = async () => {
+    // Validate the score against the game's rules (reach the target, win by
+    // the margin), then open the confirmation modal instead of writing
+    // directly. Round-robin uses the event's points_to_win/win_by; playoff
+    // matches carry their own (semifinal/medal) config on the row.
+    const submit = () => {
       const a = parseInt(scoreA, 10);
       const b = parseInt(scoreB, 10);
-      if (Number.isNaN(a) || Number.isNaN(b)) {
-        setErr("Both scores required.");
+      const result = validateScore(
+        a,
+        b,
+        resolveScoreRules(assigned, assignedEvent),
+      );
+      if (!result.ok) {
+        setErr(result.error);
         return;
       }
-      if (a < 0 || b < 0) {
-        setErr("Scores can't be negative.");
-        return;
-      }
-      if (a === b) {
-        setErr("Scores can't be tied.");
-        return;
-      }
+      setErr(null);
+      setPendingScore({ a, b });
+    };
+
+    const doSubmit = async () => {
+      if (!pendingScore) return;
       setBusy(true);
-      await onSubmitScore(assigned, a, b);
+      await onSubmitScore(assigned, pendingScore.a, pendingScore.b);
       setBusy(false);
+      setPendingScore(null);
     };
 
     return (
@@ -925,26 +936,28 @@ function CourtCard({
           }}
         >
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min="0"
+            pattern="[0-9]*"
             value={scoreA}
-            onChange={(e) => setScoreA(e.target.value)}
+            onChange={(e) => setScoreA(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
             disabled={busy}
             style={bigScoreInput}
-            placeholder="A"
+            aria-label={`${teamLabel(assigned.team_a_reg_id)} score`}
             autoFocus
           />
           <span style={{ color: inkMuted, fontSize: 18 }}>–</span>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min="0"
+            pattern="[0-9]*"
             value={scoreB}
-            onChange={(e) => setScoreB(e.target.value)}
+            onChange={(e) => setScoreB(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
             disabled={busy}
             style={bigScoreInput}
-            placeholder="B"
+            aria-label={`${teamLabel(assigned.team_b_reg_id)} score`}
           />
         </div>
 
@@ -980,6 +993,41 @@ function CourtCard({
             Cancel
           </button>
         </div>
+
+        {pendingScore && (
+          <ConfirmModal
+            title="Confirm final score"
+            confirmLabel="Save score"
+            cancelLabel="Go back"
+            destructive={false}
+            onCancel={() => setPendingScore(null)}
+            onConfirm={doSubmit}
+            body={
+              <div style={{ fontSize: 15, fontFamily: bodyFontStack }}>
+                <div style={scoreConfirmRow}>
+                  <span>{teamLabel(assigned.team_a_reg_id)}</span>
+                  <b style={{ fontSize: 20 }}>{pendingScore.a}</b>
+                </div>
+                <div style={scoreConfirmRow}>
+                  <span>{teamLabel(assigned.team_b_reg_id)}</span>
+                  <b style={{ fontSize: 20 }}>{pendingScore.b}</b>
+                </div>
+                <div style={scoreConfirmWinner}>
+                  Winner:{" "}
+                  <b>
+                    {teamLabel(
+                      pendingScore.a > pendingScore.b
+                        ? assigned.team_a_reg_id
+                        : assigned.team_b_reg_id,
+                    )}
+                  </b>{" "}
+                  {Math.max(pendingScore.a, pendingScore.b)}–
+                  {Math.min(pendingScore.a, pendingScore.b)}
+                </div>
+              </div>
+            }
+          />
+        )}
       </div>
     );
   }
@@ -1354,6 +1402,22 @@ const bigScoreInput: CSSProperties = {
   fontFamily: bodyFontStack,
   textAlign: "center",
   fontWeight: 600,
+};
+
+const scoreConfirmRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+  padding: "6px 0",
+  borderBottom: `1px solid ${ruleSoft}`,
+};
+
+const scoreConfirmWinner: CSSProperties = {
+  marginTop: 12,
+  paddingTop: 10,
+  borderTop: `2px solid ${ink}`,
+  fontSize: 15,
 };
 
 const primaryBtnBase: CSSProperties = {
