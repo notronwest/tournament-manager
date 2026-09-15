@@ -24,6 +24,7 @@ import {
 import type { Database } from "../../types/supabase";
 import { computeMedals, type Team as BracketTeam } from "../../lib/bracketTeams";
 import { playoffStageLabel } from "../../lib/matchLabel";
+import { BracketView } from "../../components/BracketView";
 import {
   bg as v5Bg,
   ink,
@@ -3685,7 +3686,10 @@ function ResultsPanel({
                 {rr.length > 0 ? `Pool play: ${rrDone} of ${rr.length} games played` : "Bracket in progress"}
               </div>
             )}
-            {groupList.length > 0 && (
+            {isDE && playoff.length > 0 && (
+              <BracketView matches={playoff} labelFor={labelFor} />
+            )}
+            {!isDE && groupList.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
                 {groupList.map(([key, rows]) => (
                   <div key={key} style={{ border: `1px solid ${ruleSoft}`, borderRadius: 6, padding: "8px 10px" }}>
