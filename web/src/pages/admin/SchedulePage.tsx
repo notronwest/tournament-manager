@@ -1411,6 +1411,7 @@ export default function SchedulePage() {
                         row={r}
                         courtCount={courtCount}
                         busy={frozen}
+                        locked={locked}
                         error={rowErr[r.event.id] ?? ""}
                         onPatch={(patch) => void onPatchEvent(r.event.id, patch)}
                         onToggleCourt={(c) => void onToggleCourt(r.event.id, c)}
@@ -1558,6 +1559,7 @@ function SetupPanel({
   row,
   courtCount,
   busy,
+  locked,
   error,
   onPatch,
   onToggleCourt,
@@ -1565,6 +1567,7 @@ function SetupPanel({
   row: EventRow;
   courtCount: number;
   busy: boolean;
+  locked: boolean;
   error: string;
   onPatch: (
     patch: Partial<
@@ -1712,6 +1715,22 @@ function SetupPanel({
       {error && (
         <div style={{ marginTop: 8, padding: "6px 10px", background: dangerBg, color: dangerFg, borderRadius: 4, fontSize: 12 }}>
           {error}
+        </div>
+      )}
+      {locked && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "6px 10px",
+            background: warnBg,
+            color: warnFg,
+            borderRadius: 4,
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          🔒 Schedule is locked — click “Unlock schedule” at the top to change
+          setup.
         </div>
       )}
       <div style={{ marginTop: 8, fontSize: 11, color: inkMuted }}>
