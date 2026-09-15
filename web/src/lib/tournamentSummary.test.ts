@@ -273,3 +273,40 @@ describe("fmtDateRange", () => {
     expect(fmtDateRange("2026-06-30T12:00:00", "2026-07-01T12:00:00")).toMatch(/^June 30 – .*July 1, 2026$/);
   });
 });
+
+describe("tournament window", () => {
+  const players = [player("p1", "Ann", "Adams"), player("p2", "Bo", "Burke"), player("p3", "Cy", "Cole")];
+  const regs = [reg("r1", "e1", "p1"), reg("r2", "e1", "p2"), reg("r3", "e1", "p3")];
+  const events = [event({ id: "e1", name: "Singles", format: "singles" })];
+  const window = { startsAt: "2026-06-06T12:00:00Z", endsAt: "2026-06-06T22:00:00Z" };
+  const played = [
+    match({ id: "a", event_id: "e1", team_a_reg_id: "r1", team_b_reg_id: "r2", team_a_score: 11, team_b_score: 5, winner_reg_id: "r1", updated_at: "2026-06-06T13:00:00Z" }),
+    match({ id: "b", event_id: "e1", team_a_reg_id: "r1", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 7, winner_reg_id: "r1", updated_at: "2026-06-06T20:00:00Z" }),
+  ];
+
+  it("keeps a score typed in days later out of the days/hours of play but in the totals", () => {
+    const late = match({ id: "c", event_id: "e1", team_a_reg_id: "r2", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 9, winner_reg_id: "r2", updated_at: "2026-06-09T16:00:00Z" });
+    const s = buildTournamentSummary({ events, regs, players, matches: [...played, late], timeZone: TZ, window });
+    expect(s.headline.days).toBe(1);
+    expect(s.headline.playMinutes).toBe(420);
+    expect(s.days.map((d) => [d.date, d.matches])).toEqual([["2026-06-06", 2]]);
+    expect(s.headline.matchesPlayed).toBe(3);
+    expect(s.headline.pointsScored).toBe(16 + 18 + 20);
+    expect(s.lateScores).toBe(1);
+    expect(s.lastResultAt?.toISOString()).toBe("2026-06-09T16:00:00.000Z");
+  });
+
+  it("folds a final scored just after midnight into the last day", () => {
+    const lateFinal = match({ id: "c", event_id: "e1", team_a_reg_id: "r2", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 9, winner_reg_id: "r2", updated_at: "2026-06-07T00:30:00Z" });
+    const s = buildTournamentSummary({ events, regs, players, matches: [...played, lateFinal], timeZone: TZ, window });
+    expect(s.lateScores).toBe(0);
+    expect(s.days.map((d) => [d.date, d.matches, d.spanMinutes])).toEqual([["2026-06-06", 3, 690]]);
+  });
+
+  it("buckets by calendar day when no window is given", () => {
+    const late = match({ id: "c", event_id: "e1", team_a_reg_id: "r2", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 9, winner_reg_id: "r2", updated_at: "2026-06-09T16:00:00Z" });
+    const s = buildTournamentSummary({ events, regs, players, matches: [...played, late], timeZone: TZ });
+    expect(s.headline.days).toBe(2);
+    expect(s.lateScores).toBe(0);
+  });
+});
