@@ -35,6 +35,7 @@ import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
 import { pairRegistrations } from "../../lib/registrations";
+import { BracketView } from "../../components/BracketView";
 import type { SupabaseClient } from "@supabase/supabase-js";
 // Double-elimination columns (migration 20260914210000) — generated types lag.
 const untyped = supabase as unknown as SupabaseClient;
@@ -2450,6 +2451,12 @@ function DoubleElimSection({
 
   const medals = useMemo(() => computeMedals(event, matches, teamByAnyRegId), [event, matches, teamByAnyRegId]);
   const slotsByKey = useMemo(() => new Map(preview?.slots.map((x) => [x.key, x]) ?? []), [preview]);
+  // Bracket picture by default; the table is the score-entry fallback. Clicking
+  // a card in the picture opens that one match's row for scoring below it.
+  const [view, setView] = useState<"bracket" | "table">("bracket");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = rows.find((r) => r.id === selectedId) ?? null;
+  const teamLabel = (regId: string) => teamByAnyRegId.get(regId)?.label ?? "TBD";
 
   return (
     <section>
@@ -2457,7 +2464,11 @@ function DoubleElimSection({
         title="Double elimination"
         right={
           rows.length > 0 ? (
-            <div className="no-print" style={{ display: "flex", gap: 8 }}>
+            <div className="no-print" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "inline-flex", border: `1px solid ${rule}`, borderRadius: 6, overflow: "hidden" }}>
+                <button onClick={() => setView("bracket")} style={{ ...tinySecondaryBtn, border: "none", borderRadius: 0, background: view === "bracket" ? courtBlue : "#fff", color: view === "bracket" ? "#fff" : inkSoft }}>Bracket</button>
+                <button onClick={() => setView("table")} style={{ ...tinySecondaryBtn, border: "none", borderRadius: 0, borderLeft: `1px solid ${rule}`, background: view === "table" ? courtBlue : "#fff", color: view === "table" ? "#fff" : inkSoft }}>Table</button>
+              </div>
               <button onClick={() => window.print()} style={tinyPrimaryBtn}>Print bracket</button>
               <button onClick={onReset} disabled={busy} style={tinyDangerBtn}>Reset bracket</button>
             </div>
@@ -2477,6 +2488,28 @@ function DoubleElimSection({
           <button onClick={onGenerate} disabled={busy || teams.length < 3} style={primaryBtn(busy || teams.length < 3)}>
             {busy ? "Generating…" : "Generate bracket"}
           </button>
+        </div>
+      ) : view === "bracket" ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <BracketView matches={rows} labelFor={teamLabel} onSelect={(m) => setSelectedId(m.id)} selectedId={selectedId} />
+          {selected && (
+            <div style={{ border: `1px solid ${courtBlue}`, borderRadius: 6, padding: 10, background: "#fff" }}>
+              <div style={{ fontSize: 12, color: inkMuted, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+                <span>{selected.label ?? selected.slot_key} — enter the score</span>
+                <button onClick={() => setSelectedId(null)} style={tinySecondaryBtn}>Close</button>
+              </div>
+              <table style={tableStyle}>
+                <tbody>
+                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                </tbody>
+              </table>
+            </div>
+          )}
+          {medals.length > 0 && (
+            <div style={{ padding: 16, background: warnBg, border: `1px solid ${courtYellow}`, borderRadius: 6, color: warnFg, fontSize: 14, fontWeight: 500 }}>
+              {medals.map((m) => `${m.place === "gold" ? "🥇" : m.place === "silver" ? "🥈" : "🥉"} ${m.team.label}`).join("   ")}
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
