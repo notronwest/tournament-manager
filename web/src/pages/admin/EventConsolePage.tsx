@@ -32,6 +32,7 @@ import {
 } from "../../components/PlayerPicker";
 import { eligibilityChips } from "../../lib/eligibility";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
+import { resolvePartnerBAction } from "../../lib/teamEdit";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
 import { pairRegistrations } from "../../lib/registrations";
@@ -843,20 +844,62 @@ function TeamsSection({
       }
     }
 
-    if (isDoubles && team.partnerRegId && team.partner) {
+    if (isDoubles) {
       const bRes = await persistPlayerSelection(editSelB);
       if (!bRes.player) {
         setError(bRes.error ?? "Failed to save Player B.");
         setBusy(false);
         return;
       }
-      if (bRes.player.id !== team.partner.id) {
+      const action = resolvePartnerBAction({
+        isDoubles,
+        partnerRegId: team.partnerRegId,
+        currentPartnerPlayerId: team.partner?.id ?? null,
+        selectedPlayerBId: bRes.player.id,
+      });
+
+      if (action.kind === "update-player") {
+        // Existing partner registration -> update player_id (it changed).
         const { error: regErr } = await supabase
           .from("event_registrations")
           .update({ player_id: bRes.player.id })
-          .eq("id", team.partnerRegId);
+          .eq("id", action.partnerRegId);
         if (regErr) {
           setError(regErr.message);
+          setBusy(false);
+          return;
+        }
+      } else if (action.kind === "create-partner") {
+        // No partner yet (solo / partner-seeker) -> create the partner
+        // registration and link both directions, mirroring Add Team.
+        // Without this branch, adding a Player B to a partnerless team
+        // silently no-ops (no write, no error).
+        const { data: regB, error: rBErr } = await supabase
+          .from("event_registrations")
+          .insert({
+            event_id: event.id,
+            player_id: bRes.player.id,
+            event_fee_cents: 0,
+            status: "paid",
+            partner_status: "confirmed",
+            partner_registration_id: team.captainRegId,
+          })
+          .select()
+          .single();
+        if (rBErr || !regB) {
+          setError(rBErr?.message ?? "Failed to register Player B.");
+          setBusy(false);
+          return;
+        }
+        const { error: updErr } = await supabase
+          .from("event_registrations")
+          .update({
+            partner_registration_id: regB.id,
+            partner_status: "confirmed",
+          })
+          .eq("id", team.captainRegId);
+        if (updErr) {
+          setError(updErr.message);
           setBusy(false);
           return;
         }

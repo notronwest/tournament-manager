@@ -5,6 +5,31 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-11 — Event console: assigning a Player B to a partner-seeker no longer silently drops (PR #866)
+
+Ron (fix pre-applied uncommitted on the offline laptop, reproduced properly here with review
++ tests): in the event console **Teams** editor, editing a doubles team with no Player B yet
+(a solo / partner-seeker — `partner_status='seeking'`, `partner_registration_id` null),
+picking a Player B and clicking **Save** silently no-op'd — no request, no error, row refetched
+unchanged. Root cause: `saveEdit` only had an UPDATE-existing-partner path; no CREATE path when
+none existed. Fix (`web/src/pages/admin/EventConsolePage.tsx`): when the doubles team is
+partnerless, CREATE the partner `event_registration` and link both directions, mirroring the
+working `addTeam` flow (insert Player B with `partner_registration_id=captainRegId`, then point
+the captain reg at the new reg and flip its `partner_status` seeking→confirmed); the existing
+swap-`player_id` path is preserved. Branch selection extracted to a pure
+`resolvePartnerBAction()` helper (`web/src/lib/teamEdit.ts`) with unit coverage
+(`teamEdit.test.ts`, 5 cases) — matches the repo's `src/lib/*.test.ts` convention; the Teams
+editor has no component-test harness. Edge cases verified against schema: singles skipped;
+seeking→confirmed on the captain update; the paired-roles side trigger
+(`check_paired_roles_sides_trigger`) and any constraint error surface via `setError` (both
+insert and update errors captured), so a bad pairing isn't silent — mirrors `addTeam`; seed /
+pool_index untouched by the writes and preserved by `buildTeams`' coalesce. `npm run typecheck`
+clean, full `vitest run` green (61); the 2 EventConsolePage lint errors are pre-existing
+`set-state-in-effect` (line 635 on origin/main, untouched). NOT included: the laptop's
+`supabase/config.toml` + `seed.sql` offline-dev tweaks (unrelated, left uncommitted there).
+
+**Next:** Ron review + merge PR #866 → TEST, validate assigning a partner to a seeker (Judy
+Poulin + Laurie Walmsley was the manual repro), then promote main→production for PROD.
 ## 2026-09-11 — Offline runtime hardened: fresh machine goes offline with one clean command (epic #732)
 
 Fixed the two blockers hit live tonight setting up Ron's tournament laptop, so
