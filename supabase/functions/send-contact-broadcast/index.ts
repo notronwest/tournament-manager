@@ -11,14 +11,40 @@
 // can be targeted. We own the unsubscribe link (a signed token → the public
 // unsubscribe-contact function sets organization_contacts.unsubscribed_at).
 //
+// WITH ATTACHMENTS the send takes a different road: Resend's /emails/batch
+// cannot carry attachments, so each recipient becomes its own POST /emails,
+// paced under Resend's 2 req/s (see _shared/attachments.ts). That is too slow
+// for one invocation on a big list, so the function sends one WINDOW of
+// recipients per call (`cursor` + `limit`) and returns `nextCursor`; the client
+// loops until it is null. The recipient set is computed the same way on every
+// call and sorted (lowercased email, then playerId) so windows never overlap
+// or skip. Cursor 0 creates the contact_broadcasts row; later windows pass its
+// id back. The email itself — html, reply-to, unsubscribe link + headers — is
+// identical to the batch path, plus the files.
+//
 // Each send is logged: one `contact_broadcasts` row + one
 // `contact_broadcast_recipients` row per recipient (correlated to Resend by
 // resend_email_id). The resend-webhook function advances delivery status.
 //
 // ORG-STAFF only. Requires an explicit consent flag.
 //
-// Body:    { organizationId, subject, body, consent: true, playerIds?: string[] }
-// Returns: { broadcastId, recipientCount, sent }
+// Body: {
+//   organizationId, subject, body, consent: true,
+//   playerIds?: string[],             restrict to this subset
+//   bodyIsHtml?: boolean, replyTo?: string,
+//   attachments?: { filename, contentBase64 }[],
+//                                     PDF only; max 3 files, 5 MB total decoded
+//   cursor?: number, limit?: number,  attachments only: window offset (default 0)
+//                                     and size (default 25, clamped 1..50)
+//   broadcastId?: string              attachments only: required when cursor > 0
+// }
+// Returns (no attachments): { broadcastId, recipientCount, sent, failed?, detail? }
+//                           — the whole list in one call; cursor/limit/broadcastId ignored.
+// Returns (attachments):    { broadcastId, recipientCount, sent, failed, nextCursor, detail? }
+//                           — sent/failed are for THIS window; nextCursor null on the last.
+// Errors: { error: code, detail? } — 400 attachment_invalid / attachment_too_large /
+//         too_many_attachments / broadcast_id_required, 404 broadcast_not_found,
+//         502 when Resend accepted nothing (the broadcast row is removed).
 //
 // Required secrets (auto-injected): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 // Required secrets (already set):   RESEND_API_KEY, RESEND_FROM_ADDRESS.
@@ -27,6 +53,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
 import { makeUnsubToken, unsubscribeUrl } from "../_shared/unsubscribe.ts";
+import { parseAttachments, sendOneEmail, sleep, clampInt, SEND_SPACING_MS } from "../_shared/attachments.ts";
+import type { Attachment } from "../_shared/attachments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,6 +70,12 @@ const BATCH_SIZE = 100; // Resend /emails/batch caps at 100 per call.
 // waitlisted players included. Must match lib/orgContacts on the client.
 const ACTIVE_REG_STATUSES = ["paid", "pending_payment", "waitlisted", "waitlisted_pending_payment"];
 const PAGE_SIZE = 1000; // PostgREST max_rows — page every list query past it.
+// Attachments: PDF only, a few files, small enough for every inbox.
+const MAX_ATTACHMENT_FILES = 3;
+const MAX_ATTACHMENT_TOTAL_BYTES = 5 * 1024 * 1024;
+// Per-recipient window (attachments only) — same defaults as send-tournament-summary.
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 50;
 
 type Body = {
   organizationId?: string;
@@ -56,6 +90,13 @@ type Body = {
   // Per-send Reply-To override. When omitted, we fall back to the org's saved
   // default (organizations.contact_email) and then to the sending admin's email.
   replyTo?: string;
+  // PDF attachments. Present and non-empty → the per-recipient windowed send
+  // (see header); absent/empty → the batch send, exactly as before.
+  attachments?: { filename?: string; contentBase64?: string }[];
+  // Windowing — only read when attachments are present.
+  cursor?: number;
+  limit?: number;
+  broadcastId?: string;
 };
 type Recipient = { playerId: string; email: string; first: string; last: string };
 
@@ -102,8 +143,8 @@ Deno.serve(async (req: Request) => {
     const senderEmail = (userData.user.email ?? "").trim() || null;
 
     // ── 2. Input ─────────────────────────────────────────────────────
-    const { organizationId, subject, body, consent, playerIds, bodyIsHtml, replyTo } =
-      (await req.json()) as Body;
+    const input = (await req.json()) as Body;
+    const { organizationId, subject, body, consent, playerIds, bodyIsHtml, replyTo } = input;
     if (!organizationId) return json({ error: "organizationId is required" }, 400);
     if (!subject || !subject.trim()) return json({ error: "subject is required" }, 400);
     if (!body || !body.trim()) return json({ error: "body is required" }, 400);
@@ -112,6 +153,29 @@ Deno.serve(async (req: Request) => {
     const replyToOverride = typeof replyTo === "string" ? replyTo.trim() : "";
     if (replyToOverride && !EMAIL_RE.test(replyToOverride)) {
       return json({ error: "invalid_reply_to" }, 400);
+    }
+    // Attachments (optional). Absent or an empty array → the batch path below,
+    // untouched. Anything else must parse as PDFs, and switches the send to
+    // one POST per recipient in windows.
+    let attachments: Attachment[] = [];
+    if (input.attachments !== undefined && input.attachments !== null) {
+      const parsed = parseAttachments(input.attachments, {
+        maxFiles: MAX_ATTACHMENT_FILES,
+        maxTotalBytes: MAX_ATTACHMENT_TOTAL_BYTES,
+      });
+      if (!parsed.ok) return json({ error: parsed.error }, 400);
+      attachments = parsed.files;
+    }
+    const windowed = attachments.length > 0;
+    let cursor = 0;
+    let limit = DEFAULT_LIMIT;
+    let broadcastIdIn: string | null = null;
+    if (windowed) {
+      cursor = clampInt(input.cursor, 0, 0, Number.MAX_SAFE_INTEGER);
+      limit = clampInt(input.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
+      broadcastIdIn =
+        typeof input.broadcastId === "string" && input.broadcastId.trim() ? input.broadcastId.trim() : null;
+      if (cursor > 0 && !broadcastIdIn) return json({ error: "broadcast_id_required" }, 400);
     }
 
     // ── 3. Authorize + load org ──────────────────────────────────────
@@ -133,6 +197,19 @@ Deno.serve(async (req: Request) => {
     const effectiveReplyTo: string | null =
       replyToOverride || org.contact_email || senderEmail;
 
+    // A continuation window must append to a broadcast this org owns — never
+    // to a row from another tenant. (Only reachable on the attachments path.)
+    if (windowed && cursor > 0 && broadcastIdIn) {
+      const { data: bcRow, error: bcLookupErr } = await admin
+        .from("contact_broadcasts")
+        .select("id")
+        .eq("id", broadcastIdIn)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+      if (bcLookupErr) throw new Error(`broadcast lookup: ${bcLookupErr.message}`);
+      if (!bcRow) return json({ error: "broadcast_not_found" }, 404);
+    }
+
     // ── 4. Build the recipient set (contacts ∪ registrants), then narrow
     //     to the selected subset if playerIds was provided. Unsubscribed and
     //     no-email people are already excluded, so a selected-but-unsubscribed
@@ -147,7 +224,127 @@ Deno.serve(async (req: Request) => {
       return json({ error: `too_many_recipients (max ${MAX_RECIPIENTS})` }, 400);
     }
 
-    // ── 5. Log the broadcast (one row per send) ──────────────────────
+    // ── 5. The email for one recipient — shared by both delivery paths so
+    //     an attachment send is the same message, same reply-to, same
+    //     unsubscribe link + headers, plus the files. ────────────────────
+    const buildEmail = async (r: Recipient, broadcastId: string) => {
+      const token = await makeUnsubToken(SERVICE_KEY, organizationId, r.playerId, broadcastId);
+      const unsubUrl = unsubscribeUrl(SUPABASE_URL, token);
+      const html = renderEmailHtml({
+        // No org-name eyebrow or subject heading in the body — the subject
+        // already rides in the email's Subject line; the body starts with
+        // the sender's own content under the branded logo band.
+        bodyHtml: bodyIsHtml ? body : textToHtml(body),
+        footer: `${escapeHtml(org.name ?? "This club")} via bert &amp; erne &mdash; pickleball tournaments<br /><a href="${unsubUrl}" style="color:#6b7280;">Unsubscribe</a>`,
+      });
+      return {
+        from: fromAddress,
+        to: [r.email],
+        subject: subject.trim(),
+        html,
+        ...(effectiveReplyTo ? { reply_to: effectiveReplyTo } : {}),
+        headers: {
+          "List-Unsubscribe": `<${unsubUrl}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+      };
+    };
+
+    // ── 6a. Attachments → one POST /emails per recipient, one window per
+    //      call. /emails/batch can't carry files, and per-recipient sends
+    //      are rate-limited, so the client loops on nextCursor. ──────────
+    if (windowed) {
+      // Deterministic order so every window slices the same list. Emails are
+      // already lowercased and unique per recipient; playerId breaks any tie.
+      recipients.sort((a, b) =>
+        a.email < b.email ? -1 : a.email > b.email ? 1 : a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0,
+      );
+      const total = recipients.length;
+
+      let broadcastId: string;
+      if (cursor === 0) {
+        const { data: bc, error: bcErr } = await admin
+          .from("contact_broadcasts")
+          .insert({
+            organization_id: organizationId,
+            subject: subject.trim(),
+            body: body,
+            recipient_count: total,
+            sent_by: authUserId,
+          })
+          .select("id")
+          .single();
+        if (bcErr || !bc) return json({ error: bcErr?.message ?? "broadcast_log_failed" }, 500);
+        broadcastId = bc.id as string;
+      } else {
+        broadcastId = broadcastIdIn as string; // verified above to belong to this org
+      }
+
+      const start = Math.min(cursor, total);
+      const end = Math.min(start + limit, total);
+      const page = recipients.slice(start, end);
+
+      let sent = 0;
+      let failed = 0;
+      let firstError: string | null = null;
+      const logRows: { broadcast_id: string; player_id: string; email: string; resend_email_id: string | null }[] = [];
+      for (let i = 0; i < page.length; i++) {
+        const r = page[i];
+        const email = { ...(await buildEmail(r, broadcastId)), attachments };
+        const result = await sendOneEmail(resendApiKey, email);
+        if (result.ok) {
+          sent++;
+          logRows.push({ broadcast_id: broadcastId, player_id: r.playerId, email: r.email, resend_email_id: result.id });
+        } else {
+          // Counted and logged, never thrown — one bad address must not lose
+          // the rest of the window. Recipient rows are only written for
+          // accepted sends (a row reads as "sent" forever).
+          failed++;
+          if (!firstError) firstError = result.error;
+          console.error(`broadcast send failed for ${r.email}: ${result.error}`);
+        }
+        if (i < page.length - 1) await sleep(SEND_SPACING_MS);
+      }
+
+      if (logRows.length > 0) {
+        const { error: recErr } = await admin.from("contact_broadcast_recipients").insert(logRows);
+        if (recErr) console.error("recipient log failed", recErr.message);
+      }
+
+      const nextCursor = end < total ? end : null;
+
+      // Nothing accepted across the WHOLE send → surface the error and don't
+      // leave a phantom broadcast on the status page. Only knowable on the last
+      // window (an earlier window sending 0 may still be followed by successes),
+      // and only when no window at all produced a recipient row.
+      if (nextCursor === null && sent === 0) {
+        const { count, error: countErr } = await admin
+          .from("contact_broadcast_recipients")
+          .select("id", { count: "exact", head: true })
+          .eq("broadcast_id", broadcastId);
+        if (!countErr && count === 0) {
+          await admin.from("contact_broadcasts").delete().eq("id", broadcastId);
+          return json(
+            {
+              error: `Resend rejected the send — no emails went out. ${firstError ?? ""}`.trim(),
+              detail: firstError,
+            },
+            502,
+          );
+        }
+      }
+
+      return json({
+        broadcastId,
+        recipientCount: total,
+        sent,
+        failed,
+        nextCursor,
+        ...(firstError ? { detail: firstError } : {}),
+      });
+    }
+
+    // ── 6b. No attachments → log the broadcast, then batch-send ──────
     const { data: bc, error: bcErr } = await admin
       .from("contact_broadcasts")
       .insert({
@@ -162,7 +359,6 @@ Deno.serve(async (req: Request) => {
     if (bcErr || !bc) return json({ error: bcErr?.message ?? "broadcast_log_failed" }, 500);
     const broadcastId: string = bc.id;
 
-    // ── 6. Batch-send via Resend, then record per-recipient rows ──────
     let sent = 0;
     // First Resend rejection, surfaced to the caller so a failed send stops
     // masquerading as a successful one (the usual cause is an unverified
@@ -172,30 +368,7 @@ Deno.serve(async (req: Request) => {
       const chunk = recipients.slice(start, start + BATCH_SIZE);
 
       // One email object per recipient, each with its own unsubscribe link.
-      const emails = await Promise.all(
-        chunk.map(async (r) => {
-          const token = await makeUnsubToken(SERVICE_KEY, organizationId, r.playerId, broadcastId);
-          const unsubUrl = unsubscribeUrl(SUPABASE_URL, token);
-          const html = renderEmailHtml({
-            // No org-name eyebrow or subject heading in the body — the subject
-            // already rides in the email's Subject line; the body starts with
-            // the sender's own content under the branded logo band.
-            bodyHtml: bodyIsHtml ? body : textToHtml(body),
-            footer: `${escapeHtml(org.name ?? "This club")} via bert &amp; erne &mdash; pickleball tournaments<br /><a href="${unsubUrl}" style="color:#6b7280;">Unsubscribe</a>`,
-          });
-          return {
-            from: fromAddress,
-            to: [r.email],
-            subject: subject.trim(),
-            html,
-            ...(effectiveReplyTo ? { reply_to: effectiveReplyTo } : {}),
-            headers: {
-              "List-Unsubscribe": `<${unsubUrl}>`,
-              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-            },
-          };
-        }),
-      );
+      const emails = await Promise.all(chunk.map((r) => buildEmail(r, broadcastId)));
 
       let ids: (string | null)[];
       try {

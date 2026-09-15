@@ -11,11 +11,13 @@
 // unsubscribed from the club's list, and it carries no unsubscribe link (same
 // rationale as send-tournament-briefing).
 //
-// WHY ONE POST PER RECIPIENT, IN WINDOWS: this is the first email in the
-// codebase with an attachment. Resend's /emails/batch endpoint does not accept
-// attachments, so each recipient is a separate POST /emails, paced to stay
-// under Resend's default 2 requests/second. A 300-player tournament is ~3
-// minutes of sends — longer than we want a single invocation to run — so the
+// WHY ONE POST PER RECIPIENT, IN WINDOWS: this was the first email in the
+// codebase with an attachment (the machinery now lives in
+// _shared/attachments.ts and send-contact-broadcast uses it too). Resend's
+// /emails/batch endpoint does not accept attachments, so each recipient is a
+// separate POST /emails, paced to stay under Resend's default 2 requests/second.
+// A 300-player tournament is ~3 minutes of sends — longer than we want a single
+// invocation to run — so the
 // function sends one WINDOW of recipients per call (`cursor` + `limit`) and
 // returns `nextCursor`; the client loops until it is null. Recipients are
 // sorted by lowercased email so every window sees the same order.
@@ -46,6 +48,15 @@
 // @ts-expect-error remote import resolved at runtime by Deno
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { renderEmailHtml, escapeHtml } from "../_shared/email-layout.ts";
+import {
+  parseAttachments,
+  sanitizeFilename,
+  sendOneEmail,
+  sleep,
+  clampInt,
+  SEND_SPACING_MS,
+} from "../_shared/attachments.ts";
+import type { Attachment } from "../_shared/attachments.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,7 +64,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const RESEND = "https://api.resend.com";
 const SITE_URL = "https://bertanderne.com";
 const PAGE_SIZE = 1000; // PostgREST max_rows — page list queries past it.
 const ID_CHUNK = 300; // .in(...) chunk size for player lookups.
@@ -64,13 +74,8 @@ const ID_CHUNK = 300; // .in(...) chunk size for player lookups.
 const SPOT_HOLDING_STATUSES = ["paid", "pending_payment", "waitlisted_pending_payment"];
 const MAX_SUBJECT_CHARS = 200;
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
-const MAX_FILENAME_CHARS = 120;
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 50;
-// Resend's default limit is 2 requests/second; ~550 ms between sends keeps a
-// window under it with a little headroom for clock jitter.
-const SEND_SPACING_MS = 550;
-const RATE_LIMIT_RETRY_MS = 1100;
 const PREVIEW_SAMPLE = 5;
 
 type Mode = "preview" | "test" | "send";
@@ -86,8 +91,6 @@ type Body = {
   limit?: number;
   broadcastId?: string;
 };
-
-type Attachment = { filename: string; content: string };
 
 type EventRow = { id: string };
 
@@ -244,7 +247,7 @@ Deno.serve(async (req: Request) => {
     // ── 5b. Test: the real email, attachment included, to the caller ─
     if (mode === "test") {
       if (!senderEmail) return json({ error: "no_sender_email" }, 400);
-      const result = await sendOne(resendApiKey, emailFor(senderEmail, `[TEST] ${subject}`));
+      const result = await sendOneEmail(resendApiKey, emailFor(senderEmail, `[TEST] ${subject}`));
       if (!result.ok) return json({ error: "send_failed", detail: result.error }, 502);
       return json({ mode, sentTo: senderEmail });
     }
@@ -281,7 +284,7 @@ Deno.serve(async (req: Request) => {
     const logRows: { broadcast_id: string; player_id: string; email: string; resend_email_id: string | null }[] = [];
     for (let i = 0; i < batch.length; i++) {
       const r = batch[i];
-      const result = await sendOne(resendApiKey, emailFor(r.email, subject));
+      const result = await sendOneEmail(resendApiKey, emailFor(r.email, subject));
       if (result.ok) {
         sent++;
         logRows.push({ broadcast_id: broadcastId, player_id: r.playerId, email: r.email, resend_email_id: result.id });
@@ -383,46 +386,23 @@ async function collectRecipients(
 
 type ParsedAttachment = { ok: true; attachment: Attachment } | { ok: false; error: string };
 
+// The summary's single `attachment` is REQUIRED, so a missing file is
+// `attachment_required` here (the shared parser only knows "invalid"). The
+// presence checks keep their original order — filename, its .pdf shape, then
+// content — so the error codes are unchanged; everything after that (base64
+// shape, decoded size, %PDF magic) is the shared parser, fed the one file as
+// a one-element list.
 function parseAttachment(raw: Body["attachment"]): ParsedAttachment {
   if (!raw || typeof raw !== "object") return { ok: false, error: "attachment_required" };
   const filename = typeof raw.filename === "string" ? sanitizeFilename(raw.filename) : "";
   if (!filename) return { ok: false, error: "attachment_required" };
   if (!/\.pdf$/i.test(filename) || filename.length <= 4) return { ok: false, error: "attachment_invalid" };
-
   if (typeof raw.contentBase64 !== "string" || !raw.contentBase64.trim()) {
     return { ok: false, error: "attachment_required" };
   }
-  // Tolerate a data-URL prefix and line-wrapped base64; Resend wants the bare string.
-  let b64 = raw.contentBase64.trim();
-  const comma = b64.indexOf(",");
-  if (/^data:/i.test(b64) && comma !== -1) b64 = b64.slice(comma + 1);
-  b64 = b64.replace(/\s+/g, "");
-  if (!b64 || b64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) {
-    return { ok: false, error: "attachment_invalid" };
-  }
-  // Decoded size from the encoded length — no need to decode 5 MB to know it's too big.
-  const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
-  const decodedBytes = (b64.length / 4) * 3 - padding;
-  if (decodedBytes > MAX_ATTACHMENT_BYTES) return { ok: false, error: "attachment_too_large" };
-  // Decode the first bytes to confirm this is really a PDF (every PDF starts
-  // with "%PDF") and that the base64 is well-formed.
-  try {
-    const head = atob(b64.slice(0, 8));
-    if (!head.startsWith("%PDF")) return { ok: false, error: "attachment_invalid" };
-  } catch {
-    return { ok: false, error: "attachment_invalid" };
-  }
-  return { ok: true, attachment: { filename, content: b64 } };
-}
-
-// Strip path separators and control characters so the name is safe as a
-// mail attachment; keep it short enough for every mail client.
-function sanitizeFilename(name: string): string {
-  const cleaned = name
-    .replace(/[\\/:*?"<>|]/g, "_")
-    .replace(/[\u0000-\u001F\u007F]/g, "")
-    .trim();
-  return cleaned.length > MAX_FILENAME_CHARS ? cleaned.slice(cleaned.length - MAX_FILENAME_CHARS) : cleaned;
+  const parsed = parseAttachments([raw], { maxFiles: 1, maxTotalBytes: MAX_ATTACHMENT_BYTES });
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  return { ok: true, attachment: parsed.files[0] };
 }
 
 // ── Rendering ───────────────────────────────────────────────────────
@@ -470,53 +450,8 @@ function textToHtml(text: string): string {
     .join("");
 }
 
-// ── Resend ──────────────────────────────────────────────────────────
-
-type SendResult = { ok: true; id: string | null } | { ok: false; error: string };
-
-// One POST /emails. Never throws — a failure inside a window must not lose
-// the sent/failed count. A 429 gets exactly one retry after a pause.
-async function sendOne(apiKey: string, email: unknown): Promise<SendResult> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let resp: Response;
-    let bodyText: string;
-    try {
-      resp = await fetch(`${RESEND}/emails`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(email),
-      });
-      bodyText = await resp.text();
-    } catch (e) {
-      return { ok: false, error: `resend POST /emails network error: ${String((e as { message?: string })?.message ?? e)}` };
-    }
-    if (resp.ok) {
-      try {
-        const parsed = bodyText ? (JSON.parse(bodyText) as { id?: string }) : {};
-        return { ok: true, id: typeof parsed.id === "string" ? parsed.id : null };
-      } catch {
-        return { ok: true, id: null };
-      }
-    }
-    if (resp.status === 429 && attempt === 0) {
-      await sleep(RATE_LIMIT_RETRY_MS);
-      continue;
-    }
-    return { ok: false, error: `resend POST /emails → ${resp.status}: ${bodyText.slice(0, 500)}` };
-  }
-  return { ok: false, error: "resend POST /emails → rate limited" };
-}
-
 // ── Helpers ─────────────────────────────────────────────────────────
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function clampInt(v: unknown, dflt: number, min: number, max: number): number {
-  const n = typeof v === "number" && Number.isFinite(v) ? Math.round(v) : dflt;
-  return Math.min(max, Math.max(min, n));
-}
+// (Resend single-send, sleep, clampInt live in ../_shared/attachments.ts.)
 
 function normalizeFrom(raw: string): string {
   const s = raw.trim().replace(/[\r\n]+/g, " ");
