@@ -1,4 +1,4 @@
--- 20260912120000_event_registrations_checked_in_at.sql
+-- 20260914220000_event_registrations_checked_in_at.sql
 --
 -- Day-of player CHECK-IN. Requested live during the 2026-09-12 Pickleball
 -- Angels tournament — until now there was nothing check-in-related in the
