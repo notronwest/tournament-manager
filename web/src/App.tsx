@@ -66,6 +66,7 @@ import ResetPasswordPage from "./pages/public/ResetPasswordPage";
 import TournamentSetupIntakePage from "./pages/public/TournamentSetupIntakePage";
 import AuthConfirmPage from "./pages/public/AuthConfirmPage";
 import SchedulePage from "./pages/admin/SchedulePage";
+import CheckInPage from "./pages/admin/CheckInPage";
 import TournamentBriefingPage from "./pages/admin/TournamentBriefingPage";
 import TournamentSummaryPage from "./pages/admin/TournamentSummaryPage";
 import TournamentWaitlistPage from "./pages/admin/TournamentWaitlistPage";
@@ -484,6 +485,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/schedule"
           element={<SchedulePage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/checkin"
+          element={<CheckInPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/briefing"

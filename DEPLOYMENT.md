@@ -199,6 +199,13 @@ green can also mean *inert*, so confirm the target's secrets exist with
   and email templates are set by hand per Supabase project; the CLI doesn't
   manage them, so they never ride a deploy.
 - **`regression.yml`** — Playwright E2E. It's a **gate**, not a deploy target.
+- **The offline runtime** — `scripts/offline.sh`, `scripts/offline-verify.sh`,
+  the `--mode offline` Vite build, the local Supabase stack, and the
+  `web/e2e/offline/*` specs are **local dev/venue tooling for running a
+  tournament with no Internet** (see [`docs/OFFLINE.md`](./docs/OFFLINE.md)).
+  None of it ships: normal `npm run dev`/`build` and CI never touch `--mode
+  offline`, and `[inbucket] enabled = false` in `supabase/config.toml` only
+  affects the **local** CLI stack, never a hosted Supabase project.
 - **Tier 2 self-serve custom domains** — designed but not built. Every organizer
   domain today is hand-wired.
 

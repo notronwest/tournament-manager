@@ -5,6 +5,168 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-14 — Double elimination shipped to PROD; day-of PRs merged for tomorrow's NH Baners event; laptop offline stack
+
+**Double elimination (epic built end-to-end, all on PROD):** PRs #902 (pure
+`lib/doubleElim.ts` + 17 tests), #903 (`[DB]` migration
+`20260914210000_double_elim.sql` — `events.double_elim_final` enum
+`crossover|bronze_only`, `matches.bracket/slot_key/label/if_necessary/
+feeds_winner_to(+side)/feeds_loser_to(+side)`), #905 (event form "Tournament
+style" round_robin|double_elim + Final format; Teams tab seed randomizers;
+Event console `DoubleElimSection` — Generate inserts slots then wires feeds by
+`slot_key`; data-driven `feedForwardPlayoffWinners` — W-champ wins F1 deletes
+the if-necessary F2; fair court queue via `bracketRank`), #907 (public
+Results tab — medals + playoff/bracket scores), #910 (`BracketView`: zoomable
+0.4–2×, scrollable, real bracket picture; Bracket|Table toggle; click a card to
+score). Design notes in memory `double-elim-design.md`. Ron's call: **offer both**
+finals — crossover (true DE, 2N−2 games +1 if F2) and bronze-only (consolation
+ends at L(2k−3), 2N−4 games).
+
+**Merged today for the event (Builder PRs Ron asked to run "today"):** #880
+`[DB]` `event_registrations.checked_in_at` (renumbered to
+`20260914220000` — the original `20260912…` stamp was behind remote head and
+would have failed closed; TEST migration workflow green), #865 offline
+runtime hardening, #866 assign Player B to a partnerless team, #881 day-of
+check-in screen + printable sheet + Start gate (rebased; kept both import
+groups), #870 score-entry safety (rebased; `MatchRow` now requires `event` —
+added at both `DoubleElimSection` call sites). Typecheck / 125 vitest / build
+green on each. Tracking issues for the Builder PRs' `Closes` check: #912 (#865),
+#913 (#866). Promotion PR main→production follows this entry.
+
+**Laptop / offline for NH Baners:** `backups/pull-live.py` now takes
+`TM_ORG_ID` / `TM_TID` env and clears a same-slug seeded org before load;
+run order in `backups/OFFLINE-CHEATSHEET.md`; `.claude/launch.json` has an
+`offline` config (`scripts/offline.sh`, :5173). Local DB migrated to head
+(`checked_in_at` present; migration is idempotent). Docker reinstalled on the
+new laptop via Homebrew cask.
+
+**Incident (this session):** a failed `cd` into a worktree made a
+`reset --hard` + rebase run in the shared main checkout, wiping its
+*uncommitted* STATUS.md/CLAUDE.md edits (CLAUDE.md is the bootstrap block
+sync — harmless; the STATUS content is re-recorded in this entry). Rule
+re-learned: `cd "$WT" || exit 1` before any destructive git op, and the
+worktree script wants the **repo path**, not its basename.
+
+**Still open / not merged:** Builder PRs #867, #869, #872, #874, #877, #878,
+#884, #885; medal-match score editing for brackets on Edit event; bracket
+rounds on the print sheet; pg_net on PROD (#785).
+
+## 2026-09-11 — Score-entry safety: valid-score enforcement + confirm modal (#871/#868), PR #870 open
+
+Productized two score-entry safety features Ron applied locally on the offline
+laptop from live tournament-desk feedback: score entry accepted physically
+impossible finals (a game to 11 win-by-2 took 9–7, which nobody had won —
+only NaN/negative/tied were checked). New shared, tested helper
+`web/src/lib/scoreValidation.ts`: `resolveScoreRules(match,event)` (per-match
+`points_to_win`/`win_by` win — playoff rows carry their semifinal/medal config
+stamped at bracket generation; round-robin falls back to the event) +
+`validateScore` (reach the target, win by the margin, end by exactly win-by
+past the target; target checks only when a target is known so time-capped
+formats aren't false-rejected). Wired into both Court Manager screens
+(validate → ConfirmModal showing teams/scores/winner before writing) and the
+Games-tab MatchRow (validation inline, no modal). Also folded in the #868
+polish across all three surfaces: `number`→`text inputMode=numeric` + digit
+sanitize + `aria-label`s + Enter-to-submit. Tests: all required cases (11-9 ok,
+11-10/9-7/13-9 rejected, 12-10/15-13 ok) + guards + RR-vs-playoff resolution;
+full suite 71/71, `tsc -b` clean, Pages preview built.
+
+**Scope note:** the offline laptop also had UNRELATED uncommitted edits in
+`EventConsolePage.tsx` (doubles partner-registration fix + playoff-bracket
+preview modal) and `supabase/config.toml`/`seed.sql` — deliberately left out
+of this PR; still uncommitted in the main checkout for separate handling.
+
+**Next:** Ron review + merge PR #870 → TEST, validate at a desk (9–7 rejected,
+valid score confirms the winner), then promote via a `main`→`production` PR.
+## 2026-09-12 — Day-of player check-in: schema PR #880 + UX PR #881 open
+
+Requested live by Ron during the Pickleball Angels tournament — nothing
+check-in-related existed (front desk ran off the paper `backups/checkin-sheet.html`).
+Built in two PRs per the DB/UX split (a PR preview runs against the live DB):
+
+- **#880 (schema, `feat/checkin-schema`)** — nullable
+  `event_registrations.checked_in_at` + `(event_id, checked_in_at)` index. No
+  RLS added (existing org-staff update / org-member select cover it).
+- **#881 (frontend, `feat/player-checkin`)** — `lib/checkin.ts` (pure, tested:
+  build roster, check-ALL-a-player's-events, `eventCheckInGate`); `CheckInPage`
+  at `…/tournaments/:slug/checkin` (autofocus search, Enter to check in top
+  match, running count, missing filter, per-player check-in/undo across all
+  their events); `CheckInPrintModal` (A–Z printable master sheet mirroring the
+  paper stopgap); and a **hard-block gate with organizer override** on Generate
+  matches (RoundRobinSection) and Start event (draft/ready→active) that lists
+  missing players. Resume/Reopen aren't gated.
+
+Check-in is a PLAYER action (stamps every spot-holding reg they hold in the
+tournament at once; undo nulls them). `checked_in_at` lags the generated types,
+so it's read via `"*"` + written through an untyped client (repo convention,
+cf. `schedule_order`). `tsc -b` clean, 77 tests pass, `vite build` clean.
+
+**Next:** merge #880 → applies to TEST; then merge #881; validate check-in +
+the Start gate on TEST; promote `main`→`production` when ready.
+## 2026-09-11 — Event console: assigning a Player B to a partner-seeker no longer silently drops (PR #866)
+
+Ron (fix pre-applied uncommitted on the offline laptop, reproduced properly here with review
++ tests): in the event console **Teams** editor, editing a doubles team with no Player B yet
+(a solo / partner-seeker — `partner_status='seeking'`, `partner_registration_id` null),
+picking a Player B and clicking **Save** silently no-op'd — no request, no error, row refetched
+unchanged. Root cause: `saveEdit` only had an UPDATE-existing-partner path; no CREATE path when
+none existed. Fix (`web/src/pages/admin/EventConsolePage.tsx`): when the doubles team is
+partnerless, CREATE the partner `event_registration` and link both directions, mirroring the
+working `addTeam` flow (insert Player B with `partner_registration_id=captainRegId`, then point
+the captain reg at the new reg and flip its `partner_status` seeking→confirmed); the existing
+swap-`player_id` path is preserved. Branch selection extracted to a pure
+`resolvePartnerBAction()` helper (`web/src/lib/teamEdit.ts`) with unit coverage
+(`teamEdit.test.ts`, 5 cases) — matches the repo's `src/lib/*.test.ts` convention; the Teams
+editor has no component-test harness. Edge cases verified against schema: singles skipped;
+seeking→confirmed on the captain update; the paired-roles side trigger
+(`check_paired_roles_sides_trigger`) and any constraint error surface via `setError` (both
+insert and update errors captured), so a bad pairing isn't silent — mirrors `addTeam`; seed /
+pool_index untouched by the writes and preserved by `buildTeams`' coalesce. `npm run typecheck`
+clean, full `vitest run` green (61); the 2 EventConsolePage lint errors are pre-existing
+`set-state-in-effect` (line 635 on origin/main, untouched). NOT included: the laptop's
+`supabase/config.toml` + `seed.sql` offline-dev tweaks (unrelated, left uncommitted there).
+
+**Next:** Ron review + merge PR #866 → TEST, validate assigning a partner to a seeker (Judy
+Poulin + Laurie Walmsley was the manual repro), then promote main→production for PROD.
+## 2026-09-11 — Offline runtime hardened: fresh machine goes offline with one clean command (epic #732)
+
+Fixed the two blockers hit live tonight setting up Ron's tournament laptop, so
+a fresh checkout runs `bash scripts/offline.sh` and comes up clean with **no
+manual config edits**:
+
+1. **Missing web deps.** `scripts/offline.sh` now installs `web/node_modules`
+   before launching Vite (`ensure_web_deps` → `npm ci`, guarded by a
+   lockfile-hash stamp so reruns at the venue are instant and never needlessly
+   wipe deps). A checkout predating the self-hosted `@fontsource/*` fonts
+   (#735/#843) used to die at Vite import time — no longer.
+2. **Inbucket port bug.** `[inbucket] enabled = false` is now committed in
+   `supabase/config.toml` (with a comment explaining why). The pinned Supabase
+   CLI (v2.105.0) can't publish inbucket's port and aborts the whole
+   `supabase start`; this app never uses the local dev inbox, so it's off for
+   good — CLI-version-independent, no venue-side edit. (Tonight's live
+   workaround was the same toggle, uncommitted, on the shared `main` checkout.)
+
+New verification harness (#735): `scripts/offline-verify.sh` runs the whole
+check in one command — bundle grep + clean-checkout `npm ci` + real
+`supabase start` via `offline.sh` + **first-paint with the network simulated
+down** (new `web/e2e/offline/first-paint.spec.ts`, non-destructive). `--full`
+also runs the existing full mock-event `network-audit.spec.ts` (which writes to
+the local DB — don't use against a live event). Docs updated: `docs/OFFLINE.md`
+(one-time setup now just "run offline.sh once online"; new harness section) and
+`DEPLOYMENT.md` ("Does NOT deploy" now lists the offline tooling). `.gitignore`
+now covers `supabase/.branches/` and `web/test-results/`.
+
+**Verified:** clean-checkout `npm ci` + `build:offline` (fonts resolve, no
+import error); `ensure_web_deps` stamp idempotency (install → instant no-op →
+reinstall on drift); `offline-verify.sh` green end-to-end against the running
+local stack (bundle grep, npm ci, runtime up on :5174, first-paint offline);
+`typecheck` + `eslint` clean. **Not verified against a fully fresh
+`supabase start`** — the local stack is a singleton by `project_id` and was up
+for tonight's live setup, so I didn't cycle it; the running stack already has
+inbucket disabled and came up clean (no `:54324` container), which is the same
+committed config. Run `scripts/offline-verify.sh --full` on a clean clone at
+the Friday dry-run to close that gap.
+
+**Branch:** `fix/offline-runtime-hardening` (worktree) → PR.
 ## 2026-09-14 — SYNCED Pickleball Angels results from the offline laptop DB → PROD (+ session recap 09-10→09-14)
 
 **Sync (today).** Sat Sep 12 ran on the offline stack; PROD had 0 matches. Started Docker +

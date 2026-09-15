@@ -9,9 +9,12 @@
 #
 # ONE-TIME PREREQUISITE (needs network — do this BEFORE going offline):
 #   brew install supabase/tap/supabase   # if not already installed
-#   supabase start                       # from the repo root; caches the
-#                                         # local stack's Docker images once
-# After that first run, this script needs no network access.
+#   bash scripts/offline.sh              # once, WITH network — this installs
+#                                         # web/node_modules and caches the
+#                                         # local stack's Docker images
+# After that first run, this script needs no network access. (Running it once
+# online is the whole one-time setup; the Docker image pull and the npm
+# install are the only network-dependent steps, and both are cached after.)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -21,6 +24,46 @@ if ! command -v supabase >/dev/null 2>&1; then
   echo "Install it (brew install supabase/tap/supabase) before going offline." >&2
   exit 1
 fi
+
+# Guarantee web/node_modules matches web/package-lock.json BEFORE launching the
+# dev server. Without this, a checkout that predates a dependency change (e.g.
+# the self-hosted @fontsource/* fonts from #735/#843) has node_modules missing
+# those packages and Vite dies at first import — "Failed to resolve import
+# '@fontsource/alfa-slab-one/400.css'" — which is exactly the blocker hit live
+# on 2026-09-11 setting up the tournament laptop.
+#
+# Idempotent + cheap on reruns: we stamp node_modules with the lockfile's hash
+# and skip the install when it already matches, so rerunning offline.sh between
+# rounds at the venue is instant and never needlessly wipes node_modules.
+ensure_web_deps() {
+  local lock="web/package-lock.json"
+  local stamp="web/node_modules/.offline-deps.stamp"
+  local want
+  if [ ! -f "$lock" ]; then
+    # No lockfile to pin against — fall back to a plain install if deps are
+    # absent, otherwise trust what's there.
+    [ -d web/node_modules ] || npm --prefix web install
+    return 0
+  fi
+  want="$(shasum -a 256 "$lock" | cut -d' ' -f1)"
+  if [ -f "$stamp" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$want" ]; then
+    return 0  # node_modules already matches the current lockfile
+  fi
+  echo "Installing web dependencies (node_modules is missing or out of date)..."
+  # `npm ci` reproduces the lockfile exactly. It uses the on-disk npm cache, so
+  # once you've run this online it works offline too — as long as the cache
+  # still holds every package (which the one-time online run above populates).
+  if ! npm --prefix web ci; then
+    echo "error: 'npm --prefix web ci' failed." >&2
+    echo "If you are already offline, the npm cache is probably missing a" >&2
+    echo "package. Run this script ONCE with network before the event so the" >&2
+    echo "cache is populated (see docs/OFFLINE.md, one-time setup)." >&2
+    exit 1
+  fi
+  printf '%s\n' "$want" > "$stamp"
+}
+
+ensure_web_deps
 
 echo "Starting local Supabase (Postgres + Auth + API)..."
 # Idempotent: if the stack is already up, `supabase start` reports that and

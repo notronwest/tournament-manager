@@ -11,7 +11,13 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { eligibilityChips } from "../../lib/eligibility";
 import { estimateEvent } from "../../lib/estimator";
-import { teamCountFor } from "../../lib/registrationStatus";
+import { teamCountFor, SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
+import {
+  eventCheckInGate,
+  type CheckInGate,
+  type CheckInReg,
+  type CheckInPlayerLite,
+} from "../../lib/checkin";
 import {
   compactTierPriceLabel,
   type PricingTier,
@@ -98,6 +104,11 @@ export default function TournamentDetailPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [pendingDeleteEvent, setPendingDeleteEvent] = useState<EventSummary | null>(null);
   const [deletingEvent, setDeletingEvent] = useState(false);
+  // Set when "Start event" is blocked because not everyone is checked in —
+  // holds the event + missing players for the override confirm.
+  const [startGate, setStartGate] = useState<
+    { eventId: string; eventName: string; gate: CheckInGate } | null
+  >(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -319,7 +330,9 @@ export default function TournamentDetailPage() {
     return m;
   }, [eventCourts, events]);
 
-  const setEventStatus = async (eventId: string, status: EventStatus) => {
+  // Perform the status write. Kept separate from the gate so the override
+  // confirm can call it directly.
+  const applyEventStatus = async (eventId: string, status: EventStatus) => {
     setBusyAction(`status:${eventId}`);
     const { error: updErr } = await supabase
       .from("events")
@@ -331,6 +344,47 @@ export default function TournamentDetailPage() {
       return;
     }
     await reload();
+  };
+
+  // Fetch this event's spot-holding registrations and compute the check-in
+  // gate. Used only on the Start path, so it's a targeted read rather than
+  // widening the page's main query.
+  const fetchEventCheckInGate = async (
+    eventId: string,
+  ): Promise<CheckInGate | null> => {
+    // "*" so the lagging-typed checked_in_at column comes back at runtime.
+    const { data, error: gErr } = await supabase
+      .from("event_registrations")
+      .select("*, players(id, first_name, last_name, email, phone)")
+      .eq("event_id", eventId)
+      .is("deleted_at", null)
+      .in("status", SPOT_HOLDING_STATUSES);
+    if (gErr || !data) return null;
+    const rows = data as unknown as (CheckInReg & {
+      players: CheckInPlayerLite | null;
+    })[];
+    const playerById = new Map<string, CheckInPlayerLite>();
+    for (const r of rows) if (r.players) playerById.set(r.players.id, r.players);
+    return eventCheckInGate(rows, playerById);
+  };
+
+  const setEventStatus = async (eventId: string, status: EventStatus) => {
+    // Gate only the START of an event (draft/ready → active). Resume
+    // (on_hold → active) and Reopen (complete → active) aren't starts — those
+    // players are already in play — so they pass straight through.
+    if (status === "active") {
+      const current = events.find((s) => s.event.id === eventId)?.event;
+      if (current && (current.status === "draft" || current.status === "ready")) {
+        setBusyAction(`status:${eventId}`);
+        const gate = await fetchEventCheckInGate(eventId);
+        setBusyAction(null);
+        if (gate && !gate.allCheckedIn) {
+          setStartGate({ eventId, eventName: current.name, gate });
+          return;
+        }
+      }
+    }
+    await applyEventStatus(eventId, status);
   };
 
   // Duplicate an event: clone the full row into a fresh DRAFT under the same
@@ -633,6 +687,14 @@ export default function TournamentDetailPage() {
             style={secondaryLinkBtn}
           >
             Schedule
+          </Link>
+          {/* Day-of front-desk check-in. Prominent because it's the first
+              thing an organizer reaches for on tournament morning. */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/checkin`}
+            style={secondaryLinkBtn}
+          >
+            Check-in
           </Link>
           {/* Player briefing — email every registrant their start times +
               what to do before they arrive (waiver, warm-ups, what to bring). */}
@@ -1042,6 +1104,42 @@ export default function TournamentDetailPage() {
           confirmLabel={deletingEvent ? "Deleting…" : "Delete event"}
           onCancel={() => setPendingDeleteEvent(null)}
           onConfirm={confirmDeleteEvent}
+        />
+      )}
+
+      {startGate && (
+        <ConfirmModal
+          title="Not everyone is checked in"
+          body={
+            <div>
+              <p style={{ marginTop: 0 }}>
+                {startGate.gate.missing.length}{" "}
+                {startGate.gate.missing.length === 1 ? "player" : "players"} in{" "}
+                <strong>{startGate.eventName}</strong>{" "}
+                {startGate.gate.missing.length === 1 ? "hasn't" : "haven't"}{" "}
+                checked in yet ({startGate.gate.checkedIn} of{" "}
+                {startGate.gate.total} checked in):
+              </p>
+              <ul style={{ margin: "0 0 12px", paddingLeft: 20, maxHeight: 200, overflowY: "auto" }}>
+                {startGate.gate.missing.map((m) => (
+                  <li key={m.playerId} style={{ fontSize: 13 }}>{m.name}</li>
+                ))}
+              </ul>
+              <p style={{ margin: 0 }}>
+                Check them in from the Check-in screen first, or start anyway if
+                they've withdrawn or you're handling it another way.
+              </p>
+            </div>
+          }
+          confirmLabel={
+            busyAction === `status:${startGate.eventId}` ? "Starting…" : "Start anyway"
+          }
+          onCancel={() => setStartGate(null)}
+          onConfirm={async () => {
+            const { eventId } = startGate;
+            setStartGate(null);
+            await applyEventStatus(eventId, "active");
+          }}
         />
       )}
 

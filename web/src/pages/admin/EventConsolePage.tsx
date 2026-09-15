@@ -32,8 +32,15 @@ import {
 } from "../../components/PlayerPicker";
 import { eligibilityChips } from "../../lib/eligibility";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
+import { resolvePartnerBAction } from "../../lib/teamEdit";
+import {
+  eventCheckInGate,
+  type CheckInReg,
+  type CheckInPlayerLite,
+} from "../../lib/checkin";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
+import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
 import { pairRegistrations } from "../../lib/registrations";
 import { BracketView } from "../../components/BracketView";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -515,6 +522,8 @@ export default function EventConsolePage() {
             teams={teams}
             matches={rrMatches}
             teamByAnyRegId={teamByAnyRegId}
+            regs={regs}
+            players={players}
             onChange={reload}
           />
           <PlayoffSection
@@ -843,20 +852,62 @@ function TeamsSection({
       }
     }
 
-    if (isDoubles && team.partnerRegId && team.partner) {
+    if (isDoubles) {
       const bRes = await persistPlayerSelection(editSelB);
       if (!bRes.player) {
         setError(bRes.error ?? "Failed to save Player B.");
         setBusy(false);
         return;
       }
-      if (bRes.player.id !== team.partner.id) {
+      const action = resolvePartnerBAction({
+        isDoubles,
+        partnerRegId: team.partnerRegId,
+        currentPartnerPlayerId: team.partner?.id ?? null,
+        selectedPlayerBId: bRes.player.id,
+      });
+
+      if (action.kind === "update-player") {
+        // Existing partner registration -> update player_id (it changed).
         const { error: regErr } = await supabase
           .from("event_registrations")
           .update({ player_id: bRes.player.id })
-          .eq("id", team.partnerRegId);
+          .eq("id", action.partnerRegId);
         if (regErr) {
           setError(regErr.message);
+          setBusy(false);
+          return;
+        }
+      } else if (action.kind === "create-partner") {
+        // No partner yet (solo / partner-seeker) -> create the partner
+        // registration and link both directions, mirroring Add Team.
+        // Without this branch, adding a Player B to a partnerless team
+        // silently no-ops (no write, no error).
+        const { data: regB, error: rBErr } = await supabase
+          .from("event_registrations")
+          .insert({
+            event_id: event.id,
+            player_id: bRes.player.id,
+            event_fee_cents: 0,
+            status: "paid",
+            partner_status: "confirmed",
+            partner_registration_id: team.captainRegId,
+          })
+          .select()
+          .single();
+        if (rBErr || !regB) {
+          setError(rBErr?.message ?? "Failed to register Player B.");
+          setBusy(false);
+          return;
+        }
+        const { error: updErr } = await supabase
+          .from("event_registrations")
+          .update({
+            partner_registration_id: regB.id,
+            partner_status: "confirmed",
+          })
+          .eq("id", team.captainRegId);
+        if (updErr) {
+          setError(updErr.message);
           setBusy(false);
           return;
         }
@@ -1455,43 +1506,35 @@ function RoundRobinSection({
   teams,
   matches,
   teamByAnyRegId,
+  regs,
+  players,
   onChange,
 }: {
   event: Event;
   teams: Team[];
   matches: Match[];
   teamByAnyRegId: Map<string, Team>;
+  regs: EventRegistration[];
+  players: Player[];
   onChange: () => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Check-in gate. Set when Generate is blocked because not every registered
+  // player is checked in — holds the missing list for the override confirm.
+  const [gateBlocked, setGateBlocked] = useState<{
+    missing: { playerId: string; name: string }[];
+  } | null>(null);
 
-  const onGenerate = async () => {
-    setError(null);
-    if (teams.length < 2) {
-      setError("Need at least 2 teams.");
-      return;
-    }
-    if (event.pool_count > 1) {
-      const unassigned = teams.filter((t) => t.poolIndex === null);
-      if (unassigned.length > 0) {
-        setError(
-          `Assign every team to a pool first — ${unassigned.length} unassigned.`,
-        );
-        return;
-      }
-      // Smallest-pool >= 4 rule: any pool below that and pool play
-      // becomes degenerate (1-2 matches per team).
-      for (let p = 1; p <= event.pool_count; p++) {
-        const inPool = teams.filter((t) => t.poolIndex === p).length;
-        if (inPool < 4) {
-          setError(
-            `Pool ${poolLetter(p)} only has ${inPool} team${inPool === 1 ? "" : "s"} — each pool needs at least 4.`,
-          );
-          return;
-        }
-      }
-    }
+  const checkInGate = useMemo(() => {
+    const playerById = new Map<string, CheckInPlayerLite>(
+      players.map((p) => [p.id, p]),
+    );
+    return eventCheckInGate(regs as unknown as CheckInReg[], playerById);
+  }, [regs, players]);
+
+  // The actual generation, once validated and past (or overriding) the gate.
+  const doGenerate = async () => {
     setBusy(true);
     const rows: Database["public"]["Tables"]["matches"]["Insert"][] = [];
     let position = 0;
@@ -1531,6 +1574,44 @@ function RoundRobinSection({
     await autoTransitionEventStatus(event.id);
     setBusy(false);
     await onChange();
+  };
+
+  // Validate, then gate on check-in. Generating matches starts play, so we
+  // hard-block it until every registered player in the event is checked in —
+  // with an explicit organizer override (e.g. a no-show being withdrawn
+  // first) surfaced through the confirm modal.
+  const onGenerate = async () => {
+    setError(null);
+    setGateBlocked(null);
+    if (teams.length < 2) {
+      setError("Need at least 2 teams.");
+      return;
+    }
+    if (event.pool_count > 1) {
+      const unassigned = teams.filter((t) => t.poolIndex === null);
+      if (unassigned.length > 0) {
+        setError(
+          `Assign every team to a pool first — ${unassigned.length} unassigned.`,
+        );
+        return;
+      }
+      // Smallest-pool >= 4 rule: any pool below that and pool play
+      // becomes degenerate (1-2 matches per team).
+      for (let p = 1; p <= event.pool_count; p++) {
+        const inPool = teams.filter((t) => t.poolIndex === p).length;
+        if (inPool < 4) {
+          setError(
+            `Pool ${poolLetter(p)} only has ${inPool} team${inPool === 1 ? "" : "s"} — each pool needs at least 4.`,
+          );
+          return;
+        }
+      }
+    }
+    if (!checkInGate.allCheckedIn) {
+      setGateBlocked({ missing: checkInGate.missing });
+      return;
+    }
+    await doGenerate();
   };
 
   const onResetAll = async () => {
@@ -1602,11 +1683,53 @@ function RoundRobinSection({
                 match={m}
                 index={i + 1}
                 teamByAnyRegId={teamByAnyRegId}
+                event={event}
                 onSaved={onChange}
               />
             ))}
           </tbody>
         </table>
+      )}
+
+      {/* Check-in status hint before matches exist — tells the organizer why
+          Generate will prompt, and lets them jump to the desk. */}
+      {matches.length === 0 && teams.length >= 2 && !checkInGate.allCheckedIn && (
+        <p style={{ fontSize: 12.5, color: warnFg, marginTop: 8 }}>
+          {checkInGate.total - checkInGate.checkedIn} of {checkInGate.total}{" "}
+          players not checked in yet — generating matches will ask you to
+          confirm.
+        </p>
+      )}
+
+      {gateBlocked && (
+        <ConfirmModal
+          title="Not everyone is checked in"
+          body={
+            <div>
+              <p style={{ marginTop: 0 }}>
+                {gateBlocked.missing.length}{" "}
+                {gateBlocked.missing.length === 1 ? "player" : "players"} in this
+                event {gateBlocked.missing.length === 1 ? "hasn't" : "haven't"}{" "}
+                checked in yet:
+              </p>
+              <ul style={{ margin: "0 0 12px", paddingLeft: 20, maxHeight: 200, overflowY: "auto" }}>
+                {gateBlocked.missing.map((m) => (
+                  <li key={m.playerId} style={{ fontSize: 13 }}>{m.name}</li>
+                ))}
+              </ul>
+              <p style={{ margin: 0 }}>
+                Check them in from the Check-in screen first, or start anyway if
+                they've withdrawn or you're handling it another way.
+              </p>
+            </div>
+          }
+          confirmLabel={busy ? "Generating…" : "Start anyway"}
+          onCancel={() => setGateBlocked(null)}
+          onConfirm={async () => {
+            setGateBlocked(null);
+            await doGenerate();
+          }}
+        />
       )}
     </section>
   );
@@ -1620,11 +1743,13 @@ function MatchRow({
   match,
   index,
   teamByAnyRegId,
+  event,
   onSaved,
 }: {
   match: Match;
   index: number;
   teamByAnyRegId: Map<string, Team>;
+  event: Event;
   onSaved: () => Promise<void>;
 }) {
   const teamA = match.team_a_reg_id
@@ -1650,16 +1775,17 @@ function MatchRow({
     setErr(null);
     const a = scoreA === "" ? null : parseInt(scoreA, 10);
     const b = scoreB === "" ? null : parseInt(scoreB, 10);
-    if (a === null || b === null || Number.isNaN(a) || Number.isNaN(b)) {
+    if (a === null || b === null) {
       setErr("Both scores required.");
       return;
     }
-    if (a < 0 || b < 0) {
-      setErr("Scores can't be negative.");
-      return;
-    }
-    if (a === b) {
-      setErr("Scores can't be tied.");
+    // Same rule check as the court cards (reach the target, win by the
+    // margin) — round-robin resolves the target from the event, playoff
+    // matches from their own row config. No modal here: this is a dense
+    // admin grid that also edits/clears finished scores inline.
+    const result = validateScore(a, b, resolveScoreRules(match, event));
+    if (!result.ok) {
+      setErr(result.error);
       return;
     }
     setBusy(true);
@@ -1712,21 +1838,27 @@ function MatchRow({
       >
         <div className="no-print" style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap" }}>
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={scoreA}
-            onChange={(e) => setScoreA(e.target.value)}
+            onChange={(e) => setScoreA(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && onSave()}
             disabled={!canPlay || busy}
             style={scoreInputStyle}
+            aria-label={`${teamA?.label ?? "Team A"} score`}
           />
           <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={scoreB}
-            onChange={(e) => setScoreB(e.target.value)}
+            onChange={(e) => setScoreB(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && onSave()}
             disabled={!canPlay || busy}
             style={scoreInputStyle}
+            aria-label={`${teamB?.label ?? "Team B"} score`}
           />
           <button
             onClick={onSave}
@@ -2292,6 +2424,7 @@ function PlayoffSection({
                         match={m}
                         index={i + 1}
                         teamByAnyRegId={teamByAnyRegId}
+                        event={event}
                         onSaved={onChange}
                       />
                     ))}
@@ -2500,7 +2633,7 @@ function DoubleElimSection({
               </div>
               <table style={tableStyle}>
                 <tbody>
-                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
                 </tbody>
               </table>
             </div>
@@ -2530,7 +2663,7 @@ function DoubleElimSection({
                 </thead>
                 <tbody>
                   {g.rows.map((r, i) => (
-                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
                   ))}
                 </tbody>
               </table>
