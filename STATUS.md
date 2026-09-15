@@ -5,6 +5,31 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-12 — Day-of player check-in: schema PR #880 + UX PR #881 open
+
+Requested live by Ron during the Pickleball Angels tournament — nothing
+check-in-related existed (front desk ran off the paper `backups/checkin-sheet.html`).
+Built in two PRs per the DB/UX split (a PR preview runs against the live DB):
+
+- **#880 (schema, `feat/checkin-schema`)** — nullable
+  `event_registrations.checked_in_at` + `(event_id, checked_in_at)` index. No
+  RLS added (existing org-staff update / org-member select cover it).
+- **#881 (frontend, `feat/player-checkin`)** — `lib/checkin.ts` (pure, tested:
+  build roster, check-ALL-a-player's-events, `eventCheckInGate`); `CheckInPage`
+  at `…/tournaments/:slug/checkin` (autofocus search, Enter to check in top
+  match, running count, missing filter, per-player check-in/undo across all
+  their events); `CheckInPrintModal` (A–Z printable master sheet mirroring the
+  paper stopgap); and a **hard-block gate with organizer override** on Generate
+  matches (RoundRobinSection) and Start event (draft/ready→active) that lists
+  missing players. Resume/Reopen aren't gated.
+
+Check-in is a PLAYER action (stamps every spot-holding reg they hold in the
+tournament at once; undo nulls them). `checked_in_at` lags the generated types,
+so it's read via `"*"` + written through an untyped client (repo convention,
+cf. `schedule_order`). `tsc -b` clean, 77 tests pass, `vite build` clean.
+
+**Next:** merge #880 → applies to TEST; then merge #881; validate check-in +
+the Start gate on TEST; promote `main`→`production` when ready.
 ## 2026-09-11 — Event console: assigning a Player B to a partner-seeker no longer silently drops (PR #866)
 
 Ron (fix pre-applied uncommitted on the offline laptop, reproduced properly here with review
