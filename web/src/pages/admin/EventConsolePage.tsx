@@ -2633,7 +2633,7 @@ function DoubleElimSection({
               </div>
               <table style={tableStyle}>
                 <tbody>
-                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
                 </tbody>
               </table>
             </div>
@@ -2663,7 +2663,7 @@ function DoubleElimSection({
                 </thead>
                 <tbody>
                   {g.rows.map((r, i) => (
-                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} onSaved={onChange} />
+                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
                   ))}
                 </tbody>
               </table>
