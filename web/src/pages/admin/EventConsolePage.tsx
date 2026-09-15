@@ -1712,21 +1712,31 @@ function MatchRow({
       >
         <div className="no-print" style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap" }}>
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={scoreA}
-            onChange={(e) => setScoreA(e.target.value)}
+            onChange={(e) => setScoreA(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave();
+            }}
             disabled={!canPlay || busy}
             style={scoreInputStyle}
+            aria-label={`${teamA?.label ?? "Team A"} score`}
           />
           <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
           <input
-            type="number"
-            min="0"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={scoreB}
-            onChange={(e) => setScoreB(e.target.value)}
+            onChange={(e) => setScoreB(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onSave();
+            }}
             disabled={!canPlay || busy}
             style={scoreInputStyle}
+            aria-label={`${teamB?.label ?? "Team B"} score`}
           />
           <button
             onClick={onSave}
