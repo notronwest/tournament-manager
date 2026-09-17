@@ -4,7 +4,7 @@ import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { fetchOrgContacts, type OrgContact, type ContactSource } from "../../lib/orgContacts";
+import { fetchOrgContacts, matchesSource, type OrgContact, type SourceFilter } from "../../lib/orgContacts";
 import {
   MAX_ATTACHMENT_FILES,
   MAX_ATTACHMENT_TOTAL_BYTES,
@@ -113,7 +113,7 @@ function ComposeTab({
 
   // Recipient filters. (No "subscribed only" here — unsubscribed contacts can
   // never be emailed, so `emailable` already excludes them.)
-  const [sourceFilter, setSourceFilter] = useState<"all" | ContactSource>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [addedSince, setAddedSince] = useState("");
   const [search, setSearch] = useState("");
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -155,7 +155,7 @@ function ComposeTab({
     return emailable.filter((c) => {
       if (q && !`${c.firstName} ${c.lastName} ${c.email ?? ""} ${c.city ?? ""}`.toLowerCase().includes(q))
         return false;
-      if (sourceFilter !== "all" && c.source !== sourceFilter) return false;
+      if (!matchesSource(c, sourceFilter)) return false;
       if (addedSince) {
         if (!c.addedAt || c.addedAt.slice(0, 10) < addedSince) return false;
       }
@@ -207,7 +207,7 @@ function ComposeTab({
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <select
                 value={sourceFilter}
-                onChange={(e) => setSourceFilter(e.target.value as "all" | ContactSource)}
+                onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
                 style={{ ...inputStyle, maxWidth: 180 }}
                 aria-label="Filter by source"
               >
