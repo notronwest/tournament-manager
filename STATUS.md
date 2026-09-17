@@ -5,6 +5,21 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-16 — Email/Contacts "Registrants" filter now overlaps with Imported
+
+Ron: Email page said 44 registrants for Pickleball Angels; PROD has 70 active
+registrant players with email. Cause: `lib/orgContacts` gives each contact ONE
+label (manual > import > registrant) and the filter compared the label, so the 26
+registrants who were also on the imported list only showed under "Imported".
+Fix: `OrgContact.isRegistrant` + pure `lib/contactSource.ts` `matchesSource()`
+(tests) — "Registrants" = anyone with an active registration, "Imported"/"Added
+manually" = how the link was created; used by EmailPage and OrgContactsPage;
+Contacts table shows "· registered" next to an Imported/Manual pill when the
+person also registered. Labels and recipients otherwise unchanged.
+
+Also found: the 12 NH Baners players (wmpc org) have **no email on file**, so no
+summary/broadcast can reach them until emails are added to their player records.
+
 ## 2026-09-15 — PDF attachments on the admin Email page (story #925)
 
 Ron: "attach the pdf to the normal email functionality we have as an admin." Same

@@ -28,7 +28,8 @@ const ACTIVE_REG_STATUSES = [
 // list query here pages with .range() until a short page comes back.
 const PAGE_SIZE = 1000;
 
-export type ContactSource = "registrant" | "import" | "manual";
+import type { ContactSource } from "./contactSource";
+export { matchesSource, type ContactSource, type SourceFilter } from "./contactSource";
 
 export type OrgContact = {
   playerId: string;
@@ -38,7 +39,14 @@ export type OrgContact = {
   phone: string | null;
   city: string | null;
   state: string | null;
+  /** How the person got onto the list — one label per contact for display.
+   * An explicit import/manual link wins over "registrant". Filter with
+   * `matchesSource`, not this field: a contact can be BOTH imported and a
+   * registrant, and "Registrants" must mean everyone who registered. */
   source: ContactSource;
+  /** True when the person holds an active registration in one of the org's
+   * events — regardless of `source`. */
+  isRegistrant: boolean;
   unsubscribed: boolean;
   /** When the contact was added to the list (organization_contacts.created_at).
    * Null for registrants, who are derived live and have no link row. */
@@ -104,6 +112,7 @@ export async function fetchOrgContacts(orgId: string): Promise<OrgContact[]> {
       city: p.city,
       state: p.state,
       source,
+      isRegistrant: registrantIds.has(p.id),
       unsubscribed: !!link?.unsubscribed_at,
       addedAt: link?.created_at ?? null,
     });
