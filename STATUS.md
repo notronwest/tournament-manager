@@ -5,6 +5,37 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-18 — Testing agent: offline/ specs were failing every regression run (scoping bug, not a product break)
+
+Morning triage of the nightly+daytime regression runs found the last 6+ runs (2026-09-15
+through 2026-09-17) all red on exactly `e2e/offline/first-paint.spec.ts` +
+`e2e/offline/network-audit.spec.ts`, 100% reproducible, same `ERR_INTERNET_DISCONNECTED`
+error every time. Root cause: those two specs (added in #843, part of the offline epic
+#732) are purpose-built to run ONLY via `scripts/offline-verify.sh` +
+`playwright.offline.config.ts` against `localhost` — each installs a `context.route` guard
+that aborts any non-localhost request to simulate the network being down. They were never
+excluded from `web/playwright.config.ts`'s `chromium` project (which runs the deployed
+nightly suite against `E2E_BASE_URL`), so the guard aborted the very first navigation.
+**Not a product regression** — the app never broke. Filed #934, fixed in PR #935 (adds
+`"**/offline/**"` to the chromium project's `testIgnore`, mirroring the existing
+`"**/mobile/**"` exclusion). Verified locally: `--list --project=chromium` goes from
+32→30 tests / 9→7 files; typecheck clean; lint unchanged from `main` (27 pre-existing,
+unrelated errors). **Not merged — awaiting Ron's review.**
+
+Also surfaced (not this run's regression, but a pattern worth a card): `registration.spec.ts`
++ `issue-09-confirm-cancel.spec.ts` failed intermittently in 4 of the last 6 runs — a shared
+mutable-DB-state race the suite's own config comments already call out (`workers: 1` because
+the suite "mutates registration state" against one shared `tm-test` deploy), clean on the
+most recent run. Filed #936, **Blocked** — needs a call from Ron: per-test seed isolation vs.
+quarantining those specs.
+
+Also kicked off (background agent, morning-only Job 2 cap): a regression spec for #860
+(registration-deadline reopen bug Ron hit live on PB Angels 2026-09-11) — result not yet
+back as of this entry; check the board / a follow-up PR for `test/issue-860-spec`.
+
+**Next:** Ron reviews/merges PR #935 (quick, mechanical); decides #936's isolation-vs-quarantine
+question; reviews whatever PR the #860 spec agent opens.
+
 ## 2026-09-16 — Email/Contacts "Registrants" filter now overlaps with Imported
 
 Ron: Email page said 44 registrants for Pickleball Angels; PROD has 70 active
