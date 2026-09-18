@@ -5,6 +5,33 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-18 — SYNCED NH Baners results from the offline laptop → PROD
+
+Ron: "Sync the nh baners tournament from my laptop to production." Same hand
+procedure as the Angels sync (memory `offline-to-prod-sync`), one transaction via
+`supabase db query --linked --file`, PROD pre-state in
+`backups/prod-pre-sync-nh-baners-20260918T141527.tgz`.
+
+What the desk did on event day: re-created the field as **7 teams / 14 regs** (PROD
+had 6 teams / 12), all at 18:52–18:55 UTC 09-15. Mapping applied: 7 players already
+on PROD → their PROD reg rows updated (seed, paid, partner) and match refs remapped;
+desk-created "Ron West" (no email) → Ron's real PROD player; 6 genuinely new players
+inserted (Berg, G+D Gove, Kalis, K+L Wilhite — no emails on file); 5 PROD players who
+never played → `withdrawn` (Candace Byrnes, Stephen Kendall, Evangelista, Wade,
+Parisi; Ron decides refunds); 12 completed matches (crossover DE, feeds wired after
+insert), event_courts 1–2, event `complete`, tournament `completed`. Verified: 14
+paid regs all mutually paired, seeds 1–7, 0 dangling team refs; Final = Berg / West
+def. Kalis / Laurinaitis 15–8. Public Results tab now shows it.
+
+Gotcha (cost one rollback): `event_registrations.partner_status` is NOT NULL
+(default `solo`) — withdrawn rows must use `'solo'`, not null. Local tournament had
+picked a saved `location_id` that doesn't exist on PROD; PROD kept its text
+location fields (not synced).
+
+Still true: every NH Baners player has **no email**, so the summary email can't reach
+them until addresses are added on their player records. Next: build `push-live.py`
+so this stops being a hand job (third time now).
+
 ## 2026-09-18 — Testing agent: offline/ specs were failing every regression run (scoping bug, not a product break)
 
 Morning triage of the nightly+daytime regression runs found the last 6+ runs (2026-09-15
