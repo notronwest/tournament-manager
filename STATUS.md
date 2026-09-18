@@ -30,11 +30,16 @@ most recent run. Filed #936, **Blocked** — needs a call from Ron: per-test see
 quarantining those specs.
 
 Also kicked off (background agent, morning-only Job 2 cap): a regression spec for #860
-(registration-deadline reopen bug Ron hit live on PB Angels 2026-09-11) — result not yet
-back as of this entry; check the board / a follow-up PR for `test/issue-860-spec`.
+(registration-deadline reopen bug Ron hit live on PB Angels 2026-09-11) — tracking issue
+#937, PR #938 (`test/issue-860-spec`). The agent had no local E2E credentials so it
+authored the spec from source only, never ran it. Verified that directly: manually
+dispatched the real regression workflow against that branch (run 35338842927) — both new
+tests fail. **Converted PR #938 to draft** with the failure-run link, rather than leave an
+unverified spec looking merge-ready.
 
-**Next:** Ron reviews/merges PR #935 (quick, mechanical); decides #936's isolation-vs-quarantine
-question; reviews whatever PR the #860 spec agent opens.
+**Next:** Ron reviews/merges PR #935 (quick, mechanical, verified); decides #936's
+isolation-vs-quarantine question; PR #938 stays draft until a future Testing-agent run (with
+real E2E creds) or Ron tunes it against the linked failure traces.
 
 ## 2026-09-16 — Email/Contacts "Registrants" filter now overlaps with Imported
 
