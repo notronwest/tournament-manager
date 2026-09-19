@@ -5,6 +5,28 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Reviewer: PR #935 reviewed (APPROVE)
+
+Reviewed PR #935 ("test(e2e): exclude offline/ specs from the deployed-CI chromium project",
+closes #934) per `daemon/agents/reviewer/PROMPT.md`. Diff is a single-file change to
+`web/playwright.config.ts`: adds `"**/offline/**"` to the `chromium` project's `testIgnore`
+alongside the existing `"**/mobile/**"` exclusion, so `e2e/offline/first-paint.spec.ts` and
+`e2e/offline/network-audit.spec.ts` (which abort any non-localhost request to simulate the
+network being down) stop running under the deployed-CI regression, where they were 100%-repro
+failing on the first `page.goto` (6+ consecutive nightly runs, 2026-09-15 through 2026-09-17).
+
+Verified independently rather than trusting the PR body: pulled the branch into a scratch
+worktree and ran `npx playwright test --list --project=chromium` myself — 30 tests / 7 files,
+no `offline/**` specs listed (matches the PR's claimed 32→30 / 9→7 before/after). Confirmed
+`scripts/offline-verify.sh` and `playwright.offline.config.ts` are untouched (AC #2), and that
+the `iphone`/`pixel` projects (explicit `testMatch` whitelist, never included `offline/**`) are
+unaffected (32 tests / 3 files, unchanged). No UI change, no `DECISIONS.md` record touches CI
+test scoping. Scope matches #934's acceptance criteria exactly — no scope creep.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** queue clear for this session (#878, #884, #935 all reviewed 2026-09-19).
+
 ## 2026-09-19 — Reviewer: PR #884 reviewed (REQUEST CHANGES)
 
 Reviewed PR #884 ("feat(tournament): in-app printable round-robin pool tracking sheets") per
