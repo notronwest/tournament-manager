@@ -5,6 +5,26 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Reviewer: PR #867 reviewed (APPROVE)
+
+Reviewed PR #867 ("Polish and unify score entry across all three surfaces," Closes #868) per
+`daemon/agents/reviewer/PROMPT.md` — the first PR review by the new Reviewer agent (D-0018).
+Checked the diff against #868's acceptance bullets (numeric `type="text"` score boxes replacing
+`type="number"`'s misaligned spin-arrows, `aria-label` replacing the redundant A/B placeholder,
+Enter-to-submit on all three surfaces, validation paths unchanged) — all implemented, none
+missing. Independently re-verified in a scratch worktree off the PR head rather than trusting
+the PR body's claims: `typecheck` clean, `build` clean, and `eslint` on the three touched files
+shows the same 4 pre-existing `set-state-in-effect` errors present on `main` (no new lint
+findings). No `DECISIONS.md` violations (no migration, no direct-to-main push); design aligns
+with `wmpc-meta/design-system/DESIGN_SYSTEM.md` principles 2 and 8. Scope was clean — exactly
+the three files the issue named, PR body explicitly excludes unrelated local changes. Posted the
+verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`, creating that
+label in the repo since it didn't exist yet (also needed for future `reviewed:changes` /
+`reviewed:escalate` verdicts).
+
+**Next:** merge #867 (Ron's step per D-0018 — Reviewer never merges); the queue still has #869,
+#872, #874, #877 awaiting review (out of scope for this session, which was scoped to #867 only).
+
 ## 2026-09-19 — Testing agent (daytime run): Job 1 triage only, no new signal
 
 Triaged the newest regression run, [35444828534](https://github.com/notronwest/tournament-manager/actions/runs/35444828534) (2026-09-19 13:07 UTC, the scheduled daytime cron — the two `workflow_dispatch` runs from this morning's #862 debugging were skipped as not part of the triage cadence). Final tally: 2 failed / 55 passed. Both failure classes are already-tracked, no new cards:
