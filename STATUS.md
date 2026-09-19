@@ -5,6 +5,36 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Reviewer: PR #869 reviewed (REQUEST CHANGES)
+
+Reviewed PR #869 ("feat(admin): preview the playoff bracket before generating it") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue exists for this PR
+(`closingIssuesReferences` empty, no matching story issue found) — read as Ron
+productizing his own dry-run prototype, so graded against the PR's own stated design
+goal ("what an organizer confirms can't drift from what gets created") plus written
+repo standards. Independently verified `tsc -b` clean and `vitest run` 65/65 pass in a
+scratch checkout of the PR head. Two concrete findings, both REQUEST CHANGES-worthy:
+
+1. **Correctness** — the preview only shows its "not enough teams" warning when
+   `previewSeeds.length === 0` (`EventConsolePage.tsx:2302`), but the non-cross-pool
+   path can return a short-but-nonempty array (e.g. 3 of 4 needed — the exact case
+   `playoffSeeding.test.ts` documents). Preview silently renders an incomplete
+   matchup as fine; `onGenerate` then rejects it *after* the organizer confirms —
+   the drift the PR claims the shared helper prevents.
+2. **Design/mobile** — `ConfirmModal`'s `modalStyle` (`ConfirmModal.tsx:122-128`) has
+   no `maxHeight`/scroll, and this PR is the first caller to pass an unbounded-height
+   body (full standings table + lists) into it. On a phone viewport with a realistic
+   team count, content will clip the Generate/Go-back buttons with no way to scroll —
+   violates DESIGN_PREFERENCES.md's mobile-first hard rule (test populated states at
+   390px) and DESIGN_SYSTEM.md's Adaptive principle (#9).
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied
+`reviewed:changes`, creating that label in the repo (only `reviewed:approve` existed
+so far).
+
+**Next:** Builder picks up #869's two findings for rework. Queue still has #872, #874,
+#877 awaiting review (out of scope for this session).
+
 ## 2026-09-19 — Reviewer: PR #867 reviewed (APPROVE)
 
 Reviewed PR #867 ("Polish and unify score entry across all three surfaces," Closes #868) per
