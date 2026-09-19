@@ -52,11 +52,15 @@ export default defineConfig({
     navigationTimeout: 60_000,
   },
   projects: [
-    // Desktop journey suite — excludes the mobile/ specs.
+    // Desktop journey suite — excludes the mobile/ specs, and offline/ (those
+    // two run ONLY via scripts/offline-verify.sh + playwright.offline.config.ts
+    // against a local network-down stack; each aborts any non-localhost
+    // request, so run here against the deployed E2E_BASE_URL they fail
+    // instantly on the first navigation — see issue #934).
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: "**/mobile/**",
+      testIgnore: ["**/mobile/**", "**/offline/**"],
     },
     // Mobile profiles run the mobile/ audit plus the NON-MUTATING flows (auth,
     // discovery) at phone width (~390px, touch). They deliberately do NOT run
