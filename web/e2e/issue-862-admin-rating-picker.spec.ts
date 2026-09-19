@@ -7,16 +7,21 @@ import { test, expect, loginAs, admin, SEED } from "./fixtures";
 // resolvePlayerAccess in supabase/functions/_shared/playerOrgAccess.ts — gets
 // the same PlayerDetailPage the platform-admin view uses).
 //
-// The seeded player (SEED.playerEmail) has a registration in the main seeded
-// tournament, so Olive (SEED.organizerEmail, an owner of SEED.orgSlug) has
-// org-scoped access to their admin player page without any platform_admins
-// seed row.
+// Uses Mona (SEED.selfService.viewerEmail) as the target player: her
+// registration in e2e-self-service is a stable "read-only view" fixture that
+// no other spec ever cancels/deletes (unlike SEED.playerEmail's Pam, whose
+// sole registration IS the one issue-09-confirm-cancel.spec.ts's Path 2 test
+// cancels — using her here made this spec pass or fail depending on run
+// order/retries in the shared suite). Because Mona still belongs to
+// SEED.orgSlug for the whole run, Olive (SEED.organizerEmail, an owner of
+// SEED.orgSlug) keeps org-scoped access to her admin player page — no
+// platform_admins seed row needed.
 
 async function seededPlayerId(): Promise<string> {
   const { data, error } = await admin()
     .from("players")
     .select("id")
-    .eq("email", SEED.playerEmail)
+    .eq("email", SEED.selfService.viewerEmail)
     .single();
   if (error || !data) throw new Error(`seeded player not found: ${error?.message}`);
   return (data as { id: string }).id;
