@@ -68,6 +68,12 @@ unverified spec looking merge-ready.
 isolation-vs-quarantine question; PR #938 stays draft until a future Testing-agent run (with
 real E2E creds) or Ron tunes it against the linked failure traces.
 
+## 2026-09-18 — Testing agent (daytime run): newest regression run reconfirms #934/#936, no new cards
+
+Daytime (~15:00 local) Job 1 triage of run [35350980672](https://github.com/notronwest/tournament-manager/actions/runs/35350980672) (13:34 UTC, the newest one not yet covered by this morning's triage). All 3 failures matched already-filed issues exactly — the offline/ CI-scoping bug (#934, fix PR #935 still unmerged) and the shared-mutable-DB registration/issue-09 flake (#936, still Blocked on Ron's isolation-vs-quarantine call). Commented an update on each rather than filing duplicates (idempotency rule); no new Discord post since nothing changed beyond confirming the pattern persists.
+
+**Next:** unchanged from the morning entry above — merge #935, decide #936.
+
 ## 2026-09-16 — Email/Contacts "Registrants" filter now overlaps with Imported
 
 Ron: Email page said 44 registrants for Pickleball Angels; PROD has 70 active
