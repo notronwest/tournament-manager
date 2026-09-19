@@ -5,6 +5,17 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Testing agent (daytime run): Job 1 triage only, no new signal
+
+Triaged the newest regression run, [35444828534](https://github.com/notronwest/tournament-manager/actions/runs/35444828534) (2026-09-19 13:07 UTC, the scheduled daytime cron — the two `workflow_dispatch` runs from this morning's #862 debugging were skipped as not part of the triage cadence). Final tally: 2 failed / 55 passed. Both failure classes are already-tracked, no new cards:
+
+- **Offline scoping bug (#934):** `first-paint.spec.ts` + `network-audit.spec.ts` still `ERR_INTERNET_DISCONNECTED` on both base + retry — same signature as every prior run. Fix is PR #935, still unmerged. Commented an update on #934.
+- **Shared-state flake (#936):** three `registration.spec.ts` subtests ("register with a new partner", "register needing a partner", "register for a singles event") each failed on attempt 1, passed on retry — net 0 failures on this file, consistent with the documented race. Still Blocked on Ron's isolation-vs-quarantine call (already asked in the issue body — not re-proposing). Commented an update on #936.
+
+No Discord post — both patterns already surfaced today, nothing new to report. Job 2 skipped (daytime run; authoring cap belongs to mornings). Noticed in passing: #934 and #936 don't appear on the WMPC Roadmap board (Project #1) despite being filed as bug issues — only #862 (unrelated) shows up under tournament-manager in a 500-item board pull. Not fixing that today (out of scope for a triage pass), flagging so it doesn't silently stay a gap.
+
+**Next:** same as this morning — Ron reviews/merges #935 (quick, mechanical, verified); decides #936's isolation-vs-quarantine question; PR #942 still needs its second failure root-caused (untouched today, Job 2 is morning-only).
+
 ## 2026-09-19 — Testing agent (morning run): Job 1 triage + #862 regression spec (PR #942, verification in flight)
 
 **Job 1:** triaged the newest run, [35386996729](https://github.com/notronwest/tournament-manager/actions/runs/35386996729) (2026-09-18 19:37 UTC — later than the daytime run already covered, so a real third run needed its own pass). All 4 failures matched already-filed issues: the offline/ CI-scoping bug (#934, fix PR #935 still unmerged) and `registration.spec.ts` "register for a singles event" + `issue-09-confirm-cancel.spec.ts` Path 1 — both instances of the shared-mutable-DB flake tracked in #936 (still Blocked on Ron's isolation-vs-quarantine call). Commented an update on #936 with the new subtest + the prior run's "register with a new partner" flake-then-pass, rather than filing a duplicate. No new cards.
