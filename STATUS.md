@@ -5,6 +5,30 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Reviewer: PR #874 reviewed (APPROVE)
+
+Reviewed PR #874 ("feat(scorecards): show pool on printed round-robin scorecards") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue exists (`closingIssuesReferences`
+empty, no matching story found) — same pattern as #869/#877, read as Ron productizing a fix he'd
+already verified locally, so graded against the PR's own stated goal (multi-pool round-robin
+scorecards were printing identical, unsorted-by-pool) plus written standards. Diff is a single
+file, `web/src/pages/admin/ScorecardsPage.tsx`: new `poolLetter()` helper is byte-identical to the
+existing convention in `EventConsolePage.tsx` (1-based `pool_index` → A/B/C), the pool is only
+shown when `event.pool_count > 1 && m.stage === "round_robin"` (matches the file's existing stage
+filter), and playoff matches correctly show no pool since they can be cross-pool. Lookup keys off
+`team_a_reg_id` only, safe because round-robin matches are always intra-pool; null-safety checked
+throughout (no crash paths for a missing team or unset `pool_index`).
+
+Independently verified in a scratch worktree off the PR head rather than trusting the PR body's
+claims: `npm install && npx tsc -b --noEmit && npm run build` all clean. No `DECISIONS.md`
+violations (no migration, single file, no direct-to-main push). Design is a plain-text addition
+next to the existing "Match:" label in the printed card's meta line — no new component/token,
+nothing in `docs/DESIGN_PREFERENCES.md` it could violate. Scope matches the PR description exactly.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** queue still has #877 awaiting review (out of scope for this session).
+
 ## 2026-09-19 — Reviewer: PR #872 reviewed (APPROVE)
 
 Reviewed PR #872 ("fix(standings): break record ties by head-to-head before differential,"
