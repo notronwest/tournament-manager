@@ -5,6 +5,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Testing agent (morning run): Job 1 triage + #862 regression spec (PR #942, verification in flight)
+
+**Job 1:** triaged the newest run, [35386996729](https://github.com/notronwest/tournament-manager/actions/runs/35386996729) (2026-09-18 19:37 UTC — later than the daytime run already covered, so a real third run needed its own pass). All 4 failures matched already-filed issues: the offline/ CI-scoping bug (#934, fix PR #935 still unmerged) and `registration.spec.ts` "register for a singles event" + `issue-09-confirm-cancel.spec.ts` Path 1 — both instances of the shared-mutable-DB flake tracked in #936 (still Blocked on Ron's isolation-vs-quarantine call). Commented an update on #936 with the new subtest + the prior run's "register with a new partner" flake-then-pass, rather than filing a duplicate. No new cards.
+
+Housekeeping: found CLAUDE.md + STATUS.md uncommitted in the working tree at session start — yesterday's daytime-triage STATUS entry had never made it into a commit before the next `git pull` fast-forwarded past it, silently dropping it. Recovered it from the stash and committed (`bb9707e`); dropped an unrelated, already-in-progress CLAUDE.md block-reorder edit rather than commit something out of this agent's scope.
+
+**Job 2:** authored `web/e2e/issue-862-admin-rating-picker.spec.ts` for #862 ("Admin player profile editor should use the same rating picker and gender UX as the player's Profile page," Done, no spec) — the oldest resolved-and-uncovered issue found. No seed changes needed: the seeded player already holds a registration in the seeded org, so `resolvePlayerAccess` grants the seeded org owner org-scoped access to `/admin/players/:id` without a `platform_admins` row. Tracking issue #941, PR #942 (`test/issue-862-spec`), draft — this session has no local E2E credentials, only verified with `playwright test --list` + eslint. Manually dispatched the real regression workflow against the branch (run 35439313256) to confirm pass/fail before asking Ron to review; **result not back as of this entry**, check PR #942 / a follow-up STATUS entry.
+
+**Next:** Ron reviews/merges #935 (quick, mechanical, verified); decides #936's isolation-vs-quarantine question; reviews PR #942 once its verification run lands (still draft either way pending that confirmation, per convention).
+
 ## 2026-09-18 — SYNCED NH Baners results from the offline laptop → PROD
 
 Ron: "Sync the nh baners tournament from my laptop to production." Same hand
