@@ -5,6 +5,31 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Reviewer: PR #872 reviewed (APPROVE)
+
+Reviewed PR #872 ("fix(standings): break record ties by head-to-head before differential,"
+Closes #873, part of #40) per `daemon/agents/reviewer/PROMPT.md`. Bug: `computeStandings`
+(feeds both the Standings tab and playoff seeding) broke record ties by differential then
+points-for, never considering head-to-head — real data showed a 4-2 three-way tie seeded
+exactly backwards (worst-record-vs-the-tied-group ranked #1). Fix builds a head-to-head win
+map while tallying, then within each equal-wins group sorts by H2H wins scoped to *that
+tied group* (mini round-robin), falling through to diff → points-for on a circular tie.
+Extracted into new `web/src/lib/standings.ts` (React-free, mirrors `lib/resultsExport.ts`)
+so it's unit-testable; `EventConsolePage.tsx` now imports it instead of defining it inline.
+
+Independently verified in a scratch worktree on the PR head (not just trusting the PR body):
+`tsc -b --noEmit` clean, `vitest run` 59/59 green (incl. 3 new tiebreak tests: 2-way, 3-way
+mini round-robin, circular), `eslint` clean on both new files. Traced the algorithm by hand
+against the issue's required order and confirmed `captainRegId` is used consistently as the
+match-team key everywhere else in `EventConsolePage.tsx`, so the H2H map keys line up. No
+DECISIONS.md entry governs this; no UI touched; scope is tight. PR body's own "⚠️ Seeding
+impact" section already flags that this reorders standings/seeding for any event with record
+ties and recommends a sanity check before PROD promotion.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** queue still has #874, #877 awaiting review (out of scope for this session).
+
 ## 2026-09-19 — Reviewer: PR #869 reviewed (REQUEST CHANGES)
 
 Reviewed PR #869 ("feat(admin): preview the playoff bracket before generating it") per
