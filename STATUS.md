@@ -5,6 +5,82 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-19 — Reviewer: PR #884 reviewed (REQUEST CHANGES)
+
+Reviewed PR #884 ("feat(tournament): in-app printable round-robin pool tracking sheets") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue (`closingIssuesReferences` empty;
+searched for a matching story across "print", "pool sheets", "round robin", "tracking sheet",
+"gen_sheets" — none found) — flagged as a non-blocking hygiene note, graded against the PR's own
+stated contract instead.
+
+Blocking finding: `PoolSheetsPage.tsx:31` (local `Team` type) and `:427-468` (local `buildTeams`)
+reimplement, field-for-field, the `Team` type + `buildTeams` already in `web/src/lib/bracketTeams.ts`
+(which `EventConsolePage.tsx` imports) — extracted there specifically so every consumer computes
+teams "exactly the way the console shows them." The duplicate happens to match today, but the next
+fix to the canonical `buildTeams` won't propagate here, silently breaking the PR's own claim that
+printed `T1..Tn` numbers match the app's. Cited CLAUDE.md's "reuse before adding" and gave the fix
+(import `buildTeams`/`Team` from `lib/bracketTeams` instead).
+
+Independently verified the circle-method round-robin schedule (n=4,5,6,7: every pair plays exactly
+once, no dupes/omissions), the multi-tenant scoping on the event fetch, and that the registration
+status filter (`SPOT_HOLDING_STATUSES`) matches `EventConsolePage`'s own team-list query.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:changes`.
+
+**Next:** #935 still open in the queue, not reviewed this session (out of this session's scope).
+
+## 2026-09-19 — Reviewer: PR #878 reviewed (REQUEST CHANGES)
+
+Reviewed PR #878 ("feat(playoff): single-elimination brackets for Top-6 and Top-8") per
+`daemon/agents/reviewer/PROMPT.md`. Verified correctness independently rather than trusting the PR
+body: pulled the branch into a scratch worktree, ran `vitest run` (83/83 green, incl. the new
+20-case `playoffBracket.test.ts`) and `tsc -b --noEmit` (clean) myself, and hand-traced the Top-6/
+Top-8 seeding, bye pre-placement, and `winnerTarget`/`bronzeTarget` feed-forward math in
+`web/src/lib/playoffBracket.ts`, plus the bye-restore path in `EventConsolePage.tsx`'s
+`onResetAllScores` (`:349-388`) — all correct, including the Top-6 play-in-upset-into-bronze edge
+case the tests cover.
+
+Blocked on one hard, CI-enforced finding: `gh pr view 878 --json closingIssuesReferences` is empty
+and the required `PR links an issue` check is **FAILING**
+(https://github.com/notronwest/tournament-manager/actions/runs/34672782995/job/103497197636). Per
+`wmpc-meta/conventions/backlog.md` § "Every PR ties to an issue," every PR must `Closes #N`; I found
+no existing story for this Top-6/Top-8 work (the double-elim epic #892/893/896/898 is a different,
+separate feature). Builder needs to open a small tracking issue and add the closing keyword.
+
+Design/scope/hygiene: clean — the new `playoff_rounds` `<option>`s reuse the existing native
+`<select>` pattern (not a mode-selection surface, so the choice-tiles convention doesn't apply), and
+the `matchLabel`/`playoffStageLabel` generalizations are in-scope for supporting 3-round brackets.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:changes`.
+
+**Next:** per the task scope, did not review #884 or #935 this session — still open in the queue.
+
+## 2026-09-19 — Reviewer: PR #877 reviewed (APPROVE)
+
+Reviewed PR #877 ("fix(schedule): explain locked setup dropdowns in per-event panels") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue (`closingIssuesReferences` empty,
+no matching story found) — same Ron-productized-local-fix pattern as #874/#869, so graded against
+the PR's own stated goal plus written standards rather than acceptance criteria.
+
+Diff is a single file, `web/src/pages/admin/SchedulePage.tsx`, +19/-0: new `locked: boolean` prop
+threaded from the page's `const locked = !!tournament?.schedule_locked_at` (`:377`) through the
+single `<SetupPanel>` call site (`:1412`) into the component's props type and a new hint block
+(`:1710-1725`) rendered when locked. Confirmed only one `<SetupPanel>` call site exists (no other
+caller missing the new prop), and the hint's copy ("click \"Unlock schedule\" at the top") matches
+the actual button label at `:972` exactly.
+
+This is a direct instance of the documented design-system convention (`wmpc-meta/design-system/DESIGN_SYSTEM.md`
+changelog, 2026-06-06): "Don't render dead ends" — gate the affordance and show the reason instead
+of silently disabling. Styling reuses the file's existing `warnBg`/`warnFg` tokens (no new raw hex)
+and matches the visual pattern of the adjacent `warning`/`error` blocks and the existing lock banner
+elsewhere in the same file. No `DECISIONS.md` entry applies (no migration, no deploy/branch change,
+no money path). Independently verified `npm run typecheck` clean in a scratch worktree off the PR
+branch rather than trusting the PR body's claim.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** Reviewer queue (867/869/872/874/877) is now fully drained for this pass.
+
 ## 2026-09-19 — Reviewer: PR #874 reviewed (APPROVE)
 
 Reviewed PR #874 ("feat(scorecards): show pool on printed round-robin scorecards") per
