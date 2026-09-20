@@ -5,6 +5,14 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-20 — Testing agent: daytime triage, all green
+
+**Job 1 (triage):** newest untriaged run ([35513866940](https://github.com/notronwest/tournament-manager/actions/runs/35513866940), 2026-09-20 13:33 UTC) — **all green, 56 passed** (up from 33 pre-#945/#942/#938 spec additions still pending merge, so this run reflects the existing merged suite only). No failures to triage, no card needed. Not Monday, so no heartbeat posted to Discord per cadence rules (quiet-when-green).
+
+**Job 2 (author):** skipped — daytime run, per-day authoring cap already spent on this morning's run (PR #945 for #10).
+
+**Housekeeping:** confirmed the previously-flagged locally-modified `CLAUDE.md` (missing Engineering-standard/UI-work/Deployment blocks vs. `origin/main`) is still present and still untouched by me — out of scope for this run, flagging again in case it's stale. Draft PRs #945 (#10), #942 (#862), #938 (#860) remain open awaiting harness-access selector tuning; nothing new to do on them this run.
+
 ## 2026-09-20 — Testing agent: morning triage + spec PR for #10 + backlog-scope flag
 
 **Job 1 (triage):** newest untriaged run ([35463990606](https://github.com/notronwest/tournament-manager/actions/runs/35463990606), 2026-09-19 19:19 UTC) failed only the two `e2e/offline/*` specs — the known #934 signature, and this run predates #935 (the fix) merging later the same day, so no new information. Commented on #934 for the record; no new card. `registration.spec.ts` + #936's specs were clean this run.
