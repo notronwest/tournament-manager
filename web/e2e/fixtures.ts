@@ -53,6 +53,16 @@ export const SEED = {
     registrantEmail: "e2e-cam@wmpc.test", // Cam, pending reg w/ Pat
     newPartnerQuery: "Quinn",
   },
+  // Partner-not-notified-until-checkout copy (#10). Each its own tournament.
+  partnerNotice: {
+    tournamentSlug: "e2e-partner-notice",
+    pickerEmail: "e2e-noa-notice@wmpc.test", // Noa — picks existing partner Pat
+    partnerQuery: "Pat",
+    seekerTournamentSlug: "e2e-partner-notice-seeker",
+    seekerEmail: "e2e-sage-notice@wmpc.test", // Sage — "I need a partner"
+    singlesTournamentSlug: "e2e-partner-notice-singles",
+    singlesEmail: "e2e-milo-notice@wmpc.test", // Milo — singles, no partner section at all
+  },
   inviteAccept: {
     tournamentSlug: "e2e-invite",
     token: "e2e-accept-token",
