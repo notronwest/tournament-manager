@@ -5,6 +5,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-20 — Builder: PR #947 for #946 (checkout donation UX)
+
+Single-item run on issue #946 ("Charity donations P2 [UX] — add-donation field + order-summary line at checkout"), the UX-only sub-slice split out of #378 (which stays Blocked on the money-touching `[FN]` half). No sub-issues/open PRs already existed under #946, so this was a normal build, not a mis-queued rework.
+
+Opened this PR (#947, Closes #946) on `feature/issue-946-donation-checkout-ux` — single-file diff to `web/src/pages/public/CheckoutPage.tsx`: optional donation field (presets + custom amount, mirrors the existing `/donate` page's pattern) shown only when `accepts_donations` is on, its own order-summary line, live-updating total, and floor enforcement (never displays below required fees). `donationCents` is forwarded to `create-payment-intent`, which currently ignores it — no Stripe/edge-function/webhook file touched. typecheck clean, build clean, lint adds zero new errors (confirmed against a `main` baseline worktree: 27 errors/4 warnings on both).
+
+**Flagged prominently in the PR** (not a blocker, but Ron should read before merging): until #378's `[FN]` half ships, the UI will preview a donation-inclusive total throughout checkout but the actual Stripe charge stays registration-only — a real preview/charge mismatch. Also, `accepts_donations` is the same flag already live for the standalone `/donate` page (#377), so any tournament with it already on will surface this new checkout field immediately on merge, before the FN half exists. Recommend Ron decide: hold for FN pairing, or merge now accepting the temporary gap.
+
+**Next:** Ron reviews/merges #947, or requests the FN half be paired first. #378 itself stays Blocked (money-path change, not the Builder's to attempt) until Ron authorizes and builds the `[FN]` piece.
+
 ## 2026-09-19 — Reviewer: PR #935 reviewed (APPROVE)
 
 Reviewed PR #935 ("test(e2e): exclude offline/ specs from the deployed-CI chromium project",
