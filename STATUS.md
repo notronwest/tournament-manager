@@ -5,6 +5,14 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-21 — Builder: single-item orphan recovery, #936 reconciled to Backlog
+
+Single-item mode: recover orphaned **In Progress** card #936 (dispatcher assumed a `feature/db/fn/issue-936-*` branch existed with no open PR). Checked local + all remote branches — no branch for #936 exists anywhere; nothing to build or open a PR for.
+
+Found the real state via #936's own comment thread: CoS triage (2026-09-21) already diagnosed and resolved this — the actionable fix was dispatched as **#950** (self-seeding isolation fix), which has an open, mergeable PR **#951** (In Review, see the entry below). That same CoS comment said "This card moves to Backlog as the tracking issue," but the board move was never applied, leaving #936 stranded in In Progress with no work attached to it.
+
+Action: moved #936's board status **In Progress → Backlog** via `gh project item-edit`, and left an explanatory comment (`<!-- wmpc-builder -->`) pointing to #950/#951 and the disposition. No branch, no code, no PR — this card had nothing to build. **Next:** #936 stays open until a week of clean regression runs on the affected specs, per #950's note; nothing further for the Builder here.
+
 ## 2026-09-21 — Builder: single-item run, PR #951 for #950 (self-seeding e2e fix)
 
 Built issue #950 in single-item mode (no sub-issues/PRs existed yet — a fresh build, not a mis-queue). Scope: make the five specific subtests named in #950's AC self-seeding (four in `registration.spec.ts` + issue-09 "Path 1"), fixing the recurring #936 flake's root cause (shared single-use seed state from `e2e/seed.ts`).
