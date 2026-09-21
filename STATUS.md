@@ -5,6 +5,14 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-21 — Testing agent (daytime run): Job 1 triage, known #936 flake, no new card
+
+Triaged the newest untriaged regression run, [35621868067](https://github.com/notronwest/tournament-manager/actions/runs/35621868067) (2026-09-21 15:52 UTC). Only persistent failure (failed both attempt and retry #1): `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" — `TimeoutError: locator.fill` on the partner-search placeholder, same signature already tracked in #936. Two more flaked-then-passed on retry #1 (`registration.spec.ts` › "register needing a partner", and `mobile/audit.spec.ts` (iphone) › "register tab — pending card actions usable") — same shared-mutable-seed-state family, not previously named in #936 but same root cause.
+
+This run predates PR #951 (Builder's self-seeding fix for #950) merging, so it's the expected signature until that lands — not new information. Commented an update on #936 rather than filing a duplicate card. Posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped — this is the ~15:00-local (daytime) slot per `agents/testing/PROMPT.md`, and Job 2's per-day cap belongs to the morning run. Note: no "Testing agent morning run" STATUS entry exists for 2026-09-21, so it's unclear whether this morning's run fired — flagging in case the 07:00 slot needs a look, but not investigating scheduler health here (out of this agent's scope). **Next:** once #951 merges, the following run is the real signal on whether #936's flake clears.
+
 ## 2026-09-21 — Builder: single-item orphan recovery, #936 reconciled to Backlog
 
 Single-item mode: recover orphaned **In Progress** card #936 (dispatcher assumed a `feature/db/fn/issue-936-*` branch existed with no open PR). Checked local + all remote branches — no branch for #936 exists anywhere; nothing to build or open a PR for.
