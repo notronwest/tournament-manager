@@ -371,6 +371,16 @@ async function main() {
   );
   await resetEvent(noticeSinglesE);
   await ensurePlayer("e2e-milo-notice@wmpc.test", "Milo", "Singles2");
+  // 7b. Partner-mode segmented control fixture (#15) — its own single-event
+  //    tournament (#253 convention) so the Register tab shows exactly one
+  //    card and this spec's form-opening never races another spec's actual
+  //    save on shared state. The test never clicks Save (it only opens the
+  //    form and toggles the mode radios), so a fresh player with no existing
+  //    reg is enough — no reset-then-mutate lifecycle needed here.
+  const modeT = await mkTournament("e2e-partner-mode", "E2E Partner Mode Cup");
+  const modeE = await doublesEvent(modeT, "E2E Partner Mode Doubles");
+  await resetEvent(modeE);
+  await ensurePlayer("e2e-uma-mode@wmpc.test", "Uma", "Modecheck");
 
   // 8. Self-service fixtures: my-tournaments view + withdraw. Two players with
   //    pending regs on a dedicated event — Mona (read-only view) and Will (the
