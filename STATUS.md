@@ -5,6 +5,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-21 — Builder: single-item run, PR #951 for #950 (self-seeding e2e fix)
+
+Built issue #950 in single-item mode (no sub-issues/PRs existed yet — a fresh build, not a mis-queue). Scope: make the five specific subtests named in #950's AC self-seeding (four in `registration.spec.ts` + issue-09 "Path 1"), fixing the recurring #936 flake's root cause (shared single-use seed state from `e2e/seed.ts`).
+
+Added `web/e2e/registration-fixtures.ts` — a Playwright fixture `seedRegistration(kind)` that creates its own tournament/event/player(s) per test invocation (keyed by a fresh random id) and tears them down after, so two runs, two tests, or a CI retry can never collide. Wired it into the four named `registration.spec.ts` subtests and issue-09's "Path 1"; left "change partner", "accept a partner invite", and issue-09 "Path 2" on the shared seed since they weren't named in the AC. Diff confined to `web/e2e/` per the AC — `e2e/seed.ts` and the CI workflow untouched. typecheck/build/lint all clean (lint: scoped diff clean; full run shows the same pre-existing `main` errors, none new).
+
+One snag caught before opening: my first PR body phrase "Fixes the recurring #936 flake" (and "doesn't close #936") tripped GitHub's closing-keyword parser and auto-linked #936 as a second closing issue — violates the one-issue-per-PR rule. Reworded to neutral phrasing ("Addresses... investigated in #936" / "issue #936 should stay open...") and re-verified only #950 closes.
+
+PR: [#951](https://github.com/notronwest/tournament-manager/pull/951) (Closes #950), card moved to In Review. **Next:** Ron reviews/merges; per #950's note, #936 itself stays open until a week of clean regression runs on these specs.
+
 ## 2026-09-20 — Testing agent: daytime triage, all green
 
 **Job 1 (triage):** newest untriaged run ([35513866940](https://github.com/notronwest/tournament-manager/actions/runs/35513866940), 2026-09-20 13:33 UTC) — **all green, 56 passed** (up from 33 pre-#945/#942/#938 spec additions still pending merge, so this run reflects the existing merged suite only). No failures to triage, no card needed. Not Monday, so no heartbeat posted to Discord per cadence rules (quiet-when-green).
