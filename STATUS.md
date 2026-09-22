@@ -5,6 +5,12 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
+
+Triaged the newest untriaged regression run, [35737353782](https://github.com/notronwest/tournament-manager/actions/runs/35737353782) (2026-09-22 14:00 UTC) — workflow **failed** (56 passed, 1 failed, 1 flaky). `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" failed **both** attempt and retry #1 this time (`TimeoutError: locator.fill` on the partner-search placeholder) — same #936 signature, but landed persistent instead of flaky-then-pass, so this is the first of the last three occurrences to flip the run red. `registration.spec.ts` › "register for a singles event (no partner picker)" flaked once (`TimeoutError: locator.scrollIntoViewIfNeeded`) then passed on retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged — expected signature until it lands. Commented an update on #936 (with the severity bump noted) rather than filing a duplicate card; posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run). **Next:** #951 merging is the actual fix — worth prioritizing given today's run crossed from flaky-green to red.
+
 ## 2026-09-21 — Testing agent (daytime run): Job 1 triage, green with known #936 flake, no new card
 
 Triaged the newest untriaged regression run, [35655046570](https://github.com/notronwest/tournament-manager/actions/runs/35655046570) (2026-09-21 21:05 UTC) — **overall green** (56 passed, 2 flaky). Both flakes are the same tracked #936 family: `registration.spec.ts` › "register needing a partner" and `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" each failed attempt 1 (`TimeoutError: locator.fill` on the partner-search placeholder) but passed retry #1. Notably better than the prior run (35621868067), where Path 1 failed both attempt and retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged, so this is the expected signature until it lands — commented an update on #936 rather than filing a duplicate card. Posted a one-line Discord triage summary to Backlog.
