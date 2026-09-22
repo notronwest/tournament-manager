@@ -5,6 +5,12 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-21 — Testing agent (daytime run): Job 1 triage, green with known #936 flake, no new card
+
+Triaged the newest untriaged regression run, [35655046570](https://github.com/notronwest/tournament-manager/actions/runs/35655046570) (2026-09-21 21:05 UTC) — **overall green** (56 passed, 2 flaky). Both flakes are the same tracked #936 family: `registration.spec.ts` › "register needing a partner" and `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" each failed attempt 1 (`TimeoutError: locator.fill` on the partner-search placeholder) but passed retry #1. Notably better than the prior run (35621868067), where Path 1 failed both attempt and retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged, so this is the expected signature until it lands — commented an update on #936 rather than filing a duplicate card. Posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped (daytime slot; authoring cap belongs to the morning run). **Next:** once #951 merges, the following run is the real signal on whether #936's flake clears for good.
+
 ## 2026-09-21 — Testing agent (daytime run): Job 1 triage, known #936 flake, no new card
 
 Triaged the newest untriaged regression run, [35621868067](https://github.com/notronwest/tournament-manager/actions/runs/35621868067) (2026-09-21 15:52 UTC). Only persistent failure (failed both attempt and retry #1): `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" — `TimeoutError: locator.fill` on the partner-search placeholder, same signature already tracked in #936. Two more flaked-then-passed on retry #1 (`registration.spec.ts` › "register needing a partner", and `mobile/audit.spec.ts` (iphone) › "register tab — pending card actions usable") — same shared-mutable-seed-state family, not previously named in #936 but same root cause.
