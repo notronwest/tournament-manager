@@ -523,6 +523,32 @@ async function main() {
       .select("id")
       .single(),
     "tournament e2e-reopen-future-deadline",
+  // 10. Pricing-preview fixtures (#12) — organizer-facing "override" copy on
+  //     the event-fee field + the tournament wizard's "Preview math" box.
+  //     Own tournament with a real (non-$0) pricing tier so the preview shows
+  //     computed totals instead of the "Free tournament" branch, and the
+  //     event carries a non-zero fee override so the "Flat override active"
+  //     note has something to show. Read-only spec (no registrations touch
+  //     this fixture), so it's safe to share across runs/retries.
+  const pricingT = await mkTournament("e2e-pricing-preview", "E2E Pricing Preview Cup");
+  const pricingE = await doublesEvent(pricingT, "E2E Pricing Preview Doubles");
+  await db.from("events").update({ event_fee_cents: 2000 }).eq("id", pricingE);
+  await db.from("tournament_pricing_tiers").delete().eq("tournament_id", pricingT);
+  ok(
+    await db
+      .from("tournament_pricing_tiers")
+      .insert({
+        tournament_id: pricingT,
+        sort_order: 1,
+        label: "Standard",
+        starts_at: null,
+        ends_at: null,
+        first_event_fee_cents: 3000,
+        additional_event_fee_cents: 1500,
+      })
+      .select("id")
+      .single(),
+    "pricing-preview tier insert",
   );
 
   console.log("seed: e2e-test fixture ready");
