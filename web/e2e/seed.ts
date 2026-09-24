@@ -345,6 +345,33 @@ async function main() {
   const vicId = await ensurePlayer("e2e-vic@wmpc.test", "Vic", "Viewer");
   await db.from("partner_invites").insert({ event_id: inviteE, inviter_player_id: ivanId, invitee_player_id: vicId, invitee_email: "e2e-vic@wmpc.test", token: "e2e-view-token" });
 
+  // 7b. Partner-notice fixtures (#10) — each its own single-event tournament
+  //    (matching the #253 convention) so this spec's own register/save
+  //    mutations never collide with anything else and each Register tab
+  //    shows exactly one card. Noa picks an existing partner (Pat) and must
+  //    see the "won't be notified until you check out" note both on the open
+  //    form and the resulting pending card; Sage ("I need a partner") and
+  //    Milo (singles) must NOT see it (AC #10.3).
+  const noticeT = await mkTournament("e2e-partner-notice", "E2E Partner Notice Cup");
+  const noticeE = await doublesEvent(noticeT, "E2E Partner Notice Doubles");
+  await resetEvent(noticeE);
+  await ensurePlayer("e2e-noa-notice@wmpc.test", "Noa", "Notice");
+
+  const noticeSeekerT = await mkTournament("e2e-partner-notice-seeker", "E2E Partner Notice Seeker Cup");
+  const noticeSeekerE = await doublesEvent(noticeSeekerT, "E2E Partner Notice Seeker Doubles");
+  await resetEvent(noticeSeekerE);
+  await ensurePlayer("e2e-sage-notice@wmpc.test", "Sage", "Seeking");
+
+  const noticeSinglesT = await mkTournament("e2e-partner-notice-singles", "E2E Partner Notice Singles Cup");
+  const noticeSinglesE = await selectOrInsert(
+    "events",
+    { tournament_id: noticeSinglesT, name: "E2E Partner Notice Singles" },
+    { tournament_id: noticeSinglesT, name: "E2E Partner Notice Singles", format: "singles", gender: "mixed" },
+    "notice singles event",
+  );
+  await resetEvent(noticeSinglesE);
+  await ensurePlayer("e2e-milo-notice@wmpc.test", "Milo", "Singles2");
+
   // 8. Self-service fixtures: my-tournaments view + withdraw. Two players with
   //    pending regs on a dedicated event — Mona (read-only view) and Will (the
   //    withdraw test cancels his; reset recreates it each run). Invites-view
