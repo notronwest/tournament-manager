@@ -48,6 +48,7 @@ async function createPlayer(
   email: string,
   first: string,
   last: string,
+  extra?: { gender?: "M" | "F" | "X"; selfRatingDoubles?: number },
 ): Promise<{ playerId: string; authUserId: string }> {
   const created = await db.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true });
   const authUserId = created.data?.user?.id;
@@ -56,7 +57,14 @@ async function createPlayer(
     await db
       .from("players")
       .upsert(
-        { auth_user_id: authUserId, first_name: first, last_name: last, email },
+        {
+          auth_user_id: authUserId,
+          first_name: first,
+          last_name: last,
+          email,
+          gender: extra?.gender,
+          self_rating_doubles: extra?.selfRatingDoubles,
+        },
         { onConflict: "auth_user_id" },
       )
       .select("id")
@@ -66,7 +74,15 @@ async function createPlayer(
   return { playerId: player.id, authUserId };
 }
 
-export type ScenarioKind = "existingPartner" | "newPartner" | "seeker" | "singles" | "discard";
+export type ScenarioKind =
+  | "existingPartner"
+  | "newPartner"
+  | "seeker"
+  | "singles"
+  | "discard"
+  | "ratingGate"
+  | "genderGate"
+  | "eligible";
 
 export interface ScenarioData {
   orgSlug: string;
@@ -110,6 +126,12 @@ async function seedScenario(kind: ScenarioKind): Promise<{ data: ScenarioData; c
   ) as { id: string };
 
   const format = kind === "singles" ? "singles" : "doubles";
+  // #55: ratingGate/genderGate/eligible each configure the event's
+  // gender + rating gates and the registrant's matching player fields so
+  // checkEligibility() lands on a deterministic, single-gate outcome —
+  // isolating rating from gender (each event only turns on one gate).
+  const eventGender =
+    kind === "genderGate" ? "men" : kind === "ratingGate" ? "women" : "mixed";
   const event = ok(
     await db
       .from("events")
@@ -117,7 +139,9 @@ async function seedScenario(kind: ScenarioKind): Promise<{ data: ScenarioData; c
         tournament_id: tournament.id,
         name: `E2E ${kind} event ${id}`,
         format,
-        gender: "mixed",
+        gender: eventGender,
+        min_rating: kind === "ratingGate" ? 3.5 : null,
+        max_rating: kind === "ratingGate" ? 4.0 : null,
       })
       .select("id")
       .single(),
@@ -125,7 +149,16 @@ async function seedScenario(kind: ScenarioKind): Promise<{ data: ScenarioData; c
   ) as { id: string };
 
   const registrantEmail = `e2e-${kind}-${id}@wmpc.test`;
-  const registrant = await createPlayer(db, registrantEmail, "E2E", `Reg${id}`);
+  const registrant = await createPlayer(db, registrantEmail, "E2E", `Reg${id}`, {
+    // ratingGate: event is women's + rated, so the registrant needs a
+    // matching gender ("F") to isolate the rating gate, and a self-rating
+    // below the 3.5–4.0 floor to trip it.
+    // genderGate: event is men's, registrant is "F" — a *set* (not blank)
+    // wrong gender, since an unset gender on a gendered event renders a
+    // "set your gender" link instead of the plain "Not eligible" text.
+    gender: kind === "ratingGate" ? "F" : kind === "genderGate" ? "F" : undefined,
+    selfRatingDoubles: kind === "ratingGate" ? 3.0 : undefined,
+  });
   const players = [registrant];
   const extraEmails: string[] = [];
 
