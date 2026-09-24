@@ -62,6 +62,7 @@ export const SEED = {
     seekerEmail: "e2e-sage-notice@wmpc.test", // Sage — "I need a partner"
     singlesTournamentSlug: "e2e-partner-notice-singles",
     singlesEmail: "e2e-milo-notice@wmpc.test", // Milo — singles, no partner section at all
+  },
   // Partner-mode segmented control (#15) — the "I have a partner / I need a
   // partner" toggle renders as a real radiogroup, not two action buttons.
   partnerMode: {
