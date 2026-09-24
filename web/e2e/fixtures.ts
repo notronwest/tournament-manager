@@ -77,6 +77,19 @@ export const SEED = {
   invitesView: {
     inviteeEmail: "e2e-vic@wmpc.test", // dedicated invitee — invite never consumed
   },
+  // Pricing-model clarity in the admin forms (#12): event-fee "override"
+  // hint on EventFormPage + the tournament wizard's "Preview math" box.
+  pricingPreview: {
+    tournamentSlug: "e2e-pricing-preview",
+    eventName: "E2E Pricing Preview Doubles",
+    adminEmail: "e2e-organizer@wmpc.test", // Olive, org owner
+    // Matches seed.ts §10: first_event_fee_cents 3000 / additional 1500 /
+    // event_fee_cents (override) 2000.
+    firstEventFeeUsd: "$30.00",
+    twoEventsUsd: "$45.00",
+    threeEventsUsd: "$60.00",
+    eventOverrideUsd: "$20.00",
+  },
   // Manage-registration editor (#657). Organizer (Olive, an org owner) drives
   // the admin Attendees editor. One event per scenario; unique player names so
   // the By-Player filter box narrows to one row. Emails match seed.ts §9.
