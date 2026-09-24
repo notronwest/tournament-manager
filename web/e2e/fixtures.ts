@@ -96,6 +96,25 @@ export const SEED = {
     refundRemove: { player: "Rita Refund", email: "mr-rita@wmpc.test", event: "MR Refund Remove" },
     refundGatingPending: { player: "Gary Gating", email: "mr-gary@wmpc.test", event: "MR Refund Pending" },
   },
+  // Reopen-on-Basics-edit (#860). Organizer (Olive) edits the Basics step of
+  // the tournament wizard on a CLOSED tournament. Two scenarios, each its own
+  // tournament so the specs don't race each other's status field:
+  //   pastDeadline — registration_closes_at already in the past (plausibly
+  //     auto-closed) — pushing the deadline into the future must reopen it.
+  //   futureDeadline — registration_closes_at still in the future (an early
+  //     manual "Close registration") — an unrelated Basics edit must NOT
+  //     reopen it.
+  reopen: {
+    adminEmail: "e2e-organizer@wmpc.test", // Olive, org owner
+    pastDeadline: {
+      tournamentSlug: "e2e-reopen-past-deadline",
+      tournamentName: "E2E Reopen Past-Deadline Cup",
+    },
+    futureDeadline: {
+      tournamentSlug: "e2e-reopen-future-deadline",
+      tournamentName: "E2E Reopen Future-Deadline Cup",
+    },
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";

@@ -477,6 +477,54 @@ async function main() {
   await resetEvent(mrRefundPending);
   await insertReg(mrRefundPending, await ensurePlayer("mr-gary@wmpc.test", "Gary", "Gating"), "pending_payment");
 
+  // 10. Reopen-on-Basics-edit fixtures (#860). Both start status='closed' —
+  //     re-seeding always resets them, undoing whatever the specs flip, so
+  //     every run starts deterministic. No events needed; these specs only
+  //     touch the tournament's own status/registration_closes_at fields.
+  ok(
+    await db
+      .from("tournaments")
+      .upsert(
+        {
+          organization_id: org.id,
+          slug: "e2e-reopen-past-deadline",
+          name: "E2E Reopen Past-Deadline Cup",
+          status: "closed",
+          starts_at: "2099-01-01",
+          ends_at: "2099-01-02",
+          // Already in the past — plausibly how it got auto-closed.
+          registration_closes_at: "2024-01-01T00:00:00.000Z",
+        },
+        { onConflict: "organization_id,slug" },
+      )
+      .select("id")
+      .single(),
+    "tournament e2e-reopen-past-deadline",
+  );
+
+  ok(
+    await db
+      .from("tournaments")
+      .upsert(
+        {
+          organization_id: org.id,
+          slug: "e2e-reopen-future-deadline",
+          name: "E2E Reopen Future-Deadline Cup",
+          status: "closed",
+          starts_at: "2099-01-01",
+          ends_at: "2099-01-02",
+          // Still in the future — this tournament was closed early via
+          // "Close registration", not by the auto-close trigger.
+          registration_closes_at: "2099-06-01T00:00:00.000Z",
+          description: "Seed baseline description.",
+        },
+        { onConflict: "organization_id,slug" },
+      )
+      .select("id")
+      .single(),
+    "tournament e2e-reopen-future-deadline",
+  );
+
   console.log("seed: e2e-test fixture ready");
 }
 
