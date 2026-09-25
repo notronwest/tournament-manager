@@ -5,6 +5,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-25 — Testing agent (daytime run): Job 1 triage, harness parse break persists (5th occurrence), #955 still unmerged
+
+Triaged the newest untriaged regression run, [36148433196](https://github.com/notronwest/tournament-manager/actions/runs/36148433196) (2026-09-25 14:34 UTC, daytime) — **failed at the seed step**, identical signature to the prior three runs: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. Root cause and fix unchanged: the fix (commit `0cf993d`) has been sitting in open PR [#955](https://github.com/notronwest/tournament-manager/pull/955) since 2026-09-24 morning and still isn't merged, so `main` HEAD (`8cd2299`) still can't parse as a Playwright suite. This is now **4 consecutive scheduled CI runs with zero regression signal**. Not a product regression — commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) rather than filing a duplicate card or re-posting to Discord (already flagged there with urgency this morning, per the "don't re-post the same regression same day" rule).
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
+
+Housekeeping: this session's checkout had a stale local, uncommitted `CLAUDE.md` diff (missing the "Engineering standard" section already committed on `main`, flagged in prior STATUS entries since 2026-09-20 as out-of-scope drift). While switching branches I ran `git checkout main -- .`, which brought the local file back in sync with `main`'s committed content — flagging transparently since it touched uncommitted state, though nothing committed or pushed was affected and the result matches the canonical `main` version.
+
+**Next:** Ron still needs to merge #955 — every run past this one stays blind to real regressions until it lands.
+
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
 Triaged the newest untriaged regression run, [35737353782](https://github.com/notronwest/tournament-manager/actions/runs/35737353782) (2026-09-22 14:00 UTC) — workflow **failed** (56 passed, 1 failed, 1 flaky). `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" failed **both** attempt and retry #1 this time (`TimeoutError: locator.fill` on the partner-search placeholder) — same #936 signature, but landed persistent instead of flaky-then-pass, so this is the first of the last three occurrences to flip the run red. `registration.spec.ts` › "register for a singles event (no partner picker)" flaked once (`TimeoutError: locator.scrollIntoViewIfNeeded`) then passed on retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged — expected signature until it lands. Commented an update on #936 (with the severity bump noted) rather than filing a duplicate card; posted a one-line Discord triage summary to Backlog.
