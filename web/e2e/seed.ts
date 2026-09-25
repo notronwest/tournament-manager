@@ -563,6 +563,32 @@ async function main() {
     "pricing-preview tier insert",
   );
 
+  // 11. Global partner-selection notification fixture (#64) — Gale has a
+  //     pending inbound partner_invite so the site-wide banner shows on any
+  //     authenticated page, not just the tournament. Reset-then-mutate: the
+  //     accept spec consumes this invite, so every run starts it fresh.
+  const noticeGT = await mkTournament("e2e-global-notice", "E2E Global Notice Cup");
+  const noticeGE = await doublesEvent(noticeGT, "E2E Global Notice Doubles");
+  await resetEvent(noticeGE);
+  const gioId = await ensurePlayer("e2e-gio-notice@wmpc.test", "Gio", "Global");
+  const galeId = await ensurePlayer("e2e-gale-notice@wmpc.test", "Gale", "Global");
+  ok(
+    await db
+      .from("event_registrations")
+      .insert({ event_id: noticeGE, player_id: gioId, status: "pending_payment", partner_status: "pending", event_fee_cents: 0 })
+      .select("id")
+      .single(),
+    "gio reg",
+  );
+  ok(
+    await db
+      .from("partner_invites")
+      .insert({ event_id: noticeGE, inviter_player_id: gioId, invitee_player_id: galeId, invitee_email: "e2e-gale-notice@wmpc.test" })
+      .select("id")
+      .single(),
+    "global-notice invite",
+  );
+
   console.log("seed: e2e-test fixture ready");
 }
 

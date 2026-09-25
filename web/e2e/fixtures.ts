@@ -134,6 +134,18 @@ export const SEED = {
       tournamentName: "E2E Reopen Future-Deadline Cup",
     },
   },
+  // Global partner-selection notification (#64) — Gale has a pending inbound
+  // partner_invite so the site-wide banner must show on any authenticated
+  // page, not just the tournament. Milo (#10's singles fixture) doubles as
+  // the negative case: an authenticated player with zero pending invites.
+  globalNotice: {
+    tournamentSlug: "e2e-global-notice",
+    tournamentName: "E2E Global Notice Cup",
+    eventName: "E2E Global Notice Doubles",
+    inviterName: "Gio",
+    inviteeEmail: "e2e-gale-notice@wmpc.test",
+    noInviteEmail: "e2e-milo-notice@wmpc.test", // Milo — no pending invites anywhere
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";
