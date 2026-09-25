@@ -5,6 +5,29 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-25 — Builder: single-item, #23 Blocked as already-shipped by #64/#68
+
+Single-item mode: build issue #23 ("Pending invite count on the homepage").
+Checked first for open sub-issues/PRs under it (none — not a mis-queued split
+parent), then read the story: a homepage indicator of pending partner
+invites, driven by the same `invitee_player_id = me` query the tournament
+page uses.
+
+That's already live. PR #68 (closing #64, "Global partner-selection
+notification on login", merged 2026-06-07) shipped exactly this as a
+site-wide banner — `PartnerInvitesContext.tsx` + `PartnerInvitesBanner.tsx`,
+wired into `App.tsx` between `SiteHeader` and `Routes` — so it renders on
+every route including `/`, with an explicit pending-invite count. Building a
+second homepage-only chip against the same data would just duplicate it.
+
+Commented the findings on #23 and moved the card to **Blocked** rather than
+shipping a redundant PR — Ron's call whether to close #23 as duplicate/
+already-satisfied, or describe something narrower than the existing global
+banner if that's actually what's wanted. No branch/PR opened; `main`
+untouched.
+
+**Next:** Ron resolves #23 (close, or clarify scope for a follow-up).
+
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
 Triaged the newest untriaged regression run, [35737353782](https://github.com/notronwest/tournament-manager/actions/runs/35737353782) (2026-09-22 14:00 UTC) — workflow **failed** (56 passed, 1 failed, 1 flaky). `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" failed **both** attempt and retry #1 this time (`TimeoutError: locator.fill` on the partner-search placeholder) — same #936 signature, but landed persistent instead of flaky-then-pass, so this is the first of the last three occurrences to flip the run red. `registration.spec.ts` › "register for a singles event (no partner picker)" flaked once (`TimeoutError: locator.scrollIntoViewIfNeeded`) then passed on retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged — expected signature until it lands. Commented an update on #936 (with the severity bump noted) rather than filing a duplicate card; posted a one-line Discord triage summary to Backlog.
