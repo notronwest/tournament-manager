@@ -5,6 +5,12 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-25 — Builder: single-item mode on #235, mis-queued (already shipped) — no build, card reconciled
+
+Single-item mode: build issue #235 ("Edge functions: esm.sh → npm: imports") from Agent Ready. Found the issue already **closed** since 2026-06-11 — fully shipped by merged PR #246 (`[FN]` esm.sh → `npm:` migration) — with no open sub-issues or PRs under it; the board card had just gone stale showing Agent Ready. Per the "don't rebuild a mis-queued card" rule, did not open a branch/PR. Commented on #235 explaining the mismatch and moved the card to **In Review** (Builder can't set Done itself) for Ron to confirm and close.
+
+**Next:** Ron moves #235 to Done; worth a look at why the board status didn't sync when #246 merged, in case other cards have the same stale-Agent-Ready drift.
+
 ## 2026-09-25 — Testing agent (daytime run): Job 1 triage, harness parse break persists (5th occurrence), #955 still unmerged
 
 Triaged the newest untriaged regression run, [36148433196](https://github.com/notronwest/tournament-manager/actions/runs/36148433196) (2026-09-25 14:34 UTC, daytime) — **failed at the seed step**, identical signature to the prior three runs: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. Root cause and fix unchanged: the fix (commit `0cf993d`) has been sitting in open PR [#955](https://github.com/notronwest/tournament-manager/pull/955) since 2026-09-24 morning and still isn't merged, so `main` HEAD (`8cd2299`) still can't parse as a Playwright suite. This is now **4 consecutive scheduled CI runs with zero regression signal**. Not a product regression — commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) rather than filing a duplicate card or re-posting to Discord (already flagged there with urgency this morning, per the "don't re-post the same regression same day" rule).
