@@ -183,7 +183,15 @@ export const test = base.extend<{
   // `use` in their docs, but that trips eslint-plugin-react-hooks (it treats
   // any `use…` identifier as a Hook call) — `runTest` is the same callback,
   // just spelled to avoid the false positive.
-  seedRegistration: async (fixtures, runTest) => {
+  //
+  // First param must be an OBJECT-DESTRUCTURING pattern — Playwright's own
+  // fixture-dependency parser statically scans the source for that shape, so
+  // a plain named param (e.g. `fixtures`) throws "First argument must use
+  // the object destructuring pattern" at test-list/run time even though it
+  // type-checks and lints fine as ordinary TS. This fixture has no fixture
+  // dependencies, hence the empty pattern.
+  // eslint-disable-next-line no-empty-pattern
+  seedRegistration: async ({}, runTest) => {
     const createdList: CreatedFixture[] = [];
     await runTest(async (kind) => {
       const { data, created } = await seedScenario(kind);
