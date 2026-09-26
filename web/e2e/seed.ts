@@ -561,6 +561,41 @@ async function main() {
     "pricing-preview tier insert",
   );
 
+  // 11. "Last sent" on pending partner invites (#801) — own tournament so
+  //     Resend/Resend-selected mutations here never race another spec's
+  //     invite rows. Both invites are seeded with a fixed, old created_at and
+  //     no last_sent_at (last_sent_at is nullable with no default — see
+  //     migration 20260911150000 — so this also exercises the app's
+  //     created_at fallback for pre-#802 invites, AC #5).
+  const lastSentT = await mkTournament("e2e-last-sent", "E2E Last-Sent Cup");
+  const lastSentE = await doublesEvent(lastSentT, "E2E Last-Sent Doubles");
+  await resetEvent(lastSentE);
+  const lastSentInviterId = await ensurePlayer("e2e-iris-sender@wmpc.test", "Iris", "Sender");
+  ok(
+    await db
+      .from("event_registrations")
+      .insert({ event_id: lastSentE, player_id: lastSentInviterId, status: "pending_payment", partner_status: "pending", event_fee_cents: 0 })
+      .select("id")
+      .single(),
+    "last-sent inviter reg",
+  );
+  const lastSentAdaId = await ensurePlayer("e2e-ada-oldsend@wmpc.test", "Ada", "Oldsend");
+  await db.from("partner_invites").insert({
+    event_id: lastSentE,
+    inviter_player_id: lastSentInviterId,
+    invitee_player_id: lastSentAdaId,
+    invitee_email: "e2e-ada-oldsend@wmpc.test",
+    created_at: "2024-06-01T10:00:00.000Z",
+  });
+  const lastSentBoId = await ensurePlayer("e2e-bo-freshsend@wmpc.test", "Bo", "Freshsend");
+  await db.from("partner_invites").insert({
+    event_id: lastSentE,
+    inviter_player_id: lastSentInviterId,
+    invitee_player_id: lastSentBoId,
+    invitee_email: "e2e-bo-freshsend@wmpc.test",
+    created_at: "2024-07-01T10:00:00.000Z",
+  });
+
   console.log("seed: e2e-test fixture ready");
 }
 
