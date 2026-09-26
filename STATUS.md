@@ -5,6 +5,18 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-26 — Testing agent (daytime run): Job 1 triage, harness parse break persists (6th consecutive blind run), #955 still unmerged
+
+Triaged the newest untriaged regression run, [36246119684](https://github.com/notronwest/tournament-manager/actions/runs/36246119684) (2026-09-26 13:43 UTC, daytime) — **failed at the seed step**, identical signature to every run since 2026-09-24: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. `main` HEAD is unchanged (`8cd2299`); [#955](https://github.com/notronwest/tournament-manager/pull/955) (the fix) is still `OPEN`/unreviewed, ~2.5 days since it went up. This is now the **6th consecutive scheduled run with zero regression signal**.
+
+Commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) rather than filing a duplicate card. Did **not** re-post to Discord — this morning's run already posted a `[ESCALATION]` for this same issue today, and the cadence rule is one post per regression per day. Nothing new to triage or fix; this is purely waiting on a merge of #955.
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
+
+**Housekeeping:** this checkout's `STATUS.md` had a pre-existing uncommitted local diff (unrelated content) when this run started — stashed it before editing, committed only this entry, then restored it via `git stash pop` so it's back exactly as found; not mine to commit or discard.
+
+**Next:** Ron still needs to merge #955 — every run past this one stays blind to real regressions until it lands. Worth flagging as overdue given it's crossed a full weekend plus a business day unreviewed.
+
 ## 2026-09-26 — Testing agent: Job 1 triage (6th blind run, escalated), Job 2 spec for #801 (draft PR)
 
 **Job 1:** newest untriaged run ([36186162576](https://github.com/notronwest/tournament-manager/actions/runs/36186162576), 2026-09-25 20:30 UTC) — same signature as the prior four, fails at the seed step before any test runs: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. This is now the **5th consecutive scheduled run with zero regression signal**. Root cause and fix are unchanged and already understood (tracked in [#954](https://github.com/notronwest/tournament-manager/issues/954)) — the fix has been sitting `MERGEABLE`/`CLEAN` and **unreviewed** in [#955](https://github.com/notronwest/tournament-manager/pull/955) since 2026-09-24T11:11 UTC, ~2 days now. Commented an update on #954 rather than filing a duplicate card, and posted a `[ESCALATION]` to Discord this time (rather than just a comment) since the blind window has grown from "today's triage" to "a fix sitting unreviewed across a weekend of runs" — this needs a merge, not more triage.
