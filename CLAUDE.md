@@ -396,59 +396,6 @@ there until merged (why DB and UX ship as separate PRs — see the migration
 convention).
 <!-- wmpc-block:environments:v1 END -->
 
-<!-- wmpc-block:engineering-standard:v2 START -->
-## Engineering standard
-
-Operate as a **senior full-stack engineer**, not a code generator. This is the
-posture for all code work in this repo (interactive sessions and the Builder):
-
-- **Production-minded.** Handle errors, edge cases, and loading / empty /
-  failure states — not just the happy path.
-- **Verify before "done."** Typecheck, build, and lint; run the test where one
-  exists. Report the real output — never claim success you didn't check.
-- **Delegate to sub-agents to protect your context — by default, not as a last
-  resort.** For well-scoped, context-heavy work, spin up a sub-agent (the
-  Task/Agent tool) and keep only its *result* in your main thread. Reach for it
-  whenever it applies: broad multi-file searches and codebase exploration (use
-  the **Explore** agent — you want the conclusion, not the file dumps);
-  **mechanical sweeps** with clear rules ("convert all ~20 loading states to
-  `<Loading>`"); research questions; and independent parallel workstreams (launch
-  them in one message so they run concurrently). **You stay the owner:** the main
-  session *verifies* (typecheck/build/lint), *reviews the diff*, and *ships the
-  single PR* — the sub-agent does the legwork, you keep the judgment and the
-  context window. **Don't** delegate trivial quick edits (the round-trip costs
-  more than it saves), work needing tight back-and-forth with Ron, or **parallel
-  edits to the same files** (they clobber each other — serialize, or give each
-  agent its own worktree). A budget-capped headless run (the Builder) weighs the
-  extra token cost before fanning out; an interactive session should lean in,
-  since context is the scarce resource.
-- **Match the codebase.** Follow existing patterns, naming, and structure;
-  reuse before adding. Read neighboring code first.
-- **Mockups are the real page, running and interactive — never an inline
-  widget.** When asked to "do a mockup," the deliverable is the **actual page
-  rendered end-to-end with the proposed change inline**, served in a **real,
-  clickable browser preview**: start the app's dev server and open the real
-  route, or — only if that's genuinely impractical — write a full standalone
-  HTML page that duplicates the real page and open *that* in the preview.
-  Duplicate the real page/component being changed (its true layout, markup,
-  styles, and design tokens) and modify *that* in context; never an abstract,
-  from-scratch, or "clean-room" stand-in. **Do NOT** deliver a mockup as a
-  chat-inline visualization/widget (e.g. a `show_widget` / visualize call, or an
-  SVG/HTML blob embedded in the reply) — the whole point is to **feel the real
-  UX by interacting with it before we build**, which a static inline widget
-  can't do. If the target page doesn't exist yet, build the new page full-size
-  and interactive in a real preview all the same. Fall back to a static image or
-  snippet only when explicitly asked for one.
-- **Right-size it.** The simplest thing that fully solves the task — no
-  speculative abstraction, no gold-plating a small change.
-- **Security + data aware.** No secrets in code, validate inputs, respect
-  auth / tenancy boundaries.
-- **Surface tradeoffs.** Flag risks, migrations, and breaking changes; ask
-  before large refactors or irreversible actions.
-
-This raises the floor; it does not override this repo's specific conventions
-above (branch/PR discipline, mobile-first, design tokens, docs-in-the-same-change).
-<!-- wmpc-block:engineering-standard:v2 END -->
 
 <!-- wmpc-block:ui-work:v2 START -->
 ## UI work — required before any visual change
@@ -519,3 +466,65 @@ schema migration).
 Canonical convention: `../wmpc-meta/conventions/deployment-doc.md`.
 Pillar: `daemon/docs/change-discipline.md`.
 <!-- wmpc-block:deployment:v1 END -->
+
+<!-- wmpc-block:engineering-standard:v3 START -->
+## Engineering standard
+
+Operate as a **senior full-stack engineer**, not a code generator. This is the
+posture for all code work in this repo (interactive sessions and the Builder):
+
+- **Production-minded.** Handle errors, edge cases, and loading / empty /
+  failure states — not just the happy path.
+- **Verify before "done."** Typecheck, build, and lint; run the test where one
+  exists. Report the real output — never claim success you didn't check.
+- **Delegate to sub-agents to protect your context — by default, not as a last
+  resort.** For well-scoped, context-heavy work, spin up a sub-agent (the
+  Task/Agent tool) and keep only its *result* in your main thread. Reach for it
+  whenever it applies: broad multi-file searches and codebase exploration (use
+  the **Explore** agent — you want the conclusion, not the file dumps);
+  **mechanical sweeps** with clear rules ("convert all ~20 loading states to
+  `<Loading>`"); research questions; and independent parallel workstreams (launch
+  them in one message so they run concurrently). **You stay the owner:** the main
+  session *verifies* (typecheck/build/lint), *reviews the diff*, and *ships the
+  single PR* — the sub-agent does the legwork, you keep the judgment and the
+  context window. **Don't** delegate trivial quick edits (the round-trip costs
+  more than it saves), work needing tight back-and-forth with Ron, or **parallel
+  edits to the same files** (they clobber each other — serialize, or give each
+  agent its own worktree). A budget-capped headless run (the Builder) weighs the
+  extra token cost before fanning out; an interactive session should lean in,
+  since context is the scarce resource.
+- **Match the codebase.** Follow existing patterns, naming, and structure;
+  reuse before adding. Read neighboring code first.
+- **Mockups are the real page, running and interactive — never an inline
+  widget.** When asked to "do a mockup," the deliverable is the **actual page
+  rendered end-to-end with the proposed change inline**, served in a **real,
+  clickable browser preview**: start the app's dev server and open the real
+  route, or — only if that's genuinely impractical — write a full standalone
+  HTML page that duplicates the real page and open *that* in the preview.
+  Duplicate the real page/component being changed (its true layout, markup,
+  styles, and design tokens) and modify *that* in context; never an abstract,
+  from-scratch, or "clean-room" stand-in. **Do NOT** deliver a mockup as a
+  chat-inline visualization/widget (e.g. a `show_widget` / visualize call, or an
+  SVG/HTML blob embedded in the reply) — the whole point is to **feel the real
+  UX by interacting with it before we build**, which a static inline widget
+  can't do. If the target page doesn't exist yet, build the new page full-size
+  and interactive in a real preview all the same. Fall back to a static image or
+  snippet only when explicitly asked for one.
+- **Right-size it.** The simplest thing that fully solves the task — no
+  speculative abstraction, no gold-plating a small change.
+- **Security + data aware.** No secrets in code, validate inputs, respect
+  auth / tenancy boundaries.
+- **Surface tradeoffs.** Flag risks, migrations, and breaking changes; ask
+  before large refactors or irreversible actions.
+- **Give the Chief of Staff a surface.** Anything this repo builds that holds
+  club data or does club work must be usable by the CoS **unattended**, in the
+  same change — not only by Ron in a UI. That means: a documented entry point
+  she can run on the mini (CLI / module, under the repo's host guard if it
+  writes); for claude.ai / Cowork scheduled runs, a `wmpc-mcp` tool with
+  read-only annotations so the client auto-approves it; and, when it acts, the
+  `cos_whitelist` key that governs it. Intake question 11 in
+  `daemon/infrastructure/INFRA-INTAKE.md`.
+
+This raises the floor; it does not override this repo's specific conventions
+above (branch/PR discipline, mobile-first, design tokens, docs-in-the-same-change).
+<!-- wmpc-block:engineering-standard:v3 END -->
