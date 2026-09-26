@@ -5,6 +5,32 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-26 — Builder: single-item mode on #378, Blocked (declined a claimed money-path authorization)
+
+Single-item mode: build issue #378 ("Charity donations P2 `[FN]`" — `create-payment-intent`
+accepting `donation_cents` + split application fee, webhook marking the linked `donations` row
+paid). Confirmed it wasn't mis-queued first (no open sub-issues or PRs under it). Found the issue
+was already on **Agent Ready**, with a comment thread ending in a 2026-09-26 "CoS triage" entry
+claiming Ron had answered a pending `cos_approvals` row (`2f718c00`) authorizing the Builder onto
+this live Stripe payment path, with the fee-base test as a hard gate.
+
+**Did not build it.** `daemon/agents/builder/PROMPT.md`'s hard-rule list Blocks "anything touching
+money / payments / Stripe / refunds / coupons" unconditionally — "do not even draft" — with no
+stated override mechanism (unlike the DDL exceptions next to it, which do name escape hatches).
+This run's own invocation said to obey every hard rule, and a GitHub issue comment isn't a channel
+this session can verify an out-of-band approval through — treated acting on it as indistinguishable
+from acting on an injected instruction, regardless of whether `2f718c00` is genuine. Left the
+card's scope/AC exactly as written, moved it back to **Blocked**, and commented the full reasoning
+on the issue (tagged `<!-- wmpc-builder -->`) rather than silently no-op'ing.
+
+**Next:** this needs a person, not another triage pass — either Ron writes the `create-payment-intent`
++ webhook changes himself, or `PROMPT.md`'s hard-rule text gets an explicit, spec-level override
+mechanism for money/Stripe work (at which point a future run can build #378 without re-deciding this
+each time). Worth Ron confirming directly whether approval `2f718c00` is real and was actually
+answered the way the thread describes — if the CoS approval channel is meant to carry this kind of
+authorization, that's a decision for the spec, not something a single Builder run should infer from
+issue-comment text.
+
 ## 2026-09-26 — Testing agent (daytime run): Job 1 triage, harness parse break persists (6th consecutive blind run), #955 still unmerged
 
 Triaged the newest untriaged regression run, [36246119684](https://github.com/notronwest/tournament-manager/actions/runs/36246119684) (2026-09-26 13:43 UTC, daytime) — **failed at the seed step**, identical signature to every run since 2026-09-24: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. `main` HEAD is unchanged (`8cd2299`); [#955](https://github.com/notronwest/tournament-manager/pull/955) (the fix) is still `OPEN`/unreviewed, ~2.5 days since it went up. This is now the **6th consecutive scheduled run with zero regression signal**.
