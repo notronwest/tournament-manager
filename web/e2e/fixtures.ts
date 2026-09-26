@@ -133,6 +133,26 @@ export const SEED = {
       tournamentName: "E2E Reopen Future-Deadline Cup",
     },
   },
+  // "Last sent" on pending partner invites (#801). Two never-resent invites,
+  // both seeded with a fixed, deliberately old created_at (no last_sent_at,
+  // matching invites that predate the #802 migration) so "Last sent" always
+  // starts on a calendar date that differs from whenever the suite runs —
+  // required to exercise the "invited <original date>" muted sub-line, which
+  // only renders when the two formatted dates diverge.
+  lastSent: {
+    tournamentSlug: "e2e-last-sent",
+    adminEmail: "e2e-organizer@wmpc.test", // Olive, org owner
+    single: {
+      inviteeName: "Ada Oldsend",
+      createdAt: "2024-06-01T10:00:00.000Z",
+      formattedDate: "Jun 1, 2024", // en-US month/day/year, matches fmtDate()
+    },
+    bulk: {
+      inviteeName: "Bo Freshsend",
+      createdAt: "2024-07-01T10:00:00.000Z",
+      formattedDate: "Jul 1, 2024",
+    },
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";
