@@ -561,6 +561,41 @@ async function main() {
     "pricing-preview tier insert",
   );
 
+  // 11. Pool-count preview fixtures (#813) — the Round-robin pool-play
+  //     section on EventFormPage shows real registered-team counts (not
+  //     just the Max teams cap) and previews how the chosen pool count
+  //     splits them, warning when a pool would fall below the 4-team
+  //     minimum. Own tournament, two events:
+  //       poolPreview.eventName     — 6 registered teams (4 confirmed pairs
+  //         + 2 still-forming singles) under a 20-team cap, so the pool
+  //         dropdown (up to 5 pools, derived from the cap) offers counts the
+  //         6 actual teams can't fill evenly — picking 2 pools previews
+  //         3 + 3 (amber, below the 4-team minimum) and 3 pools previews
+  //         2 + 2 + 2 (red, too small to play).
+  //       poolPreview.zeroRegEventName — no registrations at all, so the
+  //         section reads "No registrations yet" and plans on its own
+  //         12-team cap instead.
+  const poolT = await mkTournament("e2e-pool-preview", "E2E Pool Preview Cup");
+  const poolE = await doublesEvent(poolT, "E2E Pool Preview Doubles");
+  await resetEvent(poolE);
+  await db.from("events").update({ max_teams: 20 }).eq("id", poolE);
+  for (let i = 1; i <= 4; i++) {
+    const a = await ensurePlayer(`e2e-poolpair${i}a@wmpc.test`, `PoolPair${i}A`, "E2E");
+    const b = await ensurePlayer(`e2e-poolpair${i}b@wmpc.test`, `PoolPair${i}B`, "E2E");
+    const aReg = await insertReg(poolE, a, "paid", "confirmed");
+    const bReg = await insertReg(poolE, b, "paid", "confirmed");
+    await db.from("event_registrations").update({ partner_registration_id: bReg }).eq("id", aReg);
+    await db.from("event_registrations").update({ partner_registration_id: aReg }).eq("id", bReg);
+  }
+  for (let i = 1; i <= 2; i++) {
+    const solo = await ensurePlayer(`e2e-poolsolo${i}@wmpc.test`, `PoolSolo${i}`, "E2E");
+    await insertReg(poolE, solo, "pending_payment", "solo");
+  }
+
+  const poolZeroE = await doublesEvent(poolT, "E2E Pool Preview Zero Regs");
+  await resetEvent(poolZeroE);
+  await db.from("events").update({ max_teams: 12 }).eq("id", poolZeroE);
+
   console.log("seed: e2e-test fixture ready");
 }
 
