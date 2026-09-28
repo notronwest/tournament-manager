@@ -718,6 +718,14 @@ export default function TournamentDetailPage() {
           >
             Offline field
           </Link>
+          {/* Pull registrations + divisions from a PickleballBrackets.com export
+              (D-0045 / #981): org registers on PB.com, runs the event here. */}
+          <Link
+            to={`/admin/${org.slug}/tournaments/${t.slug}/import-pb`}
+            style={secondaryLinkBtn}
+          >
+            Import from PickleballBrackets
+          </Link>
           <Link
             to={`/admin/${org.slug}/tournaments/${t.slug}/wizard/contacts`}
             style={secondaryLinkBtn}
