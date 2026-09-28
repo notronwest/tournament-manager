@@ -82,6 +82,7 @@ import LocationsPage from "./pages/admin/LocationsPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
 import PairingBoardPage from "./pages/admin/PairingBoardPage";
+import PbImportPage from "./pages/admin/PbImportPage";
 
 // The site root. On a canonical host this is the marketing HomePage. On a
 // mapped custom domain (#408) it renders that domain's tournament at the
@@ -465,6 +466,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/attendees"
           element={<AttendeesPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/import-pb"
+          element={<PbImportPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/contacts"
