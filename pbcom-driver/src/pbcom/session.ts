@@ -1,0 +1,150 @@
+/**
+ * Playwright session/auth SCAFFOLD for PickleballBrackets.com.
+ *
+ * Mirrors courtreserve-api's `browser_session` (Python) lesson-for-lesson:
+ *   • an ISOLATED persistent context in a throwaway profile dir, so the driver
+ *     never touches the operator's normal Chrome;
+ *   • prefer the REAL installed Google Chrome (channel: "chrome") over Playwright's
+ *     managed Chromium — a Playwright package bump without a matching browser install
+ *     silently broke the CR scheduler once; binding to the OS Chrome is drift-immune;
+ *   • HEADED by default — headless trips bot-management on these WebForms sites; the
+ *     driver runs on the club's residential IP on the mini for the same reason;
+ *   • one logged-in page reused across all form operations in a run (session reuse).
+ *
+ * The LOGIN FORM SELECTORS are intentionally NOT invented here. They are captured in
+ * the live director-session trace (D-0045 "trace first") and dropped into the marked
+ * TODO seam in `login()`. Everything AROUND login — lifecycle, isolation, channel
+ * choice, popup dismissal hook, session reuse — is real.
+ */
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium, type BrowserContext, type Page } from "playwright";
+import type { DriverConfig } from "../config.js";
+import { log } from "../log.js";
+
+export class PbcomLoginError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = "PbcomLoginError";
+  }
+}
+
+export class PbcomSession {
+  private context: BrowserContext | null = null;
+  private profileDir: string | null = null;
+  private _page: Page | null = null;
+
+  constructor(private readonly cfg: DriverConfig) {}
+
+  /** The logged-in page for the current session. Throws if not opened. */
+  get page(): Page {
+    if (!this._page) throw new PbcomLoginError("session not open — call open() first");
+    return this._page;
+  }
+
+  /** Launch an isolated browser, then log in. */
+  async open(): Promise<void> {
+    this.profileDir = mkdtempSync(join(tmpdir(), "pbcom_driver_chrome_"));
+    log.info("launching browser", {
+      channel: this.cfg.browserChannel,
+      headless: this.cfg.headless,
+    });
+    this.context = await chromium.launchPersistentContext(this.profileDir, {
+      headless: this.cfg.headless,
+      channel: this.cfg.browserChannel === "chrome" ? "chrome" : undefined,
+      args: ["--disable-blink-features=AutomationControlled"],
+    });
+    this._page = this.context.pages()[0] ?? (await this.context.newPage());
+    await this.login();
+  }
+
+  /**
+   * Log in as the org's own PB.com account.
+   *
+   * ┌─ TRACE SEAM (login) ─────────────────────────────────────────────────────┐
+   * │ Fill from the captured director-session trace. Do NOT guess selectors.    │
+   * │ Expected shape (confirm against the trace):                               │
+   * │   1. goto `${baseUrl}` login page                                          │
+   * │   2. fill the email field      → cfg.pbcomUsername                         │
+   * │   3. fill the password field   → cfg.pbcomPassword                         │
+   * │   4. click submit                                                          │
+   * │   5. wait for a post-login signal (URL change / a director-only element)   │
+   * │   6. dismissPopups(page)                                                   │
+   * │ Throw PbcomLoginError if the post-login signal never appears.              │
+   * └───────────────────────────────────────────────────────────────────────────┘
+   */
+  private async login(): Promise<void> {
+    const page = this.page;
+    await page.goto(this.cfg.pbcomBaseUrl, { waitUntil: "load" });
+
+    // TODO(trace): replace the block below with the real login steps + selectors
+    // from the director-session trace. Until then the driver cannot authenticate,
+    // so we fail loudly rather than proceed against an unauthenticated page.
+    const LOGIN_SELECTORS_CAPTURED = false;
+    if (!LOGIN_SELECTORS_CAPTURED) {
+      throw new PbcomLoginError(
+        "login selectors not yet captured — fill the TRACE SEAM in session.ts:login() " +
+          "from the PB.com director-session trace (D-0045)",
+      );
+    }
+
+    // Example of the intended shape once selectors are known (kept commented so it
+    // is not mistaken for a real, verified flow):
+    // await page.fill(EMAIL_SELECTOR, this.cfg.pbcomUsername);
+    // await page.fill(PASSWORD_SELECTOR, this.cfg.pbcomPassword);
+    // await page.click(SUBMIT_SELECTOR);
+    // await page.waitForURL((u) => !/login/i.test(u.toString()), { timeout: 30_000 });
+    // await this.dismissPopups();
+  }
+
+  /**
+   * Dismiss announcement / survey overlays that can sit on top of the Save button.
+   *
+   * ┌─ TRACE SEAM (popups) ────────────────────────────────────────────────────┐
+   * │ PB.com's specific modal/overlay selectors come from the trace. The CR      │
+   * │ driver learned that third-party NPS/announcement overlays silently swallow  │
+   * │ clicks; expect the same class of nuisance here and clear them best-effort.  │
+   * └───────────────────────────────────────────────────────────────────────────┘
+   */
+  async dismissPopups(): Promise<void> {
+    // Best-effort, never throws — an absent popup is the normal case.
+    try {
+      await this.page.keyboard.press("Escape");
+    } catch {
+      /* no popup — fine */
+    }
+    // TODO(trace): add PB.com-specific close-control selectors from the trace.
+  }
+
+  /** Tear down the browser and remove the throwaway profile. */
+  async close(): Promise<void> {
+    try {
+      await this.context?.close();
+    } finally {
+      this.context = null;
+      this._page = null;
+      if (this.profileDir) {
+        rmSync(this.profileDir, { recursive: true, force: true });
+        this.profileDir = null;
+      }
+    }
+  }
+}
+
+/**
+ * Context-manager-style helper: open a logged-in session, run `fn`, always close.
+ * Mirrors the Python `with browser_session() as page:` ergonomics.
+ */
+export async function withSession<T>(
+  cfg: DriverConfig,
+  fn: (session: PbcomSession) => Promise<T>,
+): Promise<T> {
+  const session = new PbcomSession(cfg);
+  await session.open();
+  try {
+    return await fn(session);
+  } finally {
+    await session.close();
+  }
+}

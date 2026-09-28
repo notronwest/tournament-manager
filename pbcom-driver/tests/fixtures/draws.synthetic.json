@@ -1,0 +1,24 @@
+[
+  {
+    "division": {
+      "eventId": "event-01",
+      "tournamentId": "00000000-0000-0000-0000-tournament01",
+      "name": "Men's Doubles 3.0",
+      "sourceSystem": "pbcom",
+      "sourceDivisionLabel": "Mens Doubles Skill: (3.0 To 3.49)",
+      "format": "doubles",
+      "gender": "men",
+      "bracketType": "round_robin"
+    },
+    "entries": [
+      { "registrationId": "reg-a1", "eventId": "event-01", "playerId": "p-a1", "partnerRegistrationId": "reg-a2", "seed": 1, "sourceSystem": "pbcom", "sourceActivityId": "AID-1001", "sourceTeamId": "T-1", "sourceAttendeeHeaderId": "AH-1" },
+      { "registrationId": "reg-a2", "eventId": "event-01", "playerId": "p-a2", "partnerRegistrationId": "reg-a1", "seed": 1, "sourceSystem": "pbcom", "sourceActivityId": "AID-1002", "sourceTeamId": "T-1", "sourceAttendeeHeaderId": "AH-2" },
+      { "registrationId": "reg-b1", "eventId": "event-01", "playerId": "p-b1", "partnerRegistrationId": "reg-b2", "seed": 2, "sourceSystem": "pbcom", "sourceActivityId": "AID-2001", "sourceTeamId": "T-2", "sourceAttendeeHeaderId": "AH-3" },
+      { "registrationId": "reg-b2", "eventId": "event-01", "playerId": "p-b2", "partnerRegistrationId": "reg-b1", "seed": 2, "sourceSystem": "pbcom", "sourceActivityId": "AID-2002", "sourceTeamId": "T-2", "sourceAttendeeHeaderId": "AH-4" }
+    ],
+    "matches": [
+      { "matchId": "m-1", "eventId": "event-01", "stage": "round_robin", "bracket": null, "round": 1, "position": 1, "slotKey": "rr-1", "teamARegId": "reg-a1", "teamBRegId": "reg-b1", "status": "completed", "teamAScore": 11, "teamBScore": 6, "winnerRegId": "reg-a1" },
+      { "matchId": "m-2", "eventId": "event-01", "stage": "playoff", "bracket": "final", "round": 2, "position": 1, "slotKey": "f-1", "teamARegId": "reg-a1", "teamBRegId": "reg-b1", "status": "pending", "teamAScore": null, "teamBScore": null, "winnerRegId": null }
+    ]
+  }
+]

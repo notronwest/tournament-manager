@@ -68,6 +68,13 @@ targets:
 | `migrations` | push to `main`/`production` under `supabase/migrations/**` | that branch's Supabase project |
 | `edge-functions` | push to `main`/`production` under `supabase/functions/**` | that branch's Supabase project |
 | `organizer-custom-domains` | hand-wired per domain | that organizer's domain, e.g. `pickleballangels.com` |
+| `pbcom-driver` (module) | NOT via a branch — mac-mini-launchd | the club Mac mini; drives PB.com. See `pbcom-driver/DEPLOYMENT.md` |
+
+> **`pbcom-driver/` is a separate deploy shape.** The B&E → PickleballBrackets.com
+> results-push driver (D-0045 / #982) runs Playwright on the club Mac mini via
+> launchd — it is NOT part of this repo's branch routing, and pushing to `main`
+> deploys nothing for it. It is currently scaffold (not yet wired to run). Its own
+> `pbcom-driver/DEPLOYMENT.md` holds the `wmpc-deployment: v1` block for that module.
 
 ## Targets
 
