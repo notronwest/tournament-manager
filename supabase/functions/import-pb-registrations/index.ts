@@ -139,9 +139,10 @@ Deno.serve(async (req: Request) => {
         if (!label) continue;
         const key = divKey(label);
         if (!wantDivisions.has(key)) {
+          const cleanLabel = stripWaitlist(label);
           wantDivisions.set(key, {
-            label,
-            meta: e.division ?? parseDivisionFallback(label),
+            label: cleanLabel,
+            meta: e.division ?? parseDivisionFallback(cleanLabel),
           });
         }
       }
@@ -344,9 +345,12 @@ Deno.serve(async (req: Request) => {
         const isDoubles = (e.division?.format ?? "doubles") === "doubles";
         const teamId = str(e.teamId) || null;
 
-        // Already imported?
+        // Already imported? Idempotency is (event, player) — one registration
+        // per player per division. NOTE: PB's ActivityID is the DIVISION id
+        // (shared by every registrant in a division), NOT a per-entry id, so it
+        // must NOT be the dedup key — doing so collapses a whole division to one
+        // registration. It is still stored (source_activity_id) for the push.
         let reg =
-          (activityId && existingRegByActivity.get(activityId)) ||
           existingRegByEventPlayer.get(`${eventId}::${playerId}`) ||
           null;
         if (reg) {
@@ -489,8 +493,13 @@ function parseDivisionFallback(label: string): DivisionMeta {
   };
 }
 
+// A "(WAIT) " prefix marks waitlisted registrants in the SAME PB division, so
+// strip it before keying — otherwise a waitlist splits into its own B&E division.
+function stripWaitlist(label: string): string {
+  return label.trim().replace(/^\(WAIT\)\s*/i, "");
+}
 function divKey(label: string): string {
-  return label.trim().toLowerCase().replace(/\s+/g, " ");
+  return stripWaitlist(label).toLowerCase().replace(/\s+/g, " ");
 }
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
