@@ -154,6 +154,47 @@ adding a new one. Hand-editing a repo's `DECISIONS.md`.
 
 **Forbids.** No auto-posting to public social, and no paid Canva or paid-ads action, without a Ron approval. No creds in the repo (mini env only). No per-platform repo sprawl — extend `marketing-api`, don't add a second service.
 
+### D-0045 — Bert & Erne ⇄ PickleballBrackets.com — a two-way bridge; registrations pull in, the live event pushes out by driving PB.com as a human
+
+*2026-09-28 · scope: `a new Bert & Erne (bande.com) product feature integrating with PickleballBrackets.com for orgs that register on PB.com but run in B&E; tracking issue tournament-manager#970` · source: Ron 2026-09-28 — corrected daemon's framing twice, then confirmed the full shape: "a new feature … for organizations that run registration through pb.com because of their reach but want the ease of use for bande.com" + "we DO need a push … PB.com would be driven as if it were being manually managed by a human."*
+
+**Decision.** Build a **two-way B&E ⇄ PB.com bridge** as a Bert & Erne product capability — for any org (WMPC
+included) that takes **registration on PickleballBrackets.com for its reach** but wants to **run the event in Bert &
+Erne for ease of use**:
+
+1. **Pull registrations in** — **PB.com → B&E, pre-event, ONLINE.** The org's registrant list comes from PB.com into
+   B&E (players, divisions, registrations). **Ship-first: CSV export → import** (the org exports their own registrants
+   from PB.com; B&E imports + field-maps). A connected pull is a later option, not day one.
+2. **Push the live event out** — **B&E → PB.com, during play, ONLINE.** A bracket started in B&E starts in PB.com; a
+   game scored in B&E is scored in PB.com. **PB.com is DRIVEN AS IF a human director were operating it**, because it
+   has **no public API.**
+
+**The push is a PB.com "driver."** It performs on PB.com the same actions a human would, authenticated as the org's
+**own PB.com account**:
+- **Trace first (the pivotal step):** capture a real PB.com director session (start a bracket, enter a score) to map
+  each action to what PB.com actually does. This decides, per action, **XHR-replay (preferred — fast, headless) vs
+  headless UI automation (fallback)** and proves feasibility before any build.
+- **Driver service:** listens to B&E events → performs the PB.com equivalent → **verifies it landed and reconciles
+  drift** (idempotent, self-healing — the same executor discipline as the CR billing/membership drains, because we're
+  driving an external system). The pattern mirrors **court-reserve-scheduler** (Playwright-driving a no-public-API
+  site), reuse its lessons.
+
+**Build order.** Director-session **trace first** → the **push driver** (XHR-preferred/UI-fallback); the
+**registration import** (CSV-first) is the simpler, independent parallel track.
+
+**Honest risks (named, not hidden).** Automating a no-public-API third-party site is **ToS-grey, brittle to PB.com's
+UI/API changes, and a standing maintenance burden.** It is *defensible* — each org's own account acting on their own
+event's data — but the fragility is a conscious product trade, not a surprise. Reconciliation + a human-visible
+"PB.com out of sync" signal are required, not optional.
+
+**Corrects daemon's earlier wrong framings (recorded so the mistake is legible):** (a) NOT a live results-sync
+B&E→PB.com under an *offline/queue-and-replay* constraint (daemon wrongly imported B&E's venue-offline fact into a
+feature that runs online); (b) NOT import-only. It is the two-way bridge above.
+
+**Binds.** A B&E (tournament-manager) product feature; relates to D-0021 (events hub). Tracking: **tournament-manager
+#970** (body corrected to this). **Owed:** correct the Hopper card + any STATUS notes carrying the old framing; set
+the director-session-trace task Agent Ready as the first build step.
+
 ## Proposed (not binding yet)
 
 _None._
