@@ -324,6 +324,13 @@ banner if that's actually what's wanted. No branch/PR opened; `main`
 untouched.
 
 **Next:** Ron resolves #23 (close, or clarify scope for a follow-up).
+## 2026-09-28 — Testing agent (morning run): Job 1 triage (9th consecutive blind run, escalated), Job 2 spec authoring launched
+
+**Job 1:** newest untriaged run ([36346985310](https://github.com/notronwest/tournament-manager/actions/runs/36346985310), 2026-09-27 20:09 UTC) — same signature as every run since 2026-09-24: `web/e2e/seed.ts:543: ERROR: Unexpected "const"` (the unclosed `ok(...)` call before the #12 pricing-preview block). This is now the **9th consecutive scheduled run with zero regression signal**. [#955](https://github.com/notronwest/tournament-manager/pull/955) (the fix, branch `fix/e2e-fixtures-syntax`) is still `OPEN`/`MERGEABLE`/checks-green, now **~4 days** unreviewed since 2026-09-24T11:11 UTC. Commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) and posted a fresh `[ESCALATION]` to the Backlog Discord channel — new calendar day since the last escalation (2026-09-27 morning), and the fix is now crossing into a fourth full business day unreviewed. Nothing left to triage or fix on the harness side; purely waiting on a merge.
+
+**Job 2:** delegated spec authoring (background agent, isolated worktree) for one of five vetted candidate Done issues with real AC and no existing spec — #72 (event roster panel), #90 (duplicate Publish button), #98 (register focus mode), #103 (My Tournaments page), #104 (admin tournament list archive/delete) — with discretion to pick whichever is most tractable to spec reliably without a live harness. Result not back as of this entry; per precedent (see 2026-09-25 entry below) this run authors within the 5-cap, not necessarily hitting it, on budget/session-scope grounds.
+
+**Housekeeping / branching note:** this session found the shared checkout on a stale branch (`docs/status-2026-09-25-daytime-triage`, several unmerged Testing-agent commits deep, PR #967 open) carrying a pre-existing uncommitted CoS/Hopper (#970) entry noted by several prior runs — left it untouched again (stashed/restored, not committed). Rather than stack a 6th commit onto that branch, opened this entry fresh off `origin/main` to avoid compounding an already-large unmerged pile (open Testing-agent PRs as of today: #955, #957, #963, #965, #967, #969, #972, #974 — none merged yet). Flagging the pile-up for Ron's awareness; not mine to merge.
 
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
