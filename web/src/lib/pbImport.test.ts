@@ -7,8 +7,10 @@ import {
   unmappedColumns,
   divisionKey,
 } from "./pbImport";
-// The real PB.com "Export Player w/ Events (Flat File)" sample (emails masked),
-// loaded verbatim via Vite's ?raw so the tests run against the actual export.
+// A fully anonymized sample in the real PB.com "Export Player w/ Events (Flat File)"
+// format (synthetic names, emails, phones, DUPR ids + record UUIDs — the export's
+// exact column layout and multi-row-per-attendee shape preserved), loaded verbatim
+// via Vite's ?raw so the tests run against the real export structure.
 import csvText from "./__fixtures__/pb-attendees-sample.csv?raw";
 
 const parsed = parsePbBuffer(new TextEncoder().encode(csvText));
@@ -66,35 +68,35 @@ describe("parseAttendees (multi-row-per-attendee grouping)", () => {
 
   it("groups the flat rows into one attendee per AttendeeHeaderID", () => {
     expect(attendees.length).toBe(2);
-    const marc = attendees.find((a) => a.firstName === "Marc")!;
-    const scott = attendees.find((a) => a.firstName === "Scott")!;
-    expect(marc.lastName).toBe("Abend");
-    expect(scott.lastName).toBe("Aiken");
-    expect(marc.attendeeHeaderId).toBe("7781014f-cc8d-4332-8e87-4dd989096152");
+    const alex = attendees.find((a) => a.firstName === "Alex")!;
+    const jordan = attendees.find((a) => a.firstName === "Jordan")!;
+    expect(alex.lastName).toBe("Rivera");
+    expect(jordan.lastName).toBe("Chen");
+    expect(alex.attendeeHeaderId).toBe("11111111-1111-4111-8111-111111111111");
   });
 
   it("extracts one entry per filled Event column, with the division + PB ids", () => {
-    const marc = parseAttendees(parsed).attendees.find((a) => a.firstName === "Marc")!;
-    expect(marc.entries.length).toBe(1);
-    const e = marc.entries[0];
+    const alex = parseAttendees(parsed).attendees.find((a) => a.firstName === "Alex")!;
+    expect(alex.entries.length).toBe(1);
+    const e = alex.entries[0];
     expect(e.divisionLabel).toBe("Mens Doubles Skill: (3.0 To 3.49)");
-    expect(e.activityId).toBe("696d48ca-60f7-4b47-a1a1-1f32d92ef477");
+    expect(e.activityId).toBe("22222222-2222-4222-8222-222222222222");
     expect(e.division.format).toBe("doubles");
     expect(e.division.gender).toBe("men");
-    expect(e.eventColumnIndex).toBe(1); // Marc's division sits in "Event 1"
+    expect(e.eventColumnIndex).toBe(1); // Alex's division sits in "Event 1"
     // No TeamID in this sample → an unpaired (seeking) doubles entry.
     expect(e.teamId).toBe("");
   });
 
   it("captures DUPR id + ratings, treating 0 as 'not provided'", () => {
     const { attendees: a } = parseAttendees(parsed);
-    const marc = a.find((x) => x.firstName === "Marc")!;
-    const scott = a.find((x) => x.firstName === "Scott")!;
-    expect(marc.duprId).toBe("YM2GXK");
-    expect(Number(marc.ratingDuprDbl)).toBeGreaterThan(3);
-    expect(Number(marc.ratingDuprS)).toBe(0); // 0 = not provided (normalized to null later)
-    expect(scott.duprId).toBe("WK6W5Q");
-    expect(Number(scott.ratingDuprS)).toBeCloseTo(4.16, 2);
+    const alex = a.find((x) => x.firstName === "Alex")!;
+    const jordan = a.find((x) => x.firstName === "Jordan")!;
+    expect(alex.duprId).toBe("DUPRAA1");
+    expect(Number(alex.ratingDuprDbl)).toBeGreaterThan(3);
+    expect(Number(alex.ratingDuprS)).toBe(0); // 0 = not provided (normalized to null later)
+    expect(jordan.duprId).toBe("DUPRBB2");
+    expect(Number(jordan.ratingDuprS)).toBeCloseTo(4.16, 2);
   });
 
   it("keys divisions by label (the tournament Event-column ordinal is incidental)", () => {

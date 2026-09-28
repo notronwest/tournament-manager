@@ -41,12 +41,12 @@ describe("buildPlan — real PB.com export, fresh tournament", () => {
   });
 
   it("carries DUPR onto the plan players (0 → null)", () => {
-    const marc = plan.players.find((p) => p.firstName === "Marc")!;
-    expect(marc.duprId).toBe("YM2GXK");
-    expect(marc.duprDoubles).not.toBeNull();
-    expect(marc.duprSingles).toBeNull(); // Marc's singles DUPR was 0
-    const scott = plan.players.find((p) => p.firstName === "Scott")!;
-    expect(scott.duprSingles).toBeCloseTo(4.16, 2);
+    const alex = plan.players.find((p) => p.firstName === "Alex")!;
+    expect(alex.duprId).toBe("DUPRAA1");
+    expect(alex.duprDoubles).not.toBeNull();
+    expect(alex.duprSingles).toBeNull(); // Alex's singles DUPR was 0
+    const jordan = plan.players.find((p) => p.firstName === "Jordan")!;
+    expect(jordan.duprSingles).toBeCloseTo(4.16, 2);
   });
 });
 
