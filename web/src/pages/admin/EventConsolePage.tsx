@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
@@ -41,6 +42,13 @@ import {
   type CheckInPlayerLite,
 } from "../../lib/checkin";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
+import {
+  replaceRoundRobinMatches,
+  replacePlayoffMatches,
+  buildPlayoffRows,
+  clearEventMatches,
+  type MatchesWriteClient,
+} from "../../lib/matchGeneration";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
 import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
 import { pairRegistrations } from "../../lib/registrations";
@@ -1654,6 +1662,12 @@ function RoundRobinSection({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Synchronous re-entrancy guard for generate. `busy` disables the button,
+  // but its React state update isn't visible until the next render — a
+  // double-click (or any second invoke in the same tick) can slip through
+  // before that. This ref flips synchronously, so the second call returns
+  // immediately. Belt to the delete-then-insert idempotency's suspenders.
+  const generatingRef = useRef(false);
   // Check-in gate. Set when Generate is blocked because not every registered
   // player is checked in — holds the missing list for the override confirm.
   const [gateBlocked, setGateBlocked] = useState<{
@@ -1668,62 +1682,49 @@ function RoundRobinSection({
   }, [regs, players]);
 
   // The actual generation, once validated and past (or overriding) the gate.
+  //
+  // Idempotent (bug #993): replaceRoundRobinMatches DELETEs the event's
+  // existing round-robin matches — and dependent playoff matches, since a
+  // regenerated round robin invalidates the standings the playoff seeded
+  // from — before inserting the fresh set. A second generate therefore
+  // REPLACES rather than APPENDs. generatingRef makes a concurrent invoke a
+  // no-op (busy's state update lags a render); the DB unique index (migration
+  // 20260929120000) is the final backstop.
   const doGenerate = async () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
     setBusy(true);
-    // DUPR-seed the field first if it has never been seeded, so the generated
-    // draw (schedule order, and — for a single pool — pairing order) reflects
-    // team strength. Respect any existing seeds (manual drag / Seed by DUPR /
-    // pool distribution / a prior run): only auto-seed when a team is still
-    // unseeded. Multi-pool membership is set on the Teams tab before this runs,
-    // so this just backfills the seed values there.
-    let orderedTeams = teams;
-    if (teams.some((t) => t.seed == null)) {
-      const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
-      if (seedErr) {
-        setBusy(false);
-        setError(seedErr);
+    try {
+      // DUPR-seed the field first if it has never been seeded, so the generated
+      // draw (schedule order, and — for a single pool — pairing order) reflects
+      // team strength. Respect any existing seeds (manual drag / Seed by DUPR /
+      // pool distribution / a prior run): only auto-seed when a team is still
+      // unseeded. Multi-pool membership is set on the Teams tab before this
+      // runs, so this just backfills the seed values there.
+      let orderedTeams = teams;
+      if (teams.some((t) => t.seed == null)) {
+        const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
+        if (seedErr) {
+          setError(seedErr);
+          return;
+        }
+        orderedTeams = orderBySeed(teams, seedByCaptain);
+      }
+      const { error: insErr } = await replaceRoundRobinMatches(
+        supabase as unknown as MatchesWriteClient,
+        event,
+        orderedTeams,
+      );
+      if (insErr) {
+        setError(insErr.message);
         return;
       }
-      orderedTeams = orderBySeed(teams, seedByCaptain);
-    }
-    const rows: Database["public"]["Tables"]["matches"]["Insert"][] = [];
-    let position = 0;
-    const poolGroups: Team[][] =
-      event.pool_count > 1
-        ? Array.from({ length: event.pool_count }, (_, idx) =>
-            orderedTeams.filter((t) => t.poolIndex === idx + 1),
-          )
-        : [orderedTeams];
-    // Each pairing is generated once per `play_each_team_times`.
-    // Multi-pool: pairings only happen within a single pool. The match
-    // doesn't carry a pool_index column — pool membership is derived
-    // from either team's event_registration.pool_index at read time.
-    for (let rep = 0; rep < event.play_each_team_times; rep++) {
-      for (const group of poolGroups) {
-        for (let i = 0; i < group.length; i++) {
-          for (let j = i + 1; j < group.length; j++) {
-            rows.push({
-              event_id: event.id,
-              stage: "round_robin",
-              round: 1,
-              position: position++,
-              team_a_reg_id: group[i].captainRegId,
-              team_b_reg_id: group[j].captainRegId,
-              status: "pending",
-            });
-          }
-        }
-      }
-    }
-    const { error: insErr } = await supabase.from("matches").insert(rows);
-    if (insErr) {
+      await autoTransitionEventStatus(event.id);
+      await onChange();
+    } finally {
       setBusy(false);
-      setError(insErr.message);
-      return;
+      generatingRef.current = false;
     }
-    await autoTransitionEventStatus(event.id);
-    setBusy(false);
-    await onChange();
   };
 
   // Validate, then gate on check-in. Generating matches starts play, so we
@@ -2288,6 +2289,12 @@ function PlayoffSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Re-entrancy guard — same rationale as RoundRobinSection.doGenerate:
+  // `busy` disables the button but its state update lags a render, so a
+  // double-click could double-generate. This ref blocks the second call
+  // synchronously.
+  const generatingRef = useRef(false);
+
   const N = event.teams_advancing_to_playoff;
   const R = event.playoff_rounds;
   // playoff_seeding (migration 20260911190000) — generated types lag it.
@@ -2296,6 +2303,7 @@ function PlayoffSection({
   const crossPool = seeding === "cross_pool" && event.pool_count === 2 && N === 4 && R === 1;
 
   const onGenerate = async () => {
+    if (generatingRef.current) return;
     setError(null);
     if (N === 0) {
       setError(
@@ -2336,99 +2344,31 @@ function PlayoffSection({
       top = [p1[0], p2[0], p1[1], p2[1]];
     }
 
+    generatingRef.current = true;
     setBusy(true);
-    const rows: Database["public"]["Tables"]["matches"]["Insert"][] = [];
-
-    // Two config bundles. For R=1 every match is a medal match and
-    // uses medalConfig. For R=2 the semis (round 1) use semiConfig
-    // and the final + bronze (round 2) use medalConfig. Values are
-    // copied onto each match row at generation so per-match edits
-    // diverge cleanly and event-default changes don't retro-rewrite
-    // an in-flight bracket.
-    const medalConfig = {
-      match_format: event.medal_match_format,
-      match_points_to_win: event.medal_points_to_win,
-      match_win_by: event.medal_win_by,
-      match_minutes_per_game: event.medal_minutes_per_game,
-    } as const;
-    const semiConfig = {
-      match_format: event.semifinal_match_format,
-      match_points_to_win: event.semifinal_points_to_win,
-      match_win_by: event.semifinal_win_by,
-      match_minutes_per_game: event.semifinal_minutes_per_game,
-    } as const;
-
-    if (R === 1) {
-      // Pairwise medal matches: (seed1 v seed2), (seed3 v seed4), …
-      // Each pair plays directly for that medal slot — no feed-forward.
-      for (let i = 0; i < N; i += 2) {
-        rows.push({
-          event_id: event.id,
-          stage: "playoff",
-          round: 1,
-          position: i / 2,
-          team_a_reg_id: top[i].captainRegId,
-          team_b_reg_id: top[i + 1].captainRegId,
-          status: "pending",
-          ...medalConfig,
-        });
+    try {
+      // Idempotent (bug #993): replacePlayoffMatches DELETEs the event's
+      // existing playoff matches (mirrors "Reset playoff") before inserting
+      // the fresh bracket, so a second generate REPLACES rather than APPENDs.
+      // Round-robin matches are untouched. buildPlayoffRows owns the R=1
+      // pairwise-medal vs R=2 semis+final+bronze row shapes and copies the
+      // event's medal/semifinal config onto each row.
+      const rows = buildPlayoffRows(event, top);
+      const { error: insErr } = await replacePlayoffMatches(
+        supabase as unknown as MatchesWriteClient,
+        event.id,
+        rows,
+      );
+      if (insErr) {
+        setError(insErr.message);
+        return;
       }
-    } else {
-      // R=2, N=4: two semis (1v4, 2v3) → gold final + bronze game.
-      // Semis carry semiConfig; round 2 carries medalConfig.
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 1,
-        position: 0,
-        team_a_reg_id: top[0].captainRegId,
-        team_b_reg_id: top[3].captainRegId,
-        status: "pending",
-        ...semiConfig,
-      });
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 1,
-        position: 1,
-        team_a_reg_id: top[1].captainRegId,
-        team_b_reg_id: top[2].captainRegId,
-        status: "pending",
-        ...semiConfig,
-      });
-      // Round 2 gold + bronze placeholders. team slots are populated
-      // via feedForwardPlayoffWinners as the semis complete.
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 2,
-        position: 0,
-        team_a_reg_id: null,
-        team_b_reg_id: null,
-        status: "pending",
-        ...medalConfig,
-      });
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 2,
-        position: 1,
-        team_a_reg_id: null,
-        team_b_reg_id: null,
-        status: "pending",
-        ...medalConfig,
-      });
-    }
-
-    const { error: insErr } = await supabase.from("matches").insert(rows);
-    if (insErr) {
+      await autoTransitionEventStatus(event.id);
+      await onChange();
+    } finally {
       setBusy(false);
-      setError(insErr.message);
-      return;
+      generatingRef.current = false;
     }
-    await autoTransitionEventStatus(event.id);
-    setBusy(false);
-    await onChange();
   };
 
   const onReset = async () => {
@@ -2633,6 +2573,9 @@ function DoubleElimSection({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Re-entrancy guard — see RoundRobinSection.doGenerate. Blocks a
+  // double-click before `busy` re-renders the disabled button.
+  const generatingRef = useRef(false);
   const format = event.double_elim_final ?? "crossover";
   const isDoubles = event.format === "doubles";
   const rows = matches as DEMatchRow[];
@@ -2643,9 +2586,11 @@ function DoubleElimSection({
   const preview = useMemo(() => (teams.length >= 3 ? buildDoubleElim(teams.length, format) : null), [teams.length, format]);
 
   const onGenerate = async () => {
+    if (generatingRef.current) return;
     setError(null);
     if (teams.length < 3) { setError("Double elimination needs at least 3 teams."); return; }
     if (unpaired > 0) { setError(`${unpaired} player${unpaired === 1 ? " is" : "s are"} unpaired — pair them (or Randomize remaining) first.`); return; }
+    generatingRef.current = true;
     setBusy(true);
     try {
       // Seeds drive elimination placement (seedOrder puts byes on the top
@@ -2687,6 +2632,16 @@ function DoubleElimSection({
         status: "pending",
         ...(isMedal(x) ? medalConfig : poolConfig),
       }));
+      // Idempotent (bug #993): a DE event is entirely a playoff bracket, so —
+      // mirroring "Reset bracket" (onReset) — clear every existing match in
+      // the event before re-inserting. A second generate REPLACES rather than
+      // APPENDs. Done after seeding/row-build so a failure there leaves the
+      // existing bracket intact.
+      const { error: clearErr } = await clearEventMatches(
+        untyped as unknown as MatchesWriteClient,
+        event.id,
+      );
+      if (clearErr) throw new Error(clearErr.message);
       const { data: created, error: insErr } = await untyped.from("matches").insert(inserts).select("id, slot_key");
       if (insErr) throw new Error(insErr.message);
       const idBySlot = new Map<string, string>((created as { id: string; slot_key: string }[]).map((r) => [r.slot_key, r.id]));
@@ -2713,6 +2668,7 @@ function DoubleElimSection({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      generatingRef.current = false;
     }
   };
 
