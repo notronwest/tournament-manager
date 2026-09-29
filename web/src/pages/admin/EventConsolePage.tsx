@@ -72,6 +72,7 @@ import {
   resultsFilename,
 } from "../../lib/resultsExport";
 import type { Database } from "../../types/supabase";
+import { selectPlayoffSeeds, pairPlayoffSeeds } from "../../lib/playoffSeeding";
 import {
   ink,
   inkSoft,
@@ -2368,6 +2369,63 @@ function PlayoffSection({
     (event as unknown as { playoff_seeding?: "overall" | "cross_pool" }).playoff_seeding ?? "overall";
   const crossPool = seeding === "cross_pool" && event.pool_count === 2 && N === 4 && R === 1;
 
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Preview = exactly what onGenerate will build. Both read the same
+  // helpers, so what the organizer confirms is what gets created.
+  const previewSeeds = selectPlayoffSeeds(standings, N, crossPool);
+  const previewPairs = pairPlayoffSeeds(previewSeeds, R);
+
+  const ordinal = (n: number) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+  };
+
+  // Why this team qualifies: pool finish (cross-pool) or overall rank, + record.
+  const seedReason = (s: Standing, seedIdx: number) => {
+    const rec = `${s.wins}-${s.losses}, ${s.diff >= 0 ? "+" : ""}${s.diff} pts`;
+    if (crossPool) {
+      // Seeds arrive [PoolA#1, PoolB#1, PoolA#2, PoolB#2] — 0,1 are pool
+      // winners, 2,3 the runners-up. Pool letter comes from the team's
+      // 1-indexed pool (1 → A, 2 → B).
+      const letter = poolLetter(s.team.poolIndex ?? 0);
+      return `${seedIdx < 2 ? "Won" : "Runner-up in"} Pool ${letter} · ${rec}`;
+    }
+    return `${ordinal(seedIdx + 1)} overall · ${rec}`;
+  };
+
+  const pairLabel = (i: number) =>
+    R === 1
+      ? i === 0
+        ? "Gold / Silver match"
+        : i === 1
+          ? "Bronze / 4th match"
+          : `Medal match ${i + 1}`
+      : `Semifinal ${i + 1}`;
+
+  const ppLbl: CSSProperties = {
+    fontWeight: 700,
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: inkMuted,
+    margin: "13px 0 5px",
+  };
+  const ppTh: CSSProperties = {
+    padding: "3px 6px",
+    fontSize: 10,
+    textTransform: "uppercase",
+    color: inkMuted,
+    borderBottom: `1px solid ${rule}`,
+    textAlign: "center",
+  };
+  const ppTd: CSSProperties = {
+    padding: "3px 6px",
+    borderBottom: `1px solid ${ruleSoft}`,
+    textAlign: "center",
+  };
+
   const onGenerate = async () => {
     if (generatingRef.current) return;
     setError(null);
@@ -2375,11 +2433,6 @@ function PlayoffSection({
       setError(
         "Top-N teams advancing is set to 0 — edit the event to enable a playoff.",
       );
-      return;
-    }
-    let top = standings.slice(0, N).map((s) => s.team);
-    if (top.length < N) {
-      setError(`Need at least ${N} teams in the standings.`);
       return;
     }
     if (R === 1 && N % 2 !== 0) {
@@ -2390,25 +2443,29 @@ function PlayoffSection({
       setError("2-round playoffs (semis + final + bronze) support Top-4 only.");
       return;
     }
-    // Cross-pool seeding (2 pools, top 4, 1 round): Pool 1 #1 v Pool 2 #1
-    // for gold (position 0), Pool 1 #2 v Pool 2 #2 for bronze (position 1).
-    // Standings are already ordered by record, so filtering by pool keeps
-    // each pool's placement order.
+    // Cross-pool seeding reads each pool's placement order, so every team
+    // must be assigned to a pool first.
     if (crossPool) {
-      const inPool = (p: number) => standings.filter((s) => s.team.poolIndex === p).map((s) => s.team);
-      const p1 = inPool(1);
-      const p2 = inPool(2);
       const unassigned = standings.filter((s) => s.team.poolIndex == null).length;
       if (unassigned > 0) {
         setError(`${unassigned} team${unassigned === 1 ? " is" : "s are"} not assigned to a pool — assign pools on the Teams tab first.`);
         return;
       }
-      if (p1.length < 2 || p2.length < 2) {
-        setError("Cross-pool seeding needs at least 2 teams in each pool.");
-        return;
-      }
-      top = [p1[0], p2[0], p1[1], p2[1]];
     }
+    // Who advances, in seed order. Shared with the confirm preview
+    // (playoffSeeding.selectPlayoffSeeds) so the two can't diverge:
+    // overall = top-N of the standings; cross-pool (2 pools, top 4) =
+    // [Pool A #1, Pool B #1, Pool A #2, Pool B #2].
+    const seeds = selectPlayoffSeeds(standings, N, crossPool);
+    if (seeds.length < N) {
+      setError(
+        crossPool
+          ? "Cross-pool seeding needs at least 2 teams in each pool."
+          : `Need at least ${N} teams in the standings.`,
+      );
+      return;
+    }
+    const top = seeds.map((s) => s.team);
 
     generatingRef.current = true;
     setBusy(true);
@@ -2418,7 +2475,11 @@ function PlayoffSection({
       // the fresh bracket, so a second generate REPLACES rather than APPENDs.
       // Round-robin matches are untouched. buildPlayoffRows owns the R=1
       // pairwise-medal vs R=2 semis+final+bronze row shapes and copies the
-      // event's medal/semifinal config onto each row.
+      // event's medal/semifinal config onto each row. The seeds fed in come
+      // from selectPlayoffSeeds — the same helper the confirm preview uses —
+      // and buildPlayoffRows pairs them the same way pairPlayoffSeeds does in
+      // the preview (R=1 adjacent, R=2 high-vs-low), so what's confirmed is
+      // what's created.
       const rows = buildPlayoffRows(event, top);
       const { error: insErr } = await replacePlayoffMatches(
         supabase as unknown as MatchesWriteClient,
@@ -2532,9 +2593,123 @@ function PlayoffSection({
                   : "1 round (pairwise medal matches)"
                 : "2 rounds (semis + final + bronze)"}
             </div>
-            <button onClick={onGenerate} disabled={busy} style={primaryBtn(busy)}>
+            <button
+              onClick={() => setShowPreview(true)}
+              disabled={busy}
+              style={primaryBtn(busy)}
+            >
               {busy ? "Generating…" : "Generate playoff bracket"}
             </button>
+            {showPreview && (
+              <ConfirmModal
+                title="Generate playoff bracket?"
+                confirmLabel="Generate bracket"
+                cancelLabel="Go back"
+                destructive={false}
+                onCancel={() => setShowPreview(false)}
+                onConfirm={async () => {
+                  setShowPreview(false);
+                  await onGenerate();
+                }}
+                body={
+                  <div
+                    style={{
+                      fontFamily: bodyFontStack,
+                      fontSize: 13,
+                      maxWidth: 560,
+                    }}
+                  >
+                    <div style={ppLbl}>Final standings</div>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr>
+                          <th style={ppTh}>#</th>
+                          <th style={{ ...ppTh, textAlign: "left" }}>Team</th>
+                          <th style={ppTh}>W-L</th>
+                          <th style={ppTh}>Diff</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {standings.map((s, i) => {
+                          const advancing = previewSeeds.includes(s);
+                          return (
+                            <tr
+                              key={s.team.captainRegId}
+                              style={
+                                advancing ? { background: successBg } : undefined
+                              }
+                            >
+                              <td style={ppTd}>{i + 1}</td>
+                              <td
+                                style={{
+                                  ...ppTd,
+                                  textAlign: "left",
+                                  fontWeight: advancing ? 700 : 400,
+                                }}
+                              >
+                                {s.team.label}
+                                {advancing ? " ✓" : ""}
+                              </td>
+                              <td style={ppTd}>
+                                {s.wins}-{s.losses}
+                              </td>
+                              <td style={ppTd}>
+                                {s.diff >= 0 ? "+" : ""}
+                                {s.diff}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    <div style={ppLbl}>
+                      Advancing to the playoff ({previewSeeds.length})
+                    </div>
+                    {previewSeeds.length === 0 ? (
+                      <div style={{ color: dangerFg }}>
+                        {crossPool
+                          ? "Each pool needs at least 2 teams to seed a cross-pool bracket."
+                          : "Not enough teams in the standings to seed a bracket."}
+                      </div>
+                    ) : (
+                      <ol style={{ margin: 0, paddingLeft: 20 }}>
+                        {previewSeeds.map((s, i) => (
+                          <li
+                            key={s.team.captainRegId}
+                            style={{ marginBottom: 3 }}
+                          >
+                            <b>{s.team.label}</b> — {seedReason(s, i)}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+
+                    {previewPairs.length > 0 && (
+                      <>
+                        <div style={ppLbl}>Proposed matchups</div>
+                        <ul style={{ margin: 0, paddingLeft: 20 }}>
+                          {previewPairs.map(([a, b], i) => (
+                            <li key={i} style={{ marginBottom: 3 }}>
+                              <span style={{ color: inkMuted }}>
+                                {pairLabel(i)}:
+                              </span>{" "}
+                              <b>
+                                #{previewSeeds.indexOf(a) + 1} {a.team.label}
+                              </b>{" "}
+                              vs{" "}
+                              <b>
+                                #{previewSeeds.indexOf(b) + 1} {b.team.label}
+                              </b>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                }
+              />
+            )}
           </div>
         )
       ) : (
