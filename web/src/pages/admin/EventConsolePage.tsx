@@ -73,6 +73,7 @@ import {
   courtBlue,
   courtRed,
   courtYellow,
+  courtGreen,
   successBg,
   successFg,
   dangerBg,
@@ -1775,29 +1776,18 @@ function RoundRobinSection({
             : "No matches yet. Click “Generate matches” to create the round-robin pairings."}
         </Empty>
       ) : (
-        <table style={tableStyle}>
-          <thead>
-            <tr style={tableHeadRow}>
-              <th style={{ ...thStyle, width: 40 }}>#</th>
-              <th style={thStyle}>Team A</th>
-              <th style={{ ...thStyle, width: 80, textAlign: "center" }}>Score</th>
-              <th style={thStyle}>Team B</th>
-              <th style={{ ...thStyle, width: 100 }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matches.map((m, i) => (
-              <MatchRow
-                key={m.id}
-                match={m}
-                index={i + 1}
-                teamByAnyRegId={teamByAnyRegId}
-                event={event}
-                onSaved={onChange}
-              />
-            ))}
-          </tbody>
-        </table>
+        <div style={matchGridStyle}>
+          {matches.map((m, i) => (
+            <MatchCard
+              key={m.id}
+              match={m}
+              index={i + 1}
+              teamByAnyRegId={teamByAnyRegId}
+              event={event}
+              onSaved={onChange}
+            />
+          ))}
+        </div>
       )}
 
       {/* Check-in status hint before matches exist — tells the organizer why
@@ -1845,10 +1835,17 @@ function RoundRobinSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Match row (used by both RR and playoff sections)
+// Match card (used by the RR, playoff, and double-elim sections)
+//
+// Layout only: a self-contained card that reads well at phone width
+// (issue #500 — mobile-first). Teams stack vertically with their score
+// input aligned to the right edge (tabular), a status accent runs down
+// the left border, and Save sits in its own action row. The score-save
+// logic (onSave / validateScore / feed-forward) is unchanged from the
+// prior table-row rendering.
 // ─────────────────────────────────────────────────────────────────────
 
-function MatchRow({
+function MatchCard({
   match,
   index,
   teamByAnyRegId,
@@ -1926,27 +1923,37 @@ function MatchRow({
     await onSaved();
   };
 
+  // Status accent runs down the card's left border so a director can
+  // scan pending / live / final at a glance mid-tournament.
+  const statusAccent =
+    match.status === "completed"
+      ? courtGreen
+      : match.status === "in_progress"
+        ? courtYellow
+        : rule;
+  const winnerA = match.winner_reg_id === match.team_a_reg_id;
+  const winnerB = match.winner_reg_id === match.team_b_reg_id;
+
   return (
-    <tr style={tableRow}>
-      <td style={{ ...tdStyle, color: inkMuted }}>{index}</td>
-      <td
-        style={{
-          ...tdStyle,
-          fontWeight: match.winner_reg_id === match.team_a_reg_id ? 600 : 400,
-          color: teamA ? ink : inkMuted,
-        }}
-      >
-        {teamA?.label ?? "TBD"}
-      </td>
-      <td
-        style={{
-          ...tdStyle,
-          textAlign: "center",
-          whiteSpace: "nowrap",
-        }}
-      >
-        <div className="no-print" style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap" }}>
+    <div style={{ ...matchCardStyle, borderLeftColor: statusAccent }}>
+      <div style={matchCardHeader}>
+        <span style={matchNumStyle}>Match {index}</span>
+        <MatchStatusBadge status={match.status} />
+      </div>
+
+      <div style={matchTeamsBlock}>
+        <div style={matchTeamRow}>
+          <span
+            style={{
+              ...matchTeamName,
+              fontWeight: winnerA ? 700 : 500,
+              color: teamA ? ink : inkMuted,
+            }}
+          >
+            {teamA?.label ?? "TBD"}
+          </span>
           <input
+            className="no-print"
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -1957,8 +1964,27 @@ function MatchRow({
             style={scoreInputStyle}
             aria-label={`${teamA?.label ?? "Team A"} score`}
           />
-          <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
+          {/* Plain text so a printed bracket shows the finished score
+              instead of an empty-looking form control. */}
+          <span className="print-score" style={matchPrintScore}>
+            {match.team_a_score ?? "–"}
+          </span>
+        </div>
+
+        <span style={matchVsStyle}>vs</span>
+
+        <div style={matchTeamRow}>
+          <span
+            style={{
+              ...matchTeamName,
+              fontWeight: winnerB ? 700 : 500,
+              color: teamB ? ink : inkMuted,
+            }}
+          >
+            {teamB?.label ?? "TBD"}
+          </span>
           <input
+            className="no-print"
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -1969,40 +1995,23 @@ function MatchRow({
             style={scoreInputStyle}
             aria-label={`${teamB?.label ?? "Team B"} score`}
           />
-          <button
-            onClick={onSave}
-            disabled={!canPlay || busy}
-            style={{ ...tinyPrimaryBtn, marginLeft: 8 }}
-          >
-            {busy ? "…" : "Save"}
-          </button>
-          {err && (
-            <div style={{ color: dangerFg, fontSize: 11, marginTop: 4 }}>
-              {err}
-            </div>
-          )}
+          <span className="print-score" style={matchPrintScore}>
+            {match.team_b_score ?? "–"}
+          </span>
         </div>
-        {/* Plain text so a printed bracket shows a finished score
-            instead of an empty-looking form control. */}
-        <span className="print-score">
-          {match.team_a_score !== null && match.team_b_score !== null
-            ? `${match.team_a_score}–${match.team_b_score}`
-            : "–"}
-        </span>
-      </td>
-      <td
-        style={{
-          ...tdStyle,
-          fontWeight: match.winner_reg_id === match.team_b_reg_id ? 600 : 400,
-          color: teamB ? ink : inkMuted,
-        }}
-      >
-        {teamB?.label ?? "TBD"}
-      </td>
-      <td style={tdStyle}>
-        <MatchStatusBadge status={match.status} />
-      </td>
-    </tr>
+      </div>
+
+      <div className="no-print" style={matchCardActions}>
+        {err && <span style={{ color: dangerFg, fontSize: 12 }}>{err}</span>}
+        <button
+          onClick={onSave}
+          disabled={!canPlay || busy}
+          style={matchSaveBtn(!canPlay || busy)}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -2508,37 +2517,18 @@ function PlayoffSection({
                 >
                   {playoffRoundLabel(round, R, ms.length)}
                 </h3>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr style={tableHeadRow}>
-                      <th style={{ ...thStyle, width: 40 }}>#</th>
-                      <th style={thStyle}>Team A</th>
-                      <th
-                        style={{
-                          ...thStyle,
-                          width: 80,
-                          textAlign: "center",
-                        }}
-                      >
-                        Score
-                      </th>
-                      <th style={thStyle}>Team B</th>
-                      <th style={{ ...thStyle, width: 100 }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ms.map((m, i) => (
-                      <MatchRow
-                        key={m.id}
-                        match={m}
-                        index={i + 1}
-                        teamByAnyRegId={teamByAnyRegId}
-                        event={event}
-                        onSaved={onChange}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+                <div style={matchGridStyle}>
+                  {ms.map((m, i) => (
+                    <MatchCard
+                      key={m.id}
+                      match={m}
+                      index={i + 1}
+                      teamByAnyRegId={teamByAnyRegId}
+                      event={event}
+                      onSaved={onChange}
+                    />
+                  ))}
+                </div>
               </div>
             ))}
           {champion && (
@@ -2748,11 +2738,7 @@ function DoubleElimSection({
                 <span>{selected.label ?? selected.slot_key} — enter the score</span>
                 <button onClick={() => setSelectedId(null)} style={tinySecondaryBtn}>Close</button>
               </div>
-              <table style={tableStyle}>
-                <tbody>
-                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
-                </tbody>
-              </table>
+              <MatchCard key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
             </div>
           )}
           {medals.length > 0 && (
@@ -2768,22 +2754,11 @@ function DoubleElimSection({
               <h3 className="print-round-head" style={{ fontSize: 13, color: inkMuted, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
                 {g.rows[0]?.label && g.rows.length === 1 ? g.rows[0].label : `${g.bracket === "final" ? "Final" : g.bracket === "winners" ? "Winners bracket" : "Consolation bracket"} · round ${g.round}`}
               </h3>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={tableHeadRow}>
-                    <th style={{ ...thStyle, width: 70 }}>#</th>
-                    <th style={thStyle}>Team A</th>
-                    <th style={{ ...thStyle, width: 80, textAlign: "center" }}>Score</th>
-                    <th style={thStyle}>Team B</th>
-                    <th style={{ ...thStyle, width: 100 }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.rows.map((r, i) => (
-                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
-                  ))}
-                </tbody>
-              </table>
+              <div style={matchGridStyle}>
+                {g.rows.map((r, i) => (
+                  <MatchCard key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
+                ))}
+              </div>
               {g.rows.some((r) => !r.team_a_reg_id || !r.team_b_reg_id) && slotsByKey.size > 0 && (
                 <div style={{ fontSize: 11, color: inkMuted, marginTop: 4 }}>
                   {g.rows
@@ -3150,14 +3125,116 @@ const tdStyle: CSSProperties = {
 };
 
 const scoreInputStyle: CSSProperties = {
-  width: 50,
-  padding: "4px 6px",
+  width: 60,
+  flexShrink: 0,
+  padding: "8px 6px",
   border: `1px solid ${rule}`,
-  borderRadius: 4,
-  fontSize: 13,
+  borderRadius: 6,
+  // 16px keeps iOS from zooming the viewport when the field is focused.
+  fontSize: 16,
   fontFamily: bodyFontStack,
+  fontVariantNumeric: "tabular-nums",
   textAlign: "center",
 };
+
+// ── Match card (Games tab) ───────────────────────────────────────────
+// The list container: a responsive grid that is a single column at phone
+// width (issue #500) and flows into multiple columns as space allows.
+const matchGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+  gap: 10,
+  alignItems: "start",
+};
+
+const matchCardStyle: CSSProperties = {
+  border: `1px solid ${rule}`,
+  borderLeft: `4px solid ${rule}`, // color overridden per status
+  borderRadius: 8,
+  background: "#fff",
+  padding: "12px 14px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  breakInside: "avoid",
+};
+
+const matchCardHeader: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+};
+
+const matchNumStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 0.6,
+  textTransform: "uppercase",
+  color: inkMuted,
+};
+
+const matchTeamsBlock: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+};
+
+const matchTeamRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const matchTeamName: CSSProperties = {
+  flex: "1 1 auto",
+  minWidth: 0,
+  fontSize: 15,
+  lineHeight: 1.3,
+  overflowWrap: "anywhere",
+};
+
+const matchVsStyle: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  color: inkMuted,
+  textAlign: "center",
+  padding: "2px 0",
+};
+
+const matchPrintScore: CSSProperties = {
+  fontSize: 15,
+  fontWeight: 700,
+  fontVariantNumeric: "tabular-nums",
+};
+
+const matchCardActions: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+function matchSaveBtn(disabled: boolean): CSSProperties {
+  return {
+    padding: "8px 20px",
+    minHeight: 40, // ≥44px tap target with the border box
+    background: disabled ? inkMuted : ink,
+    color: cream,
+    border: "none",
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
 
 function primaryBtn(busy: boolean): CSSProperties {
   return {
