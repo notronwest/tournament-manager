@@ -5,6 +5,18 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-09-28 — Testing agent (daytime run): Job 1 triage, 10th consecutive blind run on #955
+
+Triaged the newest untriaged regression run, [36459420440](https://github.com/notronwest/tournament-manager/actions/runs/36459420440) (2026-09-28 17:37 UTC, daytime) — **failed at the seed step again**, identical signature to every run since 2026-09-24: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. `main` HEAD is still `ca57343` (pre-#955). This is now the **10th consecutive scheduled run with zero regression signal**.
+
+[#955](https://github.com/notronwest/tournament-manager/pull/955) (the fix, branch `fix/e2e-fixtures-syntax`) remains `OPEN`, checks green, now **~4.3 days** unreviewed since 2026-09-24T11:11 UTC. Commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) rather than filing a duplicate card. Did **not** post to Discord — this morning's run (9th blind run) already posted a fresh `[ESCALATION]` for this same issue today; cadence is one post per regression per day.
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
+
+**Housekeeping:** this checkout also had an in-progress, uncommitted CoS/Hopper STATUS.md entry (#970) from a separate session — stashed it (`git stash`, message `cos-970-wip-not-mine`) before branching off `origin/main` for this entry, and it still needs popping back onto whichever branch that session resumes on; not mine to commit or discard.
+
+**Next:** Ron still needs to merge #955 — this is now the better part of a full work-week blind (2026-09-24 → 2026-09-28). Nothing left to triage or fix on the harness side; it's purely waiting on a merge. Note there are also several still-open Testing-agent STATUS-entry PRs stacked up unmerged (#959, #961, #963, #967, #969, #976) — none block this one, but they're worth a batch-merge pass.
+
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
 Triaged the newest untriaged regression run, [35737353782](https://github.com/notronwest/tournament-manager/actions/runs/35737353782) (2026-09-22 14:00 UTC) — workflow **failed** (56 passed, 1 failed, 1 flaky). `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" failed **both** attempt and retry #1 this time (`TimeoutError: locator.fill` on the partner-search placeholder) — same #936 signature, but landed persistent instead of flaky-then-pass, so this is the first of the last three occurrences to flip the run red. `registration.spec.ts` › "register for a singles event (no partner picker)" flaked once (`TimeoutError: locator.scrollIntoViewIfNeeded`) then passed on retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged — expected signature until it lands. Commented an update on #936 (with the severity bump noted) rather than filing a duplicate card; posted a one-line Discord triage summary to Backlog.
