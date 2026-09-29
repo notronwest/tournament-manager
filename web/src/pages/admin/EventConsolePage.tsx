@@ -42,6 +42,12 @@ import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
 import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
 import { pairRegistrations } from "../../lib/registrations";
+import {
+  seedTeams,
+  divisionFromEvent,
+  type SeedableTeam,
+  type PlayerRatings,
+} from "../../lib/seedTeams";
 import { BracketView } from "../../components/BracketView";
 import type { SupabaseClient } from "@supabase/supabase-js";
 // Double-elimination columns (migration 20260914210000) — generated types lag.
@@ -86,6 +92,62 @@ type Player = Database["public"]["Tables"]["players"]["Row"];
 type EventRegistration =
   Database["public"]["Tables"]["event_registrations"]["Row"];
 type Match = Database["public"]["Tables"]["matches"]["Row"];
+
+// ── DUPR seeding (#970 / D-0045) ──────────────────────────────────────────
+// Console Team rows carry the full player rows on `captain` / `partner`, which
+// hold the DUPR + self-rating columns. Adapt them into the shape seedTeams
+// wants. The DUPR columns lag the generated Player type (migration
+// 20260928120000), so they're read structurally via a cast.
+function toSeedableTeams(teams: Team[]): SeedableTeam[] {
+  return teams.map((t) => ({
+    captainRegId: t.captainRegId,
+    partnerRegId: t.partnerRegId,
+    captain: t.captain as unknown as PlayerRatings,
+    partner: t.partner ? (t.partner as unknown as PlayerRatings) : null,
+  }));
+}
+
+// Compute DUPR seeds for a division's teams and persist them onto
+// event_registrations.seed — both halves of a confirmed doubles pair get the
+// pair's single seed. Deterministic + idempotent (re-running on the same data
+// yields the same seeds). Returns the seed keyed by captainRegId so a caller
+// can order the draw immediately, without waiting for a reload.
+async function persistDuprSeeds(
+  event: Event,
+  teams: Team[],
+): Promise<{ seedByCaptain: Map<string, number>; error: string | null }> {
+  const division = divisionFromEvent({
+    format: event.format,
+    gender: event.gender,
+    min_rating: event.min_rating,
+    // source_division_label rides the PB.com import migration; types lag it.
+    source_division_label:
+      (event as { source_division_label?: string | null }).source_division_label ?? null,
+  });
+  const seeded = seedTeams(toSeedableTeams(teams), division);
+  const writes = seeded.map((s) => {
+    const ids = [s.captainRegId];
+    if (s.partnerRegId) ids.push(s.partnerRegId);
+    return supabase.from("event_registrations").update({ seed: s.seed }).in("id", ids);
+  });
+  const results = await Promise.all(writes);
+  const firstErr = results.find((r) => r.error)?.error;
+  const seedByCaptain = new Map(seeded.map((s) => [s.captainRegId, s.seed]));
+  return { seedByCaptain, error: firstErr?.message ?? null };
+}
+
+// Sort a copy of `teams` by a freshly-computed seed map (unseeded last). Used
+// to order the draw within the same call that persists the seeds, before the
+// parent reload re-derives the order from event_registrations.seed.
+function orderBySeed(teams: Team[], seedByCaptain: Map<string, number>): Team[] {
+  return teams
+    .slice()
+    .sort(
+      (a, b) =>
+        (seedByCaptain.get(a.captainRegId) ?? Number.POSITIVE_INFINITY) -
+        (seedByCaptain.get(b.captainRegId) ?? Number.POSITIVE_INFINITY),
+    );
+}
 
 // Team / Standing / Medal and their builders live in lib/bracketTeams so the
 // tournament summary report computes results exactly as this console does.
@@ -1076,6 +1138,27 @@ function TeamsSection({
     setTeams(shuffled);
     await persistOrder(shuffled);
   };
+
+  // Seed the field by combined DUPR (seed 1 = strongest). Persists
+  // event_registrations.seed for every team and reorders the list. The
+  // round-robin and double-elim generators consume this order directly, so a
+  // generated draw is ranked by strength. Organizers can still drag rows to
+  // fine-tune afterward (or before generating).
+  const [seeding, setSeeding] = useState(false);
+  const seedByDupr = async () => {
+    if (hasMatches || teams.length < 2) return;
+    setError(null);
+    setSeeding(true);
+    const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
+    if (seedErr) {
+      setError(seedErr);
+      setSeeding(false);
+      return;
+    }
+    setTeams(orderBySeed(teams, seedByCaptain)); // optimistic; reload confirms
+    await onChange();
+    setSeeding(false);
+  };
   const [randomizing, setRandomizing] = useState(false);
   const loose = teams.filter((t) => t.partnerRegId === null);
   const randomizeRemaining = async () => {
@@ -1124,6 +1207,16 @@ function TeamsSection({
               >
                 Saving order…
               </span>
+            )}
+            {!hasMatches && teams.length >= 2 && (
+              <button
+                onClick={() => void seedByDupr()}
+                disabled={busy || savingOrder || seeding}
+                style={tinySecondaryBtn}
+                title="Order every team by combined DUPR (seed 1 = strongest). Falls back to singles DUPR, then self-rating, then the division floor. Drag rows to fine-tune afterward."
+              >
+                {seeding ? "Seeding…" : "Seed by DUPR"}
+              </button>
             )}
             {isDE && (
               <>
@@ -1536,14 +1629,30 @@ function RoundRobinSection({
   // The actual generation, once validated and past (or overriding) the gate.
   const doGenerate = async () => {
     setBusy(true);
+    // DUPR-seed the field first if it has never been seeded, so the generated
+    // draw (schedule order, and — for a single pool — pairing order) reflects
+    // team strength. Respect any existing seeds (manual drag / Seed by DUPR /
+    // pool distribution / a prior run): only auto-seed when a team is still
+    // unseeded. Multi-pool membership is set on the Teams tab before this runs,
+    // so this just backfills the seed values there.
+    let orderedTeams = teams;
+    if (teams.some((t) => t.seed == null)) {
+      const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
+      if (seedErr) {
+        setBusy(false);
+        setError(seedErr);
+        return;
+      }
+      orderedTeams = orderBySeed(teams, seedByCaptain);
+    }
     const rows: Database["public"]["Tables"]["matches"]["Insert"][] = [];
     let position = 0;
     const poolGroups: Team[][] =
       event.pool_count > 1
         ? Array.from({ length: event.pool_count }, (_, idx) =>
-            teams.filter((t) => t.poolIndex === idx + 1),
+            orderedTeams.filter((t) => t.poolIndex === idx + 1),
           )
-        : [teams];
+        : [orderedTeams];
     // Each pairing is generated once per `play_each_team_times`.
     // Multi-pool: pairings only happen within a single pool. The match
     // doesn't carry a pool_index column — pool membership is derived
@@ -2495,12 +2604,20 @@ function DoubleElimSection({
   const onGenerate = async () => {
     setError(null);
     if (teams.length < 3) { setError("Double elimination needs at least 3 teams."); return; }
-    if (unseeded > 0) { setError(`${unseeded} team${unseeded === 1 ? " has" : "s have"} no seed — drag the Teams tab into order or Randomize seeds.`); return; }
     if (unpaired > 0) { setError(`${unpaired} player${unpaired === 1 ? " is" : "s are"} unpaired — pair them (or Randomize remaining) first.`); return; }
     setBusy(true);
     try {
+      // Seeds drive elimination placement (seedOrder puts byes on the top
+      // seeds). DUPR-seed the field when it isn't fully seeded yet; respect
+      // existing seeds (manual drag / Randomize / Seed by DUPR) otherwise.
+      let orderedSeeded = seeded;
+      if (unseeded > 0) {
+        const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
+        if (seedErr) throw new Error(seedErr);
+        orderedSeeded = orderBySeed(teams, seedByCaptain);
+      }
       const de = buildDoubleElim(teams.length, format);
-      const regOfSeed = (seed: number) => seeded[seed - 1]?.captainRegId ?? null;
+      const regOfSeed = (seed: number) => orderedSeeded[seed - 1]?.captainRegId ?? null;
       const poolConfig = {
         match_format: "single_game" as const,
         match_points_to_win: event.points_to_win,
@@ -2615,7 +2732,7 @@ function DoubleElimSection({
             {teams.length} seeded teams ·{" "}
             {format === "crossover" ? "crossover final (true double elimination)" : "bronze only (no crossover)"}
             {preview ? ` · ${preview.slots.filter((x) => !x.ifNecessary).length} matches${format === "crossover" ? " + 1 if necessary" : ""}` : ""}
-            {unseeded > 0 ? ` · ${unseeded} unseeded` : ""}
+            {unseeded > 0 ? ` · ${unseeded} unseeded (will be DUPR-seeded on generate)` : ""}
             {unpaired > 0 ? ` · ${unpaired} unpaired` : ""}
           </div>
           <button onClick={onGenerate} disabled={busy || teams.length < 3} style={primaryBtn(busy || teams.length < 3)}>
