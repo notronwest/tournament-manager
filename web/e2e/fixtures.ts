@@ -133,6 +133,22 @@ export const SEED = {
       tournamentName: "E2E Reopen Future-Deadline Cup",
     },
   },
+  // Pool-count preview on EventFormPage (#813): registered-team count +
+  // per-pool split, warned when a pool would fall below the 4-team minimum.
+  // Read-only spec (no registrations touch this fixture).
+  poolPreview: {
+    tournamentSlug: "e2e-pool-preview",
+    adminEmail: "e2e-organizer@wmpc.test", // Olive, org owner
+    // 4 confirmed pairs + 2 still-forming singles = 6 registered teams,
+    // under a 20-team cap (max 5 pools).
+    eventName: "E2E Pool Preview Doubles",
+    registeredTeams: 6,
+    completeTeams: 4,
+    formingTeams: 2,
+    maxTeams: 20,
+    zeroRegEventName: "E2E Pool Preview Zero Regs",
+    zeroRegMaxTeams: 12,
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";
