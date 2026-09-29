@@ -65,6 +65,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const untyped = supabase as unknown as SupabaseClient;
 type DEEvent = { bracket_type?: string | null; double_elim_final?: "crossover" | "bronze_only" | null };
 const isDoubleElim = (e: { bracket_type?: string | null } | null | undefined) => e?.bracket_type === "double_elim";
+import {
+  buildSingleElimBracket,
+  bracketRoundsForN,
+  playoffRoundName,
+} from "../../lib/playoffBracket";
 import { downloadCsv } from "../../lib/rosterExport";
 import {
   standingsToRows,
@@ -335,10 +340,10 @@ export default function EventConsolePage() {
   // matches at round=playoff_rounds:
   //   * position 0 = the gold-medal match  → winner=gold, loser=silver
   //   * position 1 = the bronze-medal game → winner=bronze
-  // Works for both pairwise (R=1, N=4) and bracket-with-bronze
-  // (R=2, N=4) since both store the medal matches at the final
-  // round. Returns an empty array until the gold match is
-  // completed; bronze is added later when its match finishes.
+  // Works for every playoff style — pairwise (R=1), single-elim brackets
+  // (Top-4 → R=2, Top-6/8 → R=3), and double-elim — since all of them store
+  // the medal matches at the final round. Returns an empty array until the
+  // gold match is completed; bronze is added later when its match finishes.
   const medals = useMemo<Medal[]>(
     () => (event ? computeMedals(event as typeof event & DEEvent, playoffMatches, teamByAnyRegId) : []),
     [event, playoffMatches, teamByAnyRegId],
@@ -350,6 +355,10 @@ export default function EventConsolePage() {
   // For playoff matches in round > 1 we also null the team slots,
   // because those teams were populated by feedForwardPlayoffWinners
   // from upstream winners — replaying earlier rounds will refeed.
+  // Exception: bye seeds (e.g. Top-6 seeds 1-2 pre-placed into the
+  // semifinals) were seeded at generation, not fed forward, so they
+  // must be restored after the blanket null — otherwise replaying the
+  // bracket would lose them (see onResetAllScores bye handling below).
   // If the event was complete/verified we also bump it back to
   // active so it re-enters the court manager.
   const onResetAllScores = async () => {
@@ -385,6 +394,49 @@ export default function EventConsolePage() {
       setError(firstErr.message);
       setResetting(false);
       return;
+    }
+
+    // Restore bye pre-placements the blanket null just wiped. A bye seed sits
+    // in a round >= 2 slot from generation (not feed-forward), so the bracket
+    // shape tells us exactly which (round, position, slot) to refill, and with
+    // whom (the team currently occupying that slot, captured pre-reset).
+    const R = event.playoff_rounds;
+    if (R >= 2 && bracketRoundsForN(event.teams_advancing_to_playoff) === R) {
+      // supabase-js returns thenable PostgrestFilterBuilders, not strict
+      // Promises — PromiseLike is what Promise.all actually needs.
+      const restores: PromiseLike<unknown>[] = [];
+      for (const b of buildSingleElimBracket(event.teams_advancing_to_playoff)) {
+        if (b.round < 2) continue;
+        const live = playoffMatches.find(
+          (m) => m.round === b.round && m.position === b.position,
+        );
+        if (!live) continue;
+        if (b.seedA != null && live.team_a_reg_id) {
+          restores.push(
+            supabase
+              .from("matches")
+              .update({ team_a_reg_id: live.team_a_reg_id })
+              .eq("id", live.id),
+          );
+        }
+        if (b.seedB != null && live.team_b_reg_id) {
+          restores.push(
+            supabase
+              .from("matches")
+              .update({ team_b_reg_id: live.team_b_reg_id })
+              .eq("id", live.id),
+          );
+        }
+      }
+      const restoreResults = await Promise.all(restores);
+      const restoreErr = restoreResults.find(
+        (r) => (r as { error?: { message: string } }).error,
+      ) as { error?: { message: string } } | undefined;
+      if (restoreErr?.error) {
+        setError(restoreErr.error.message);
+        setResetting(false);
+        return;
+      }
     }
 
     // Bump status back if the event had drifted into a finished state.
@@ -2439,8 +2491,13 @@ function PlayoffSection({
       setError("Single-round playoffs need an even Top-N.");
       return;
     }
-    if (R === 2 && N !== 4) {
-      setError("2-round playoffs (semis + final + bronze) support Top-4 only.");
+    if (R >= 2 && bracketRoundsForN(N) !== R) {
+      const supported = bracketRoundsForN(N);
+      setError(
+        supported == null
+          ? `A single-elimination bracket isn't supported for Top-${N}. Use 1 round (pairwise medal matches), or set Top-4/6/8.`
+          : `Top-${N} is a ${supported}-round bracket — set playoff rounds to ${supported} (or 1 for pairwise), not ${R}.`,
+      );
       return;
     }
     // Cross-pool seeding reads each pool's placement order, so every team
@@ -2473,13 +2530,14 @@ function PlayoffSection({
       // Idempotent (bug #993): replacePlayoffMatches DELETEs the event's
       // existing playoff matches (mirrors "Reset playoff") before inserting
       // the fresh bracket, so a second generate REPLACES rather than APPENDs.
-      // Round-robin matches are untouched. buildPlayoffRows owns the R=1
-      // pairwise-medal vs R=2 semis+final+bronze row shapes and copies the
-      // event's medal/semifinal config onto each row. The seeds fed in come
-      // from selectPlayoffSeeds — the same helper the confirm preview uses —
-      // and buildPlayoffRows pairs them the same way pairPlayoffSeeds does in
-      // the preview (R=1 adjacent, R=2 high-vs-low), so what's confirmed is
-      // what's created.
+      // Round-robin matches are untouched. buildPlayoffRows owns every
+      // playoff shape and copies the event's medal/semifinal config onto each
+      // row: R=1 pairwise medal matches, and the single-elimination brackets
+      // (Top-4 → 2 rounds, Top-6/8 → 3) whose byes/seeding/bronze routing come
+      // from playoffBracket.ts (empty slots filled by feedForwardPlayoffWinners
+      // as upstream matches complete). The seeds fed in come from
+      // selectPlayoffSeeds — the same helper the confirm preview uses — so what
+      // an organizer confirms in the preview is what gets created.
       const rows = buildPlayoffRows(event, top);
       const { error: insErr } = await replacePlayoffMatches(
         supabase as unknown as MatchesWriteClient,
@@ -2591,7 +2649,9 @@ function PlayoffSection({
                 ? crossPool
                   ? "1 round — cross-pool: pool winners for gold, runners-up for bronze"
                   : "1 round (pairwise medal matches)"
-                : "2 rounds (semis + final + bronze)"}
+                : R === 2
+                  ? "2 rounds (semis → final + bronze)"
+                  : `${R} rounds (${N === 6 ? "play-in" : "quarterfinals"} → semis → final + bronze)`}
             </div>
             <button
               onClick={() => setShowPreview(true)}
@@ -3012,23 +3072,15 @@ function DoubleElimSection({
   );
 }
 
+// Round heading for the playoff table. Delegates to the shared bracket
+// vocabulary so Medal / Play-in / Quarterfinals / Semifinals / Final + bronze
+// read the same here, in the scheduler, and on the court manager.
 function playoffRoundLabel(
   round: number,
   totalRounds: number,
   matchesInRound: number,
 ): string {
-  // Pairwise medal round (R=1): single round of 1v2 / 3v4 / etc.
-  if (totalRounds === 1) return "Medal matches";
-  // 2-round bracket (R=2, N=4): semis, then final + bronze.
-  if (totalRounds === 2) {
-    if (round === 1) return "Semifinals";
-    if (round === 2) return "Final + bronze";
-  }
-  // Generic fallback.
-  if (matchesInRound === 1) return "Final";
-  if (matchesInRound === 2) return "Semifinals";
-  if (matchesInRound === 4) return "Quarterfinals";
-  return `Round ${round}`;
+  return playoffRoundName(round, totalRounds, matchesInRound);
 }
 
 // ─────────────────────────────────────────────────────────────────────
