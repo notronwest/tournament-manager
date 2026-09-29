@@ -1326,39 +1326,32 @@ function EventCard({
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {/* Lifecycle: draft → ready → active.
-              Draft is for "still being configured"; Ready to play is
-              "configured + waiting to start"; Active is running. From
-              draft we offer both "Mark ready" (just stage it) and
-              "Start event" (skip ready, go straight to active) so the
-              organizer isn't forced through an extra click on event
-              day. */}
-          {event.status === "draft" && (
-            <button
-              onClick={() => onSetStatus(event.id, "ready")}
-              disabled={busyAction === `status:${event.id}` || teamCount < 2}
-              title={
-                teamCount < 2
-                  ? "Add at least 2 teams first."
-                  : "Mark this event configured and ready to play. Doesn't start match generation."
-              }
-              style={secondaryBtn}
-            >
-              Mark ready
-            </button>
-          )}
-          {(event.status === "draft" || event.status === "ready") && (
-            <button
-              onClick={() => onSetStatus(event.id, "active")}
-              disabled={busyAction === `status:${event.id}` || teamCount < 2}
-              title={teamCount < 2 ? "Add at least 2 teams first." : ""}
-              style={primaryBtn(
-                busyAction === `status:${event.id}` || teamCount < 2,
-              )}
-            >
-              Start event
-            </button>
-          )}
+          {/* Lifecycle: draft → ready → active. The standalone
+              "Mark ready" and "Start event" buttons were retired in
+              #1005 — both actions now happen inside the Bracket Setup
+              wizard, launched here with "Set up & start" (deep-links to
+              the console with ?wizard=1). The wizard marks the event
+              ready, confirms teams & settings, builds the bracket, and
+              starts the event, with the same check-in gate. */}
+          {(event.status === "draft" || event.status === "ready") &&
+            (teamCount < 2 ? (
+              <button
+                type="button"
+                disabled
+                title="Add at least 2 teams first."
+                style={primaryBtn(true)}
+              >
+                Set up &amp; start
+              </button>
+            ) : (
+              <Link
+                to={`/admin/${orgSlug}/tournaments/${tournamentSlug}/events/${event.id}?wizard=1`}
+                title="Guided setup: mark ready, confirm teams & settings, build the bracket, and start the event."
+                style={primaryLinkBtnSmall}
+              >
+                Set up &amp; start
+              </Link>
+            ))}
           {(event.status === "active" || event.status === "medal_round") && (
             <>
               <button
