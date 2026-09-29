@@ -127,3 +127,50 @@ describe("bracketWizardFurthestReachable", () => {
     );
   });
 });
+
+// The #1005 refactor moves the real, editable settings screen inline
+// into the settings step, but the step *order and gating* must not
+// change: teams stay confirmed before Build, and the bracket is built
+// before Start. These lock that ordering invariant regardless of how the
+// settings step renders.
+describe("step ordering invariant (#1005 — inline settings)", () => {
+  const stepIdx = (id: string) =>
+    BRACKET_WIZARD_STEPS.findIndex((s) => s.id === id);
+
+  it("settings sits between teams and build, and build before start", () => {
+    expect(stepIdx("teams")).toBeLessThan(stepIdx("settings"));
+    expect(stepIdx("settings")).toBeLessThan(stepIdx("build"));
+    expect(stepIdx("build")).toBeLessThan(stepIdx("start"));
+  });
+
+  it("unconfirmed teams block reaching the settings step", () => {
+    // Doubles event with an unpaired team: the teams gate must fail, so
+    // the furthest reachable step is teams itself — settings (and the
+    // inline editor it now hosts) stays locked behind it.
+    const ctx: BracketWizardContext = {
+      ...ready,
+      isDoubles: true,
+      unpairedCount: 1,
+      matchCount: 0,
+    };
+    expect(bracketWizardFurthestReachable(ctx)).toBe(stepIdx("teams"));
+    expect(bracketWizardFurthestReachable(ctx)).toBeLessThan(
+      stepIdx("settings"),
+    );
+  });
+
+  it("an unbuilt bracket blocks reaching Start even with teams settled", () => {
+    // A pooled doubles event, fully paired and pool-assigned, but no
+    // games yet: reachable up to Build, never Start.
+    const ctx: BracketWizardContext = {
+      ...ready,
+      isDoubles: true,
+      unpairedCount: 0,
+      poolCount: 2,
+      unassignedPoolCount: 0,
+      matchCount: 0,
+    };
+    expect(bracketWizardFurthestReachable(ctx)).toBe(stepIdx("build"));
+    expect(bracketWizardStepGate("build", ctx).ok).toBe(false);
+  });
+});

@@ -76,6 +76,7 @@ import {
   WizardReviewRow,
   type BracketWizardStepView,
 } from "./BracketSetupWizard";
+import { EventSettingsForm } from "./EventSettingsForm";
 import {
   bracketWizardStepGate,
   type BracketWizardContext,
@@ -466,13 +467,35 @@ export default function EventConsolePage() {
     await reload();
   };
 
-  // ── Bracket Setup wizard (#943) ─────────────────────────────────────
+  // ── Bracket Setup wizard (#943, #1005) ──────────────────────────────
   // A standalone, guided path over the five actions that today live in
   // five different places to start an event's bracket: mark ready →
   // confirm teams → confirm settings → build → start. Every step reuses
   // this page's existing sections / handlers — the wizard consolidates
   // the flow, it doesn't reimplement generation or the start transition.
+  //
+  // It launches two ways: the header "Set up & start" button, and the
+  // events list on the tournament home page, which links here with
+  // ?wizard=1 (#1005). Closing the wizard strips that param so a refresh
+  // doesn't reopen it.
   const [wizardOpen, setWizardOpen] = useState(false);
+  const closeWizard = useCallback(() => {
+    setWizardOpen(false);
+    if (searchParams.get("wizard")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("wizard");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+  // Deep-link launch from the tournament home page events list (#1005):
+  // ?wizard=1 opens the wizard once the event has loaded, but only while
+  // it's still draft/ready — the same gate as the header launcher.
+  useEffect(() => {
+    if (searchParams.get("wizard") !== "1") return;
+    if (event && (event.status === "draft" || event.status === "ready")) {
+      setWizardOpen(true);
+    }
+  }, [searchParams, event]);
   const [markingReady, setMarkingReady] = useState(false);
   const [starting, setStarting] = useState(false);
   // Check-in confirm for the terminal Start step — same gate the Generate
@@ -525,7 +548,7 @@ export default function EventConsolePage() {
       return;
     }
     setStartGateMissing(null);
-    setWizardOpen(false);
+    closeWizard();
     await reload();
   };
 
@@ -571,8 +594,6 @@ export default function EventConsolePage() {
     event.pool_count > 1
       ? teams.filter((t) => t.poolIndex === null).length
       : 0;
-  const editUrl = `/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/edit`;
-
   const wizardCtx: BracketWizardContext = {
     status: event.status,
     teamCount: teams.length,
@@ -645,7 +666,14 @@ export default function EventConsolePage() {
     {
       id: "settings",
       gate: bracketWizardStepGate("settings", wizardCtx),
-      content: <SettingsTab event={event} editUrl={editUrl} />,
+      // The real, editable settings screen — rendered inline so the
+      // director changes format / pools / playoff config without leaving
+      // the wizard (#1005). Same component the /edit route and the
+      // console "Settings" tab use; saving reloads the console so the
+      // wizard's downstream gates (pool assignment, build) see the change.
+      content: (
+        <EventSettingsForm mode="edit" variant="inline" onSaved={reload} />
+      ),
     },
     {
       id: "build",
@@ -915,10 +943,7 @@ export default function EventConsolePage() {
       </div>
 
       {activeTab === "settings" && (
-        <SettingsTab
-          event={event}
-          editUrl={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/edit`}
-        />
+        <EventSettingsForm mode="edit" variant="inline" onSaved={reload} />
       )}
 
       {activeTab === "teams" && (
@@ -975,7 +1000,7 @@ export default function EventConsolePage() {
         <BracketSetupWizard
           eventName={event.name}
           steps={wizardSteps}
-          onClose={() => setWizardOpen(false)}
+          onClose={closeWizard}
           onStart={startEvent}
           starting={starting}
           startDisabledReason={
@@ -3486,124 +3511,11 @@ function TabStrip({
   );
 }
 
-// Settings tab — read-only view of every event-config column with an
-// "Edit settings" link to the existing form page. We don't inline-
-// edit yet because that'd require lifting EventFormPage's form into
-// a shared component; deferred until there's a clear need.
-function SettingsTab({
-  event,
-  editUrl,
-}: {
-  event: Event;
-  editUrl: string;
-}) {
-  const playoffSummary =
-    event.teams_advancing_to_playoff > 0
-      ? `${event.teams_advancing_to_playoff} (${event.playoff_rounds} round${event.playoff_rounds === 1 ? "" : "s"})`
-      : "None";
-  return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: ink }}>
-          Event settings
-        </h2>
-        <Link
-          to={editUrl}
-          style={{
-            padding: "8px 16px",
-            background: ink,
-            color: cream,
-            textDecoration: "none",
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 600,
-            fontFamily: headingFontStack,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Edit settings →
-        </Link>
-      </div>
-      <dl
-        style={{
-          display: "grid",
-          gridTemplateColumns: "max-content 1fr",
-          rowGap: 8,
-          columnGap: 24,
-          fontSize: 13,
-          margin: 0,
-          maxWidth: 700,
-        }}
-      >
-        <DtDd label="Name" value={event.name} />
-        <DtDd label="Format" value={capitalize(event.format)} />
-        <DtDd label="Gender" value={capitalize(event.gender)} />
-        <DtDd
-          label="Bracket type"
-          value={event.bracket_type.replace(/_/g, " ")}
-        />
-        <DtDd label="Pools" value={String(event.pool_count)} />
-        <DtDd
-          label="Play each team"
-          value={`${event.play_each_team_times}×`}
-        />
-        <DtDd
-          label="Game"
-          value={`${event.points_to_win} win by ${event.win_by}`}
-        />
-        <DtDd
-          label="Timeouts per game"
-          value={String(event.timeouts_per_game)}
-        />
-        <DtDd label="Playoff" value={playoffSummary} />
-        <DtDd
-          label="Min age"
-          value={event.min_age != null ? String(event.min_age) : "—"}
-        />
-        <DtDd
-          label="Max age"
-          value={event.max_age != null ? String(event.max_age) : "—"}
-        />
-        <DtDd
-          label="Min rating"
-          value={event.min_rating != null ? String(event.min_rating) : "—"}
-        />
-        <DtDd
-          label="Max rating"
-          value={event.max_rating != null ? String(event.max_rating) : "—"}
-        />
-        <DtDd label="Rating source" value={event.rating_source ?? "—"} />
-        <DtDd
-          label="Event fee"
-          value={`$${(event.event_fee_cents / 100).toFixed(2)}`}
-        />
-        <DtDd
-          label="Max teams"
-          value={event.max_teams != null ? String(event.max_teams) : "Unlimited"}
-        />
-      </dl>
-    </section>
-  );
-}
-
-function DtDd({ label, value }: { label: string; value: string }) {
-  return (
-    <>
-      <dt style={{ color: inkMuted }}>{label}</dt>
-      <dd style={{ margin: 0, color: ink }}>{value}</dd>
-    </>
-  );
-}
+// The event "Settings" surface (console tab + wizard step) is now the
+// shared, editable <EventSettingsForm variant="inline">, so the director
+// edits format / pools / playoff config in place instead of navigating
+// to the /edit page. The old read-only SettingsTab + DtDd summary that
+// linked out lived here and was removed with #1005.
 
 function SectionHeader({
   title,
