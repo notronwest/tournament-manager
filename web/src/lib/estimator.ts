@@ -253,6 +253,59 @@ export function fmtDuration(mins: number): string {
   return `${h} hr ${m} min`;
 }
 
+// Compact "Xh Ym" / "Ym" form for the tight Event Console line
+// (fmtDuration's "1 hr 20 min" is too long there).
+export function fmtCompactDuration(mins: number): string {
+  const total = Math.max(0, Math.round(mins));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Live completion estimate — Event Console, once games are created
+// ─────────────────────────────────────────────────────────────────────
+
+// A running "how much longer will this event take" figure for the Event
+// Console. Unlike estimateEvent (a pre-generation planner fed by the
+// event's settings + roster), this is derived from the *live* match
+// state: matches still to play, courts, and the per-match minutes.
+//
+// Matches run up to `courts` in parallel, so the matches left need
+// ceil(matchesRemaining / courts) waves of play, each perMatchMinutes
+// long:  estMinutes = ceil(matchesRemaining / courts) * perMatchMinutes.
+// As matches finish, matchesRemaining drops and the estimate shrinks —
+// no polling needed, the console recomputes from match state.
+export type CompletionInputs = {
+  matchesRemaining: number;
+  courts: number;
+  perMatchMinutes: number;
+};
+
+export type CompletionEstimate = {
+  minutes: number;
+  // Parallel waves of play still to run (ceil(remaining / courts)).
+  waves: number;
+};
+
+// Returns null when it can't be computed — no courts assigned or no
+// per-match minutes set — so the caller can hide the line or prompt the
+// director to set match length & courts. A finished event (nothing
+// remaining) returns a concrete 0, distinct from "can't estimate".
+export function estimateCompletion(
+  i: CompletionInputs,
+): CompletionEstimate | null {
+  const remaining = Math.max(0, Math.floor(i.matchesRemaining));
+  if (remaining === 0) return { minutes: 0, waves: 0 };
+  const courts = Math.floor(i.courts);
+  const perMatch = i.perMatchMinutes;
+  if (courts < 1 || perMatch < 1) return null;
+  const waves = Math.ceil(remaining / courts);
+  return { minutes: waves * perMatch, waves };
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Per-event adapter — the one place an events row becomes an estimate
 // ─────────────────────────────────────────────────────────────────────

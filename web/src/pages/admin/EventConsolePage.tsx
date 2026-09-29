@@ -34,6 +34,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { eligibilityChips } from "../../lib/eligibility";
+import { estimateCompletion, fmtCompactDuration } from "../../lib/estimator";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { resolvePartnerBAction } from "../../lib/teamEdit";
 import {
@@ -494,6 +495,44 @@ export default function EventConsolePage() {
                 ))}
               </div>
             )}
+            {/* Live completion estimate — shows once games are created
+                (READY TO PLAY). Derived from match state: matches still
+                to play run up to `court_count` in parallel, each taking
+                pool_minutes_per_game. Shrinks as matches finish; no
+                polling. Pure math lives in lib/estimator. */}
+            {matches.length > 0 &&
+              (() => {
+                const matchesRemaining = matches.filter(
+                  (m) => m.status !== "completed",
+                ).length;
+                const courts = tournament.court_count;
+                const perMatchMinutes = event.pool_minutes_per_game;
+                const est = estimateCompletion({
+                  matchesRemaining,
+                  courts,
+                  perMatchMinutes,
+                });
+                let text: string;
+                if (est === null) {
+                  text = "Set match length & courts to estimate completion.";
+                } else if (matchesRemaining === 0) {
+                  text = "All matches complete.";
+                } else {
+                  text = `Est. ~${fmtCompactDuration(est.minutes)} to complete · ${matchesRemaining} ${matchesRemaining === 1 ? "match" : "matches"} left · ${courts} ${courts === 1 ? "court" : "courts"} · ${perMatchMinutes} min/match`;
+                }
+                return (
+                  <p
+                    style={{
+                      color: inkSoft,
+                      fontSize: 13,
+                      margin: "6px 0 0",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {text}
+                  </p>
+                );
+              })()}
           </div>
           {/* Edit format moved into the Settings tab below — header
               keeps cross-cutting actions only (Print, Reset). */}
