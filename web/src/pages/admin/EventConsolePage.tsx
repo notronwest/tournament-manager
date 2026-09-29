@@ -22,6 +22,8 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   planPoolDistribution,
+  poolControlsLocked,
+  POOL_LOCK_MESSAGE,
   type PoolPattern,
 } from "./poolDistribution";
 import {
@@ -1124,6 +1126,10 @@ function TeamsSection({
   const showPoolColumn = event.pool_count > 1;
   const isDE = isDoubleElim(event);
   const showSeedColumn = event.pool_count > 1 || isDE;
+  // Once games exist, pool assignment (and the seed order it derives from) is
+  // frozen — re-pooling would corrupt the generated bracket. This one flag
+  // drives every locked pool control plus the inline explanation below.
+  const poolsLocked = poolControlsLocked(hasMatches);
 
   // Double elimination: seeds drive the bracket, so let organizers shuffle
   // them, and pair everyone still solo/seeking at random (hand-built teams
@@ -1245,11 +1251,11 @@ function TeamsSection({
                 <button
                   onClick={() => distributePools("alternate")}
                   disabled={
-                    busy || savingOrder || teams.length === 0 || hasMatches
+                    busy || savingOrder || teams.length === 0 || poolsLocked
                   }
                   style={tinyPrimaryBtn}
                   title={
-                    hasMatches
+                    poolsLocked
                       ? "Locked — games already created. Reset all matches first to redistribute pools."
                       : "Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, seed 3 → pool 1, etc."
                   }
@@ -1259,11 +1265,11 @@ function TeamsSection({
                 <button
                   onClick={() => distributePools("snake")}
                   disabled={
-                    busy || savingOrder || teams.length === 0 || hasMatches
+                    busy || savingOrder || teams.length === 0 || poolsLocked
                   }
                   style={tinySecondaryBtn}
                   title={
-                    hasMatches
+                    poolsLocked
                       ? "Locked — games already created. Reset all matches first to redistribute pools."
                       : "Snake-draft teams for competitive balance: 1,2,2,1,1,2,2,1. Keeps the average seed equal across pools."
                   }
@@ -1311,6 +1317,31 @@ function TeamsSection({
       </form>
 
       {error && <ErrorBox message={error} />}
+
+      {poolsLocked && showPoolColumn && (
+        <div
+          role="note"
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "flex-start",
+            padding: 12,
+            marginBottom: 16,
+            background: warnBg,
+            border: `1px solid ${courtYellow}`,
+            borderRadius: 6,
+            color: warnFg,
+            fontSize: 13,
+            fontWeight: 500,
+            lineHeight: 1.4,
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.3 }}>
+            🔒
+          </span>
+          <span>{POOL_LOCK_MESSAGE}</span>
+        </div>
+      )}
 
       {teams.length === 0 ? (
         <Empty>No teams yet — add one above.</Empty>
@@ -1422,14 +1453,22 @@ function TeamsSection({
                     return (
                       <tr
                         key={team.captainRegId}
-                        draggable={showSeedColumn && editingTeamId === null}
+                        draggable={
+                          showSeedColumn && editingTeamId === null && !poolsLocked
+                        }
                         onDragStart={(e) => {
-                          if (!showSeedColumn || editingTeamId !== null) return;
+                          if (
+                            !showSeedColumn ||
+                            editingTeamId !== null ||
+                            poolsLocked
+                          )
+                            return;
                           setDragIdx(i);
                           e.dataTransfer.effectAllowed = "move";
                         }}
                         onDragOver={(e) => {
-                          if (!showSeedColumn || dragIdx === null) return;
+                          if (!showSeedColumn || dragIdx === null || poolsLocked)
+                            return;
                           e.preventDefault();
                           e.dataTransfer.dropEffect = "move";
                           if (overIdx !== i) setOverIdx(i);
@@ -1455,7 +1494,9 @@ function TeamsSection({
                             ? `2px solid ${courtBlue}`
                             : tableRow.borderBottom,
                           cursor:
-                            showSeedColumn && editingTeamId === null
+                            showSeedColumn &&
+                            editingTeamId === null &&
+                            !poolsLocked
                               ? "grab"
                               : undefined,
                         }}
@@ -1484,9 +1525,9 @@ function TeamsSection({
                           <td style={tdStyle}>
                             <select
                               value={team.poolIndex ?? ""}
-                              disabled={hasMatches}
+                              disabled={poolsLocked}
                               title={
-                                hasMatches
+                                poolsLocked
                                   ? "Locked — games already created. Reset all matches first to change pools."
                                   : undefined
                               }

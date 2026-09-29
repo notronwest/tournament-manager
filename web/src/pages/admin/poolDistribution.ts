@@ -4,6 +4,26 @@
 export type PoolPattern = "alternate" | "snake";
 
 /**
+ * Whether the pool-distribution controls (drag-to-reorder seeds, the per-team
+ * pool picker, and the Distribute / Randomize buttons) must be locked.
+ *
+ * They lock the moment ANY match exists for the event: generated matches
+ * reference each team's pool assignment, so re-pooling — or reordering the
+ * seeds that pool distribution is derived from — after games are created would
+ * silently corrupt the bracket and standings. The escape hatch is deleting the
+ * matches (Round-robin tab → "Reset all matches"), which flips this back to
+ * false and re-enables editing.
+ */
+export function poolControlsLocked(hasMatches: boolean): boolean {
+  return hasMatches;
+}
+
+/** Inline copy shown next to the locked controls, so the reason and the escape
+ * hatch are visible in place rather than only in a hover tooltip. */
+export const POOL_LOCK_MESSAGE =
+  "Pools are locked because games have been generated. To change pools, open the Round-robin tab and choose “Reset all matches”.";
+
+/**
  * Snake-draft pool index (1-based): seeds fill pools 1,2,2,1,1,2,… so the
  * average seed stays even across pools.
  */

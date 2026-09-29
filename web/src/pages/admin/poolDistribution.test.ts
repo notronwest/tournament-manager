@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   planPoolDistribution,
+  poolControlsLocked,
+  POOL_LOCK_MESSAGE,
   snakePoolIndex,
   type PoolDistributionTeam,
 } from "./poolDistribution";
@@ -87,6 +89,27 @@ describe("planPoolDistribution", () => {
     });
     // Seeded first (1 then 5), then the two unseeded in original order.
     expect(plan.map((a) => a.ids[0])).toEqual(["d", "a", "b", "c"]);
+  });
+});
+
+describe("poolControlsLocked", () => {
+  // This predicate is the single source of truth the Teams tab uses to disable
+  // the pool pickers, the Distribute / Snake buttons, and seed drag-reorder,
+  // and to show the inline lock note. Enabled with no matches, locked once any
+  // match exists.
+  it("enables the pool controls when no matches exist", () => {
+    expect(poolControlsLocked(false)).toBe(false);
+  });
+
+  it("locks the pool controls the moment matches exist", () => {
+    expect(poolControlsLocked(true)).toBe(true);
+  });
+
+  it("gives the inline note a reason and the escape hatch", () => {
+    // The copy must name why it's locked and point at "Reset all matches",
+    // which is the action that deletes matches and re-enables editing.
+    expect(POOL_LOCK_MESSAGE).toMatch(/games have been generated/i);
+    expect(POOL_LOCK_MESSAGE).toMatch(/Reset all matches/i);
   });
 });
 
