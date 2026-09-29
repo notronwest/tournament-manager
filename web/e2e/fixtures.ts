@@ -62,6 +62,7 @@ export const SEED = {
     seekerEmail: "e2e-sage-notice@wmpc.test", // Sage — "I need a partner"
     singlesTournamentSlug: "e2e-partner-notice-singles",
     singlesEmail: "e2e-milo-notice@wmpc.test", // Milo — singles, no partner section at all
+  },
   // Partner-mode segmented control (#15) — the "I have a partner / I need a
   // partner" toggle renders as a real radiogroup, not two action buttons.
   partnerMode: {
@@ -132,6 +133,18 @@ export const SEED = {
       tournamentSlug: "e2e-reopen-future-deadline",
       tournamentName: "E2E Reopen Future-Deadline Cup",
     },
+  },
+  // Global partner-selection notification (#64) — Gale has a pending inbound
+  // partner_invite so the site-wide banner must show on any authenticated
+  // page, not just the tournament. Milo (#10's singles fixture) doubles as
+  // the negative case: an authenticated player with zero pending invites.
+  globalNotice: {
+    tournamentSlug: "e2e-global-notice",
+    tournamentName: "E2E Global Notice Cup",
+    eventName: "E2E Global Notice Doubles",
+    inviterName: "Gio",
+    inviteeEmail: "e2e-gale-notice@wmpc.test",
+    noInviteEmail: "e2e-milo-notice@wmpc.test", // Milo — no pending invites anywhere
   },
 };
 
