@@ -3,7 +3,9 @@ import {
   estimatePoolPlay,
   estimateMedalRound,
   estimateEvent,
+  estimateCompletion,
   fmtDuration,
+  fmtCompactDuration,
 } from "./estimator";
 
 describe("estimatePoolPlay", () => {
@@ -131,5 +133,64 @@ describe("fmtDuration", () => {
     expect(fmtDuration(45)).toBe("45 min");
     expect(fmtDuration(120)).toBe("2 hr");
     expect(fmtDuration(200)).toBe("3 hr 20 min");
+  });
+});
+
+describe("fmtCompactDuration", () => {
+  it("uses the compact Xh Ym / Ym form", () => {
+    expect(fmtCompactDuration(0)).toBe("0m");
+    expect(fmtCompactDuration(20)).toBe("20m");
+    expect(fmtCompactDuration(60)).toBe("1h");
+    expect(fmtCompactDuration(80)).toBe("1h 20m");
+    expect(fmtCompactDuration(200)).toBe("3h 20m");
+  });
+});
+
+describe("estimateCompletion", () => {
+  it("runs matches up to `courts` in parallel: ceil(remaining/courts) × perMatch", () => {
+    // 10 matches, 4 courts, 20 min → 3 waves × 20 = 60 min.
+    const e = estimateCompletion({
+      matchesRemaining: 10,
+      courts: 4,
+      perMatchMinutes: 20,
+    });
+    expect(e).toEqual({ minutes: 60, waves: 3 });
+  });
+
+  it("rounds waves up when matches don't divide evenly across courts", () => {
+    // 7 matches on 3 courts → ceil(7/3)=3 waves.
+    const e = estimateCompletion({
+      matchesRemaining: 7,
+      courts: 3,
+      perMatchMinutes: 15,
+    });
+    expect(e).toEqual({ minutes: 45, waves: 3 });
+  });
+
+  it("needs only one wave when courts cover every remaining match", () => {
+    const e = estimateCompletion({
+      matchesRemaining: 3,
+      courts: 8,
+      perMatchMinutes: 12,
+    });
+    expect(e).toEqual({ minutes: 12, waves: 1 });
+  });
+
+  it("returns a concrete zero when nothing is left to play", () => {
+    expect(
+      estimateCompletion({ matchesRemaining: 0, courts: 4, perMatchMinutes: 20 }),
+    ).toEqual({ minutes: 0, waves: 0 });
+  });
+
+  it("returns null (can't estimate) when there are no courts", () => {
+    expect(
+      estimateCompletion({ matchesRemaining: 6, courts: 0, perMatchMinutes: 20 }),
+    ).toBeNull();
+  });
+
+  it("returns null (can't estimate) when per-match minutes is zero", () => {
+    expect(
+      estimateCompletion({ matchesRemaining: 6, courts: 4, perMatchMinutes: 0 }),
+    ).toBeNull();
   });
 });
