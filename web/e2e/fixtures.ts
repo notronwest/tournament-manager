@@ -133,6 +133,30 @@ export const SEED = {
       tournamentName: "E2E Reopen Future-Deadline Cup",
     },
   },
+  // My Tournaments page (#103) — player-facing /my-tournaments: Mia sees her
+  // own regs split Upcoming/Past with per-row event + status; Otto's
+  // registration in a tournament Mia isn't part of must never leak onto her
+  // page (RLS scoping); Vera has none, for the empty state. Matches seed.ts
+  // §11.
+  myTournaments: {
+    viewerEmail: "e2e-mt-mia@wmpc.test", // Mia
+    emptyEmail: "e2e-mt-vera@wmpc.test", // Vera — no registrations
+    upcoming: {
+      tournamentName: "E2E MyTourneys Upcoming Cup",
+      tournamentSlug: "e2e-my-tournaments-upcoming",
+      doublesEventName: "E2E MyTourneys Upcoming Doubles",
+      doublesStatusLabel: "Paid · Seeking partner",
+      singlesEventName: "E2E MyTourneys Upcoming Singles",
+      singlesStatusLabel: "Pending payment",
+    },
+    past: {
+      tournamentName: "E2E MyTourneys Past Cup",
+      tournamentSlug: "e2e-my-tournaments-past",
+      eventName: "E2E MyTourneys Past Singles",
+      statusLabel: "Paid",
+    },
+    otherPlayerTournamentName: "E2E MyTourneys OtherPlayer Cup",
+  },
 };
 
 const PASSWORD = process.env.E2E_TEST_PASSWORD || "e2e-password";

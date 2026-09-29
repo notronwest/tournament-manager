@@ -561,6 +561,55 @@ async function main() {
     "pricing-preview tier insert",
   );
 
+  // 11. My Tournaments fixtures (#103) — the player-facing /my-tournaments
+  //     page splits a signed-in player's own registrations into "Upcoming &
+  //     Running" vs "Past" and must show ONLY their own regs (RLS-scoped via
+  //     current_player_id()). Mia is registered in an upcoming tournament
+  //     with a paid+seeking doubles reg and a pending-payment singles reg
+  //     (covers the paid/pending/seeking status labels in one card), and a
+  //     completed tournament (paid singles, for the Past section). Otto is
+  //     registered in a THIRD tournament Mia has no part in at all, to prove
+  //     it never appears on her page. Vera has zero registrations, for the
+  //     empty state.
+  const miaId = await ensurePlayer("e2e-mt-mia@wmpc.test", "Mia", "MyTourneys");
+  const ottoId = await ensurePlayer("e2e-mt-otto@wmpc.test", "Otto", "OtherPlayer");
+  await ensurePlayer("e2e-mt-vera@wmpc.test", "Vera", "Empty");
+
+  const mtUpcomingT = await mkTournament("e2e-my-tournaments-upcoming", "E2E MyTourneys Upcoming Cup");
+  const mtUpcomingDoubles = await doublesEvent(mtUpcomingT, "E2E MyTourneys Upcoming Doubles");
+  await resetEvent(mtUpcomingDoubles);
+  await insertReg(mtUpcomingDoubles, miaId, "paid", "seeking");
+  const mtUpcomingSingles = await singlesEvent(mtUpcomingT, "E2E MyTourneys Upcoming Singles");
+  await resetEvent(mtUpcomingSingles);
+  await insertReg(mtUpcomingSingles, miaId, "pending_payment");
+
+  const mtPastT = (ok(
+    await db
+      .from("tournaments")
+      .upsert(
+        {
+          organization_id: org.id,
+          slug: "e2e-my-tournaments-past",
+          name: "E2E MyTourneys Past Cup",
+          status: "completed",
+          starts_at: "2020-01-01",
+          ends_at: "2020-01-02",
+        },
+        { onConflict: "organization_id,slug" },
+      )
+      .select("id")
+      .single(),
+    "tournament e2e-my-tournaments-past",
+  ) as { id: string }).id;
+  const mtPastSingles = await singlesEvent(mtPastT, "E2E MyTourneys Past Singles");
+  await resetEvent(mtPastSingles);
+  await insertReg(mtPastSingles, miaId, "paid");
+
+  const mtOtherT = await mkTournament("e2e-my-tournaments-otherplayer", "E2E MyTourneys OtherPlayer Cup");
+  const mtOtherSingles = await singlesEvent(mtOtherT, "E2E MyTourneys OtherPlayer Singles");
+  await resetEvent(mtOtherSingles);
+  await insertReg(mtOtherSingles, ottoId, "paid");
+
   console.log("seed: e2e-test fixture ready");
 }
 
