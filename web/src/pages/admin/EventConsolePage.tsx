@@ -72,6 +72,15 @@ import {
 } from "../../lib/playoffBracket";
 import { downloadCsv } from "../../lib/rosterExport";
 import {
+  BracketSetupWizard,
+  WizardReviewRow,
+  type BracketWizardStepView,
+} from "./BracketSetupWizard";
+import {
+  bracketWizardStepGate,
+  type BracketWizardContext,
+} from "../../lib/bracketWizard";
+import {
   standingsToRows,
   resultsToCsv,
   resultsFilename,
@@ -457,6 +466,81 @@ export default function EventConsolePage() {
     await reload();
   };
 
+  // ── Bracket Setup wizard (#943) ─────────────────────────────────────
+  // A standalone, guided path over the five actions that today live in
+  // five different places to start an event's bracket: mark ready →
+  // confirm teams → confirm settings → build → start. Every step reuses
+  // this page's existing sections / handlers — the wizard consolidates
+  // the flow, it doesn't reimplement generation or the start transition.
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [markingReady, setMarkingReady] = useState(false);
+  const [starting, setStarting] = useState(false);
+  // Check-in confirm for the terminal Start step — same gate the Generate
+  // handlers use, surfaced when the director starts with players still out.
+  const [startGateMissing, setStartGateMissing] = useState<
+    { playerId: string; name: string }[] | null
+  >(null);
+
+  // Same check-in computation the RoundRobin generate uses — reused here
+  // so "Start event" from the wizard honors the identical gate.
+  const startCheckInGate = useMemo(() => {
+    const playerById = new Map<string, CheckInPlayerLite>(
+      players.map((p) => [p.id, p]),
+    );
+    return eventCheckInGate(regs as unknown as CheckInReg[], playerById);
+  }, [regs, players]);
+
+  // Step 1 handler — draft → ready (mirrors the TournamentDetailPage
+  // "Mark ready" control; a plain status write, no generation).
+  const markReady = async () => {
+    if (!event) return;
+    setMarkingReady(true);
+    setError(null);
+    const { error: updErr } = await supabase
+      .from("events")
+      .update({ status: "ready" })
+      .eq("id", event.id);
+    setMarkingReady(false);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    await reload();
+  };
+
+  // Terminal action — draft/ready → active. Gates the genuine start on
+  // check-in (resume/reopen aren't starts), matching setEventStatus on
+  // TournamentDetailPage. Games appear in the Court Manager once active.
+  const doStart = async () => {
+    if (!event) return;
+    setStarting(true);
+    setError(null);
+    const { error: updErr } = await supabase
+      .from("events")
+      .update({ status: "active" })
+      .eq("id", event.id);
+    setStarting(false);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setStartGateMissing(null);
+    setWizardOpen(false);
+    await reload();
+  };
+
+  const startEvent = () => {
+    if (
+      event &&
+      (event.status === "draft" || event.status === "ready") &&
+      !startCheckInGate.allCheckedIn
+    ) {
+      setStartGateMissing(startCheckInGate.missing);
+      return;
+    }
+    void doStart();
+  };
+
   if (!org) return null;
   if (loading) return <div style={{ color: inkMuted, fontSize: 14 }}>Loading…</div>;
   if (error) {
@@ -476,6 +560,141 @@ export default function EventConsolePage() {
     );
   }
   if (!event || !tournament) return null;
+
+  // ── Wizard wiring (built here so `event`/`teams`/`matches` are live) ──
+  const isDoubles = event.format === "doubles";
+  const isDE = isDoubleElim(event);
+  const unpairedCount = isDoubles
+    ? teams.filter((t) => t.partnerRegId === null).length
+    : 0;
+  const unassignedPoolCount =
+    event.pool_count > 1
+      ? teams.filter((t) => t.poolIndex === null).length
+      : 0;
+  const editUrl = `/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/edit`;
+
+  const wizardCtx: BracketWizardContext = {
+    status: event.status,
+    teamCount: teams.length,
+    isDoubles,
+    unpairedCount,
+    poolCount: event.pool_count,
+    unassignedPoolCount,
+    matchCount: matches.length,
+  };
+
+  const playoffSummary =
+    event.teams_advancing_to_playoff > 0
+      ? `Top ${event.teams_advancing_to_playoff} · ${event.playoff_rounds} round${event.playoff_rounds === 1 ? "" : "s"}`
+      : "No playoff";
+  const statusReady =
+    event.status !== "draft" ? "Ready to play" : "Draft (not ready yet)";
+
+  const wizardSteps: BracketWizardStepView[] = [
+    {
+      id: "ready",
+      gate: bracketWizardStepGate("ready", wizardCtx),
+      content: (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: inkSoft, lineHeight: 1.55 }}>
+            Marking the event ready locks it as configured and waiting to
+            start. It doesn’t generate any games yet.
+          </p>
+          <div style={{ fontSize: 13, color: inkMuted }}>
+            Status: <strong style={{ color: ink }}>{statusReady}</strong>
+          </div>
+          {event.status === "draft" ? (
+            <button
+              onClick={() => void markReady()}
+              disabled={markingReady || teams.length < 2}
+              title={teams.length < 2 ? "Add at least 2 teams first." : undefined}
+              style={primaryBtn(markingReady || teams.length < 2)}
+            >
+              {markingReady ? "Marking…" : "Mark ready"}
+            </button>
+          ) : (
+            <div
+              style={{
+                padding: "8px 12px",
+                background: successBg,
+                border: `1px solid ${successFg}`,
+                borderRadius: 6,
+                color: successFg,
+                fontSize: 13,
+                alignSelf: "flex-start",
+              }}
+            >
+              ✓ Event is marked ready
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "teams",
+      gate: bracketWizardStepGate("teams", wizardCtx),
+      content: (
+        <TeamsSection
+          event={event}
+          teams={teams}
+          hasMatches={matches.length > 0}
+          onChange={reload}
+        />
+      ),
+    },
+    {
+      id: "settings",
+      gate: bracketWizardStepGate("settings", wizardCtx),
+      content: <SettingsTab event={event} editUrl={editUrl} />,
+    },
+    {
+      id: "build",
+      gate: bracketWizardStepGate("build", wizardCtx),
+      content: isDE ? (
+        <DoubleElimSection
+          event={event as typeof event & DEEvent}
+          teams={teams}
+          teamByAnyRegId={teamByAnyRegId}
+          matches={playoffMatches}
+          onChange={reload}
+        />
+      ) : (
+        <RoundRobinSection
+          event={event}
+          teams={teams}
+          matches={rrMatches}
+          teamByAnyRegId={teamByAnyRegId}
+          regs={regs}
+          players={players}
+          onChange={reload}
+        />
+      ),
+    },
+    {
+      id: "start",
+      gate: bracketWizardStepGate("start", wizardCtx),
+      content: (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 13.5, color: inkSoft, lineHeight: 1.55 }}>
+            Review the setup, then start the event. Its games move into the
+            Court Manager the moment it goes active.
+          </p>
+          <WizardReviewRow label="Format" value={`${capitalize(event.format)} · ${event.bracket_type.replace(/_/g, " ")}`} />
+          <WizardReviewRow label="Teams" value={String(teams.length)} />
+          {event.pool_count > 1 && (
+            <WizardReviewRow label="Pools" value={String(event.pool_count)} />
+          )}
+          <WizardReviewRow label="Playoff" value={playoffSummary} />
+          <WizardReviewRow label="Games built" value={String(matches.length)} warn={matches.length === 0} />
+          <WizardReviewRow
+            label="Checked in"
+            value={`${startCheckInGate.checkedIn} / ${startCheckInGate.total}`}
+            warn={!startCheckInGate.allCheckedIn && startCheckInGate.total > 0}
+          />
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
@@ -590,6 +809,28 @@ export default function EventConsolePage() {
           {/* Edit format moved into the Settings tab below — header
               keeps cross-cutting actions only (Print, Reset). */}
           <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(event.status === "draft" || event.status === "ready") && (
+              <button
+                onClick={() => setWizardOpen(true)}
+                title="Guided setup: mark ready, confirm teams & settings, build the bracket, and start the event."
+                style={{
+                  padding: "8px 16px",
+                  background: ink,
+                  color: cream,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: headingFontStack,
+                  letterSpacing: "0.03em",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Set up &amp; start
+              </button>
+            )}
             {event.is_paired_roles && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/pair-teams`}
@@ -730,6 +971,57 @@ export default function EventConsolePage() {
         />
       )}
 
+      {wizardOpen && (
+        <BracketSetupWizard
+          eventName={event.name}
+          steps={wizardSteps}
+          onClose={() => setWizardOpen(false)}
+          onStart={startEvent}
+          starting={starting}
+          startDisabledReason={
+            matches.length === 0 ? "Build the bracket first." : null
+          }
+        />
+      )}
+      {startGateMissing && (
+        <ConfirmModal
+          title="Not everyone is checked in"
+          body={
+            <div>
+              <p style={{ marginTop: 0 }}>
+                {startGateMissing.length}{" "}
+                {startGateMissing.length === 1 ? "player" : "players"} in this
+                event {startGateMissing.length === 1 ? "hasn't" : "haven't"}{" "}
+                checked in yet:
+              </p>
+              <ul
+                style={{
+                  margin: "0 0 12px",
+                  paddingLeft: 20,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                }}
+              >
+                {startGateMissing.map((m) => (
+                  <li key={m.playerId} style={{ fontSize: 13 }}>
+                    {m.name}
+                  </li>
+                ))}
+              </ul>
+              <p style={{ margin: 0 }}>
+                Check them in first, or start anyway if they’ve withdrawn or
+                you’re handling it another way.
+              </p>
+            </div>
+          }
+          confirmLabel={starting ? "Starting…" : "Start anyway"}
+          onCancel={() => setStartGateMissing(null)}
+          onConfirm={async () => {
+            setStartGateMissing(null);
+            await doStart();
+          }}
+        />
+      )}
       {resetConfirmOpen && (
         <ConfirmModal
           title="Reset all scores?"
