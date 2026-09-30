@@ -8,7 +8,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
 import {
@@ -198,6 +198,7 @@ export type { Medal, Team, Standing } from "../../lib/bracketTeams";
 // directly by the organizer.
 export default function EventConsolePage() {
   const { org } = useCurrentOrg();
+  const navigate = useNavigate();
   const { tournamentSlug, eventId } = useParams<{
     tournamentSlug: string;
     eventId: string;
@@ -555,8 +556,17 @@ export default function EventConsolePage() {
       return;
     }
     setStartGateMissing(null);
-    closeWizard();
-    await reload();
+    // Setup is done — hand off straight to the Court Manager, where this
+    // event's games now live. Falls back to closing the wizard in place if a
+    // slug is somehow unavailable.
+    if (org && tournament && event) {
+      navigate(
+        `/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/courts`,
+      );
+    } else {
+      closeWizard();
+      await reload();
+    }
   };
 
   const startEvent = () => {
@@ -765,6 +775,28 @@ export default function EventConsolePage() {
             value={`${startCheckInGate.checkedIn} / ${startCheckInGate.total}`}
             warn={!startCheckInGate.allCheckedIn && startCheckInGate.total > 0}
           />
+          {event.status === "active" && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/courts`}
+              className="no-print"
+              style={{
+                alignSelf: "flex-start",
+                marginTop: 12,
+                padding: "10px 16px",
+                minHeight: 44,
+                display: "inline-flex",
+                alignItems: "center",
+                background: courtBlue,
+                color: "#fff",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              Go to Court Manager →
+            </Link>
+          )}
         </div>
       ),
     },
