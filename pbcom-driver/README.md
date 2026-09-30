@@ -72,10 +72,19 @@ npx tsx src/cli.ts push <tournamentId> "<divisionLabel>" --force-host
 ```
 push   <tournamentId> <divisionLabel|ALL> [--dry-run] [--fixture f.json] [--force-host]
 verify <tournamentId> [<divisionLabel>]   [--fixture f.json]
+poll                                       [--dry-run] [--fixture f.json] [--force-host]
+push --auto                                [...]   # alias for poll
 ```
 
 `<divisionLabel>` is the PB.com division string (`events.source_division_label`).
 `--dry-run` / `verify` read + plan + print with **no browser and no creds**.
+
+`poll` is the **unattended all-active mode** the launchd job runs: it discovers every
+ACTIVE (status active/medal_round/complete), PB.com-bound division across the binding
+config and pushes each division's delta (create-if-needed + scores), reusing ONE
+persistent-profile session for the tick. A lapsed PB.com session records
+`needs_attention` + posts a Discord alert (`PBCOM_DISCORD_WEBHOOK`) and exits cleanly
+(no crash-loop). See `DEPLOYMENT.md` + `AUTO-PUSH-PRNOTES.md`.
 
 ## The PB.com flows (implemented) + the one remaining seam
 

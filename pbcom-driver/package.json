@@ -9,6 +9,7 @@
     "test": "vitest run",
     "push": "tsx src/cli.ts push",
     "plan": "tsx src/cli.ts push --dry-run",
+    "poll": "tsx src/cli.ts poll",
     "verify": "tsx src/cli.ts verify"
   },
   "dependencies": {

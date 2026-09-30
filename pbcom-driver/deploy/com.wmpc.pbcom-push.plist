@@ -11,11 +11,12 @@
          Do not hardcode a machine path in a committed plist. -->
     <string>/PATH/TO/tournament-manager/pbcom-driver/deploy/pbcom-push.sh</string>
   </array>
-  <!-- Every 2 minutes during play: a score entered in B&E should reach PB.com while
+  <!-- Every ~150s during play: a score entered in B&E should reach PB.com while
        the match card is still on screen. A no-op on every host except PBCOM-PUSH-HOST,
-       and a no-op there whenever there is no delta, so a tight interval is cheap. -->
+       and a no-op there whenever there is no delta (no browser opened), so a tight
+       interval is cheap. -->
   <key>StartInterval</key>
-  <integer>120</integer>
+  <integer>150</integer>
   <!-- Do not fire on load: reinstalling must not kick off a PB.com push. -->
   <key>RunAtLoad</key>
   <false/>
