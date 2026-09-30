@@ -19,6 +19,12 @@ export interface DriverConfig {
   headless: boolean;
   bindingPath: string;
   /**
+   * Discord webhook for the UNATTENDED auto/poll loop's needs_attention alerts
+   * (a lapsed PB.com session, an unverifiable write). Null → the loop logs loudly
+   * and skips the post (never crashes). See src/alert.ts.
+   */
+  discordWebhook: string | null;
+  /**
    * A persistent Chrome profile dir. When set, the logged-in PB.com session survives
    * across runs, so a SUPERVISED operator completes the email-code login once. Unset →
    * a throwaway profile each run (login must be completed every run).
@@ -49,8 +55,13 @@ export function loadConfig(
 ): DriverConfig {
   const pbcomUsername = env.PBCOM_USERNAME?.trim() ?? "";
   const pbcomPassword = env.PBCOM_PASSWORD ?? "";
-  if (requireCreds && (!pbcomUsername || !pbcomPassword)) {
-    throw new MissingCredentials("PBCOM_USERNAME / PBCOM_PASSWORD not set");
+  // PB.com auth is email → one-time CODE reused from a persistent Chrome profile
+  // (Ron's decision #1); there is NO password to fill from a secret. So a real run
+  // needs the login email (to pre-fill / identify the account), not a password —
+  // requiring a nonexistent PBCOM_PASSWORD would make the unattended job exit 2
+  // forever. The persistent-profile login is what actually authenticates.
+  if (requireCreds && !pbcomUsername) {
+    throw new MissingCredentials("PBCOM_USERNAME not set");
   }
   const channelRaw = (env.PBCOM_BROWSER_CHANNEL ?? "chrome").toLowerCase();
   return {
@@ -67,5 +78,6 @@ export function loadConfig(
     bindingPath: env.PBCOM_BINDING_PATH ?? "./binding.json",
     profileDir: env.PBCOM_PROFILE_DIR?.trim() || null,
     loginTimeoutMs: Number(env.PBCOM_LOGIN_TIMEOUT_MS ?? "180000") || 180_000,
+    discordWebhook: env.PBCOM_DISCORD_WEBHOOK?.trim() || null,
   };
 }

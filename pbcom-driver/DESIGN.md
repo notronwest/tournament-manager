@@ -6,7 +6,17 @@ and answers the daemon **INFRA-INTAKE** checklist. Several answers are marked
 **OPEN — needs Ron** because designating an unattended fleet singleton is an
 INFRA-INTAKE decision, not one this scaffolding session makes unilaterally.
 
-## Scope of THIS PR — on-demand, supervised-run ONLY
+> **Update — unattended auto-push layer (D-0045 productionization).** The OPEN
+> items below have since been resolved per Ron's decisions and built on top of the
+> on-demand driver: a durable DB ledger (`pbcom_push_ledger` + `pbcom_push_state`),
+> an all-active `poll` mode driven by launchd on the mini every ~150s, session-lapse
+> handling (records `needs_attention`, posts a Discord alert, exits cleanly — no
+> crash-loop), the committed `PBCOM-PUSH-HOST` singleton fact (`wmpcMacMini1`), and
+> the one-step `install.sh`. Auth stays **persistent-profile + re-auth ping** (no
+> hands-off login — PB.com is email-OTP). The INFRA-INTAKE table records the resolved
+> answers; the section below is kept as the original scaffold-scope record.
+
+## Scope of the original PR — on-demand, supervised-run ONLY
 
 This PR ships the driver as an **on-demand tool a human runs and watches**, not a
 standing service. Concretely:
@@ -88,16 +98,16 @@ ships the web app / edge functions to TEST and deploys **nothing** for `pbcom-dr
 
 | # | Question | Answer |
 |---|----------|--------|
-| 1 | **Unattended?** | **Not in this PR — on-demand + supervised only.** The form flows are implemented, but PB.com login is an email one-time code, so a run needs a human (persistent-profile login, or headed code entry). Unattended running (headless login, WebForms bot-management on the mini's IP, session lifetime, the launchd cadence) is the OPEN INFRA-INTAKE decision this PR defers. |
+| 1 | **Unattended?** | **RESOLVED — yes, via a launchd `poll` loop every ~150s on the mini** (Ron's decision #2). Each tick discovers every ACTIVE, PB.com-bound division and pushes its delta (create-if-needed + scores since the last confirmed push). Auth is NOT hands-off: it reuses the persistent director profile; when the session has lapsed it records `needs_attention` + posts a Discord alert + exits cleanly (Ron's decision #1), so a human re-auths once and it resumes. Bot-management is handled the same way as courtreserve-api (real Chrome, residential IP, mini only). Session lifetime stays **empirical** (see row 9). |
 | 2 | **How many machines?** | The repo is on several Macs; **exactly one** (the club mini) may drive. |
-| 3 | **Singleton?** | **Gate 1:** committed `PBCOM-PUSH-HOST` fact; the executor self-gates fail-closed (unset = nobody drives) — the `BUILDER-HOST`/`EVENTS-DRAIN-HOST` pattern. **Gate 2:** a same-machine exclusive lockfile (`state/pbcom-push.lock`, O_EXCL). **Gate 3 (OPEN):** the DB-backed ledger should claim atomically once wired, so even a defeated gate 1+2 can't double-submit. Today the ledger is the reconcile backstop: a push is recorded only after PB.com verify, so a re-run re-plans the delta rather than duplicating. |
-| 4 | **Propagation.** | Via the same `git pull` + `reconcile.sh` path as the rest of the fleet — **OPEN:** reconcile must learn to `npm install` + refresh this module's launchd plist (like it does for courtreserve-api). Not wired in this PR. |
-| 5 | **Bootstrap — one manual touch.** | **OPEN:** the one per-machine step (on the mini only): install deps + load `com.wmpc.pbcom-push.plist`, fill `.env`, set `PBCOM-PUSH-HOST`. To be scripted as `setup.sh`/`install.sh` at productionization. |
+| 3 | **Singleton?** | **RESOLVED.** **Gate 1:** committed `PBCOM-PUSH-HOST` fact (now set to `wmpcMacMini1`); `runPush`/`runAutoPush` self-gate fail-closed (unset = nobody drives) — the `BUILDER-HOST`/`EVENTS-DRAIN-HOST` pattern. **Gate 2:** a same-machine exclusive lockfile (`state/pbcom-push.lock`, O_EXCL). **Gate 3:** the DB ledger (`pbcom_push_ledger`) is the durable backstop — a push is recorded only after PB.com verify, on a `(tournament, kind, entry_key)` uniqueness constraint (UPSERT), so even a defeated gate 1+2 re-plans the delta and cannot double-submit. |
+| 4 | **Propagation.** | Via the same `git pull` + `reconcile.sh` path as the rest of the fleet. `install.sh` is idempotent and safe for reconcile to invoke (`npm ci` + refresh the launchd plist), mirroring courtreserve-api. The ledger schema propagates separately, via branch routing (main→TEST, production→PROD). |
+| 5 | **Bootstrap — one manual touch.** | **RESOLVED:** `install.sh` is the one per-machine step (mini only) — installs deps, seeds `.env` from the template (never overwrites), loads the plist, and prints the remaining human steps (set `PBCOM-PUSH-HOST`, one-time headed PB.com login, add `PBCOM_DISCORD_WEBHOOK`). See `AUTO-PUSH-PRNOTES.md`. |
 | 6 | **Self-heal.** | Idempotent by construction: reconcile keyed on PB.com source ids + match identity means a crashed/re-run push only pushes the delta; a stale lock is reclaimed next tick; the host gate fails closed on a deleted fact. |
-| 7 | **Source of truth.** | The repo: `PBCOM-PUSH-HOST` (who drives), the declarative binding config (tournament↔eid), and the B&E DB (the draw + the push ledger). The **binding** and **ledger** should become committed/DB state respectively — **OPEN:** ledger table migration (see §data). |
+| 7 | **Source of truth.** | The repo: `PBCOM-PUSH-HOST` (who drives) and the declarative binding config (tournament↔eid, which also IS the set of tournaments the `poll` loop discovers). The B&E DB holds the draw + the durable push ledger. **RESOLVED:** the ledger is now `public.pbcom_push_ledger` (+ `pbcom_push_state`), added by `supabase/migrations/20260930120000_pbcom_push_ledger.sql` (§data). |
 | 8 | **Failure mode.** | **Fail-closed** everywhere: unset host → nobody drives; missing creds → clean exit 2; a seam that can't verify a write → does NOT record the ledger and escalates to `needs_attention` (the D-0045 "PB.com out of sync" signal); the driver **never deletes** on PB.com (orphans are reported, not removed). |
-| 9 | **Secrets / auth.** | PB.com login is **email + one-time code** (supervised), aided by `PBCOM_USERNAME` + a persistent `PBCOM_PROFILE_DIR` in the mini's gitignored `.env`. The draw is read read-only from Supabase via `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (service-role, never committed). Same custody model as courtreserve-api's creds; rotation = edit `.env`. **OPEN:** an unattended login path (if ever wanted) would need a durable director-session mechanism PB.com does not obviously offer. |
-| 10 | **Observability.** | Structured one-JSON-per-line logs to `~/.local/state/wmpc-pbcom/push.{out,err}.log`. **OPEN:** a Discord heartbeat / dashboard "PB.com out of sync" surface for the `needs_attention` state (D-0045 requires a human-visible out-of-sync signal). |
+| 9 | **Secrets / auth.** | PB.com login is **email + one-time code** (supervised), aided by `PBCOM_USERNAME` + a persistent `PBCOM_PROFILE_DIR` in the mini's gitignored `.env`. The draw is read read-only from Supabase via `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` (service-role, never committed). Same custody model as courtreserve-api's creds; rotation = edit `.env`. **RESOLVED (as far as it can be):** there is no hands-off login — the unattended loop reuses the persistent director profile and, when it lapses, records `needs_attention` + Discord-alerts for a human re-auth (Ron's decision #1). **EMPIRICAL / still unknowable:** how long a PB.com director cookie survives unattended — measured in practice, not designed; the re-auth ping is the safety net for whatever it turns out to be. |
+| 10 | **Observability.** | **RESOLVED.** Structured one-JSON-per-line logs to `~/.local/state/wmpc-pbcom/push.{out,err}.log`, PLUS: (a) a **Discord alert** (`PBCOM_DISCORD_WEBHOOK`) on a lapsed session / an unverifiable write — deduped ~6h, best-effort, never crashes; unset → logged loudly + skipped; and (b) the **`pbcom_push_state`** table, one row per division, which the dashboard reads `where state = 'needs_attention'` to render the D-0045 "PB.com out of sync" surface. |
 | 11 | **Can the Chief of Staff use it?** | **OPEN:** expose a documented mini entry point (`npx tsx src/cli.ts push` under the host guard) and, for club-data reach, a read-only plan/status via `wmpc-mcp`. Not built in this PR. |
 
 ## Data model the push reads (tournament-manager, origin/main)
@@ -117,11 +127,15 @@ ships the web app / edge functions to TEST and deploys **nothing** for `pbcom-dr
 
 ### Known dependencies / gaps (see the PR body)
 
-- **Push ledger persistence.** Reconcile needs a durable record of confirmed pushes.
-  The scaffold uses an in-memory ledger + a `PushLedger` seam; production needs a
-  `pbcom_push_ledger` table (a migration — intentionally NOT added here, so this PR
-  deploys nothing to TEST). Suggested shape mirrors the ledger entry type in
-  `src/types.ts`.
+- **Push ledger persistence.** RESOLVED. `public.pbcom_push_ledger` (+
+  `pbcom_push_state`) now backs reconcile durably —
+  `supabase/migrations/20260930120000_pbcom_push_ledger.sql`. `DbPushLedger`
+  (`src/push/run.ts`) reads/writes it via the service-role key, scoped per
+  tournament, UPSERTing on `(tournament_id, kind, entry_key)` so a re-run pushes
+  only the delta and a corrected score re-pushes into the same row. `MemoryLedger`
+  stays for `--fixture` / dry-runs / tests. The row shape mirrors `PushLedgerEntry`.
+  NOTE: the migration ships via branch routing (main→TEST, production→PROD); the
+  driver code does not.
 - **DrawSource DB read.** `src/cli.ts`'s `DbDrawSource` is **implemented** — it reads
   the three tables above (plus `players` for last names) from the tournament-manager
   Supabase project via the service-role key (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`,
