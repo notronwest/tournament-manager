@@ -100,6 +100,45 @@ describe("buildPlan — doubles pairing by TeamID", () => {
   });
 });
 
+const singlesMeta = { raw: "Mens Singles Skill: (3.0 To 3.49)", gender: "men" as const, format: "singles" as const, bracketType: "skill" as const, low: 3.0, high: 3.49 };
+
+describe("buildPlan — singles division (solo entries, no pairing)", () => {
+  const div = "Mens Singles Skill: (3.0 To 3.49)";
+  const a = attendee({
+    firstName: "Sam", lastName: "S", email: "sam@x.com", attendeeHeaderId: "sa", ratingDuprS: "3.42",
+    entries: [{ activityId: "act-1", teamId: "", divisionLabel: div, division: singlesMeta, eventColumnIndex: 1 }],
+  });
+  const b = attendee({
+    firstName: "Pat", lastName: "P", email: "pat@x.com", attendeeHeaderId: "pb", ratingDuprS: "3.10",
+    entries: [{ activityId: "act-2", teamId: "", divisionLabel: div, division: singlesMeta, eventColumnIndex: 1 }],
+  });
+
+  it("creates one singles division and two solo entries, with no pairs", () => {
+    const plan = buildPlan(wrap([a, b]), { divisionKeys: [], entries: [] });
+    const t = planTotals(plan);
+    expect(t.divisionsNew).toBe(1);
+    expect(t.add).toBe(2);
+    expect(t.pairs).toBe(0);
+    expect(plan.divisionsToCreate[0].format).toBe("singles");
+  });
+
+  it("carries the SINGLES DUPR onto the players", () => {
+    const plan = buildPlan(wrap([a, b]), { divisionKeys: [], entries: [] });
+    const sam = plan.players.find((p) => p.firstName === "Sam")!;
+    expect(sam.duprSingles).toBeCloseTo(3.42, 2);
+  });
+
+  it("does NOT pair singles entries even if PB assigned them a TeamID", () => {
+    const withTeam = (over: Partial<PbAttendee>, act: string) =>
+      attendee({ ...over, entries: [{ activityId: act, teamId: "T9", divisionLabel: div, division: singlesMeta, eventColumnIndex: 1 }] });
+    const x = withTeam({ firstName: "X", email: "x@x.com", attendeeHeaderId: "x" }, "act-x");
+    const y = withTeam({ firstName: "Y", email: "y@x.com", attendeeHeaderId: "y" }, "act-y");
+    const plan = buildPlan(wrap([x, y]), { divisionKeys: [], entries: [] });
+    expect(plan.pairs.length).toBe(0);
+    expect(planTotals(plan).add).toBe(2);
+  });
+});
+
 describe("buildPlan — drops flagged, never invented", () => {
   it("flags an existing pbcom entry whose ActivityID is gone from the file", () => {
     const a = attendee({
