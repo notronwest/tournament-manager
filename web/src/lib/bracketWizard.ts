@@ -20,6 +20,8 @@ export type BracketWizardStepId =
   | "ready"
   | "teams"
   | "settings"
+  | "court"
+  | "starttime"
   | "build"
   | "start";
 
@@ -45,6 +47,16 @@ export const BRACKET_WIZARD_STEPS: BracketWizardStepMeta[] = [
     id: "settings",
     title: "Confirm settings",
     blurb: "Format, pools, and playoff configuration.",
+  },
+  {
+    id: "court",
+    title: "Courts",
+    blurb: "Assign the courts this event will use today.",
+  },
+  {
+    id: "starttime",
+    title: "Start time",
+    blurb: "Pick when this event starts, around the day's other events.",
   },
   {
     id: "build",
@@ -73,6 +85,11 @@ export type BracketWizardContext = {
   unassignedPoolCount: number;
   // Games generated so far (round-robin + bracket).
   matchCount: number;
+  // Courts assigned to this event (event_courts rows). The court step is
+  // satisfied once at least one is assigned.
+  courtsAssignedCount: number;
+  // Whether the event has a scheduled_start_at. Gates the start-time step.
+  hasStartTime: boolean;
 };
 
 // A step is either clear to advance past, or blocked with a reason the
@@ -126,6 +143,17 @@ export function bracketWizardStepGate(
     case "settings":
       // Settings always have valid defaults; confirmation is enough.
       return CLEAR;
+
+    case "court":
+      // Auto-satisfied when the recommendation is accepted; block only if the
+      // director cleared every court.
+      if (ctx.courtsAssignedCount > 0) return CLEAR;
+      return { ok: false, reason: "Assign at least one court to continue." };
+
+    case "starttime":
+      // Auto-satisfied when the recommended start is accepted.
+      if (ctx.hasStartTime) return CLEAR;
+      return { ok: false, reason: "Set a start time to continue." };
 
     case "build":
       if (ctx.matchCount > 0) return CLEAR;
