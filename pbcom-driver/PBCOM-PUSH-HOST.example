@@ -1,0 +1,12 @@
+# PBCOM-PUSH-HOST — the ONE host allowed to run the PB.com push (singleton gate 1).
+#
+# Copy to `PBCOM-PUSH-HOST` (no extension) and put the short hostname of the club
+# Mac mini on a line by itself. An UNSET / missing fact fails CLOSED: nobody drives.
+# This mirrors courtreserve-api's EVENTS-DRAIN-HOST / BILLING-HOST facts.
+#
+# ⚠️ Designating a host makes this an unattended fleet singleton. Per daemon
+# convention, do NOT set it until the INFRA-INTAKE pass (see DESIGN.md) is done
+# with Ron and the trace has filled the form seams.
+#
+# Example (uncomment + set the real hostname on the copy, not here):
+# wmpcMacMini1
