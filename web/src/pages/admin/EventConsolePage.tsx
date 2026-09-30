@@ -77,6 +77,8 @@ import {
   type BracketWizardStepView,
 } from "./BracketSetupWizard";
 import { EventSettingsForm } from "./EventSettingsForm";
+import { CourtAssignmentStep } from "./CourtAssignmentStep";
+import { EventStartTimeStep } from "./EventStartTimeStep";
 import {
   bracketWizardStepGate,
   type BracketWizardContext,
@@ -206,6 +208,9 @@ export default function EventConsolePage() {
   const [regs, setRegs] = useState<EventRegistration[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  // Courts assigned to this event (event_courts) — drives the wizard's court
+  // gate. Fetched in reload so accepting the recommendation clears the gate.
+  const [courtCount, setCourtCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -261,7 +266,7 @@ export default function EventConsolePage() {
     setTournament(t);
     setEvent(ev as Event);
 
-    const [regsRes, matchesRes] = await Promise.all([
+    const [regsRes, matchesRes, courtsRes] = await Promise.all([
       // Only spot-holding regs become bracket teams. Without the status
       // filter withdrawn / cancelled / refunded / free-waitlisted rows were
       // all counted ("Teams (15 / 12)" on a 12-team event).
@@ -279,6 +284,7 @@ export default function EventConsolePage() {
         .order("stage", { ascending: true })
         .order("round", { ascending: true })
         .order("position", { ascending: true }),
+      supabase.from("event_courts").select("court_number").eq("event_id", eventId),
     ]);
     if (regsRes.error) {
       setError(regsRes.error.message);
@@ -290,6 +296,7 @@ export default function EventConsolePage() {
       setLoading(false);
       return;
     }
+    setCourtCount((courtsRes.data ?? []).length);
     const regsData = regsRes.data ?? [];
     setRegs(regsData);
     setMatches(matchesRes.data ?? []);
@@ -602,7 +609,12 @@ export default function EventConsolePage() {
     poolCount: event.pool_count,
     unassignedPoolCount,
     matchCount: matches.length,
+    courtsAssignedCount: courtCount,
+    hasStartTime: !!event.scheduled_start_at,
   };
+  // Player ids on this event's roster — for the Courts / Start-time steps'
+  // clash detection against the day's other events.
+  const eventPlayerIds = new Set(regs.map((r) => r.player_id));
 
   const playoffSummary =
     event.teams_advancing_to_playoff > 0
@@ -673,6 +685,40 @@ export default function EventConsolePage() {
       // wizard's downstream gates (pool assignment, build) see the change.
       content: (
         <EventSettingsForm mode="edit" variant="inline" onSaved={reload} />
+      ),
+    },
+    {
+      id: "court",
+      gate: bracketWizardStepGate("court", wizardCtx),
+      // Recommends the courts this event should use, accounting for the day's
+      // other events; self-saves to event_courts and reloads.
+      content: (
+        <CourtAssignmentStep
+          event={event}
+          tournament={tournament}
+          teamCount={teams.length}
+          players={eventPlayerIds}
+          orgSlug={org.slug}
+          tournamentSlug={tournament.slug}
+          onSaved={reload}
+        />
+      ),
+    },
+    {
+      id: "starttime",
+      gate: bracketWizardStepGate("starttime", wizardCtx),
+      // Recommends when this event should start, fit around the day's other
+      // events; self-saves to events.scheduled_start_at and reloads.
+      content: (
+        <EventStartTimeStep
+          event={event}
+          tournament={tournament}
+          teamCount={teams.length}
+          players={eventPlayerIds}
+          orgSlug={org.slug}
+          tournamentSlug={tournament.slug}
+          onSaved={reload}
+        />
       ),
     },
     {

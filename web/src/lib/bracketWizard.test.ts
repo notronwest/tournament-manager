@@ -16,6 +16,8 @@ const ready: BracketWizardContext = {
   poolCount: 1,
   unassignedPoolCount: 0,
   matchCount: 15,
+  courtsAssignedCount: 4,
+  hasStartTime: true,
 };
 
 describe("bracketWizardStepGate — mark ready", () => {
@@ -77,6 +79,38 @@ describe("bracketWizardStepGate — confirm teams", () => {
   });
 });
 
+describe("bracketWizardStepGate — courts & start time", () => {
+  it("court blocks until at least one court is assigned", () => {
+    const gate = bracketWizardStepGate("court", {
+      ...ready,
+      courtsAssignedCount: 0,
+    });
+    expect(gate.ok).toBe(false);
+    if (!gate.ok) expect(gate.reason).toMatch(/court/i);
+  });
+
+  it("court clears once a court is assigned", () => {
+    expect(
+      bracketWizardStepGate("court", { ...ready, courtsAssignedCount: 1 }).ok,
+    ).toBe(true);
+  });
+
+  it("starttime blocks until a start is set", () => {
+    const gate = bracketWizardStepGate("starttime", {
+      ...ready,
+      hasStartTime: false,
+    });
+    expect(gate.ok).toBe(false);
+    if (!gate.ok) expect(gate.reason).toMatch(/start time/i);
+  });
+
+  it("starttime clears once a start is set", () => {
+    expect(
+      bracketWizardStepGate("starttime", { ...ready, hasStartTime: true }).ok,
+    ).toBe(true);
+  });
+});
+
 describe("bracketWizardStepGate — settings & build", () => {
   it("settings always clears (valid defaults)", () => {
     expect(bracketWizardStepGate("settings", ready).ok).toBe(true);
@@ -109,6 +143,8 @@ describe("bracketWizardFurthestReachable", () => {
       poolCount: 1,
       unassignedPoolCount: 0,
       matchCount: 0,
+      courtsAssignedCount: 0,
+      hasStartTime: false,
     };
     expect(bracketWizardFurthestReachable(ctx)).toBe(0);
   });
@@ -141,6 +177,23 @@ describe("step ordering invariant (#1005 — inline settings)", () => {
     expect(stepIdx("teams")).toBeLessThan(stepIdx("settings"));
     expect(stepIdx("settings")).toBeLessThan(stepIdx("build"));
     expect(stepIdx("build")).toBeLessThan(stepIdx("start"));
+  });
+
+  it("court then start time sit after settings and before build", () => {
+    expect(stepIdx("settings")).toBeLessThan(stepIdx("court"));
+    expect(stepIdx("court")).toBeLessThan(stepIdx("starttime"));
+    expect(stepIdx("starttime")).toBeLessThan(stepIdx("build"));
+  });
+
+  it("an unassigned court blocks reaching Build even with settings settled", () => {
+    const ctx: BracketWizardContext = {
+      ...ready,
+      courtsAssignedCount: 0,
+      hasStartTime: false,
+      matchCount: 0,
+    };
+    expect(bracketWizardFurthestReachable(ctx)).toBe(stepIdx("court"));
+    expect(bracketWizardStepGate("court", ctx).ok).toBe(false);
   });
 
   it("unconfirmed teams block reaching the settings step", () => {
