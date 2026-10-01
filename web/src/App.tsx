@@ -60,6 +60,7 @@ import ProfilePage from "./pages/public/ProfilePage";
 import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import TournamentContactPage from "./pages/public/TournamentContactPage";
 import StartTimesPage from "./pages/public/StartTimesPage";
+import LiveResultsPage from "./pages/public/LiveResultsPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
@@ -219,6 +220,11 @@ export default function App() {
       <Route
         path="/t/:orgSlug/:tournamentSlug/start-times"
         element={<StartTimesPage />}
+      />
+      {/* Public live results — anonymous-readable, no auth required. */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/results"
+        element={<LiveResultsPage />}
       />
       <Route
         path="/t/:orgSlug/:tournamentSlug/contact"

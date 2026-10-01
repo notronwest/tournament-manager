@@ -101,6 +101,45 @@ export function buildTeams(regs: EventRegistration[], players: Player[]): Team[]
   return teams;
 }
 
+// Pool label: 0 → "A", 1 → "B", … (wraps past Z with a numeric suffix, which
+// no real tournament hits). The single source for pool letters so the console,
+// the pool sheets and the public results page can't disagree.
+export function poolLetter(index: number): string {
+  if (index < 26) return String.fromCharCode(65 + index);
+  return `${String.fromCharCode(65 + (index % 26))}${Math.floor(index / 26) + 1}`;
+}
+
+export type PoolGroup = { pool: number | null; rows: Standing[] };
+
+// Split standings into per-pool groups for a multi-pool event — the grouping
+// the Standings tab and the public results page both render. Single pool (or a
+// one-pool event) returns one group with pool = null. Teams not yet assigned to
+// a pool collect in a trailing `pool: null` "Unassigned" group. Groups are
+// ordered by pool index; rows keep their incoming (standings) order.
+export function groupStandingsByPool(
+  standings: Standing[],
+  multiPool: boolean,
+): PoolGroup[] {
+  if (!multiPool) return [{ pool: null, rows: standings }];
+  const map = new Map<number, Standing[]>();
+  const unassigned: Standing[] = [];
+  for (const s of standings) {
+    const p = s.team.poolIndex;
+    if (p == null) {
+      unassigned.push(s);
+      continue;
+    }
+    const arr = map.get(p);
+    if (arr) arr.push(s);
+    else map.set(p, [s]);
+  }
+  const groups: PoolGroup[] = [...map.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([pool, rows]) => ({ pool, rows }));
+  if (unassigned.length > 0) groups.push({ pool: null, rows: unassigned });
+  return groups;
+}
+
 // Map every reg id (captain AND partner) to its team, since a match's
 // winner_reg_id may point at either half of a doubles pair.
 export function teamByAnyRegId(teams: Team[]): Map<string, Team> {
