@@ -23,7 +23,7 @@ function attendee(over: Partial<PbAttendee>): PbAttendee {
   };
 }
 function wrap(attendees: PbAttendee[]): ParsedAttendees {
-  return { attendees, skippedRows: 0 };
+  return { attendees, skippedRows: 0, waitlistSkipped: 0 };
 }
 const doublesMeta = { raw: "", gender: "men" as const, format: "doubles" as const, bracketType: "skill" as const, low: 3.0, high: 3.49 };
 
