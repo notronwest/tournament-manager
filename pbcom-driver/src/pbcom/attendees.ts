@@ -19,6 +19,9 @@
  * follows the eDB.aspx director-console convention and is VERIFIED in the supervised
  * first live run (`link-partners <tid>` watched) before the loop is trusted.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Page } from "playwright";
 import type { PbcomSession } from "./session.js";
 import {
@@ -29,6 +32,9 @@ import {
   type RawAttendeeBlock,
 } from "../../../web/src/lib/pbPartners.js";
 import { log } from "../log.js";
+
+/** pbcom-driver repo root (…/pbcom-driver), for the debug dump path. */
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const NAV = { waitUntil: "load" as const, timeout: 45_000 };
 const STEP_TIMEOUT = 30_000;
@@ -144,9 +150,37 @@ export async function fetchAttendeesPartnersPages(
   baseUrl: string,
   eid: string,
 ): Promise<RawAttendeeBlock[]> {
-  log.info("attendees: scraping raS.aspx director attendees", { eid });
+  const url = attendeesUrl(baseUrl, eid);
+  log.info("attendees: scraping raS.aspx director attendees", { eid, url });
   const browser = new PlaywrightAttendeesBrowser(session.page);
   const pages = await collectAttendeesPages(browser, baseUrl, eid);
+
+  // TRACE-SEAM DIAGNOSTIC (2026-10-01): the raS.aspx `?eid=` URL is unverified —
+  // a run that collects a page but parses 0 attendees can't tell "wrong page /
+  // login redirect" from "right page, wrong grammar". So dump exactly what the
+  // authenticated browser landed on: the final URL (catches a silent redirect to
+  // login), the total rendered-text length, a short preview, and the full text to
+  // a file. Remove once the seam is confirmed. Never throws (best-effort).
+  try {
+    const landedUrl = session.page.url();
+    const joined = pages.map((p) => p.text).join("\n");
+    const dumpDir = join(REPO_ROOT, "state");
+    mkdirSync(dumpDir, { recursive: true });
+    const dumpPath = join(dumpDir, `attendees-debug-${eid}.txt`);
+    writeFileSync(dumpPath, `REQUESTED: ${url}\nLANDED:    ${landedUrl}\n\n${joined}`, "utf8");
+    log.info("attendees: DEBUG dump written", {
+      eid,
+      requestedUrl: url,
+      landedUrl,
+      pages: pages.length,
+      textLength: joined.length,
+      preview: joined.slice(0, 400).replace(/\s+/g, " ").trim(),
+      dumpPath,
+    });
+  } catch (err) {
+    log.warn("attendees: debug dump failed (continuing)", { eid, error: String((err as Error)?.message ?? err) });
+  }
+
   log.info("attendees: collected attendee pages", { eid, pages: pages.length });
   return pages;
 }
