@@ -276,4 +276,50 @@ describe("dayFloors", () => {
     expect(byId["sat"]).toBe(24 * H + 9 * H); // day 2
     expect(byId["satB"]).toBeGreaterThanOrEqual(24 * H + 9 * H); // stays on day 2
   });
+
+  it("an un-pinned event re-flows to the pinned day and IGNORES its own stale start (the 8:35pm bug)", () => {
+    // The SchedulePage composition: pinned events are FIXED; un-pinned events are
+    // packed with floors derived from pins ONLY (pinnedStartMs null for un-pinned),
+    // so a stale bad start on an un-pinned event never floors it.
+    const anchor = 0; // Fri 00:00
+    const SAT8 = 32 * H; // Sat 8:00am
+    const womensEnd = SAT8 + 125 * 60_000; // 2h05
+    const fixed = [
+      {
+        id: "womens30",
+        startMs: SAT8,
+        endMs: womensEnd,
+        courts: [1, 2, 3],
+        heldBy: null,
+        segments: [{ kind: "pool" as const, startMs: SAT8, endMs: womensEnd, courts: [1, 2, 3] }],
+      },
+    ];
+    // Womens 3.0 pinned Sat 8am; Mens 3.0 un-pinned (its real DB start was a stale
+    // Sat 8:35pm — NOT passed here, because dayFloors only reads pinned starts).
+    const floors = dayFloors(
+      [
+        { id: "womens30", pinnedStartMs: SAT8 },
+        { id: "mens30", pinnedStartMs: null },
+      ],
+      anchor,
+    );
+    const out = packSchedule(
+      [
+        {
+          id: "mens30",
+          order: 1,
+          players: none,
+          minStartMs: floors.get("mens30"),
+          segments: [{ kind: "pool" as const, minutes: 135, courtsNeeded: 1 }],
+        },
+      ],
+      anchor,
+      0,
+      4,
+      fixed,
+      new Map([["womens30", none]]),
+    );
+    expect(out[0].startMs).toBe(SAT8); // re-flowed onto Sat 8am, not frozen at 8:35pm
+    expect(out[0].courts).toEqual([4]); // the one court Womens 3.0 left free
+  });
 });

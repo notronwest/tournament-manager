@@ -173,6 +173,7 @@ export function EventStartTimeStep({
         <span>Start time</span>
         <input
           type="datetime-local"
+          step={900}
           value={localValue}
           disabled={saving}
           onChange={(e) => {
