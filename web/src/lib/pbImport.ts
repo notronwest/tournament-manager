@@ -180,10 +180,10 @@ export function parseDivisionLabel(raw: string): DivisionMeta {
 
 // A stable key for a division = its label (deduped case/space-insensitively).
 // The "Event N" column index is only the tournament ordinal, so the LABEL is the
-// identity (D-0045 correction).
-export function divisionKey(label: string): string {
-  return label.trim().toLowerCase().replace(/\s+/g, " ");
-}
+// identity (D-0045 correction). The implementation now lives in ./pbDivision (a
+// dependency-free module) so the pure partner linker can reuse it without pulling
+// in this file's xlsx dependency; re-exported here so existing importers are unchanged.
+export { divisionKey } from "./pbDivision";
 
 // A PB.com registration is WAITLISTED when its division label is prefixed
 // "(WAIT) …" on the attendee export. Waitlisted entries are NOT imported into
