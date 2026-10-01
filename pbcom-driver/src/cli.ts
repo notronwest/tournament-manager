@@ -23,6 +23,13 @@ import { log } from "./log.js";
 import type { BandeDraw } from "./types.js";
 import { PbcomSession, withSession } from "./pbcom/session.js";
 import { createBracketOnPbcom, submitScoreCard } from "./pbcom/driver.js";
+import { fetchAttendeesPartnersPages, parsePages } from "./pbcom/attendees.js";
+import {
+  DbPartnerData,
+  runAutoLinkPartners,
+  type PartnerScraper,
+  type TournamentPartnerData,
+} from "./push/linkPartners.js";
 import type { ResolvedDivisionTarget } from "./binding.js";
 import {
   bracketLedgerEntry,
@@ -275,12 +282,88 @@ function makeOpenDriver(cfg: DriverConfig, bindingPath: string): () => Promise<A
   };
 }
 
+/**
+ * Build the auto-linkage scraper opener: opens ONE PB.com session for the tick and
+ * returns a scraper that drives the raS.aspx Attendees report per eid (reusing the
+ * attendees.ts seam + pbPartners' pure parser). Throws PbcomLoginError from open()
+ * on a lapsed session — runAutoLinkPartners catches that and alerts rather than
+ * crash-looping, exactly like the push loop's makeOpenDriver.
+ */
+function makeOpenScraper(cfg: DriverConfig): () => Promise<PartnerScraper> {
+  return async (): Promise<PartnerScraper> => {
+    const session = new PbcomSession(cfg);
+    await session.open(); // throws PbcomLoginError on a lapsed / OTP-required session
+    return {
+      scrape: async (eid: string) => {
+        const pages = await fetchAttendeesPartnersPages(session, cfg.pbcomBaseUrl, eid);
+        return parsePages(pages);
+      },
+      close: () => session.close(),
+    };
+  };
+}
+
+/**
+ * Run doubles partner-linkage for the given tournaments. Shared by the supervised
+ * `link-partners <tid>` command and the unattended `poll` fold-in. DB-backed data +
+ * service-role writes + Discord alerting on a real run; the cheap unpaired-doubles
+ * pre-check means NO browser opens unless there is something to link.
+ */
+async function runLinkPartners(cfg: DriverConfig, tournamentIds: string[], dryRun: boolean): Promise<void> {
+  if (tournamentIds.length === 0) {
+    log.info("link: no bound tournaments — nothing to link");
+    return;
+  }
+  if (!cfg.supabaseUrl || !cfg.supabaseServiceRoleKey) {
+    log.warn("link: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — skipping partner linkage");
+    return;
+  }
+  let binding;
+  try {
+    binding = loadBinding(cfg.bindingPath);
+  } catch (err) {
+    if (err instanceof BindingError) {
+      log.warn("link: no usable binding config — nothing bound to PB.com", { error: err.message });
+      return;
+    }
+    throw err;
+  }
+
+  const dataFor = (tid: string): TournamentPartnerData => new DbPartnerData(cfg, tid);
+  const eidFor = (tid: string): string => resolveEventBinding(binding, tid).pbcomEid;
+  const openScraper = dryRun ? undefined : makeOpenScraper(cfg);
+  const alert = dryRun ? undefined : new DiscordAlerter(cfg.discordWebhook);
+
+  const result = await runAutoLinkPartners(
+    { tournamentIds, dryRun, forceHost: flag("force-host") },
+    { cfg, dataFor, eidFor, openScraper, alert },
+  );
+  if (!result.ran) {
+    log.warn("link: partner linkage did not run", { reason: result.reason });
+    return;
+  }
+  for (const t of result.tournaments) {
+    log.info("link tournament", {
+      tournamentId: t.tournamentId,
+      unpaired: t.unpaired,
+      linked: t.linked,
+      unchanged: t.unchanged,
+      unlinked: t.unlinkedCount,
+    });
+  }
+  log.info("link: partner linkage complete", {
+    tournaments: result.tournaments.length,
+    sessionLapsed: result.sessionLapsed,
+  });
+}
+
 function usage(): number {
   log.error(
     "usage:\n" +
       "  cli.ts push <tournamentId> <divisionLabel|ALL> [--dry-run] [--fixture f.json] [--force-host]\n" +
       "  cli.ts verify <tournamentId> [<divisionLabel>] [--fixture f.json]\n" +
-      "  cli.ts poll [--dry-run] [--fixture f.json] [--force-host]      # unattended all-active auto push\n" +
+      "  cli.ts link-partners <tournamentId> [--dry-run] [--force-host]  # supervised doubles partner-linkage\n" +
+      "  cli.ts poll [--dry-run] [--fixture f.json] [--force-host]      # unattended all-active: link partners + push\n" +
       "  cli.ts push --auto [...]                                        # alias for poll",
   );
   return 1;
@@ -324,6 +407,25 @@ async function runAutoMode(cfg: DriverConfig, fixture: string | undefined, dryRu
     throw err;
   }
 
+  // Fold doubles partner-linkage into the standing poll: pair seeking doubles from
+  // the raS.aspx Attendees page BEFORE pushing, so brackets are built on the correct
+  // teams. DB-only (linkage needs the real players/registrations); skipped for a
+  // --fixture run. Best-effort: linkage catches its own per-tournament errors and
+  // never aborts the push that follows.
+  if (!fixture) {
+    try {
+      await runLinkPartners(cfg, tournamentIds, dryRun);
+    } catch (err) {
+      if (err instanceof MissingCredentials) {
+        log.warn(err.message);
+      } else {
+        log.error("link: partner linkage pass errored (continuing to push)", {
+          error: String((err as Error)?.message ?? err),
+        });
+      }
+    }
+  }
+
   try {
     const useDb = !fixture;
     const ledgerFor = useDb
@@ -360,7 +462,14 @@ async function runAutoMode(cfg: DriverConfig, fixture: string | undefined, dryRu
 
 async function main(): Promise<number> {
   const command = process.argv[2];
-  if (command !== "push" && command !== "verify" && command !== "poll") return usage();
+  if (
+    command !== "push" &&
+    command !== "verify" &&
+    command !== "poll" &&
+    command !== "link-partners"
+  ) {
+    return usage();
+  }
 
   const fixture = opt("fixture");
   const auto = command === "poll" || (command === "push" && flag("auto"));
@@ -378,6 +487,24 @@ async function main(): Promise<number> {
   }
 
   if (auto) return runAutoMode(cfg, fixture, dryRun);
+
+  // ── supervised doubles partner-linkage: link-partners <tournamentId> ─────────
+  // The watched first live run (and the manual re-run): scrape raS.aspx + pair the
+  // tournament's seeking doubles. Same path the poll fold-in uses, scoped to one tid.
+  if (command === "link-partners") {
+    const tid = positionals()[0];
+    if (!tid) return usage();
+    try {
+      await runLinkPartners(cfg, [tid], dryRun);
+    } catch (err) {
+      if (err instanceof MissingCredentials) {
+        log.warn(err.message);
+        return NO_CREDENTIALS;
+      }
+      throw err;
+    }
+    return 0;
+  }
 
   // ── manual / supervised push <tournamentId> <divisionLabel|ALL> ──────────────
   const pos = positionals();

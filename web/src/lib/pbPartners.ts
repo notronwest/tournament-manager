@@ -1,4 +1,4 @@
-import { divisionKey } from "./pbImport";
+import { divisionKey } from "./pbDivision";
 
 // ─────────────────────────────────────────────────────────────────────────
 // PickleballBrackets.com → Bert & Erne — DOUBLES PARTNER LINKAGE (D-0045 / #984
@@ -167,28 +167,28 @@ export function parseAttendeeBlock(block: string): AttendeeEntry[] {
       text,
     );
   const ownerName: PbName = headerMatch
-    ? { last: headerMatch[1].trim(), first: headerMatch[2].trim() }
+    ? { last: headerMatch[1]!.trim(), first: headerMatch[2]!.trim() }
     : { last: "", first: "" };
 
   const firstEntryIdx = text.search(/Self\s+\d/);
   const headerRegion = firstEntryIdx >= 0 ? text.slice(0, firstEntryIdx) : text;
   const ownerPhoneMatch = PHONE_RE.exec(headerRegion);
   const ownerPhone = ownerPhoneMatch
-    ? `+${ownerPhoneMatch[1]} ${ownerPhoneMatch[2].replace(/\D/g, "")}`
+    ? `+${ownerPhoneMatch[1]} ${ownerPhoneMatch[2]!.replace(/\D/g, "")}`
     : "";
 
   const entries: AttendeeEntry[] = [];
   ENTRY_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = ENTRY_RE.exec(text)) !== null) {
-    const middle = m[2].trim();
+    const middle = m[2]!.trim();
     const split = PARTNER_SPLIT_RE.exec(middle);
 
     let divisionLabel: string;
     let partnerSegment: string | null;
     if (split) {
-      divisionLabel = split[1].trim();
-      partnerSegment = split[2].trim();
+      divisionLabel = split[1]!.trim();
+      partnerSegment = split[2]!.trim();
     } else {
       divisionLabel = middle;
       partnerSegment = null;
@@ -202,7 +202,7 @@ export function parseAttendeeBlock(block: string): AttendeeEntry[] {
 
     if (partnerSegment) {
       const phone = PHONE_RE.exec(partnerSegment);
-      if (phone) partnerPhone = `+${phone[1]} ${phone[2].replace(/\D/g, "")}`;
+      if (phone) partnerPhone = `+${phone[1]} ${phone[2]!.replace(/\D/g, "")}`;
 
       // Name is whatever precedes "Waiting List"/"WL" or the phone.
       let namePart = phone ? partnerSegment.slice(0, phone.index) : partnerSegment;
@@ -368,7 +368,7 @@ export function buildPartnerLinks(
       continue;
     }
 
-    const [lo, hi] = [ownerNorm, partnerCanon].sort();
+    const [lo, hi] = [ownerNorm, partnerCanon].sort() as [string, string];
     const key = `${dkey}::${lo}|${hi}`;
     const pair: PartnerPair = {
       divisionKey: dkey,
