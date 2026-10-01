@@ -167,3 +167,24 @@ describe("parseDupr", () => {
     expect(parseDupr("4.16")).toBeCloseTo(4.16, 2);
   });
 });
+
+describe("buildPlan — a NEW player in an EXISTING division is ADDED (ActivityID is the division id)", () => {
+  it("adds a late registrant whose entry shares the division's ActivityID", () => {
+    const div = "Mens Doubles Skill: (3.0 To 3.49)";
+    const dk = divisionKey(div);
+    const DIV_ACTIVITY = "div-shared-123"; // PB's ActivityID = the DIVISION id, shared by all
+    const old = attendee({ firstName: "Old", email: "old@x.com", attendeeHeaderId: "o",
+      entries: [{ activityId: DIV_ACTIVITY, teamId: "", divisionLabel: div, division: doublesMeta, eventColumnIndex: 1 }] });
+    const neu = attendee({ firstName: "New", email: "new@x.com", attendeeHeaderId: "n",
+      entries: [{ activityId: DIV_ACTIVITY, teamId: "", divisionLabel: div, division: doublesMeta, eventColumnIndex: 1 }] });
+    // Already imported: only the OLD player (its entry carries the shared ActivityID).
+    const existing = { divisionKeys: [dk], entries: [
+      { activityId: DIV_ACTIVITY, divisionKey: dk, playerKey: playerKeyOf("old@x.com", "", "") } ] };
+    const plan = buildPlan(wrap([old, neu]), existing);
+    const t = planTotals(plan);
+    expect(t.add).toBe(1);        // the NEW player — not collapsed into the division's ActivityID
+    expect(t.unchanged).toBe(1);  // the OLD player
+    expect(t.drop).toBe(0);
+    expect(plan.toAdd[0].playerKey).toBe(playerKeyOf("new@x.com", "", ""));
+  });
+});

@@ -212,33 +212,30 @@ export function buildPlan(
     if (!d.gender) warnings.push(`Division "${d.raw}" — couldn't detect gender; defaulting to mixed.`);
   }
 
-  // Reconcile desired entries vs existing (idempotent diff, keyed by ActivityID
-  // with an (division, player) fallback when ActivityID is absent).
-  const existingByActivity = new Set(
-    existing.entries.map((e) => e.activityId).filter((x): x is string => !!x),
-  );
+  // Reconcile desired entries vs existing, keyed by (player, division) — the
+  // SAME identity the edge function writes on (one registration per player per
+  // division). PB.com's ActivityID is the DIVISION id, shared by every
+  // registrant in a division, so it is NEVER a per-entry key: matching on it
+  // marks a NEW player in an existing division as "unchanged" (0 to add) and a
+  // whole division collapses to one registration. (#985/#987 fixed the writer;
+  // this is the same fix in the preview/plan layer.)
   const existingByCompound = new Set(
     existing.entries.map((e) => `${e.playerKey}::${e.divisionKey}`),
   );
   const toAdd: DesiredEntry[] = [];
   const unchanged: DesiredEntry[] = [];
-  const desiredActivity = new Set<string>();
   const desiredCompound = new Set<string>();
   for (const e of desiredEntries) {
-    if (e.activityId) desiredActivity.add(e.activityId);
-    desiredCompound.add(`${e.playerKey}::${e.divisionKey}`);
-    const known = e.activityId
-      ? existingByActivity.has(e.activityId)
-      : existingByCompound.has(`${e.playerKey}::${e.divisionKey}`);
-    if (known) unchanged.push(e);
+    const key = `${e.playerKey}::${e.divisionKey}`;
+    desiredCompound.add(key);
+    if (existingByCompound.has(key)) unchanged.push(e);
     else toAdd.push(e);
   }
 
-  // Drops: pbcom entries in B&E no longer in the file.
-  const toDrop = existing.entries.filter((e) => {
-    if (e.activityId) return !desiredActivity.has(e.activityId);
-    return !desiredCompound.has(`${e.playerKey}::${e.divisionKey}`);
-  });
+  // Drops: pbcom entries in B&E no longer in the file (by player+division).
+  const toDrop = existing.entries.filter(
+    (e) => !desiredCompound.has(`${e.playerKey}::${e.divisionKey}`),
+  );
 
   return {
     players: [...players.values()],
