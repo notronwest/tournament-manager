@@ -305,6 +305,9 @@ export interface ScoreCardInput {
   /** B&E team A / B last-name sets — how the row is located on PB.com (flow C). */
   teamALastNames: string[];
   teamBLastNames: string[];
+  /** B&E team A / B first-name sets — the tiebreak when surnames collide (optional). */
+  teamAFirstNames?: string[];
+  teamBFirstNames?: string[];
   /** The aggregate score B&E recorded (single pair; B&E has no per-game table). */
   teamAScore: number;
   teamBScore: number;
@@ -319,17 +322,38 @@ export interface ScoreCardResult {
   detail: string;
 }
 
+/** Split one team cell's text into per-player name chunks ("Smith / Jones"). */
+function nameChunks(text: string): string[] {
+  return text.split(/[/&]|\bvs\b|\n/i).map((s) => s.trim()).filter(Boolean);
+}
+
 /** Split a row's visible text into candidate last-name tokens. */
 export function splitLastNames(text: string): string[] {
   // Rows read like "Smith / Jones" or "Smith, John & Jones, Amy". Take the token
   // before the first comma of each name chunk; fall back to whitespace splitting.
-  const chunks = text.split(/[/&]|\bvs\b|\n/i).map((s) => s.trim()).filter(Boolean);
   const names: string[] = [];
-  for (const c of chunks) {
+  for (const c of nameChunks(text)) {
     const beforeComma = c.split(",")[0]!.trim();
     // If "Last, First" → beforeComma is the last name. If "First Last" → last token.
     const last = c.includes(",") ? beforeComma : beforeComma.split(/\s+/).pop() ?? beforeComma;
     if (last) names.push(last);
+  }
+  return names;
+}
+
+/** Split a row's visible text into candidate FIRST-name tokens (tiebreak only). */
+export function splitFirstNames(text: string): string[] {
+  const names: string[] = [];
+  for (const c of nameChunks(text)) {
+    if (c.includes(",")) {
+      // "Last, First" → everything after the first comma is the first name(s).
+      const after = c.slice(c.indexOf(",") + 1).trim().split(/\s+/)[0] ?? "";
+      if (after) names.push(after);
+    } else {
+      // "First Last" → the first whitespace token.
+      const first = c.split(/\s+/)[0] ?? "";
+      if (first) names.push(first);
+    }
   }
   return names;
 }
@@ -348,19 +372,34 @@ async function parseMatchRows(page: Page): Promise<PbMatchRow[]> {
     const teamCells = row.locator('[data-team], td.team, .match-team');
     let one: string[] = [];
     let two: string[] = [];
+    let oneFirst: string[] = [];
+    let twoFirst: string[] = [];
     if ((await teamCells.count()) >= 2) {
-      one = splitLastNames((await teamCells.nth(0).innerText()).trim());
-      two = splitLastNames((await teamCells.nth(1).innerText()).trim());
+      const t1 = (await teamCells.nth(0).innerText()).trim();
+      const t2 = (await teamCells.nth(1).innerText()).trim();
+      one = splitLastNames(t1);
+      two = splitLastNames(t2);
+      oneFirst = splitFirstNames(t1);
+      twoFirst = splitFirstNames(t2);
     } else {
       // Fallback: split the whole row text on the vs/newline separator.
       const parts = (await row.innerText()).split(/\bvs\b|\n/i).map((s) => s.trim()).filter(Boolean);
       one = splitLastNames(parts[0] ?? "");
       two = splitLastNames(parts[1] ?? "");
+      oneFirst = splitFirstNames(parts[0] ?? "");
+      twoFirst = splitFirstNames(parts[1] ?? "");
     }
     if (one.length === 0 && two.length === 0) continue;
     const cellText = (await row.innerText());
     const hasScore = /\b\d+\s*[-–]\s*\d+\b/.test(cellText) && !/\b0\s*[-–]\s*0\b/.test(cellText);
-    out.push({ ref: `row:${i}`, teamOneLastNames: one, teamTwoLastNames: two, hasScore });
+    out.push({
+      ref: `row:${i}`,
+      teamOneLastNames: one,
+      teamTwoLastNames: two,
+      teamOneFirstNames: oneFirst,
+      teamTwoFirstNames: twoFirst,
+      hasScore,
+    });
   }
   return out;
 }
@@ -402,7 +441,7 @@ export async function submitScoreCard(
   await openDivisionBracket(page, target);
 
   const rows = await parseMatchRows(page);
-  const found = findMatchRow(input.teamALastNames, input.teamBLastNames, rows);
+  const found = findMatchRow(input.teamALastNames, input.teamBLastNames, rows, { teamAFirstNames: input.teamAFirstNames, teamBFirstNames: input.teamBFirstNames });
   if (!found.ok) {
     return {
       verified: false,
@@ -450,7 +489,7 @@ export async function submitScoreCard(
   const scid = new URL(page.url()).searchParams.get("scid");
   await openDivisionBracket(page, target);
   const after = await parseMatchRows(page);
-  const reFound = findMatchRow(input.teamALastNames, input.teamBLastNames, after);
+  const reFound = findMatchRow(input.teamALastNames, input.teamBLastNames, after, { teamAFirstNames: input.teamAFirstNames, teamBFirstNames: input.teamBFirstNames });
   const landed = reFound.ok && reFound.match.row.hasScore === true;
   return {
     verified: Boolean(scid) || landed,

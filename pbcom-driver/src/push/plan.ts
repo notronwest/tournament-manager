@@ -26,7 +26,7 @@ import type {
   BandeTeam,
   PushLedgerEntry,
 } from "../types.js";
-import { lastNameSet } from "../pbcom/matchMap.js";
+import { firstNameSet, lastNameSet, surnameCollisions, type MatchSurnames } from "../pbcom/matchMap.js";
 
 // ── keys / normalization ─────────────────────────────────────────────────────
 
@@ -60,6 +60,7 @@ export function resolveTeams(entries: BandeEntry[]): BandeTeam[] {
       .filter((x): x is string => !!x)
       .sort();
     const lastNames = lastNameSet(members.map((m) => m.lastName));
+    const firstNames = firstNameSet(members.map((m) => m.firstName));
     const teamId = members.find((m) => m.sourceTeamId)?.sourceTeamId ?? null;
     const teamKey = teamId
       ? `team:${teamId}`
@@ -69,6 +70,7 @@ export function resolveTeams(entries: BandeEntry[]): BandeTeam[] {
       sourceTeamId: teamId,
       registrationIds: members.map((m) => m.registrationId).sort(),
       lastNames,
+      firstNames,
       sourceAttendeeHeaderIds: attendeeIds,
       sourceActivityIds: activityIds,
       seed: seedOf(members),
@@ -123,6 +125,30 @@ export function teamIdentityToken(team: BandeTeam | undefined): string {
 /** The sorted last-name set of the team a given registration belongs to. */
 export function teamLastNames(regId: string | null, teams: BandeTeam[]): string[] {
   return teamOf(regId, teams)?.lastNames ?? [];
+}
+
+/** The sorted first-name set of the team a given registration belongs to (tiebreak). */
+export function teamFirstNames(regId: string | null, teams: BandeTeam[]): string[] {
+  return teamOf(regId, teams)?.firstNames ?? [];
+}
+
+/**
+ * Every match in a draw as its two teams' last-name sets — the input to
+ * `surnameCollisions`, so the preflight can warn which games PB.com won't be able
+ * to tell apart by surname alone. Pure.
+ */
+export function matchSurnames(draw: BandeDraw): MatchSurnames[] {
+  const teams = resolveTeams(draw.entries);
+  return draw.matches.map((m) => ({
+    matchId: m.matchId,
+    teamALastNames: teamLastNames(m.teamARegId, teams),
+    teamBLastNames: teamLastNames(m.teamBRegId, teams),
+  }));
+}
+
+/** Convenience: the surname-collision groups within a single division's draw. */
+export function divisionSurnameCollisions(draw: BandeDraw) {
+  return surnameCollisions(matchSurnames(draw));
 }
 
 /**
@@ -183,6 +209,9 @@ export interface PlannedScore {
   /** B&E team A / B last-name sets — how the driver finds the match row on PB.com. */
   teamALastNames: string[];
   teamBLastNames: string[];
+  /** B&E team A / B first-name sets — the tiebreak when surnames collide on PB.com. */
+  teamAFirstNames: string[];
+  teamBFirstNames: string[];
   /** The scores + winner, resolved once here so the driver never re-parses the digest. */
   teamAScore: number;
   teamBScore: number;
@@ -244,6 +273,8 @@ export function computePlan(draw: BandeDraw, ledger: PushLedgerEntry[]): PushPla
       digest,
       teamALastNames: teamLastNames(match.teamARegId, teams),
       teamBLastNames: teamLastNames(match.teamBRegId, teams),
+      teamAFirstNames: teamFirstNames(match.teamARegId, teams),
+      teamBFirstNames: teamFirstNames(match.teamBRegId, teams),
       teamAScore: match.teamAScore ?? 0,
       teamBScore: match.teamBScore ?? 0,
       winnerSide: side ?? "a",

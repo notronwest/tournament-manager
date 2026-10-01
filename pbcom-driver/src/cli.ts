@@ -32,7 +32,7 @@ import {
   type Check,
 } from "./preflight.js";
 import { buildReconcileReport, type DivisionReconcileInput } from "./reconcile.js";
-import { divisionKeyOf } from "./push/plan.js";
+import { divisionKeyOf, divisionSurnameCollisions } from "./push/plan.js";
 import {
   DbPartnerData,
   runAutoLinkPartners,
@@ -240,6 +240,8 @@ async function driveDivisionOnSession(
       identity: s.identity,
       teamALastNames: s.teamALastNames,
       teamBLastNames: s.teamBLastNames,
+      teamAFirstNames: s.teamAFirstNames,
+      teamBFirstNames: s.teamBFirstNames,
       teamAScore: s.teamAScore,
       teamBScore: s.teamBScore,
       winnerSide: s.winnerSide,
@@ -431,6 +433,22 @@ async function runPreflight(cfg: DriverConfig, tournamentId: string, live: boole
 
   const beDivisions = await readBeDivisions(cfg, tournamentId);
 
+  // Surname collisions (DB-only): matches PB.com can't tell apart by last names.
+  let surnameCollisions: { label: string; matches: number }[] | null = null;
+  try {
+    const draws = await new DbDrawSource(cfg).listDivisionDraws(tournamentId);
+    surnameCollisions = [];
+    for (const draw of draws) {
+      const groups = divisionSurnameCollisions(draw);
+      const matches = groups.reduce((n, g) => n + g.matchIds.length, 0);
+      if (matches > 0) {
+        surnameCollisions.push({ label: draw.division.sourceDivisionLabel ?? draw.division.name, matches });
+      }
+    }
+  } catch (err) {
+    log.warn("preflight: surname-collision scan failed (skipping)", { error: String((err as Error)?.message ?? err) });
+  }
+
   let pbcomEntryCounts: Map<string, number> | null = null;
   let sessionAuthenticated: boolean | null = null;
   if (live && eid && cfg.pbcomUsername) {
@@ -461,6 +479,7 @@ async function runPreflight(cfg: DriverConfig, tournamentId: string, live: boole
     beDivisions,
     pbcomEntryCounts,
     sessionAuthenticated,
+    surnameCollisions,
   });
 
   const counts = countByStatus(checks);
