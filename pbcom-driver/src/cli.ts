@@ -25,6 +25,15 @@ import { PbcomSession, withSession } from "./pbcom/session.js";
 import { createBracketOnPbcom, submitScoreCard } from "./pbcom/driver.js";
 import { fetchAttendeesPartnersPages, parsePages } from "./pbcom/attendees.js";
 import {
+  buildPreflightReport,
+  preflightClear,
+  countByStatus,
+  type BeDivision,
+  type Check,
+} from "./preflight.js";
+import { buildReconcileReport, type DivisionReconcileInput } from "./reconcile.js";
+import { divisionKeyOf } from "./push/plan.js";
+import {
   DbPartnerData,
   runAutoLinkPartners,
   type PartnerScraper,
@@ -359,12 +368,191 @@ async function runLinkPartners(cfg: DriverConfig, tournamentIds: string[], dryRu
   });
 }
 
+// ── sync safety: preflight + reconcile (read-only; write NOTHING) ────────────
+
+/** Lazy service-role client, same custody as the draw source. */
+async function serviceDb(cfg: DriverConfig) {
+  const { createClient } = await import("@supabase/supabase-js");
+  return createClient(cfg.supabaseUrl!, cfg.supabaseServiceRoleKey!, { auth: { persistSession: false } });
+}
+
+const SPOT_HOLDING = ["pending_payment", "paid", "waitlisted_pending_payment"];
+
+/** B&E's pbcom divisions + per-division roster facts for this tournament. */
+async function readBeDivisions(cfg: DriverConfig, tournamentId: string): Promise<BeDivision[]> {
+  const db = await serviceDb(cfg);
+  const { data: events, error } = await db
+    .from("events")
+    .select("id, source_division_label, format")
+    .eq("tournament_id", tournamentId)
+    .eq("source_system", "pbcom")
+    .is("deleted_at", null);
+  if (error) throw new Error(`read events: ${error.message}`);
+  const out: BeDivision[] = [];
+  for (const ev of events ?? []) {
+    const { data: regs, error: rErr } = await db
+      .from("event_registrations")
+      .select("id, partner_status, status")
+      .eq("event_id", ev.id)
+      .is("deleted_at", null)
+      .in("status", SPOT_HOLDING);
+    if (rErr) throw new Error(`read registrations: ${rErr.message}`);
+    const rows = regs ?? [];
+    const regCount = rows.length;
+    const seekingDoubles = rows.filter((r) => (r.partner_status as string) === "seeking").length;
+    const teamCount = (ev.format as string) === "singles" ? regCount : Math.ceil(regCount / 2);
+    out.push({ label: (ev.source_division_label as string | null) ?? "", regCount, teamCount, seekingDoubles });
+  }
+  return out;
+}
+
+function fmtStatus(s: Check["status"]): string {
+  return s === "pass" ? "✅ PASS" : s === "warn" ? "⚠️  WARN" : "❌ FAIL";
+}
+
+/**
+ * PREFLIGHT — prove the whole B&E⇄PB.com map before the first write. Reads the
+ * DB (config + rosters) and, unless --db-only, opens a READ-ONLY PB.com session
+ * to scrape attendees and prove the live division map + auth. Writes nothing.
+ * Exits non-zero if any check FAILS, so it can gate "clear to push?".
+ */
+async function runPreflight(cfg: DriverConfig, tournamentId: string, live: boolean): Promise<number> {
+  if (!cfg.supabaseUrl || !cfg.supabaseServiceRoleKey) {
+    log.warn("preflight: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set");
+    return NO_CREDENTIALS;
+  }
+  let bindingOk = true;
+  let eid: string | null = null;
+  try {
+    eid = resolveEventBinding(loadBinding(cfg.bindingPath), tournamentId).pbcomEid ?? null;
+  } catch {
+    bindingOk = false;
+  }
+
+  const beDivisions = await readBeDivisions(cfg, tournamentId);
+
+  let pbcomEntryCounts: Map<string, number> | null = null;
+  let sessionAuthenticated: boolean | null = null;
+  if (live && eid && cfg.pbcomUsername) {
+    try {
+      const scraper = await makeOpenScraper(cfg)();
+      sessionAuthenticated = true;
+      try {
+        const entries = await scraper.scrape(eid);
+        pbcomEntryCounts = new Map();
+        for (const e of entries) {
+          pbcomEntryCounts.set(e.divisionLabel, (pbcomEntryCounts.get(e.divisionLabel) ?? 0) + 1);
+        }
+      } finally {
+        await scraper.close().catch(() => {});
+      }
+    } catch (err) {
+      sessionAuthenticated = false;
+      log.warn("preflight: live PB.com check failed", { error: String((err as Error)?.message ?? err) });
+    }
+  }
+
+  const checks = buildPreflightReport({
+    baseUrl: cfg.pbcomBaseUrl,
+    hasServiceRole: !!cfg.supabaseServiceRoleKey,
+    hasUsername: !!cfg.pbcomUsername,
+    bindingOk,
+    eid,
+    beDivisions,
+    pbcomEntryCounts,
+    sessionAuthenticated,
+  });
+
+  const counts = countByStatus(checks);
+  log.info(`\n── PREFLIGHT · tournament ${tournamentId} ──`);
+  for (const c of checks) log.info(`  ${fmtStatus(c.status)}  ${c.name} — ${c.detail}`);
+  log.info(
+    `── ${counts.pass} pass · ${counts.warn} warn · ${counts.fail} fail — ${
+      preflightClear(checks) ? "CLEAR to push ✅" : "NOT clear — resolve the ❌ above ⛔"
+    } ──\n`,
+  );
+  return preflightClear(checks) ? 0 : 1;
+}
+
+/**
+ * RECONCILE — "are we in sync?" read-only report, run any time. Compares B&E's
+ * completed matches against the push ledger (what is CONFIRMED on PB.com), per
+ * division. Exits non-zero if anything is pending or orphaned.
+ */
+async function runReconcile(cfg: DriverConfig, tournamentId: string): Promise<number> {
+  if (!cfg.supabaseUrl || !cfg.supabaseServiceRoleKey) {
+    log.warn("reconcile: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set");
+    return NO_CREDENTIALS;
+  }
+  const db = await serviceDb(cfg);
+  const { data: events, error } = await db
+    .from("events")
+    .select("id, source_division_label")
+    .eq("tournament_id", tournamentId)
+    .eq("source_system", "pbcom")
+    .is("deleted_at", null);
+  if (error) throw new Error(`read events: ${error.message}`);
+
+  const entries = await new DbPushLedger(cfg, tournamentId).list();
+  const scoreByDiv = new Map<string, number>();
+  const bracketDivs = new Set<string>();
+  for (const e of entries) {
+    const dk = e.key.split("|")[0] ?? e.key;
+    if (e.kind === "score") scoreByDiv.set(dk, (scoreByDiv.get(dk) ?? 0) + 1);
+    else if (e.kind === "bracket") bracketDivs.add(dk);
+  }
+
+  const input: DivisionReconcileInput[] = [];
+  for (const ev of events ?? []) {
+    const label = (ev.source_division_label as string | null) ?? "";
+    const dk = divisionKeyOf(label);
+    const { data: matches, error: mErr } = await db
+      .from("matches")
+      .select("id, status, winner_reg_id")
+      .eq("event_id", ev.id);
+    if (mErr) throw new Error(`read matches: ${mErr.message}`);
+    const ms = matches ?? [];
+    const completedMatches = ms.filter((m) => (m.status as string) === "completed" || m.winner_reg_id != null).length;
+    const confirmed = scoreByDiv.get(dk) ?? 0;
+    input.push({
+      label,
+      completedMatches,
+      confirmedScorePushes: confirmed,
+      orphanedPushes: Math.max(0, confirmed - completedMatches),
+      bracketConfirmed: bracketDivs.has(dk),
+      hasBracket: ms.length > 0,
+    });
+  }
+
+  const report = buildReconcileReport(input);
+  const icon = (s: string): string =>
+    s === "in_sync" ? "✅" : s === "pending" ? "⏳" : s === "needs_attention" ? "❌" : "·";
+  log.info(`\n── RECONCILE · tournament ${tournamentId} ──`);
+  for (const d of report.divisions) {
+    log.info(
+      `  ${icon(d.status)}  ${d.label || "(unlabeled)"} — ${d.completedMatches} done / ${d.confirmedScorePushes} on PB.com` +
+        (d.pendingScorePushes > 0 ? ` · ${d.pendingScorePushes} PENDING` : "") +
+        (d.orphanedPushes > 0 ? ` · ${d.orphanedPushes} ORPHANED` : "") +
+        (d.bracketConfirmed ? "" : d.hasBracket ? " · bracket not yet on PB.com" : ""),
+    );
+  }
+  log.info(
+    `── ${report.totals.confirmedScorePushes}/${report.totals.completedMatches} scores confirmed on PB.com` +
+      (report.totals.pendingScorePushes > 0 ? ` · ${report.totals.pendingScorePushes} pending` : "") +
+      (report.totals.orphanedPushes > 0 ? ` · ${report.totals.orphanedPushes} orphaned` : "") +
+      ` — ${report.inSync ? "IN SYNC ✅" : "NOT in sync ⚠️"} ──\n`,
+  );
+  return report.inSync ? 0 : 1;
+}
+
 function usage(): number {
   log.error(
     "usage:\n" +
       "  cli.ts push <tournamentId> <divisionLabel|ALL> [--dry-run] [--fixture f.json] [--force-host]\n" +
       "  cli.ts verify <tournamentId> [<divisionLabel>] [--fixture f.json]\n" +
       "  cli.ts link-partners <tournamentId> [--dry-run] [--force-host]  # supervised doubles partner-linkage\n" +
+      "  cli.ts preflight <tournamentId> [--live]                        # READ-ONLY: prove the B&E⇄PB.com map before pushing (--live opens PB.com)\n" +
+      "  cli.ts reconcile <tournamentId>                                 # READ-ONLY: 'are we in sync?' — B&E vs confirmed PB.com pushes\n" +
       "  cli.ts poll [--dry-run] [--fixture f.json] [--force-host]      # unattended all-active: link partners + push\n" +
       "  cli.ts push --auto [...]                                        # alias for poll",
   );
@@ -468,14 +656,18 @@ async function main(): Promise<number> {
     command !== "push" &&
     command !== "verify" &&
     command !== "poll" &&
-    command !== "link-partners"
+    command !== "link-partners" &&
+    command !== "preflight" &&
+    command !== "reconcile"
   ) {
     return usage();
   }
 
   const fixture = opt("fixture");
   const auto = command === "poll" || (command === "push" && flag("auto"));
-  const dryRun = flag("dry-run") || command === "verify";
+  // preflight (unless --live) and reconcile never write — creds optional like a dry-run.
+  const readOnly = command === "reconcile" || (command === "preflight" && !flag("live"));
+  const dryRun = flag("dry-run") || command === "verify" || readOnly;
 
   let cfg: DriverConfig;
   try {
@@ -486,6 +678,18 @@ async function main(): Promise<number> {
       return NO_CREDENTIALS; // clean no-credential skip, never a crash
     }
     throw err;
+  }
+
+  // ── read-only sync safety: preflight / reconcile <tournamentId> ──────────────
+  if (command === "preflight") {
+    const tid = positionals()[0];
+    if (!tid) return usage();
+    return runPreflight(cfg, tid, flag("live"));
+  }
+  if (command === "reconcile") {
+    const tid = positionals()[0];
+    if (!tid) return usage();
+    return runReconcile(cfg, tid);
   }
 
   if (auto) return runAutoMode(cfg, fixture, dryRun);
