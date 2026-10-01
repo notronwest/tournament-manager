@@ -15,6 +15,7 @@ import {
   buildTeams,
   computeMedals,
   computeStandings,
+  groupStandingsByPool,
   type Medal,
   type Team,
   type Standing,
@@ -2606,28 +2607,12 @@ function StandingsSection({
   medals: Medal[];
 }) {
   const multiPool = event.pool_count > 1;
-  const grouped = useMemo(() => {
-    if (!multiPool) return [{ pool: null as number | null, rows: standings }];
-    const map = new Map<number, Standing[]>();
-    const unassigned: Standing[] = [];
-    for (const s of standings) {
-      const p = s.team.poolIndex;
-      if (p == null) {
-        unassigned.push(s);
-        continue;
-      }
-      const arr = map.get(p) ?? [];
-      arr.push(s);
-      map.set(p, arr);
-    }
-    const groups = Array.from(map.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([pool, rows]) => ({ pool: pool as number | null, rows }));
-    if (unassigned.length > 0) {
-      groups.push({ pool: null, rows: unassigned });
-    }
-    return groups;
-  }, [standings, multiPool]);
+  // Reuse the one grouping helper (lib/bracketTeams) so the console and the
+  // public results page split pools identically (D-0049).
+  const grouped = useMemo(
+    () => groupStandingsByPool(standings, multiPool),
+    [standings, multiPool],
+  );
 
   return (
     <section>

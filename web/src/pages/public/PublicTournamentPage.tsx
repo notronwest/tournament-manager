@@ -973,6 +973,28 @@ export default function PublicTournamentPage({
           >
             🕘 Start times
           </Link>
+          {/* Live results — standings and scores as the brackets run. */}
+          <Link
+            to={`/t/${orgSlug}/${tournamentSlug}/results`}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              minHeight: 44,
+              padding: "10px 18px",
+              borderRadius: 999,
+              background: ink,
+              color: courtYellow,
+              fontFamily: headingFontStack,
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              textDecoration: "none",
+            }}
+          >
+            🏆 Live results
+          </Link>
           <Link
             to={`/t/${orgSlug}/${tournamentSlug}/contact`}
             style={{

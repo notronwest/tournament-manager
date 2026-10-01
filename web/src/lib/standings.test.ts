@@ -121,3 +121,52 @@ describe("computeStandings tiebreak: head-to-head over differential", () => {
     expect(order(teams, matches).slice(0, 3)).toEqual(["S", "Q", "P"]);
   });
 });
+
+import { groupStandingsByPool, poolLetter, type Standing } from "./bracketTeams";
+
+const standing = (captainRegId: string, poolIndex: number | null): Standing => ({
+  team: { ...team(captainRegId), poolIndex },
+  wins: 0,
+  losses: 0,
+  pf: 0,
+  pa: 0,
+  diff: 0,
+});
+
+describe("poolLetter", () => {
+  it("indexes to A, B, C …", () => {
+    expect(poolLetter(0)).toBe("A");
+    expect(poolLetter(1)).toBe("B");
+    expect(poolLetter(2)).toBe("C");
+  });
+});
+
+describe("groupStandingsByPool", () => {
+  it("single-pool events return one unlabeled group", () => {
+    const rows = [standing("a", null), standing("b", null)];
+    const groups = groupStandingsByPool(rows, false);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].pool).toBeNull();
+    expect(groups[0].rows).toHaveLength(2);
+  });
+
+  it("multi-pool events split by pool index, ordered A then B", () => {
+    const rows = [
+      standing("a1", 0),
+      standing("b1", 1),
+      standing("a2", 0),
+      standing("b2", 1),
+    ];
+    const groups = groupStandingsByPool(rows, true);
+    expect(groups.map((g) => g.pool)).toEqual([0, 1]);
+    expect(groups[0].rows.map((s) => s.team.captainRegId)).toEqual(["a1", "a2"]);
+    expect(groups[1].rows.map((s) => s.team.captainRegId)).toEqual(["b1", "b2"]);
+  });
+
+  it("un-pooled teams collect in a trailing 'Unassigned' group", () => {
+    const rows = [standing("a", 0), standing("x", null), standing("b", 1)];
+    const groups = groupStandingsByPool(rows, true);
+    expect(groups.map((g) => g.pool)).toEqual([0, 1, null]);
+    expect(groups[2].rows.map((s) => s.team.captainRegId)).toEqual(["x"]);
+  });
+});
