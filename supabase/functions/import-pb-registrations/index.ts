@@ -102,14 +102,32 @@ Deno.serve(async (req: Request) => {
     const authUserId = userData.user.id;
 
     // ── 2. Input ─────────────────────────────────────────────────────
-    const { organizationId, tournamentId, attendees } = (await req.json()) as Body;
+    const { organizationId, tournamentId, attendees: rawAttendees } = (await req.json()) as Body;
     if (!organizationId) return json({ error: "organizationId is required" }, 400);
     if (!tournamentId) return json({ error: "tournamentId is required" }, 400);
-    if (!Array.isArray(attendees)) return json({ error: "attendees must be an array" }, 400);
-    if (attendees.length === 0) return json({ error: "no attendees to import" }, 400);
-    if (attendees.length > MAX_ATTENDEES) {
+    if (!Array.isArray(rawAttendees)) return json({ error: "attendees must be an array" }, 400);
+    if (rawAttendees.length === 0) return json({ error: "no attendees to import" }, 400);
+    if (rawAttendees.length > MAX_ATTENDEES) {
       return json({ error: `too many attendees (max ${MAX_ATTENDEES})` }, 400);
     }
+
+    // Drop WAITLISTED registrations ("(WAIT) …" division labels) and any attendee
+    // left with no active entry (defense-in-depth: the client already filters
+    // these, but the edge fn is the authoritative writer). A division with no
+    // non-waitlist entry is therefore never created — "nobody signed up". Ron,
+    // 2026-10-01: don't bring over waitlisted players or empty events.
+    let waitlistSkipped = 0;
+    const attendees = rawAttendees
+      .map((a) => {
+        const entries = (a.entries ?? []).filter((e) => {
+          const w = /^\(WAIT\)\s*/i.test(str(e.divisionLabel));
+          if (w) waitlistSkipped++;
+          return !w;
+        });
+        return { ...a, entries };
+      })
+      .filter((a) => a.entries.length > 0);
+    if (attendees.length === 0) return json({ error: "no active (non-waitlist) attendees to import" }, 400);
 
     // ── 3. Authorize ─────────────────────────────────────────────────
     if (!(await isOrgStaff(admin, organizationId, authUserId))) {
@@ -432,7 +450,10 @@ Deno.serve(async (req: Request) => {
       partnersPaired,
       drops,
       attendees: attendees.length,
-      warnings,
+      waitlistSkipped,
+      warnings: waitlistSkipped > 0
+        ? [...warnings, `Skipped ${waitlistSkipped} waitlisted registration(s) — not imported.`]
+        : warnings,
       ...(errors.length > 0 ? { errors } : {}),
     });
   } catch (e) {

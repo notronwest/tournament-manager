@@ -6,6 +6,7 @@ import {
   resolveColumns,
   unmappedColumns,
   divisionKey,
+  isWaitlisted,
 } from "./pbImport";
 // A fully anonymized sample in the real PB.com "Export Player w/ Events (Flat File)"
 // format (synthetic names, emails, phones, DUPR ids + record UUIDs — the export's
@@ -103,5 +104,41 @@ describe("parseAttendees (multi-row-per-attendee grouping)", () => {
     expect(divisionKey("Mens Doubles Skill: (3.0 To 3.49)")).toBe(
       "mens doubles skill: (3.0 to 3.49)",
     );
+  });
+});
+
+describe("waitlist exclusion + empty divisions (Ron 2026-10-01)", () => {
+  const csv = [
+    "LastName,FirstName,AttendeeHeaderID,Event 1",
+    'Active,Al,h1,"Mens Doubles Skill: (3.0 To 3.49)"',
+    'Wait,Wendy,h2,"(WAIT) Mens Doubles Skill: (4.0 And Above)"',
+    'Mixed,Mo,h3,"Mens Doubles Skill: (3.0 To 3.49)"',
+    'Mixed,Mo,h3,"(WAIT) Womens Doubles Skill: (3.0 To 3.49)"',
+  ].join("\n");
+  const res = parseAttendees(parsePbBuffer(new TextEncoder().encode(csv)));
+
+  it("isWaitlisted detects the (WAIT) prefix", () => {
+    expect(isWaitlisted("(WAIT) Mens Doubles Skill: (3.0 To 3.49)")).toBe(true);
+    expect(isWaitlisted("Mens Doubles Skill: (3.0 To 3.49)")).toBe(false);
+  });
+
+  it("drops waitlisted entries and counts them", () => {
+    expect(res.waitlistSkipped).toBe(2);
+    const labels = res.attendees.flatMap((a) => a.entries.map((e) => e.divisionLabel));
+    expect(labels.some((l) => /^\(WAIT\)/i.test(l))).toBe(false);
+  });
+
+  it("does not bring over a waitlist-only attendee, but keeps one with an active entry", () => {
+    const names = res.attendees.map((a) => a.firstName).sort();
+    expect(names).toEqual(["Al", "Mo"]); // Wendy (waitlist-only) excluded
+    const mo = res.attendees.find((a) => a.firstName === "Mo")!;
+    expect(mo.entries.length).toBe(1);
+    expect(mo.entries[0].divisionLabel).toBe("Mens Doubles Skill: (3.0 To 3.49)");
+  });
+
+  it("a division that exists only as a waitlist entry is not carried over (nobody signed up)", () => {
+    const divs = new Set(res.attendees.flatMap((a) => a.entries.map((e) => e.divisionLabel)));
+    expect([...divs].some((d) => /4\.0 And Above/i.test(d))).toBe(false); // only (WAIT) → gone
+    expect([...divs].some((d) => /Womens Doubles/i.test(d))).toBe(false); // only (WAIT) → gone
   });
 });

@@ -185,6 +185,15 @@ export function divisionKey(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// A PB.com registration is WAITLISTED when its division label is prefixed
+// "(WAIT) …" on the attendee export. Waitlisted entries are NOT imported into
+// B&E (Ron, 2026-10-01: "don't bring over players who are on the waitlist"); a
+// division that exists ONLY as waitlist entries therefore has nobody signed up
+// and is not created.
+export function isWaitlisted(label: string): boolean {
+  return /^\(WAIT\)\s*/i.test((label ?? "").trim());
+}
+
 // ── Attendee grouping ────────────────────────────────────────────────────
 export type PbEntry = {
   activityId: string; // per-entry PB id (idempotency key)
@@ -213,6 +222,8 @@ export type ParsedAttendees = {
   attendees: PbAttendee[];
   // rows with no AttendeeHeaderID / no usable identity — counted, not imported
   skippedRows: number;
+  // "(WAIT) …" registrations dropped — waitlisted players are not brought over
+  waitlistSkipped: number;
 };
 
 // Group the flat rows into attendees + their division entries.
@@ -221,6 +232,7 @@ export function parseAttendees(parsed: ParsedFile): ParsedAttendees {
   const at = (r: string[], i: number) => (i >= 0 ? (r[i] ?? "").trim() : "");
   const byAttendee = new Map<string, PbAttendee>();
   let skippedRows = 0;
+  let waitlistSkipped = 0;
 
   for (const r of parsed.rows) {
     const headerId = at(r, cols.attendeeHeaderId);
@@ -279,7 +291,11 @@ export function parseAttendees(parsed: ParsedFile): ParsedAttendees {
         break;
       }
     }
-    if (divisionLabel) {
+    if (divisionLabel && isWaitlisted(divisionLabel)) {
+      // Waitlisted registration — not imported. The division it names is created
+      // only if someone is actually signed up (a non-waitlist entry) for it.
+      waitlistSkipped++;
+    } else if (divisionLabel) {
       a.entries.push({
         activityId: at(r, cols.activityId),
         teamId: at(r, cols.teamId),
@@ -290,7 +306,10 @@ export function parseAttendees(parsed: ParsedFile): ParsedAttendees {
     }
   }
 
-  return { attendees: [...byAttendee.values()], skippedRows };
+  // Attendees left with no active entries (e.g. waitlist-only) are not brought
+  // over — they carry no registration into B&E.
+  const attendees = [...byAttendee.values()].filter((a) => a.entries.length > 0);
+  return { attendees, skippedRows, waitlistSkipped };
 }
 
 // PB splits phone into calling/area/number; compose a single readable string.
