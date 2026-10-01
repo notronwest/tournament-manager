@@ -1255,6 +1255,22 @@ export default function SchedulePage() {
                       >
                         {openDetails.has(r.event.id) ? "Hide setup ▴" : "Details & setup ▾"}
                       </button>
+                      {/* Jump straight to the full event console (teams /
+                          settings / games) or the Setup & Start wizard for this
+                          event — the same screens the tournament events list
+                          links to. */}
+                      <Link
+                        to={`/admin/${org.slug}/tournaments/${tournamentSlug}/events/${r.event.id}`}
+                        style={eventLinkStyle}
+                      >
+                        Open console ↗
+                      </Link>
+                      <Link
+                        to={`/admin/${org.slug}/tournaments/${tournamentSlug}/events/${r.event.id}?wizard=1`}
+                        style={eventLinkStyle}
+                      >
+                        Setup &amp; start ↗
+                      </Link>
                     </div>
                     <div
                       style={{ fontSize: 11, color: inkMuted, marginTop: 2 }}
@@ -2366,6 +2382,20 @@ const detailsBtnStyle: CSSProperties = {
   borderRadius: 4,
   cursor: "pointer",
   fontFamily: bodyFontStack,
+  minHeight: 24,
+};
+
+// Per-event jump links (console / wizard) beside the Details & setup toggle.
+const eventLinkStyle: CSSProperties = {
+  padding: "2px 8px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: courtBlue,
+  textDecoration: "none",
+  border: `1px solid ${courtBlue}`,
+  borderRadius: 4,
+  display: "inline-flex",
+  alignItems: "center",
   minHeight: 24,
 };
 
