@@ -133,9 +133,39 @@ export function placementSegments(
 }
 
 // A MOVABLE item for packSchedule. `order` decides run order (ties broken
-// by array order). Use for the event(s) being (re)placed.
-export function toPackItem(f: EventPlacementFacts, order: number): PackItem {
-  return { id: f.id, order, segments: placementSegments(f), players: f.players };
+// by array order). `minStartMs` is the item's day floor (see dayFloors) — the
+// packer won't place it before then, which is how a pinned later day survives
+// auto-schedule. Use for the event(s) being (re)placed.
+export function toPackItem(
+  f: EventPlacementFacts,
+  order: number,
+  minStartMs?: number,
+): PackItem {
+  return { id: f.id, order, segments: placementSegments(f), players: f.players, minStartMs };
+}
+
+// Day floors from pinned start times. Given events IN RUN ORDER, each with the
+// start time the organizer pinned it to (or null when unpinned), return each
+// event's earliest allowed start:
+//   • no event starts before `anchorMs` (the tournament/day-1 start), and
+//   • once a pinned start is passed in run order, nothing after it starts
+//     earlier — the floor only ever moves forward.
+// So pinning the FIRST event of day 2 keeps every later event on day 2 instead
+// of the greedy packer pulling them back onto day 1 (the "all collapses to one
+// day" bug). A pin earlier in wall-clock than the running floor doesn't lower
+// it; the pinned event itself is still placed at/after its own pin because its
+// own floor is raised to it.
+export function dayFloors(
+  ordered: ReadonlyArray<{ id: string; pinnedStartMs: number | null }>,
+  anchorMs: number,
+): Map<string, number> {
+  const floors = new Map<string, number>();
+  let running = anchorMs;
+  for (const o of ordered) {
+    if (o.pinnedStartMs != null) running = Math.max(running, o.pinnedStartMs);
+    floors.set(o.id, running);
+  }
+  return floors;
 }
 
 // The event as a FIXED placement — an already-scheduled sibling the packer

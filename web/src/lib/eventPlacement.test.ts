@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  dayFloors,
   eventPlacementFacts,
   toFixedPlacement,
   toPackItem,
@@ -209,5 +210,70 @@ describe("toFixedPlacement", () => {
     expect(p.endMs).toBe(2 * H + f.totalMinutes * 60_000);
     expect(p.courts).toEqual([3, 4, 5, 6]);
     expect(p.segments[0].kind).toBe("pool");
+  });
+});
+
+describe("dayFloors", () => {
+  const D = 24 * H; // one day
+  it("unpinned events all floor to the anchor", () => {
+    const f = dayFloors(
+      [
+        { id: "a", pinnedStartMs: null },
+        { id: "b", pinnedStartMs: null },
+      ],
+      0,
+    );
+    expect(f.get("a")).toBe(0);
+    expect(f.get("b")).toBe(0);
+  });
+  it("a pin on a later day floors it and everything after it in run order to that day", () => {
+    const f = dayFloors(
+      [
+        { id: "friSingles", pinnedStartMs: 15 * H }, // Fri 3pm (day 1)
+        { id: "satFirst", pinnedStartMs: D + 9 * H }, // Sat 9am (day 2)
+        { id: "satSecond", pinnedStartMs: null },
+      ],
+      8 * H, // tournament starts Fri 8am
+    );
+    expect(f.get("friSingles")).toBe(15 * H); // its own pin
+    expect(f.get("satFirst")).toBe(D + 9 * H); // Sat
+    expect(f.get("satSecond")).toBe(D + 9 * H); // follows onto Sat, not pulled back to Fri
+  });
+  it("the floor only moves forward — an earlier wall-clock pin after a later one doesn't lower it", () => {
+    const f = dayFloors(
+      [
+        { id: "late", pinnedStartMs: D }, // day 2
+        { id: "earlyPin", pinnedStartMs: 10 * H }, // day 1 (out of order input)
+      ],
+      0,
+    );
+    expect(f.get("late")).toBe(D);
+    // its own pin raises its floor to itself, but the running floor stays at D
+    expect(f.get("earlyPin")).toBe(D);
+  });
+  it("end to end: floors feed the packer so pins keep two days instead of collapsing to one (the bug)", () => {
+    const anchor = 8 * H;
+    const rows = [
+      { id: "fri", pinnedStartMs: 15 * H },
+      { id: "sat", pinnedStartMs: 24 * H + 9 * H },
+      { id: "satB", pinnedStartMs: null },
+    ];
+    const floors = dayFloors(rows, anchor);
+    const out = packSchedule(
+      rows.map((r, i) => ({
+        id: r.id,
+        order: i,
+        players: none,
+        minStartMs: floors.get(r.id),
+        segments: [{ kind: "pool" as const, minutes: 60, courtsNeeded: 2 }],
+      })),
+      anchor,
+      0,
+      8,
+    );
+    const byId = Object.fromEntries(out.map((p) => [p.id, p.startMs]));
+    expect(byId["fri"]).toBe(15 * H); // day 1
+    expect(byId["sat"]).toBe(24 * H + 9 * H); // day 2
+    expect(byId["satB"]).toBeGreaterThanOrEqual(24 * H + 9 * H); // stays on day 2
   });
 });

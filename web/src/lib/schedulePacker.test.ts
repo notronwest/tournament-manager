@@ -171,6 +171,37 @@ describe("packSchedule — cascade around fixed placements", () => {
   });
 });
 
+describe("packSchedule day floor (minStartMs)", () => {
+  const D = 24 * H;
+  it("never places an item before its minStartMs even when courts are free earlier", () => {
+    const out = packSchedule(
+      [{ id: "sat", order: 1, players: none, minStartMs: D, segments: [{ kind: "pool", minutes: 60, courtsNeeded: 2 }] }],
+      0, // anchor is day 1
+      0,
+      8,
+    );
+    expect(out[0].startMs).toBe(D); // floored to day 2, not the anchor
+  });
+  it("a later-day floor keeps that item and its day separate instead of collapsing to the anchor", () => {
+    const out = packSchedule(
+      [
+        { id: "fri", order: 1, players: none, segments: [{ kind: "pool", minutes: 60, courtsNeeded: 2 }] },
+        { id: "sat", order: 2, players: none, minStartMs: D, segments: [{ kind: "pool", minutes: 60, courtsNeeded: 2 }] },
+      ],
+      0,
+      0,
+      8,
+    );
+    expect(out[0].startMs).toBe(0); // Friday event at the anchor
+    expect(out[1].startMs).toBe(D); // Saturday event stays on day 2 (not pulled back to 0)
+  });
+  it("omitting minStartMs is unchanged (single-day behaviour)", () => {
+    const out = packSchedule([one("a", 1, 60, 2), one("b", 2, 60, 2)], 0, 0, 8);
+    expect(out[0].startMs).toBe(0);
+    expect(out[1].startMs).toBe(0); // side by side, as before
+  });
+});
+
 describe("parallelGroups", () => {
   it("groups overlapping placements and drops singletons", () => {
     const groups = parallelGroups([
