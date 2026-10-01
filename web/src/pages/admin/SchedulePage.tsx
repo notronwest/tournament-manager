@@ -22,6 +22,7 @@ import {
   type Placement,
 } from "../../lib/schedulePacker";
 import {
+  dayFloors,
   eventPlacementFacts,
   toFixedPlacement,
   toPackItem,
@@ -364,9 +365,20 @@ export default function SchedulePage() {
     const venueCourts = tournament?.locations?.court_count ?? 0;
     if (!anchorIso || venueCourts < 1 || rows.length === 0) return [];
     const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
+    const anchorMs = new Date(anchorIso).getTime();
+    // Pinned start times are DAY ANCHORS: once a start lands a later day, every
+    // event after it in run order floors to that day, so auto-schedule keeps the
+    // days the organizer set instead of collapsing them onto the anchor's day.
+    const floors = dayFloors(
+      rows.map((r) => ({
+        id: r.event.id,
+        pinnedStartMs: r.scheduledStart ? r.scheduledStart.getTime() : null,
+      })),
+      anchorMs,
+    );
     return packSchedule(
-      rows.map((r, i) => toPackItem(r.facts, i)),
-      new Date(anchorIso).getTime(),
+      rows.map((r, i) => toPackItem(r.facts, i, floors.get(r.event.id))),
+      anchorMs,
       bufferMs,
       venueCourts,
     );
@@ -735,8 +747,18 @@ export default function SchedulePage() {
       fixedPlayers.set(r.event.id, playersByEvent.get(r.event.id) ?? new Set<string>());
     });
     const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
+    // Floor the later events to the new start, and to any pin among them — so a
+    // start set on a still-later day keeps the events after IT on that day too,
+    // not pulled back onto this one.
+    const laterFloors = dayFloors(
+      later.map((r) => ({
+        id: r.event.id,
+        pinnedStartMs: r.scheduledStart ? r.scheduledStart.getTime() : null,
+      })),
+      newStartMs,
+    );
     const moved = packSchedule(
-      later.map((r, i) => toPackItem(r.facts, i)),
+      later.map((r, i) => toPackItem(r.facts, i, laterFloors.get(r.event.id))),
       newStartMs,
       bufferMs,
       venueCourts,
