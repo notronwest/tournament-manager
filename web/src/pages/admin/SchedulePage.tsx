@@ -68,6 +68,10 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
 type Event = Database["public"]["Tables"]["events"]["Row"] & {
   schedule_order?: number | null;
   playoff_seeding?: "overall" | "cross_pool" | null;
+  // scheduled_pinned landed in migration 20261001120000; generated types lag it.
+  // A PINNED event is a day anchor the organizer set by hand — auto-schedule
+  // holds it at its start and re-flows every un-pinned event around it.
+  scheduled_pinned?: boolean | null;
 };
 const untyped = supabase as unknown as SupabaseClient;
 
@@ -360,33 +364,59 @@ export default function SchedulePage() {
 
   // The auto-schedule PLAN, recomputed live from order / anchor / buffer so
   // the page can say what parallelism it found before anything is written.
+  // PINNED events are the day anchors the organizer set by hand — held fixed at
+  // their start. Everything else (auto-placed starts included) re-flows around
+  // them, so re-running auto-schedule can actually fix a bad layout instead of
+  // freezing whatever start each event happens to carry.
+  const pinnedFixed = useMemo<Placement[]>(
+    () =>
+      rows
+        .filter((r) => r.event.scheduled_pinned && r.scheduledStart)
+        .map((r) => toFixedPlacement(r.facts, r.scheduledStart!.getTime())),
+    [rows],
+  );
+  // The re-flowed (un-pinned) placements — what Auto-schedule WRITES.
   const plan: Placement[] = useMemo(() => {
     const anchorIso = fromLocalInput(anchorLocal);
     const venueCourts = tournament?.locations?.court_count ?? 0;
     if (!anchorIso || venueCourts < 1 || rows.length === 0) return [];
     const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
     const anchorMs = new Date(anchorIso).getTime();
-    // Pinned start times are DAY ANCHORS: once a start lands a later day, every
-    // event after it in run order floors to that day, so auto-schedule keeps the
-    // days the organizer set instead of collapsing them onto the anchor's day.
+    // Day floors come ONLY from pinned anchors: once a pinned start lands a later
+    // day, every event after it in run order floors to that day, so the days the
+    // organizer pinned are kept instead of the greedy packer collapsing them.
     const floors = dayFloors(
       rows.map((r) => ({
         id: r.event.id,
-        pinnedStartMs: r.scheduledStart ? r.scheduledStart.getTime() : null,
+        pinnedStartMs:
+          r.event.scheduled_pinned && r.scheduledStart ? r.scheduledStart.getTime() : null,
       })),
       anchorMs,
     );
+    const movable = rows.filter((r) => !r.event.scheduled_pinned);
+    const fixedPlayers = new Map<string, ReadonlySet<string>>(
+      rows
+        .filter((r) => r.event.scheduled_pinned && r.scheduledStart)
+        .map((r) => [r.event.id, r.facts.players]),
+    );
     return packSchedule(
-      rows.map((r, i) => toPackItem(r.facts, i, floors.get(r.event.id))),
+      movable.map((r, i) => toPackItem(r.facts, i, floors.get(r.event.id))),
       anchorMs,
       bufferMs,
       venueCourts,
+      pinnedFixed,
+      fixedPlayers,
     );
-  }, [rows, anchorLocal, bufferLocal, tournament]);
-  const planSpanMinutes = plan.length
-    ? Math.round((Math.max(...plan.map((p) => p.endMs)) - Math.min(...plan.map((p) => p.startMs))) / 60_000)
+  }, [rows, anchorLocal, bufferLocal, tournament, pinnedFixed]);
+  // Pinned anchors + re-flowed events together — what the PREVIEW shows.
+  const planAll = useMemo<Placement[]>(
+    () => [...pinnedFixed, ...plan].sort((a, b) => a.startMs - b.startMs),
+    [pinnedFixed, plan],
+  );
+  const planSpanMinutes = planAll.length
+    ? Math.round((Math.max(...planAll.map((p) => p.endMs)) - Math.min(...planAll.map((p) => p.startMs))) / 60_000)
     : 0;
-  const planGroups = useMemo(() => parallelGroups(plan), [plan]);
+  const planGroups = useMemo(() => parallelGroups(planAll), [planAll]);
   const [confirmAuto, setConfirmAuto] = useState(false);
   // "Moved 3 later events" after a manual start-time change cascaded.
   const [cascadeNote, setCascadeNote] = useState<string | null>(null);
@@ -530,17 +560,23 @@ export default function SchedulePage() {
   const onAutoSchedule = async () => {
     setConfirmAuto(false);
     setError(null);
-    if (plan.length === 0) {
+    if (!fromLocalInput(anchorLocal)) {
       setError("Pick a start date/time first.");
+      return;
+    }
+    if (plan.length === 0) {
+      setError("Every event is pinned — nothing to auto-place. Un-pin (📌) the ones you want re-flowed.");
       return;
     }
     setBusy(true);
     const ids = plan.map((p) => p.id);
+    // Pinned events are the organizer's day anchors — auto-schedule only places
+    // the rest, and marks them un-pinned so a future run can re-flow them again.
     const startResults = await Promise.all(
       plan.map((p) =>
-        supabase
+        untyped
           .from("events")
-          .update({ scheduled_start_at: new Date(p.startMs).toISOString() })
+          .update({ scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false })
           .eq("id", p.id),
       ),
     );
@@ -567,7 +603,7 @@ export default function SchedulePage() {
     setEvents((prev) =>
       prev.map((e) => {
         const p = plan.find((x) => x.id === e.id);
-        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false } : e;
       }),
     );
     setEventCourts((prev) => [
@@ -658,9 +694,9 @@ export default function SchedulePage() {
     setError(null);
     if (rows.length === 0) return;
     setBusy(true);
-    const { error: updErr } = await supabase
+    const { error: updErr } = await untyped
       .from("events")
-      .update({ scheduled_start_at: null })
+      .update({ scheduled_start_at: null, scheduled_pinned: false })
       .in(
         "id",
         rows.map((r) => r.event.id),
@@ -670,7 +706,7 @@ export default function SchedulePage() {
       setBusy(false);
       return;
     }
-    setEvents((prev) => prev.map((e) => ({ ...e, scheduled_start_at: null })));
+    setEvents((prev) => prev.map((e) => ({ ...e, scheduled_start_at: null, scheduled_pinned: false })));
     setBusy(false);
   };
 
@@ -714,6 +750,24 @@ export default function SchedulePage() {
   const placementFor = (r: EventRow, startMs: number): Placement =>
     toFixedPlacement(r.facts, startMs);
 
+  // Pin / un-pin an event as a day anchor WITHOUT changing its start. A pinned
+  // event is held in place by auto-schedule; an un-pinned one re-flows. Only an
+  // event that already has a start can be pinned (the start IS the anchor).
+  const onTogglePin = async (eventId: string) => {
+    const e = events.find((x) => x.id === eventId);
+    if (!e || !e.scheduled_start_at) return;
+    const next = !e.scheduled_pinned;
+    const { error: updErr } = await untyped
+      .from("events")
+      .update({ scheduled_pinned: next })
+      .eq("id", eventId);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setEvents((prev) => prev.map((x) => (x.id === eventId ? { ...x, scheduled_pinned: next } : x)));
+  };
+
   // Manual start change. Then CASCADE: every event after this one in run
   // order is re-placed with the same rules as Auto-schedule, treating this
   // event and everything before it as fixed. Events that fit alongside stay
@@ -722,15 +776,19 @@ export default function SchedulePage() {
     setError(null);
     setCascadeNote(null);
     const iso = localValue ? fromLocalInput(localValue) : null;
-    const { error: updErr } = await supabase
+    // Typing a start time PINS the event as a day anchor; clearing it un-pins.
+    const pinned = iso != null;
+    const { error: updErr } = await untyped
       .from("events")
-      .update({ scheduled_start_at: iso })
+      .update({ scheduled_start_at: iso, scheduled_pinned: pinned })
       .eq("id", eventId);
     if (updErr) {
       setError(updErr.message);
       return;
     }
-    updateLocalEventScheduled(eventId, iso);
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? { ...e, scheduled_start_at: iso, scheduled_pinned: pinned } : e)),
+    );
     if (!iso || locked) return;
 
     const idx = rows.findIndex((r) => r.event.id === eventId);
@@ -753,12 +811,22 @@ export default function SchedulePage() {
     const laterFloors = dayFloors(
       later.map((r) => ({
         id: r.event.id,
-        pinnedStartMs: r.scheduledStart ? r.scheduledStart.getTime() : null,
+        pinnedStartMs:
+          r.event.scheduled_pinned && r.scheduledStart ? r.scheduledStart.getTime() : null,
       })),
       newStartMs,
     );
+    // A later event that is itself pinned (its own day anchor) stays put — add it
+    // to the fixed set so the cascade routes around it instead of moving it.
+    later.forEach((r) => {
+      if (r.event.scheduled_pinned && r.scheduledStart) {
+        fixed.push(placementFor(r.event, r.scheduledStart.getTime()));
+        fixedPlayers.set(r.event.id, playersByEvent.get(r.event.id) ?? new Set<string>());
+      }
+    });
+    const movableLater = later.filter((r) => !r.event.scheduled_pinned);
     const moved = packSchedule(
-      later.map((r, i) => toPackItem(r.facts, i, laterFloors.get(r.event.id))),
+      movableLater.map((r, i) => toPackItem(r.facts, i, laterFloors.get(r.event.id))),
       newStartMs,
       bufferMs,
       venueCourts,
@@ -766,13 +834,13 @@ export default function SchedulePage() {
       fixedPlayers,
     );
     const changed = moved.filter((p) => {
-      const r = later.find((x) => x.event.id === p.id);
+      const r = movableLater.find((x) => x.event.id === p.id);
       return !r?.scheduledStart || r.scheduledStart.getTime() !== p.startMs || fmtCourtRange(r.courtNumbers) !== fmtCourtRange(p.courts);
     });
     if (changed.length === 0) return;
     setBusy(true);
     const results = await Promise.all(
-      changed.map((p) => supabase.from("events").update({ scheduled_start_at: new Date(p.startMs).toISOString() }).eq("id", p.id)),
+      changed.map((p) => untyped.from("events").update({ scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false }).eq("id", p.id)),
     );
     const firstErr = results.find((r) => r.error)?.error;
     if (firstErr) {
@@ -787,7 +855,7 @@ export default function SchedulePage() {
     setEvents((prev) =>
       prev.map((e) => {
         const p = changed.find((x) => x.id === e.id);
-        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false } : e;
       }),
     );
     if (!insErr) {
@@ -887,6 +955,7 @@ export default function SchedulePage() {
             <span>Tournament start</span>
             <input
               type="datetime-local"
+              step={900}
               value={anchorLocal}
               onChange={(e) => setAnchorLocal(e.target.value)}
               style={{
@@ -1010,7 +1079,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {plan.length > 0 && !locked && (
+      {planAll.length > 0 && !locked && (
         <div
           style={{
             marginTop: 12,
@@ -1024,15 +1093,17 @@ export default function SchedulePage() {
           }}
         >
           <strong style={{ color: ink }}>Auto-schedule plan</strong> — {fmtDuration(planSpanMinutes)} from{" "}
-          {fmtTime(new Date(plan[0].startMs))}, in the order below, using the courts each event can actually keep busy.
+          {fmtTime(new Date(planAll[0].startMs))}, in the order below, using the courts each event can actually keep busy. 📌 = a day anchor you pinned (kept in place).
           <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
             {rows.map((r) => {
-              const p = plan.find((x) => x.id === r.event.id);
+              const p = planAll.find((x) => x.id === r.event.id);
               if (!p) return null;
-              const alongside = plan.filter((q) => q.id !== p.id && q.startMs < p.endMs && q.endMs > p.startMs);
-              const reason = planReason(p, rows);
+              const pinned = !!r.event.scheduled_pinned;
+              const alongside = planAll.filter((q) => q.id !== p.id && q.startMs < p.endMs && q.endMs > p.startMs);
+              const reason = pinned ? null : planReason(p, rows);
               return (
                 <li key={p.id} style={{ marginBottom: 2 }}>
+                  {pinned && <span title="Pinned day anchor">📌 </span>}
                   <strong style={{ color: ink }}>{fmtTime(new Date(p.startMs))}</strong> {r.event.name}
                   <span style={{ color: inkMuted }}>
                     {p.segments.map((g) => (
@@ -1395,22 +1466,50 @@ export default function SchedulePage() {
                     {r.teamCount < 2 ? "—" : fmtDuration(r.totalMinutes)}
                   </td>
                   <td style={tdStyle}>
-                    <input
-                      type="datetime-local"
-                      value={toLocalInput(r.event.scheduled_start_at)}
-                      onChange={(e) =>
-                        void onSetEventStart(r.event.id, e.target.value)
-                      }
-                      disabled={frozen}
-                      style={{
-                        padding: "4px 6px",
-                        border: `1px solid ${rule}`,
-                        borderRadius: 4,
-                        fontSize: 12,
-                        fontFamily: bodyFontStack,
-                        background: "#ffffff",
-                      }}
-                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <input
+                        type="datetime-local"
+                        step={900}
+                        value={toLocalInput(r.event.scheduled_start_at)}
+                        onChange={(e) =>
+                          void onSetEventStart(r.event.id, e.target.value)
+                        }
+                        disabled={frozen}
+                        style={{
+                          padding: "4px 6px",
+                          border: `1px solid ${rule}`,
+                          borderRadius: 4,
+                          fontSize: 12,
+                          fontFamily: bodyFontStack,
+                          background: "#ffffff",
+                        }}
+                      />
+                      {r.event.scheduled_start_at && (
+                        <button
+                          type="button"
+                          onClick={() => void onTogglePin(r.event.id)}
+                          disabled={frozen}
+                          title={
+                            r.event.scheduled_pinned
+                              ? "Pinned day anchor — auto-schedule keeps it here. Click to un-pin so it re-flows."
+                              : "Not pinned — auto-schedule may move it. Click to pin as a day anchor."
+                          }
+                          aria-pressed={!!r.event.scheduled_pinned}
+                          style={{
+                            cursor: frozen ? "not-allowed" : "pointer",
+                            border: "none",
+                            background: "transparent",
+                            fontSize: 14,
+                            lineHeight: 1,
+                            padding: 2,
+                            opacity: r.event.scheduled_pinned ? 1 : 0.35,
+                            filter: r.event.scheduled_pinned ? "none" : "grayscale(1)",
+                          }}
+                        >
+                          📌
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td
                     style={{
