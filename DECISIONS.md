@@ -251,6 +251,57 @@ to token-level consistency. **Execute:** (1) strengthen the two wmpc-meta CLAUDE
 Builder pre-build + Reviewer-notes lines; (3) the Reviewer's duplicate-surface check; (4) a
 "Component reuse" section in `docs/design-system.md`.
 
+### D-0050 — The B&E → PB.com results push runs as a standing unattended service — reused director session, live delta sync, fail-closed
+
+*2026-09-30 · scope: `productionizing the D-0045 push (pbcom-driver) from an on-demand supervised tool into a standing, unattended, singleton service on the mini — the auth model, cadence, home, and gates` · source: Ron 2026-09-30 — "Automate #991 so results auto-push to PB.com." The pbcom-driver (#991/#982) shipped deliberately on-demand + supervised; its DESIGN.md flagged "standing/unattended running is a SEPARATE INFRA-INTAKE decision with Ron." This is that decision.*
+
+**Decision.** The B&E → PickleballBrackets.com results push (D-0045's outbound half, the `pbcom-driver`) runs
+as a **standing, unattended service on the mini** — it creates the bracket on PB.com and keeps scores in sync
+on its own, no per-run operator. Ron's INFRA-INTAKE calls fix the model:
+
+1. **Auth = a reused director session, not a hands-off login.** PB.com authenticates by an emailed one-time
+   code, so there is no fully unattended login (and none is invented). The service reuses a **persistent
+   logged-in Chrome profile** on the mini (`PBCOM_PROFILE_DIR`), the same custody model as courtreserve-api.
+   When PB.com expires the session, the service does **not** loop-fail: it records `needs_attention`, **posts a
+   Discord alert to re-auth**, and exits cleanly; a human re-enters the code once (headed) and it resumes next
+   tick. Occasional re-auth is inherent to PB.com's OTP, not a defect.
+2. **Full live sync, ~150 s poll.** Each tick, for every active + PB.com-bound division: create the bracket on
+   PB.com if the ledger shows it isn't there yet, then push the **score delta** for matches scored since the
+   last confirmed push. Idempotent by construction — keyed on PB.com source ids + match identity (never
+   round/position) — so a crashed or re-run tick pushes only the delta and a corrected score re-pushes.
+3. **Home = mini-hosted in `tournament-manager/pbcom-driver`** (not a new repo). It ships to the mini through
+   an installer + launchd; the repo's branch-routing (`main`→TEST Cloudflare Pages) does **not** deploy it —
+   but the `pbcom_push_ledger` migration **does** ship via branch routing, and `DEPLOYMENT.md` documents that
+   split.
+
+**The gates stay — unattended is not "no rules."** Singleton enforced in code, not by install discipline: a
+committed **`PBCOM-PUSH-HOST`** fact (unset = nobody drives, fail-closed — the `EVENTS-DRAIN-HOST` pattern), a
+same-machine exclusive lock, and the **DB push-ledger** claim as the backstop. **Verify-before-ledger:** a push
+is recorded only after PB.com reads back the write; a write it cannot verify parks `needs_attention` (the
+D-0045 "PB.com out of sync" signal), never a silent success. The driver **never deletes** on PB.com — orphans
+are reported, not removed. No credentials or webhooks are committed (env-only, mini's gitignored `.env`).
+
+**No silent debut (D-0039 discipline).** This service has never run unattended, and it writes to an external
+site. Its **first live `--auto` run is a named supervised run** — `--dry-run --auto`, then a watched `--auto`
+on the mini — before the launchd tick is trusted with it.
+
+**Why.** D-0045 set the direction (B&E runs the event; results push back to PB.com) but the push stayed manual,
+so results only reached PB.com when someone ran the CLI. Ron wants them to arrive on their own. Turning the
+push unattended is the same move D-0039 made for the CoS loop: keep every safety gate, remove the human from
+the routine path, and surface the one thing a human must still do (here, the occasional OTP re-auth) instead of
+failing in the dark. Ron owns the club's PB.com tournaments and is authorizing his own automation against them.
+
+**Forbids.** No unattended run without its host fact + lock + ledger. No push recorded without a PB.com verify.
+No deletion on PB.com. No headless/secret PB.com login (the reused session + re-auth ping is the only path). No
+first-ever live `--auto` run in the dark — it is a surfaced supervised debut. Branch-routing never becomes the
+service's trigger (only the ledger migration ships that way; the launchd job is a mini install).
+
+**Binds.** Extends **D-0045** (the bridge; this productionizes its outbound push). Mirrors **D-0039** (unattended
+loop, gates intact, no silent debut) and the **`EVENTS-DRAIN-HOST` / courtreserve-api** singleton + saved-profile
+archetype. Built on the merged `pbcom-driver` (tournament-manager#991/#982). **Owed:** the auto layer
+(`pbcom_push_ledger` migration + DB ledger, `--auto` poll, session-lapse→Discord, PBCOM-PUSH-HOST + install.sh),
+then Ron's one-time mini bootstrap + the supervised first run.
+
 ## Proposed (not binding yet)
 
 _None._
