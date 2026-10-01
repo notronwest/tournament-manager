@@ -296,7 +296,9 @@ function makeOpenScraper(cfg: DriverConfig): () => Promise<PartnerScraper> {
     return {
       scrape: async (eid: string) => {
         const pages = await fetchAttendeesPartnersPages(session, cfg.pbcomBaseUrl, eid);
-        return parsePages(pages);
+        const entries = parsePages(pages);
+        log.info("attendees: parsed partner entries", { eid, entries: entries.length });
+        return entries;
       },
       close: () => session.close(),
     };
