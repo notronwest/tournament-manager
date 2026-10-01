@@ -67,11 +67,18 @@ where m.id = r.id
 -- 2. The unique-slot backstop.
 -- ─────────────────────────────────────────────────────────────────────
 
+-- NULLS NOT DISTINCT (PG15+; both envs are PG17) rather than
+-- coalesce(bracket::text,''): an enum→text cast is only STABLE, not IMMUTABLE,
+-- so Postgres rejects it inside an index expression ("functions in index
+-- expression must be marked IMMUTABLE", SQLSTATE 42P17) — this migration had
+-- never successfully applied on any env because of it. NULLS NOT DISTINCT needs
+-- no expression and collapses the NULL bracket (round-robin / single-elim
+-- playoff) into one equivalence class, exactly as the coalesce intended.
 create unique index if not exists matches_event_slot_uidx
-  on matches (event_id, stage, round, position, coalesce(bracket::text, ''));
+  on matches (event_id, stage, round, position, bracket) nulls not distinct;
 
 comment on index matches_event_slot_uidx is
   'Bug #993 backstop: one match per (event, stage, round, position, bracket) '
   'slot. Prevents non-idempotent bracket generation from appending duplicate '
   'matches. NULL bracket (round-robin / single-elim playoff) collapses to one '
-  'class via coalesce so those duplicates are caught too.';
+  'class via NULLS NOT DISTINCT so those duplicates are caught too.';
