@@ -69,11 +69,36 @@ export class PlaywrightAttendeesBrowser implements PbcomBrowserSession {
 
   async goto(url: string): Promise<void> {
     await this.page.goto(url, NAV);
+    await this.waitForRows();
   }
 
   /** The current page's rendered visible text — pbPartners parses TEXT, not the DOM. */
   async pageText(): Promise<string> {
     return this.page.locator("body").innerText();
+  }
+
+  /**
+   * raS.aspx renders its shell first ("Please wait...") and loads the attendee grid
+   * by AJAX a beat later — so a read right after `load` returns only the page chrome
+   * (title/menu/event dropdown) and parses to ZERO attendees (the 2026-10-01 blocker:
+   * textLength ~1360, no rows). Wait until the spinner clears AND real attendee
+   * content has rendered — a director row carries the partner's FULL phone and/or an
+   * email, neither of which appears in the chrome, so they are a reliable "rows are
+   * here" signal. Best-effort: on timeout we read whatever is present (the debug dump
+   * still captures it) rather than throwing.
+   */
+  private async waitForRows(): Promise<void> {
+    await this.page
+      .waitForFunction(
+        () => {
+          const t = (document.body && document.body.innerText) || "";
+          if (!t || /please wait/i.test(t)) return false;
+          // A rendered attendee row: an email, or a US phone (unmasked in director view).
+          return /@/.test(t) || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(t);
+        },
+        { timeout: 30_000 },
+      )
+      .catch(() => {});
   }
 
   /**
@@ -92,6 +117,7 @@ export class PlaywrightAttendeesBrowser implements PbcomBrowserSession {
     if (disabled || ariaDisabled) return false;
     await next.click();
     await this.page.waitForLoadState("load", { timeout: STEP_TIMEOUT }).catch(() => {});
+    await this.waitForRows();
     return true;
   }
 }
