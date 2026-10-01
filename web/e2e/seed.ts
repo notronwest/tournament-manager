@@ -345,6 +345,43 @@ async function main() {
   const vicId = await ensurePlayer("e2e-vic@wmpc.test", "Vic", "Viewer");
   await db.from("partner_invites").insert({ event_id: inviteE, inviter_player_id: ivanId, invitee_player_id: vicId, invitee_email: "e2e-vic@wmpc.test", token: "e2e-view-token" });
 
+  // 7b. Partner-notice fixtures (#10) — each its own single-event tournament
+  //    (matching the #253 convention) so this spec's own register/save
+  //    mutations never collide with anything else and each Register tab
+  //    shows exactly one card. Noa picks an existing partner (Pat) and must
+  //    see the "won't be notified until you check out" note both on the open
+  //    form and the resulting pending card; Sage ("I need a partner") and
+  //    Milo (singles) must NOT see it (AC #10.3).
+  const noticeT = await mkTournament("e2e-partner-notice", "E2E Partner Notice Cup");
+  const noticeE = await doublesEvent(noticeT, "E2E Partner Notice Doubles");
+  await resetEvent(noticeE);
+  await ensurePlayer("e2e-noa-notice@wmpc.test", "Noa", "Notice");
+
+  const noticeSeekerT = await mkTournament("e2e-partner-notice-seeker", "E2E Partner Notice Seeker Cup");
+  const noticeSeekerE = await doublesEvent(noticeSeekerT, "E2E Partner Notice Seeker Doubles");
+  await resetEvent(noticeSeekerE);
+  await ensurePlayer("e2e-sage-notice@wmpc.test", "Sage", "Seeking");
+
+  const noticeSinglesT = await mkTournament("e2e-partner-notice-singles", "E2E Partner Notice Singles Cup");
+  const noticeSinglesE = await selectOrInsert(
+    "events",
+    { tournament_id: noticeSinglesT, name: "E2E Partner Notice Singles" },
+    { tournament_id: noticeSinglesT, name: "E2E Partner Notice Singles", format: "singles", gender: "mixed" },
+    "notice singles event",
+  );
+  await resetEvent(noticeSinglesE);
+  await ensurePlayer("e2e-milo-notice@wmpc.test", "Milo", "Singles2");
+  // 7b. Partner-mode segmented control fixture (#15) — its own single-event
+  //    tournament (#253 convention) so the Register tab shows exactly one
+  //    card and this spec's form-opening never races another spec's actual
+  //    save on shared state. The test never clicks Save (it only opens the
+  //    form and toggles the mode radios), so a fresh player with no existing
+  //    reg is enough — no reset-then-mutate lifecycle needed here.
+  const modeT = await mkTournament("e2e-partner-mode", "E2E Partner Mode Cup");
+  const modeE = await doublesEvent(modeT, "E2E Partner Mode Doubles");
+  await resetEvent(modeE);
+  await ensurePlayer("e2e-uma-mode@wmpc.test", "Uma", "Modecheck");
+
   // 8. Self-service fixtures: my-tournaments view + withdraw. Two players with
   //    pending regs on a dedicated event — Mona (read-only view) and Will (the
   //    withdraw test cancels his; reset recreates it each run). Invites-view
@@ -449,6 +486,80 @@ async function main() {
   const mrRefundPending = await singlesEvent(mrT, "MR Refund Pending");
   await resetEvent(mrRefundPending);
   await insertReg(mrRefundPending, await ensurePlayer("mr-gary@wmpc.test", "Gary", "Gating"), "pending_payment");
+
+  // 10. Reopen-on-Basics-edit fixtures (#860). Both start status='closed' —
+  //     re-seeding always resets them, undoing whatever the specs flip, so
+  //     every run starts deterministic. No events needed; these specs only
+  //     touch the tournament's own status/registration_closes_at fields.
+  ok(
+    await db
+      .from("tournaments")
+      .upsert(
+        {
+          organization_id: org.id,
+          slug: "e2e-reopen-past-deadline",
+          name: "E2E Reopen Past-Deadline Cup",
+          status: "closed",
+          starts_at: "2099-01-01",
+          ends_at: "2099-01-02",
+          // Already in the past — plausibly how it got auto-closed.
+          registration_closes_at: "2024-01-01T00:00:00.000Z",
+        },
+        { onConflict: "organization_id,slug" },
+      )
+      .select("id")
+      .single(),
+    "tournament e2e-reopen-past-deadline",
+  );
+
+  ok(
+    await db
+      .from("tournaments")
+      .upsert(
+        {
+          organization_id: org.id,
+          slug: "e2e-reopen-future-deadline",
+          name: "E2E Reopen Future-Deadline Cup",
+          status: "closed",
+          starts_at: "2099-01-01",
+          ends_at: "2099-01-02",
+          // Still in the future — this tournament was closed early via
+          // "Close registration", not by the auto-close trigger.
+          registration_closes_at: "2099-06-01T00:00:00.000Z",
+          description: "Seed baseline description.",
+        },
+        { onConflict: "organization_id,slug" },
+      )
+      .select("id")
+      .single(),
+    "tournament e2e-reopen-future-deadline",
+  // 10. Pricing-preview fixtures (#12) — organizer-facing "override" copy on
+  //     the event-fee field + the tournament wizard's "Preview math" box.
+  //     Own tournament with a real (non-$0) pricing tier so the preview shows
+  //     computed totals instead of the "Free tournament" branch, and the
+  //     event carries a non-zero fee override so the "Flat override active"
+  //     note has something to show. Read-only spec (no registrations touch
+  //     this fixture), so it's safe to share across runs/retries.
+  const pricingT = await mkTournament("e2e-pricing-preview", "E2E Pricing Preview Cup");
+  const pricingE = await doublesEvent(pricingT, "E2E Pricing Preview Doubles");
+  await db.from("events").update({ event_fee_cents: 2000 }).eq("id", pricingE);
+  await db.from("tournament_pricing_tiers").delete().eq("tournament_id", pricingT);
+  ok(
+    await db
+      .from("tournament_pricing_tiers")
+      .insert({
+        tournament_id: pricingT,
+        sort_order: 1,
+        label: "Standard",
+        starts_at: null,
+        ends_at: null,
+        first_event_fee_cents: 3000,
+        additional_event_fee_cents: 1500,
+      })
+      .select("id")
+      .single(),
+    "pricing-preview tier insert",
+  );
 
   console.log("seed: e2e-test fixture ready");
 }

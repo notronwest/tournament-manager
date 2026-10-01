@@ -1,0 +1,26 @@
+{
+  "name": "pbcom-driver",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bert & Erne → PickleballBrackets.com results-push driver (D-0045 / tournament-manager#982). Drives PB.com as a human via Playwright to create brackets and submit scores. NON-FORM scaffold; PB.com DOM selectors are filled from a live director-session trace.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "push": "tsx src/cli.ts push",
+    "plan": "tsx src/cli.ts push --dry-run",
+    "poll": "tsx src/cli.ts poll",
+    "verify": "tsx src/cli.ts verify"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.8"
+  }
+}

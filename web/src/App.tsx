@@ -41,6 +41,7 @@ import TournamentWizardPage from "./pages/admin/TournamentWizardPage";
 import EventConsolePage from "./pages/admin/EventConsolePage";
 import EventFormPage from "./pages/admin/EventFormPage";
 import ScorecardsPage from "./pages/admin/ScorecardsPage";
+import PoolSheetsPage from "./pages/admin/PoolSheetsPage";
 import TournamentCourtManagerPage from "./pages/admin/TournamentCourtManagerPage";
 import CheckoutPage from "./pages/public/CheckoutPage";
 import DonatePage from "./pages/public/DonatePage";
@@ -82,6 +83,7 @@ import LocationsPage from "./pages/admin/LocationsPage";
 import TournamentDetailPage from "./pages/admin/TournamentDetailPage";
 import TournamentsListPage from "./pages/admin/TournamentsListPage";
 import PairingBoardPage from "./pages/admin/PairingBoardPage";
+import PbImportPage from "./pages/admin/PbImportPage";
 
 // The site root. On a canonical host this is the marketing HomePage. On a
 // mapped custom domain (#408) it renders that domain's tournament at the
@@ -467,6 +469,10 @@ export default function App() {
           element={<AttendeesPage />}
         />
         <Route
+          path="tournaments/:tournamentSlug/import-pb"
+          element={<PbImportPage />}
+        />
+        <Route
           path="tournaments/:tournamentSlug/contacts"
           element={<TournamentContactsPage />}
         />
@@ -533,6 +539,10 @@ export default function App() {
         <Route
           path="tournaments/:tournamentSlug/events/:eventId/scorecards"
           element={<ScorecardsPage />}
+        />
+        <Route
+          path="tournaments/:tournamentSlug/events/:eventId/pool-sheets"
+          element={<PoolSheetsPage />}
         />
         <Route
           path="tournaments/:tournamentSlug/events/:eventId/pair-teams"

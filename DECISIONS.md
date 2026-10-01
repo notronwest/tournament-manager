@@ -124,6 +124,133 @@ them without reading daemon. daemon needs to see everything.
 **Forbids.** Recording a decision only in STATUS.md. Editing a superseded record instead of
 adding a new one. Hand-editing a repo's `DECISIONS.md`.
 
+### D-0018 — Issues and PRs pass through written-standard gates, not Ron; a separate review agent enforces them
+
+*2026-09-18 · scope: `agents/chief-of-staff/**, agents/builder/**, agents/reviewer/**` · source: Ron 2026-09-18 ("I can no longer be the bottleneck for issues that need review"); builds on D-0015*
+
+**Decision.** Ron is not the review bottleneck. Quality is enforced by **gates against written standards**, not his eye — he sees only the hard calls.
+
+- **Author (Rachel / CoS)** writes tickets to a standard and owns the ticket **lifecycle**: author → set Agent Ready → triage if it blocks (re-file, decompose, re-queue), escalating architecture calls to daemon (D-0015). She writes for a human — scannable and structured, never a wall of text (the clarity principle applies to agent output, not just UI).
+- **Pre-build gate (Builder)** validates a ticket *before* spending a build — right repo, acceptance criteria, unambiguous. A bad ticket is commented + routed, never built blind (as it did for the mis-filed Pro 2+2, qbo-api #29 → courtreserve-api #209).
+- **PR-review gate — ONE new agent, separate from the Builder** (the builder never grades its own homework). It reviews every Builder PR for **correctness AND design**, against the *written* standards: the design principles in `wmpc-meta/design-system/DESIGN_SYSTEM.md` (HIG + Material; branding is the expression layer) and each repo's `DECISIONS.md`. It reuses the existing code-review / ultrareview capability. **Its first job when built: drain the current In Review queue.** Clean → ready/merge; genuinely uncertain → escalate to Ron.
+- **Calibration (fleet-wide):** act on the clear, escalate only the uncertain — the same non-blocking model as D-0015 and the CoS whitelist.
+
+**Why.** The bottleneck was never "no reviewer" — it was that the standards lived only in Ron's head, so only he could judge. Externalizing them (the design-principles doc, this register, per-repo `DECISIONS.md`) makes review delegable. A separate reviewer keeps the builder honest. And **gates, not personas**: the one new standing agent (PR review) is justified by separation of concerns; everything else is a gate or role on an agent we already have — that is the line that keeps this an AI-native pipeline instead of a cosplay of a human org.
+
+**Forbids.** Don't route routine issue/PR review through Ron. Don't let the Builder approve its own PRs. Don't add a standing agent where a gate on an existing one suffices. No gate enforces *taste* — it enforces the written standard; if a standard is missing, write it (don't guess), and if it's an architecture call, route it through daemon (D-0015).
+
+### D-0019 — One marketing-api service owns Canva + Meta; the CoS drafts assets and posts, publishing to public is gated
+
+*2026-09-18 · scope: `agents/chief-of-staff/**` · source: Ron 2026-09-18 (connect Rachel to Canva + FB/IG to streamline comms)*
+
+**Decision.** Canva (branded assets) and Meta / Facebook + Instagram (distribution) are the same workstream as email marketing — one **content spine**, with the CoS as the single operator across every channel.
+
+- **One service, not a repo per platform.** A `marketing-api` service (runs on the mini, like qbo-api) owns the Canva Connect + Meta Graph creds and wraps both APIs; the existing email-marketing spine (Resend / campaigns) folds in over time. No second marketing service.
+- **Two new gated CoS capabilities** in `cos_whitelist`, seeded **draft-only**: `build_assets` (Canva — autofill brand templates, resize, export; create/draft, never a paid Canva action) and `draft_social` (compose FB/IG posts as drafts). **Publishing to public social is the gated set** — a `cos_approvals` row (`action_kind` `ship_prod`); Ron approves, then it posts. Never auto-post publicly.
+- **Reuse existing designs.** Ron's existing Canva designs (signs, etc.) become **brand templates** with named variable slots; the CoS autofills + exports every size via the API. The design stays Ron's; production becomes the CoS's.
+- **On-brand.** Assets and posts obey the design principles (`wmpc-meta/design-system/DESIGN_SYSTEM.md`, D-0018) and each entity's brand voice (WMPC vs TSA — two entities, D-0009). A skill layers the craft on top of the service.
+
+**Why.** The fleet's pattern is one service per external system, creds on the mini, CoS access gated (D-0008, D-0014). Consolidating Canva + Meta into one marketing service — rather than a repo per tool — keeps the content spine coherent and lets Rachel run all comms from one place. Public posting and any spend stay draft-first / approval, because they are outward-facing and irreversible — the same rule as her newsletter sends.
+
+**Forbids.** No auto-posting to public social, and no paid Canva or paid-ads action, without a Ron approval. No creds in the repo (mini env only). No per-platform repo sprawl — extend `marketing-api`, don't add a second service.
+
+### D-0045 — Bert & Erne ⇄ PickleballBrackets.com — a two-way bridge; registrations pull in, the live event pushes out by driving PB.com as a human
+
+*2026-09-28 · scope: `a new Bert & Erne (bande.com) product feature integrating with PickleballBrackets.com for orgs that register on PB.com but run in B&E; tracking issue tournament-manager#970` · source: Ron 2026-09-28 — corrected daemon's framing twice, then confirmed the full shape: "a new feature … for organizations that run registration through pb.com because of their reach but want the ease of use for bande.com" + "we DO need a push … PB.com would be driven as if it were being manually managed by a human."*
+
+**Decision.** Build a **two-way B&E ⇄ PB.com bridge** as a Bert & Erne product capability — for any org (WMPC
+included) that takes **registration on PickleballBrackets.com for its reach** but wants to **run the event in Bert &
+Erne for ease of use**:
+
+1. **Pull registrations in** — **PB.com → B&E, pre-event, ONLINE.** The org's registrant list comes from PB.com into
+   B&E (players, divisions, registrations). **Ship-first: CSV export → import** (the org exports their own registrants
+   from PB.com; B&E imports + field-maps). A connected pull is a later option, not day one.
+2. **Push the live event out** — **B&E → PB.com, during play, ONLINE.** A bracket started in B&E starts in PB.com; a
+   game scored in B&E is scored in PB.com. **PB.com is DRIVEN AS IF a human director were operating it**, because it
+   has **no public API.**
+
+**The push is a PB.com "driver."** It performs on PB.com the same actions a human would, authenticated as the org's
+**own PB.com account**:
+- **Trace first (the pivotal step):** capture a real PB.com director session (start a bracket, enter a score) to map
+  each action to what PB.com actually does. This decides, per action, **XHR-replay (preferred — fast, headless) vs
+  headless UI automation (fallback)** and proves feasibility before any build.
+- **Driver service:** listens to B&E events → performs the PB.com equivalent → **verifies it landed and reconciles
+  drift** (idempotent, self-healing — the same executor discipline as the CR billing/membership drains, because we're
+  driving an external system). The pattern mirrors **court-reserve-scheduler** (Playwright-driving a no-public-API
+  site), reuse its lessons.
+
+**Build order.** Director-session **trace first** → the **push driver** (XHR-preferred/UI-fallback); the
+**registration import** (CSV-first) is the simpler, independent parallel track.
+
+**Honest risks (named, not hidden).** Automating a no-public-API third-party site is **ToS-grey, brittle to PB.com's
+UI/API changes, and a standing maintenance burden.** It is *defensible* — each org's own account acting on their own
+event's data — but the fragility is a conscious product trade, not a surprise. Reconciliation + a human-visible
+"PB.com out of sync" signal are required, not optional.
+
+**Corrects daemon's earlier wrong framings (recorded so the mistake is legible):** (a) NOT a live results-sync
+B&E→PB.com under an *offline/queue-and-replay* constraint (daemon wrongly imported B&E's venue-offline fact into a
+feature that runs online); (b) NOT import-only. It is the two-way bridge above.
+
+**Binds.** A B&E (tournament-manager) product feature; relates to D-0021 (events hub). Tracking: **tournament-manager
+#970** (body corrected to this). **Owed:** correct the Hopper card + any STATUS notes carrying the old framing; set
+the director-session-trace task Agent Ready as the first build step.
+
+### D-0049 — Reuse before you build — a component or surface that already exists is reused or shared, never copied; a second implementation is a defect the gates reject
+
+*2026-09-29 · scope: `every React/frontend product repo's web/src/** (components, pages, hooks, lib), agents/builder/**, agents/reviewer/**, docs/design-system.md, the wmpc-meta ui-work + engineering-standard CLAUDE blocks` · source: Ron 2026-09-29 — after finding the event-settings form had been built in scattered places and only shared late (tournament-manager #1006): "reusing components is imperative — this HAS to be in the application architecture framework — the code the agents are building on. This is rookie development. Let's not be rookies. I've worked too hard to have this kind of development be 'acceptable'."*
+
+**Decision.** In every frontend product repo, **reuse is the default and a second copy is a defect.**
+Before writing any component, page section, hook, or utility, you **search for one that already does
+the job** and, if it exists, you **reuse it** — or, if it *almost* fits, you **extend it or extract a
+shared version** (a `variant`/props, a shared hook, a shared lib function). You do **not** copy an
+existing surface into a new file and diverge it. This is a **gate enforced at three points**, not a
+style preference:
+
+1. **The CLAUDE block agents build on states it as a gate.** `wmpc-meta`'s `ui-work` and
+   `engineering-standard` blocks (synced into every repo's `CLAUDE.md`) carry the rule up front with
+   the concrete pre-write step: *grep the components/feature dir for the thing you're about to build;
+   if it exists, reuse; if it almost exists, extend or extract; never a second copy.*
+2. **The Builder's pre-build gate applies it.** Before implementing a UI/section/hook, the Builder
+   searches for an existing implementation. If one exists and the card would duplicate it, the
+   Builder **reuses or extracts-and-shares** it and **names that choice in the PR's Reviewer notes**
+   ("reuses `EventSettingsForm`", or "extracted `<X>` so the console and the wizard share it"). A
+   card that can only be met by duplicating an existing surface is a shaping problem → route it back,
+   don't build a copy.
+3. **The Reviewer rejects a duplicate.** A PR that introduces a second implementation of a component
+   or surface that already exists — same UI, same logic, copied and diverged — is **REQUEST CHANGES**
+   (cite this record and both files). Where it is genuinely unclear whether to extend vs extract,
+   **ESCALATE** (an architecture call, D-0015) rather than wave the copy through.
+
+**One surface, one component, mounted many ways.** The proven shape (tournament-manager #1006): a
+single editable component rendered in every place it is needed via a `variant`/`mode` prop —
+`EventSettingsForm` is the `/edit` page (`variant="page"`), the console Settings tab, **and** the
+Bracket Setup wizard's settings step (`variant="inline"`), all off one file. That is the target: the
+wizard did not get its own settings code; it mounts the same one. Divergence between a "page form" and
+a "console summary" of the same data is the anti-pattern this kills.
+
+**Why.** "Reuse before adding" already existed as a buried one-liner in the engineering block — which
+is exactly why it was not enforced: a reminder is install discipline, and install discipline fails the
+same way it failed for singletons (D-0002) and phone layout (D-0047). Agents generated a second copy
+of a settings surface because nothing in the gate stopped them, and it was only consolidated after the
+fact. Component reuse is the whole reason a React codebase stays maintainable; a portfolio of apps that
+each re-implement the same surface is the rookie failure Ron built the shop past. The fleet rule is
+**enforce in code, not by memory** — this applies it to component reuse.
+
+**Forbids.** No second implementation of a component/section/hook/util that already exists — reuse it,
+extend it, or extract a shared version. No copy-and-diverge of an existing page or surface into a new
+file. No agent marks a UI card done, and no reviewer approves it, when it ships a duplicate of an
+existing surface. This never blocks a *deliberate* shared-component extraction (that is the desired
+outcome) and never forces a genuinely new surface to contort into an ill-fitting existing one — when
+extend-vs-new is a real judgment call, it escalates, it does not copy.
+
+**Binds.** Extends the `engineering-standard` block's "reuse before adding" and the `ui-work` block's
+"reuse existing components and tokens"; sits beside **D-0047** (the phone gate) as the second
+code-enforced frontend-quality gate, and **D-0018** (gates, not Ron) as the enforcement model; relates
+to **Pillar 5 / `docs/design-system.md`** (shared vocabulary) — reuse is the component-level companion
+to token-level consistency. **Execute:** (1) strengthen the two wmpc-meta CLAUDE blocks; (2) the
+Builder pre-build + Reviewer-notes lines; (3) the Reviewer's duplicate-surface check; (4) a
+"Component reuse" section in `docs/design-system.md`.
+
 ## Proposed (not binding yet)
 
 _None._

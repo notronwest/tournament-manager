@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "events": [
+    {
+      "tournamentId": "00000000-0000-0000-0000-tournament01",
+      "pbcomEid": "123456",
+      "pbcomAccountLabel": "wmpc-pbcom",
+      "divisions": [
+        {
+          "sourceDivisionLabel": "Mens Doubles Skill: (3.0 To 3.49)",
+          "pbcomDivisionId": "div-789"
+        }
+      ]
+    }
+  ]
+}

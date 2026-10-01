@@ -10,8 +10,6 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
-  doubleElimCourtsNeeded,
-  estimateEvent,
   fmtDuration,
   poolPlayExplanation,
   utilizationLabel,
@@ -19,13 +17,18 @@ import {
 } from "../../lib/estimator";
 import { SPOT_HOLDING_STATUSES, teamCountFor } from "../../lib/registrationStatus";
 import {
-  medalCourtsNeeded,
   packSchedule,
   parallelGroups,
-  poolCourtsNeeded,
   type Placement,
-  type PlacedSegment,
 } from "../../lib/schedulePacker";
+import {
+  eventPlacementFacts,
+  toFixedPlacement,
+  toPackItem,
+  type EventPlacementFacts,
+} from "../../lib/eventPlacement";
+import { fmtTime, fromLocalInput, toLocalInput } from "../../lib/scheduleTime";
+import { bracketRoundsForN } from "../../lib/playoffBracket";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { SchedulePrintModal } from "../../components/SchedulePrintModal";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -108,6 +111,10 @@ type EventRow = {
   // the calendar work from these, so a bracket only "holds" the courts it
   // is really using.
   phases: RowPhase[];
+  // The shared event→schedule mapping this row was derived from — reused
+  // directly for the auto-schedule plan and the cascade so the page never
+  // rebuilds pack items / fixed placements by hand.
+  facts: EventPlacementFacts;
 };
 
 type RowPhase = { kind: "pool" | "medal"; start: Date; end: Date; courts: number[] };
@@ -298,53 +305,57 @@ export default function SchedulePage() {
       const courtNumbers = (courtsByEvent.get(event.id) ?? []).sort(
         (a, b) => a - b,
       );
-      // Fall back to 1 court when an event hasn't claimed any — the
-      // estimate still renders, just pessimistically.
-      const courts = Math.max(1, courtNumbers.length);
-      // One adapter for every view (schedule table, calendar, tournament
-      // event cards) so they can never disagree on an end time.
-      const estimate = estimateEvent(event, teamCount, courts);
-      const { teamsPerPool, pool, medal, totalMinutes } = estimate;
-      const planTeams = teamCount >= 2 ? teamCount : Math.max(2, event.max_teams ?? 2);
-      const venueCourts = tournament?.locations?.court_count ?? courts;
-      const isDE = (event as { bracket_type?: string }).bracket_type === "double_elim";
-      const courtsNeeded = Math.min(Math.max(1, venueCourts), isDE ? doubleElimCourtsNeeded(planTeams) : poolCourtsNeeded(planTeams, event.pool_count));
-      const medalNeed = Math.min(Math.max(1, venueCourts), isDE ? 1 : medalCourtsNeeded(event.teams_advancing_to_playoff));
+      // The one event→schedule mapping (durations, court needs, plan/fixed
+      // placement shapes) — shared with the Bracket Setup wizard's Courts
+      // and Start-time steps so they can never disagree (see eventPlacement).
+      const facts = eventPlacementFacts({
+        event,
+        teamCount,
+        courtNumbers,
+        // Venue court count caps court needs; fall back to the event's own
+        // allocation when the venue's isn't known yet.
+        venueCourts:
+          tournament?.locations?.court_count ?? Math.max(1, courtNumbers.length),
+        players: playersByEvent.get(event.id) ?? new Set<string>(),
+      });
+      const { estimate } = facts;
+      const { pool, medal } = estimate;
       const scheduledStart = event.scheduled_start_at
         ? new Date(event.scheduled_start_at)
         : null;
       const scheduledEnd = scheduledStart
-        ? new Date(scheduledStart.getTime() + totalMinutes * 60_000)
+        ? new Date(scheduledStart.getTime() + facts.totalMinutes * 60_000)
         : null;
       const phases: RowPhase[] = [];
       if (scheduledStart) {
         const poolEnd = new Date(scheduledStart.getTime() + pool.totalMinutes * 60_000);
-        const poolCourts = courtNumbers.slice(0, Math.max(1, Math.min(courtNumbers.length || 1, courtsNeeded)));
+        const poolCourts = facts.courtNumbers.slice(0, Math.max(1, Math.min(facts.courtNumbers.length || 1, facts.courtsNeeded)));
         phases.push({ kind: "pool", start: scheduledStart, end: poolEnd, courts: poolCourts.length ? poolCourts : [1] });
         if (medal && medal.totalMinutes > 0) {
-          phases.push({ kind: "medal", start: poolEnd, end: scheduledEnd!, courts: (poolCourts.length ? poolCourts : [1]).slice(0, Math.max(1, medalNeed)) });
+          phases.push({ kind: "medal", start: poolEnd, end: scheduledEnd!, courts: (poolCourts.length ? poolCourts : [1]).slice(0, Math.max(1, facts.medalCourtsNeeded)) });
         }
       }
       return {
         event,
         teamCount,
-        teamsPerPool,
-        courts,
-        courtNumbers,
-        poolMinutes: pool.totalMinutes,
-        medalMinutes: medal?.totalMinutes ?? 0,
-        totalMinutes,
+        teamsPerPool: estimate.teamsPerPool,
+        courts: facts.courts,
+        courtNumbers: facts.courtNumbers,
+        poolMinutes: facts.poolMinutes,
+        medalMinutes: facts.medalMinutes,
+        totalMinutes: facts.totalMinutes,
         poolBindingConstraint: pool.bindingConstraint,
         estimate,
-        planTeams,
-        courtsNeeded,
-        medalCourtsNeeded: medalNeed,
+        planTeams: facts.planTeams,
+        courtsNeeded: facts.courtsNeeded,
+        medalCourtsNeeded: facts.medalCourtsNeeded,
         scheduledStart,
         scheduledEnd,
         phases,
+        facts,
       };
     });
-  }, [events, eventCourts, teamsByEvent, tournament]);
+  }, [events, eventCourts, teamsByEvent, tournament, playersByEvent]);
 
   // The auto-schedule PLAN, recomputed live from order / anchor / buffer so
   // the page can say what parallelism it found before anything is written.
@@ -354,20 +365,12 @@ export default function SchedulePage() {
     if (!anchorIso || venueCourts < 1 || rows.length === 0) return [];
     const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
     return packSchedule(
-      rows.map((r, i) => ({
-        id: r.event.id,
-        order: i,
-        segments: [
-          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
-          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
-        ],
-        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
-      })),
+      rows.map((r, i) => toPackItem(r.facts, i)),
       new Date(anchorIso).getTime(),
       bufferMs,
       venueCourts,
     );
-  }, [rows, anchorLocal, bufferLocal, tournament, playersByEvent]);
+  }, [rows, anchorLocal, bufferLocal, tournament]);
   const planSpanMinutes = plan.length
     ? Math.round((Math.max(...plan.map((p) => p.endMs)) - Math.min(...plan.map((p) => p.startMs))) / 60_000)
     : 0;
@@ -694,17 +697,10 @@ export default function SchedulePage() {
     setTournament({ ...tournament, schedule_locked_at: next });
   };
 
-  // A row as a fixed placement for the cascade (its phases → segments).
-  const placementFor = (r: EventRow, startMs: number): Placement => {
-    const poolCourts = r.courtNumbers.slice(0, Math.max(1, Math.min(r.courtNumbers.length || 1, r.courtsNeeded)));
-    const pc = poolCourts.length ? poolCourts : [1];
-    const poolEnd = startMs + r.poolMinutes * 60_000;
-    const segments: PlacedSegment[] = [{ kind: "pool", startMs, endMs: poolEnd, courts: pc }];
-    if (r.medalMinutes > 0) {
-      segments.push({ kind: "medal" as const, startMs: poolEnd, endMs: poolEnd + r.medalMinutes * 60_000, courts: pc.slice(0, Math.max(1, r.medalCourtsNeeded)) });
-    }
-    return { id: r.event.id, startMs, endMs: startMs + r.totalMinutes * 60_000, courts: r.courtNumbers, segments, heldBy: null };
-  };
+  // A row as a fixed placement for the cascade — the shared mapping so it
+  // matches the auto-schedule plan exactly.
+  const placementFor = (r: EventRow, startMs: number): Placement =>
+    toFixedPlacement(r.facts, startMs);
 
   // Manual start change. Then CASCADE: every event after this one in run
   // order is re-placed with the same rules as Auto-schedule, treating this
@@ -740,15 +736,7 @@ export default function SchedulePage() {
     });
     const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
     const moved = packSchedule(
-      later.map((r, i) => ({
-        id: r.event.id,
-        order: i,
-        segments: [
-          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
-          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
-        ],
-        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
-      })),
+      later.map((r, i) => toPackItem(r.facts, i)),
       newStartMs,
       bufferMs,
       venueCourts,
@@ -1267,6 +1255,22 @@ export default function SchedulePage() {
                       >
                         {openDetails.has(r.event.id) ? "Hide setup ▴" : "Details & setup ▾"}
                       </button>
+                      {/* Jump straight to the full event console (teams /
+                          settings / games) or the Setup & Start wizard for this
+                          event — the same screens the tournament events list
+                          links to. */}
+                      <Link
+                        to={`/admin/${org.slug}/tournaments/${tournamentSlug}/events/${r.event.id}`}
+                        style={eventLinkStyle}
+                      >
+                        Open console ↗
+                      </Link>
+                      <Link
+                        to={`/admin/${org.slug}/tournaments/${tournamentSlug}/events/${r.event.id}?wizard=1`}
+                        style={eventLinkStyle}
+                      >
+                        Setup &amp; start ↗
+                      </Link>
                     </div>
                     <div
                       style={{ fontSize: 11, color: inkMuted, marginTop: 2 }}
@@ -1411,6 +1415,7 @@ export default function SchedulePage() {
                         row={r}
                         courtCount={courtCount}
                         busy={frozen}
+                        locked={locked}
                         error={rowErr[r.event.id] ?? ""}
                         onPatch={(patch) => void onPatchEvent(r.event.id, patch)}
                         onToggleCourt={(c) => void onToggleCourt(r.event.id, c)}
@@ -1558,6 +1563,7 @@ function SetupPanel({
   row,
   courtCount,
   busy,
+  locked,
   error,
   onPatch,
   onToggleCourt,
@@ -1565,6 +1571,7 @@ function SetupPanel({
   row: EventRow;
   courtCount: number;
   busy: boolean;
+  locked: boolean;
   error: string;
   onPatch: (
     patch: Partial<
@@ -1584,13 +1591,16 @@ function SetupPanel({
   const advancingOptions = [0, 2, 4, 6, 8, 10, 12, 16].filter((n) => n === 0 || n <= Math.max(teams, advancing));
   if (!advancingOptions.includes(advancing)) advancingOptions.push(advancing);
   advancingOptions.sort((a, b) => a - b);
+  const bracketR = bracketRoundsForN(advancing);
   const warning =
     advancing === 0
       ? null
       : rounds === 1 && advancing % 2 !== 0
         ? "Single-round playoffs need an even Top-N (pairs play for each medal slot)."
-        : rounds === 2 && advancing !== 4
-          ? "2-round playoffs (semis + final + bronze) support Top-4 only."
+        : rounds >= 2 && bracketR !== rounds
+          ? bracketR == null
+            ? `A single-elimination bracket isn't supported for Top-${advancing} — use 1 round (pairwise), or set Top-4/6/8.`
+            : `Top-${advancing} is a ${bracketR}-round bracket — pick ${bracketR} rounds (or 1 round for pairwise).`
           : null;
   const label: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft };
   const select: CSSProperties = {
@@ -1659,8 +1669,15 @@ function SetupPanel({
             disabled={busy}
             onChange={(e) => {
               const n = parseInt(e.target.value, 10);
-              // Leaving top-4 makes a 2-round bracket invalid — drop to 1 round.
-              onPatch(n !== 4 && rounds === 2 ? { teams_advancing_to_playoff: n, playoff_rounds: 1 } : { teams_advancing_to_playoff: n });
+              // Bracket round count follows from N (Top-4 → 2, Top-6/8 → 3).
+              // When already in a bracket, re-derive it for the new N; if the
+              // new N can't form a bracket, fall back to pairwise (1 round).
+              if (rounds >= 2) {
+                const bR = bracketRoundsForN(n);
+                onPatch({ teams_advancing_to_playoff: n, playoff_rounds: bR ?? 1 });
+              } else {
+                onPatch({ teams_advancing_to_playoff: n });
+              }
             }}
             style={select}
           >
@@ -1693,11 +1710,14 @@ function SetupPanel({
             disabled={busy || advancing === 0}
             onChange={(e) => onPatch({ playoff_rounds: parseInt(e.target.value, 10) })}
             style={select}
-            title={advancing !== 4 ? "2 rounds (semis + final + bronze) is available for Top-4 only." : undefined}
+            title="1 round pairs seeds for each medal. A single-elim bracket needs Top-4 (2 rounds) or Top-6/8 (3 rounds)."
           >
             <option value={1}>1 round (pairwise medal matches)</option>
             <option value={2} disabled={advancing !== 4}>
-              2 rounds (semis + final + bronze){advancing !== 4 ? " — Top-4 only" : ""}
+              2 rounds — bracket (semifinals → final + bronze){advancing !== 4 ? " — Top-4" : ""}
+            </option>
+            <option value={3} disabled={bracketR !== 3}>
+              3 rounds — bracket ({advancing === 6 ? "play-in" : "quarterfinals"} → semis → final + bronze){bracketR !== 3 ? " — Top-6/8" : ""}
             </option>
           </select>
         </label>
@@ -1712,6 +1732,22 @@ function SetupPanel({
       {error && (
         <div style={{ marginTop: 8, padding: "6px 10px", background: dangerBg, color: dangerFg, borderRadius: 4, fontSize: 12 }}>
           {error}
+        </div>
+      )}
+      {locked && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "6px 10px",
+            background: warnBg,
+            color: warnFg,
+            borderRadius: 4,
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          🔒 Schedule is locked — click “Unlock schedule” at the top to change
+          setup.
         </div>
       )}
       <div style={{ marginTop: 8, fontSize: 11, color: inkMuted }}>
@@ -2349,6 +2385,20 @@ const detailsBtnStyle: CSSProperties = {
   minHeight: 24,
 };
 
+// Per-event jump links (console / wizard) beside the Details & setup toggle.
+const eventLinkStyle: CSSProperties = {
+  padding: "2px 8px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: courtBlue,
+  textDecoration: "none",
+  border: `1px solid ${courtBlue}`,
+  borderRadius: 4,
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 24,
+};
+
 // "waits for Womens 2.75+ — 1 shared player" / "courts full until 10:35".
 function planReason(p: Placement, rows: EventRow[]): string | null {
   const h = p.heldBy;
@@ -2459,31 +2509,4 @@ const tdStyle: CSSProperties = {
   verticalAlign: "top",
 };
 
-// `<input type="datetime-local">` expects "YYYY-MM-DDTHH:MM" in
-// **local** time with no timezone suffix. Going either direction:
-//   - toLocalInput: ISO/timestamptz → local-time slug for the input
-//   - fromLocalInput: local-time slug → ISO with the browser's offset
-// Both round-trip the same wall-clock moment the organizer sees.
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromLocalInput(local: string): string | null {
-  if (!local) return null;
-  // new Date("YYYY-MM-DDTHH:MM") parses as local time in browsers,
-  // then .toISOString() gives us the UTC-equivalent storage form.
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
-
-function fmtTime(d: Date): string {
-  return d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 

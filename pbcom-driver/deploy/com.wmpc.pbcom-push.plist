@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.wmpc.pbcom-push</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <!-- EXAMPLE path — the installer rewrites this to the checkout's real path.
+         Do not hardcode a machine path in a committed plist. -->
+    <string>/PATH/TO/tournament-manager/pbcom-driver/deploy/pbcom-push.sh</string>
+  </array>
+  <!-- Every ~150s during play: a score entered in B&E should reach PB.com while
+       the match card is still on screen. A no-op on every host except PBCOM-PUSH-HOST,
+       and a no-op there whenever there is no delta (no browser opened), so a tight
+       interval is cheap. -->
+  <key>StartInterval</key>
+  <integer>150</integer>
+  <!-- Do not fire on load: reinstalling must not kick off a PB.com push. -->
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/notronwest/.local/state/wmpc-pbcom/push.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/notronwest/.local/state/wmpc-pbcom/push.err.log</string>
+</dict>
+</plist>
