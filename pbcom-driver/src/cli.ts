@@ -22,7 +22,8 @@ import { BindingError, loadBinding, resolveDivisionTarget, resolveEventBinding }
 import { log } from "./log.js";
 import type { BandeDraw } from "./types.js";
 import { PbcomSession, withSession } from "./pbcom/session.js";
-import { createBracketOnPbcom, submitScoreCard } from "./pbcom/driver.js";
+import { createBracketOnPbcom, submitScoreCard, probeDivisionBracket } from "./pbcom/driver.js";
+import { rehearsalVerdict } from "./rehearse.js";
 import { fetchAttendeesPartnersPages, parsePages } from "./pbcom/attendees.js";
 import {
   buildPreflightReport,
@@ -433,10 +434,11 @@ async function runPreflight(cfg: DriverConfig, tournamentId: string, live: boole
 
   const beDivisions = await readBeDivisions(cfg, tournamentId);
 
-  // Surname collisions (DB-only): matches PB.com can't tell apart by last names.
+  // The draws drive both the surname-collision scan and the live bracket probe.
+  let draws: Awaited<ReturnType<DbDrawSource["listDivisionDraws"]>> = [];
   let surnameCollisions: { label: string; matches: number }[] | null = null;
   try {
-    const draws = await new DbDrawSource(cfg).listDivisionDraws(tournamentId);
+    draws = await new DbDrawSource(cfg).listDivisionDraws(tournamentId);
     surnameCollisions = [];
     for (const draw of draws) {
       const groups = divisionSurnameCollisions(draw);
@@ -451,22 +453,38 @@ async function runPreflight(cfg: DriverConfig, tournamentId: string, live: boole
 
   let pbcomEntryCounts: Map<string, number> | null = null;
   let sessionAuthenticated: boolean | null = null;
+  let bracketProbes: { label: string; reachable: boolean; rows: number; expectedMatches: number }[] | null = null;
   if (live && eid && cfg.pbcomUsername) {
+    const session = new PbcomSession(cfg);
     try {
-      const scraper = await makeOpenScraper(cfg)();
+      await session.open(); // throws on a lapsed / OTP-required session
       sessionAuthenticated = true;
-      try {
-        const entries = await scraper.scrape(eid);
-        pbcomEntryCounts = new Map();
-        for (const e of entries) {
-          pbcomEntryCounts.set(e.divisionLabel, (pbcomEntryCounts.get(e.divisionLabel) ?? 0) + 1);
+      // (a) attendees → per-division registration counts (the roster map).
+      const entries = parsePages(await fetchAttendeesPartnersPages(session, cfg.pbcomBaseUrl, eid));
+      pbcomEntryCounts = new Map();
+      for (const e of entries) {
+        pbcomEntryCounts.set(e.divisionLabel, (pbcomEntryCounts.get(e.divisionLabel) ?? 0) + 1);
+      }
+      // (b) READ-ONLY probe of each division's live score page (write surface).
+      const binding = loadBinding(cfg.bindingPath);
+      const eventBinding = resolveEventBinding(binding, tournamentId);
+      bracketProbes = [];
+      for (const draw of draws) {
+        const label = draw.division.sourceDivisionLabel ?? draw.division.name;
+        try {
+          const target = resolveDivisionTarget(eventBinding, draw.division);
+          const probe = await probeDivisionBracket(session, target);
+          bracketProbes.push({ label, reachable: probe.reachable, rows: probe.rows, expectedMatches: draw.matches.length });
+        } catch (err) {
+          log.warn("preflight: bracket probe failed", { division: label, error: String((err as Error)?.message ?? err) });
+          bracketProbes.push({ label, reachable: false, rows: 0, expectedMatches: draw.matches.length });
         }
-      } finally {
-        await scraper.close().catch(() => {});
       }
     } catch (err) {
       sessionAuthenticated = false;
       log.warn("preflight: live PB.com check failed", { error: String((err as Error)?.message ?? err) });
+    } finally {
+      await session.close().catch(() => {});
     }
   }
 
@@ -480,6 +498,7 @@ async function runPreflight(cfg: DriverConfig, tournamentId: string, live: boole
     pbcomEntryCounts,
     sessionAuthenticated,
     surnameCollisions,
+    bracketProbes,
   });
 
   const counts = countByStatus(checks);
@@ -564,6 +583,56 @@ async function runReconcile(cfg: DriverConfig, tournamentId: string): Promise<nu
   return report.inSync ? 0 : 1;
 }
 
+/**
+ * REHEARSE — drive ONE division end-to-end against the CONFIGURED PB.com (create
+ * the bracket + push its completed scores), verify-after-write, with an IN-MEMORY
+ * ledger so nothing persists. Proves the automated WRITE path actually works before
+ * the real event. REFUSES the live host unless --allow-live, so a "rehearsal" can't
+ * accidentally write to production.
+ */
+async function runRehearse(cfg: DriverConfig, tournamentId: string, divisionLabel: string): Promise<number> {
+  if (!cfg.supabaseUrl || !cfg.supabaseServiceRoleKey) {
+    log.warn("rehearse: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set");
+    return NO_CREDENTIALS;
+  }
+  const base = cfg.pbcomBaseUrl ?? "https://pickleballbrackets.com";
+  const isLive = base.includes("pickleballbrackets.com");
+  if (isLive && !flag("allow-live")) {
+    log.error(
+      "rehearse: PBCOM_BASE_URL is the LIVE site — a rehearsal WRITES to PB.com. Point it at the training site " +
+        "(PBCOM_BASE_URL=https://train.pickleballbrackets.dev) to rehearse safely, or pass --allow-live to rehearse " +
+        "on a DISPOSABLE live division.",
+    );
+    return 1;
+  }
+  log.info(`\n── REHEARSAL · ${tournamentId} / "${divisionLabel}" ──`);
+  log.info(
+    `Driving ${base} end-to-end (create bracket + push completed scores), verify-after-write, NO DB ledger written. ` +
+      `${isLive ? "⚠️  LIVE site (--allow-live)" : "training site"}.`,
+  );
+
+  const source: DrawSource = new DbDrawSource(cfg);
+  const ledger = new MemoryLedger();
+  const drive = makeDrive(cfg, cfg.bindingPath);
+  const result = await runPush(
+    { tournamentId, divisionLabel, dryRun: false, forceHost: true },
+    { cfg, source, ledger, drive },
+  );
+  if (!result.ran) {
+    log.warn("rehearse: did not run", { reason: result.reason });
+    return 1;
+  }
+  let expected = 0;
+  for (const dp of result.divisions) {
+    expected += (dp.plan.bracketToCreate ? 1 : 0) + dp.plan.scoresToPush.length;
+    log.info("rehearse division", { ...summarizePlan(dp), state: dp.state });
+  }
+  const verified = (await ledger.list()).length;
+  const verdict = rehearsalVerdict(expected, verified);
+  log.info(`── ${verdict.summary} ──\n`);
+  return verdict.outcome === "failed" ? 1 : 0;
+}
+
 function usage(): number {
   log.error(
     "usage:\n" +
@@ -572,6 +641,7 @@ function usage(): number {
       "  cli.ts link-partners <tournamentId> [--dry-run] [--force-host]  # supervised doubles partner-linkage\n" +
       "  cli.ts preflight <tournamentId> [--live]                        # READ-ONLY: prove the B&E⇄PB.com map before pushing (--live opens PB.com)\n" +
       "  cli.ts reconcile <tournamentId>                                 # READ-ONLY: 'are we in sync?' — B&E vs confirmed PB.com pushes\n" +
+      "  cli.ts rehearse <tournamentId> <divisionLabel> [--allow-live]   # DRESS-REHEARSAL: drive ONE division end-to-end (training site; no DB ledger)\n" +
       "  cli.ts poll [--dry-run] [--fixture f.json] [--force-host]      # unattended all-active: link partners + push\n" +
       "  cli.ts push --auto [...]                                        # alias for poll",
   );
@@ -677,7 +747,8 @@ async function main(): Promise<number> {
     command !== "poll" &&
     command !== "link-partners" &&
     command !== "preflight" &&
-    command !== "reconcile"
+    command !== "reconcile" &&
+    command !== "rehearse"
   ) {
     return usage();
   }
@@ -709,6 +780,12 @@ async function main(): Promise<number> {
     const tid = positionals()[0];
     if (!tid) return usage();
     return runReconcile(cfg, tid);
+  }
+  if (command === "rehearse") {
+    const tid = positionals()[0];
+    const divisionLabel = positionals()[1];
+    if (!tid || !divisionLabel) return usage();
+    return runRehearse(cfg, tid, divisionLabel);
   }
 
   if (auto) return runAutoMode(cfg, fixture, dryRun);
