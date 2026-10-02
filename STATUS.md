@@ -5,6 +5,14 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-02 — Builder: rebased PR #1065 after reviewer "needs rebase" (#1064)
+
+Single-item rework for issue #1064, already closed by open PR #1065 (the STATUS.md-only tracking PR for #1052's mis-queue note). The reviewer gate had flagged it `CONFLICTING` and left a "needs rebase — `main` has moved" comment (D-0052) rather than a findings list.
+
+Merged `origin/main` into the existing branch (`docs/status-2026-10-02-builder-issue-1052`, no new branch/PR). Resolved the one conflict — both sides had appended a `STATUS.md` entry — by keeping both, per this file's own append-only convention: the reviewer's PR #947 approve entry (committed 2026-10-02T00:19:31-04:00) stays on top since it's chronologically newer than this PR's own #1052 mis-queue entry (2026-10-01T23:25:59-04:00). Pushed the merge commit to the same branch; `gh pr view 1065 --json mergeable` now reads `MERGEABLE`. Posted an `Addressed:` comment on PR #1065 and moved its card back to In Review.
+
+**Next:** reviewer re-reviews PR #1065 on the push (D-0052); no action needed from Ron unless it flags something new.
+
 ## 2026-10-02 — Reviewer: PR #947 re-reviewed after rework (APPROVE)
 
 Re-reviewed PR #947 (Closes #946, checkout donation UX) per `daemon/agents/reviewer/PROMPT.md` after the Builder's rework commit (`1f1f14f`) addressed the prior REQUEST CHANGES. Checked all six of #946's acceptance criteria against the diff, confirmed `create-payment-intent`'s `Body` type still has no `donationCents` field (extra field is genuinely inert, not just claimed), and verified the D-0049 fix: the duplicated preset-chip UI is now `web/src/components/DonationAmountPicker.tsx`, mounted by both `CheckoutPage.tsx` and `DonatePage.tsx` — the deliberate shared-extraction D-0049 asks for, not a new duplicate.
