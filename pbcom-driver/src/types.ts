@@ -92,6 +92,8 @@ export interface BandeEntry {
   sourceTeamId: string | null;
   /** event_registrations.source_attendee_header_id — PB.com per-attendee id. */
   sourceAttendeeHeaderId: string | null;
+  /** event_registrations.pool_index — B&E's authoritative pool assignment (null = unassigned / single-pool). */
+  poolIndex: number | null;
 }
 
 /**
@@ -123,6 +125,8 @@ export interface BandeTeam {
   sourceActivityIds: string[];
   /** The team's draw seed (min of its members' seeds; null if unseeded). */
   seed: number | null;
+  /** The team's B&E pool (shared by its members); null if unassigned. */
+  poolIndex: number | null;
 }
 
 /** A B&E match = one `matches` row. */

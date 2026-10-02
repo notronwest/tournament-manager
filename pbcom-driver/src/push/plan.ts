@@ -65,6 +65,7 @@ export function resolveTeams(entries: BandeEntry[]): BandeTeam[] {
     const teamKey = teamId
       ? `team:${teamId}`
       : `regs:${members.map((m) => m.registrationId).sort().join("+")}`;
+    const poolIndex = members.map((m) => m.poolIndex).find((p): p is number => p != null) ?? null;
     return {
       teamKey,
       sourceTeamId: teamId,
@@ -74,6 +75,7 @@ export function resolveTeams(entries: BandeEntry[]): BandeTeam[] {
       sourceAttendeeHeaderIds: attendeeIds,
       sourceActivityIds: activityIds,
       seed: seedOf(members),
+      poolIndex,
     };
   };
 

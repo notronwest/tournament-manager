@@ -41,6 +41,7 @@ function entry(regId: string, partner: string, team: string, last: string): Band
     sourceActivityId: null,
     sourceTeamId: team,
     sourceAttendeeHeaderId: null,
+    poolIndex: null,
   };
 }
 

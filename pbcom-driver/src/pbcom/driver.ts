@@ -302,6 +302,7 @@ export async function createBracketOnPbcom(
     const fmt = page.getByRole("radio", { name: bracketRadioLabel(input.bracketType) }).first();
     if (await fmt.count()) await fmt.check().catch(() => {});
   }
+  log.info("s2 Pool Options page — dumping for pool-assignment tracing", { dump: await dumpBracketPage(page) });
   await saveAndConfirm(page, saveButton(page), { step: "s2 Pool Options" });
   log.info("createBracket: s2 done — s3 Verify Settings");
 
@@ -336,6 +337,7 @@ export async function createBracketOnPbcom(
   log.info("createBracket: s4 done — s5 Verify Matchups");
 
   // ── s5 Verify First-Round Matchups — review, Save → Continue → Success → Next.
+  log.info("s5 Verify Matchups page — dumping to compare vs B&E", { dump: await dumpBracketPage(page) });
   await saveAndConfirm(page, saveButton(page), { expectSuccess: true, step: "s5 Verify Matchups" });
   log.info("createBracket: s5 done — s6 Go Live");
 

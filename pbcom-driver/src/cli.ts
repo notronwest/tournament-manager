@@ -140,7 +140,7 @@ class DbDrawSource implements DrawSource {
       const { data: regs, error: rErr } = await db
         .from("event_registrations")
         .select(
-          "id, event_id, player_id, partner_registration_id, seed, source_system, source_activity_id, source_team_id, source_attendee_header_id, players(first_name, last_name)",
+          "id, event_id, player_id, partner_registration_id, seed, source_system, source_activity_id, source_team_id, source_attendee_header_id, pool_index, players(first_name, last_name)",
         )
         .eq("event_id", ev.id)
         .is("deleted_at", null);
@@ -181,6 +181,7 @@ class DbDrawSource implements DrawSource {
             sourceActivityId: r.source_activity_id,
             sourceTeamId: r.source_team_id,
             sourceAttendeeHeaderId: r.source_attendee_header_id,
+            poolIndex: (r.pool_index as number | null) ?? null,
           };
         }),
         matches: (matches ?? []).map((m) => ({

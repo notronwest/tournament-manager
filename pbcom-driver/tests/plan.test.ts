@@ -26,6 +26,7 @@ function entry(p: Partial<BandeEntry> & { registrationId: string }): BandeEntry 
     sourceActivityId: null,
     sourceTeamId: null,
     sourceAttendeeHeaderId: null,
+    poolIndex: null,
     ...p,
   };
 }
