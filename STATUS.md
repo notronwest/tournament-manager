@@ -1724,3 +1724,21 @@ On-screen warning when matches are unscored / podiums undecided.
   (no overflow; day table stacks to cards) and 1100px, plus print-media render.
 - NOT verified against a real tournament on TEST — Ron: open a completed tournament's
   Summary report on the PR preview and eyeball the podiums vs the event consoles.
+
+## 2026-10-02 — Match timing: started_at / ended_at on matches — [DB] first, then the court-box clock
+
+Ron: "When you click 'Load this match…' start a timer and put it into the court box so we can
+see how long the match takes — store that data (start/end) with the game so we can track
+efficiency." DB half (#1055): migration `20261002120000_match_timing.sql` adds
+`matches.started_at`, `ended_at`, generated `duration_seconds`, and a BEFORE INSERT/UPDATE OF
+status trigger (`stamp_match_timing`, `clock_timestamp()`) — in_progress stamps start and
+clears end; completed stamps end; pending clears both; a value the statement itself sets is
+respected; score edits on a completed match don't touch either. Chose a trigger over client
+writes so the tournament + per-event court managers, the event console, the round simulator
+and any future scorer all record timing without code changes. No backfill (updated_at moves
+on court assignment and score edits, so it would be a guess). Verified on local Postgres 16
+(all 107 migrations + this one; pg_net/pg_cron stubbed): 8 transition cases incl. the
+"scored from console, never on a court" → duration null case. UX half (#1056) follows:
+`MatchTimer` component + `lib/matchTiming.ts` on both court manager cards.
+Note: main's `tsc -b` has 3 pre-existing errors (SchedulePage ×2, LiveResultsPage ×1) —
+not from this change.
