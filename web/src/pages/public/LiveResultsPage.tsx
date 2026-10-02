@@ -1,24 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { supabase } from "../../supabase";
+import { fetchPublicResults, type PublicEvent, type PublicResultsPayload } from "../../lib/publicResults";
 import SiteFooter from "../../components/SiteFooter";
+import { StandingsTable } from "../../components/StandingsTable";
 import {
   buildTeams,
   computeMedals,
   computeStandings,
   groupStandingsByPool,
-  poolLetter,
+  poolLabel,
   teamByAnyRegId,
-  type EventRegistration,
-  type Match,
   type Medal,
-  type Player,
 } from "../../lib/bracketTeams";
 import {
   bodyFontStack,
   contentColStyle,
-  courtGreen,
   courtRed,
   cream,
   creamDeep,
@@ -42,33 +38,8 @@ import {
 
 const REFRESH_MS = 30_000;
 
-// public_tournament_results is a hand-written RPC (migration 20261001130000),
-// not in the generated types — call it through an untyped client, like the
-// other bespoke RPCs in this app (e.g. MergeEventsPage).
-const untyped = supabase as unknown as SupabaseClient;
-
-// The curated payload the RPC returns (safe subset of each row).
-type EventLite = {
-  id: string;
-  name: string;
-  format: string;
-  gender: string;
-  bracket_type: string | null;
-  pool_count: number;
-  teams_advancing_to_playoff: number;
-  playoff_rounds: number;
-  double_elim_final: "crossover" | "bronze_only" | null;
-  status: string;
-  scheduled_start_at: string | null;
-  schedule_order: number | null;
-};
-type ResultsPayload = {
-  tournament: { name: string; slug: string; starts_at: string; ends_at: string; status: string };
-  events: EventLite[];
-  registrations: EventRegistration[];
-  players: Player[];
-  matches: Match[];
-};
+type EventLite = PublicEvent;
+type ResultsPayload = PublicResultsPayload;
 
 type EventResult = {
   event: EventLite;
@@ -113,13 +84,10 @@ export default function LiveResultsPage() {
       if (refreshing.current) return;
       refreshing.current = true;
       if (initial) setLoading(true);
-      const { data, error: rpcErr } = await untyped.rpc("public_tournament_results", {
-        p_org_slug: orgSlug,
-        p_tournament_slug: tournamentSlug,
-      });
+      const { data, error: rpcErr } = await fetchPublicResults(orgSlug, tournamentSlug);
       refreshing.current = false;
       if (rpcErr) {
-        if (initial) setError(rpcErr.message);
+        if (initial) setError(rpcErr);
         setLoading(false);
         return;
       }
@@ -129,7 +97,7 @@ export default function LiveResultsPage() {
         setLoading(false);
         return;
       }
-      setPayload(data as ResultsPayload);
+      setPayload(data);
       setError(null);
       setUpdatedAt(Date.now());
       setLoading(false);
@@ -167,7 +135,7 @@ export default function LiveResultsPage() {
       const phase: EventResult["phase"] =
         medals.some((m) => m.place === "gold")
           ? "final"
-          : gamesPlayed > 0 || evMatches.some((m) => m.status === "active")
+          : gamesPlayed > 0 || evMatches.some((m) => m.status === "in_progress")
             ? "in_progress"
             : "not_started";
       return {
@@ -373,7 +341,7 @@ function EventResultCard({ result }: { result: EventResult }) {
                     fontFamily: monoFontStack,
                   }}
                 >
-                  {g.pool == null ? "Not yet pooled" : `Pool ${poolLetter(g.pool)}`}
+                  {g.pool == null ? "Not yet pooled" : poolLabel(g.pool)}
                 </h3>
               )}
               <StandingsTable rows={g.rows} />
@@ -382,41 +350,6 @@ function EventResultCard({ result }: { result: EventResult }) {
         </div>
       )}
     </section>
-  );
-}
-
-function StandingsTable({ rows }: { rows: EventResult["groups"][number]["rows"] }) {
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: bodyFontStack }}>
-        <thead>
-          <tr>
-            <th style={{ ...thStyle, width: 32, textAlign: "left" }}>#</th>
-            <th style={{ ...thStyle, textAlign: "left" }}>Team</th>
-            <th style={numTh}>W</th>
-            <th style={numTh}>L</th>
-            <th style={numTh}>PF</th>
-            <th style={numTh}>PA</th>
-            <th style={numTh}>Diff</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((s, i) => (
-            <tr key={s.team.captainRegId} style={{ borderTop: `1px solid ${ruleSoft}` }}>
-              <td style={{ ...tdStyle, color: inkMuted }}>{i + 1}</td>
-              <td style={{ ...tdStyle, fontWeight: 500, color: ink }}>{s.team.label}</td>
-              <td style={numTd}>{s.wins}</td>
-              <td style={numTd}>{s.losses}</td>
-              <td style={{ ...numTd, color: inkMuted }}>{s.pf}</td>
-              <td style={{ ...numTd, color: inkMuted }}>{s.pa}</td>
-              <td style={{ ...numTd, color: s.diff > 0 ? courtGreen : s.diff < 0 ? courtRed : inkMuted }}>
-                {s.diff > 0 ? `+${s.diff}` : s.diff}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 
@@ -528,20 +461,3 @@ function shortEventName(name: string): string {
   return m ? `${base} ${m[1].replace(/\s*to\s*/i, "–")}` : base;
 }
 
-const thStyle: CSSProperties = {
-  fontSize: 11,
-  textTransform: "uppercase",
-  letterSpacing: 0.5,
-  color: inkMuted,
-  fontWeight: 700,
-  padding: "6px 8px",
-  fontFamily: monoFontStack,
-};
-const numTh: CSSProperties = { ...thStyle, textAlign: "right", width: 54 };
-const tdStyle: CSSProperties = { fontSize: 14, padding: "7px 8px", fontFamily: bodyFontStack };
-const numTd: CSSProperties = {
-  ...tdStyle,
-  textAlign: "right",
-  fontVariantNumeric: "tabular-nums",
-  color: ink,
-};
