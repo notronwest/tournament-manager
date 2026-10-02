@@ -49,9 +49,18 @@ import {
 } from "@stripe/react-stripe-js";
 import { getStripeForAccount, stripeConfigured } from "../../lib/stripe";
 import { trackEvent } from "../../lib/analytics";
+import DonationAmountPicker from "../../components/DonationAmountPicker";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+
+// Donation add-on at checkout (#946 — UX-only half of #378). Shares
+// DonationAmountPicker with the standalone DonatePage's preset chips. The
+// amount is carried to create-payment-intent as donationCents; until the
+// [FN] half of #378 ships, the function ignores it and the actual Stripe
+// charge stays registration-only — see the PR notes for the resulting
+// preview/charge gap.
+const DONATION_PRESET_CENTS = [500, 1000, 2500];
 
 // Per-event row loaded for the checkout. Carries enough to display
 // the event + its current partner state and to fire the partner
@@ -156,6 +165,15 @@ export default function CheckoutPage() {
   >(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponChecking, setCouponChecking] = useState(false);
+
+  // Optional donation add-on (#946). A selected preset takes precedence
+  // unless the player is using the custom field. Both are UI-only inputs —
+  // effectiveDonationCents below is the single source of truth and is always
+  // clamped to zero or above, so no input can push the total under the
+  // required fees.
+  const [donationPreset, setDonationPreset] = useState<number | null>(null);
+  const [usingCustomDonation, setUsingCustomDonation] = useState(false);
+  const [customDonationDollars, setCustomDonationDollars] = useState("");
 
   // After Pay succeeds we render the receipt view. doneEventNames
   // carries the confirmed events; receiptItems holds the server-side
@@ -420,6 +438,21 @@ export default function CheckoutPage() {
     : 0;
   const payableCents = Math.max(0, totalCents - discountCents);
 
+  // Effective donation amount. Custom entry wins when active; any
+  // non-numeric, empty, or non-positive value collapses to 0 rather than
+  // ever subtracting from the total (#946 acceptance criteria).
+  const donationCents = tournament?.accepts_donations
+    ? usingCustomDonation
+      ? (() => {
+          const dollars = Number(customDonationDollars);
+          return Number.isFinite(dollars) && dollars > 0
+            ? Math.round(dollars * 100)
+            : 0;
+        })()
+      : (donationPreset ?? 0)
+    : 0;
+  const grandTotalCents = payableCents + donationCents;
+
   // Block Pay if any doubles row is missing a partner AND is not a
   // seeker — seekers intentionally have no partner yet; they can pay
   // and get matched later.
@@ -488,6 +521,9 @@ export default function CheckoutPage() {
           tournamentSlug,
           baseUrl: window.location.origin,
           couponCode: appliedCoupon?.code,
+          // Forwarded for the [FN] half of #378 to pick up; the function
+          // currently ignores unknown fields, so this is a no-op until then.
+          donationCents: donationCents > 0 ? donationCents : undefined,
         },
       },
     );
@@ -941,10 +977,83 @@ export default function CheckoutPage() {
               <span>−{formatUsd(discountCents)}</span>
             </div>
           )}
+          {donationCents > 0 && (
+            <div style={summaryRow}>
+              <span>Donation</span>
+              <span>{formatUsd(donationCents)}</span>
+            </div>
+          )}
           <div style={summaryTotal}>
             <span>Total</span>
-            <span>{formatUsd(payableCents)}</span>
+            <span>{formatUsd(grandTotalCents)}</span>
           </div>
+
+          {/* Add-a-donation (#946). Free-form + presets, shown only when the
+              tournament accepts donations and hidden once payment starts —
+              same treatment as the coupon field below. */}
+          {!clientSecret && tournament?.accepts_donations && (
+            <div
+              style={{
+                marginTop: 14,
+                paddingTop: 14,
+                borderTop: `1px solid ${ruleSoft}`,
+              }}
+            >
+              <div
+                style={{
+                  fontFamily: headingFontStack,
+                  fontSize: 12,
+                  color: ink,
+                  marginBottom: 8,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.14em",
+                }}
+              >
+                Add a donation
+              </div>
+              {tournament.donation_prompt && (
+                <p
+                  style={{
+                    margin: "0 0 10px",
+                    color: inkSoft,
+                    fontSize: 12,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {tournament.donation_prompt}
+                </p>
+              )}
+              <DonationAmountPicker
+                presetsCents={DONATION_PRESET_CENTS}
+                selectedCents={donationPreset}
+                usingCustom={usingCustomDonation}
+                onSelectPreset={(c) => {
+                  setUsingCustomDonation(false);
+                  setDonationPreset((prev) => (prev === c ? null : c));
+                }}
+                onToggleCustom={() => {
+                  setUsingCustomDonation((v) => !v);
+                  setDonationPreset(null);
+                }}
+                customValue={customDonationDollars}
+                onCustomChange={setCustomDonationDollars}
+                customPlaceholder="0"
+                customMin="0"
+                customMaxWidth={160}
+                chipStyle={donationChip}
+                chipActiveStyle={donationChipActive}
+                inputStyle={{ ...couponInputStyle, width: "100%" }}
+                dollarSignStyle={{
+                  position: "absolute",
+                  left: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: inkMuted,
+                  fontSize: 13,
+                }}
+              />
+            </div>
+          )}
 
           {/* "Have a code?" — coupon entry (#30). Hidden once a code is on. */}
           {!clientSecret && (
@@ -1125,7 +1234,7 @@ export default function CheckoutPage() {
                     ? "Fix the partner issue above"
                     : payableCents === 0
                       ? "Confirm registration →"
-                      : `Continue to payment · ${formatUsd(payableCents)} →`}
+                      : `Continue to payment · ${formatUsd(grandTotalCents)} →`}
               </button>
               {!stripeConfigured && payableCents > 0 && (
                 <div
@@ -1167,7 +1276,7 @@ export default function CheckoutPage() {
                 options={{ clientSecret, appearance: { theme: "stripe" } }}
               >
                 <PaymentSection
-                  totalCents={payableCents}
+                  totalCents={grandTotalCents}
                   finalizing={finalizing}
                   partnerNames={rows
                     .filter((r) => r.partnerLabel)
@@ -1591,6 +1700,24 @@ const overlayPendingDot: CSSProperties = {
   height: 16,
   borderRadius: "50%",
   border: `2px solid ${rule}`,
+};
+
+const donationChip: CSSProperties = {
+  padding: "8px 14px",
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  background: "#ffffff",
+  color: ink,
+  fontSize: 13,
+  fontFamily: "inherit",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+const donationChipActive: CSSProperties = {
+  ...donationChip,
+  border: `2px solid ${courtGreen}`,
+  color: courtGreen,
 };
 
 const couponInputStyle: CSSProperties = {

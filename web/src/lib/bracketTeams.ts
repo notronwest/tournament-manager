@@ -111,6 +111,13 @@ export function poolLetter(index: number): string {
 
 export type PoolGroup = { pool: number | null; rows: Standing[] };
 
+// Heading for a PoolGroup. `pool` is the DB's 1-based pool_index, so Pool 1
+// reads "Pool A" (poolLetter above is 0-based — mixing the two is how the
+// live results page once showed Pool 1 as "B").
+export function poolLabel(pool: number | null): string {
+  return pool == null ? "Unassigned" : `Pool ${poolLetter(pool - 1)}`;
+}
+
 // Split standings into per-pool groups for a multi-pool event — the grouping
 // the Standings tab and the public results page both render. Single pool (or a
 // one-pool event) returns one group with pool = null. Teams not yet assigned to

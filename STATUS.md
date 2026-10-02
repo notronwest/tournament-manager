@@ -5,6 +5,42 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-02 — Builder: rebased PR #1065 after reviewer "needs rebase" (#1064)
+
+Single-item rework for issue #1064, already closed by open PR #1065 (the STATUS.md-only tracking PR for #1052's mis-queue note). The reviewer gate had flagged it `CONFLICTING` and left a "needs rebase — `main` has moved" comment (D-0052) rather than a findings list.
+
+Merged `origin/main` into the existing branch (`docs/status-2026-10-02-builder-issue-1052`, no new branch/PR). Resolved the one conflict — both sides had appended a `STATUS.md` entry — by keeping both, per this file's own append-only convention: the reviewer's PR #947 approve entry (committed 2026-10-02T00:19:31-04:00) stays on top since it's chronologically newer than this PR's own #1052 mis-queue entry (2026-10-01T23:25:59-04:00). Pushed the merge commit to the same branch; `gh pr view 1065 --json mergeable` now reads `MERGEABLE`. Posted an `Addressed:` comment on PR #1065 and moved its card back to In Review.
+
+**Next:** reviewer re-reviews PR #1065 on the push (D-0052); no action needed from Ron unless it flags something new.
+
+## 2026-10-02 — Reviewer: PR #947 re-reviewed after rework (APPROVE)
+
+Re-reviewed PR #947 (Closes #946, checkout donation UX) per `daemon/agents/reviewer/PROMPT.md` after the Builder's rework commit (`1f1f14f`) addressed the prior REQUEST CHANGES. Checked all six of #946's acceptance criteria against the diff, confirmed `create-payment-intent`'s `Body` type still has no `donationCents` field (extra field is genuinely inert, not just claimed), and verified the D-0049 fix: the duplicated preset-chip UI is now `web/src/components/DonationAmountPicker.tsx`, mounted by both `CheckoutPage.tsx` and `DonatePage.tsx` — the deliberate shared-extraction D-0049 asks for, not a new duplicate.
+
+Ran typecheck/lint/build myself from a fresh worktree at the PR's actual head rather than trusting the PR body's numbers: 3 typecheck errors and 38 lint problems, both pre-existing/unrelated to the changed files; build clean.
+
+Checked D-0047 (phone gate) against the actual decision record (`daemon/decisions/D-0047-*.md`) rather than applying the reviewer prompt's generic language blind: its `repos:` scope is `club-dashboard, daemon, wmpc-meta` only, and it explicitly defers tournament-manager's adoption. `e2e/mobile/audit.spec.ts`'s checkout case is `test.fixme` (pre-existing, unrelated seed-isolation gap) and only runs nightly post-merge, never as a PR-blocking check — so didn't block on a gate this repo hasn't actually wired in yet.
+
+Posted `VERDICT: APPROVE`, applied `reviewed:approve` (swapped off the stale `reviewed:changes` from the pre-rework review). **Next:** dispatcher merges per D-0052.
+
+## 2026-10-02 — Builder: #1052 mis-queued, no rebuild — fix already on PR #947
+
+Single-item dispatch for #1052 ("Unblock PR #947: extract shared DonationAmountPicker (D-0049) + resolve the main conflict"). Checked out the target branch (`feature/issue-946-donation-checkout-ux`) before touching anything and found both requested fixes already landed and pushed by an earlier run: `1f1f14f` extracts `web/src/components/DonationAmountPicker.tsx` (mounted by both `DonatePage.tsx` and `CheckoutPage.tsx`) and `9461115` merges `main` in, resolving the only conflict (`STATUS.md`, both entries kept). That run had already posted an "Addressed: both review findings" comment on PR #947 (2026-10-02T03:20:34Z) but never closed out #1052's board card, leaving it sitting in Agent Ready as if unstarted.
+
+Verified `gh pr view 947 --json mergeable,mergeStateStatus` → `MERGEABLE`/`CLEAN` — nothing left to build. Per the single-item mis-queue guard, did not rebuild or open a second PR: commented on #1052 with the evidence and moved its card to In Review. No branch created off #1052, no code touched.
+
+**Next:** reviewer/Ron re-review PR #947 against the now-clean branch; #1052 closes out once Ron confirms and merges #947 (it has no auto-closing PR of its own, so it needs a manual close once #947 lands).
+
+## 2026-10-02 — Builder: re-rebased PR #947 after a second "needs rebase" (D-0052)
+
+Single-item rework on issue #946 — already closed by open PR #947 — triggered by a second reviewer "needs rebase" comment (2026-10-02T04:51:50Z), posted right after the reviewer's own `VERDICT: APPROVE` (04:18:16Z), because `main` moved again in between (this file picked up more entries). No findings to address this round — just the conflict.
+
+Merged `origin/main` into the existing branch (`feature/issue-946-donation-checkout-ux`, no new branch/PR). The only conflict was this append-only `STATUS.md` log; resolved by keeping all entries, placing `main`'s three newer 2026-10-02 entries above this branch's own prior 2026-10-01 rework entry (which they supersede) per the file's newest-on-top convention. `CheckoutPage.tsx` and the rest of the diff auto-merged cleanly — no code conflict.
+
+Re-verified on the merged branch: `npm run typecheck` and `npm run lint` match the `origin/main` baseline exactly (3 pre-existing typecheck errors, 38 pre-existing lint problems, none introduced); `npm run build` is clean. Pushed to the same branch.
+
+**Next:** reviewer re-reviews PR #947 on this push (D-0052); card moved back to **In Review**.
+
 ## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
 
 Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
@@ -62,6 +98,16 @@ Added `web/e2e/registration-fixtures.ts` — a Playwright fixture `seedRegistrat
 One snag caught before opening: my first PR body phrase "Fixes the recurring #936 flake" (and "doesn't close #936") tripped GitHub's closing-keyword parser and auto-linked #936 as a second closing issue — violates the one-issue-per-PR rule. Reworded to neutral phrasing ("Addresses... investigated in #936" / "issue #936 should stay open...") and re-verified only #950 closes.
 
 PR: [#951](https://github.com/notronwest/tournament-manager/pull/951) (Closes #950), card moved to In Review. **Next:** Ron reviews/merges; per #950's note, #936 itself stays open until a week of clean regression runs on these specs.
+
+## 2026-09-20 — Builder: PR #947 for #946 (checkout donation UX)
+
+Single-item run on issue #946 ("Charity donations P2 [UX] — add-donation field + order-summary line at checkout"), the UX-only sub-slice split out of #378 (which stays Blocked on the money-touching `[FN]` half). No sub-issues/open PRs already existed under #946, so this was a normal build, not a mis-queued rework.
+
+Opened this PR (#947, Closes #946) on `feature/issue-946-donation-checkout-ux` — single-file diff to `web/src/pages/public/CheckoutPage.tsx`: optional donation field (presets + custom amount, mirrors the existing `/donate` page's pattern) shown only when `accepts_donations` is on, its own order-summary line, live-updating total, and floor enforcement (never displays below required fees). `donationCents` is forwarded to `create-payment-intent`, which currently ignores it — no Stripe/edge-function/webhook file touched. typecheck clean, build clean, lint adds zero new errors (confirmed against a `main` baseline worktree: 27 errors/4 warnings on both).
+
+**Flagged prominently in the PR** (not a blocker, but Ron should read before merging): until #378's `[FN]` half ships, the UI will preview a donation-inclusive total throughout checkout but the actual Stripe charge stays registration-only — a real preview/charge mismatch. Also, `accepts_donations` is the same flag already live for the standalone `/donate` page (#377), so any tournament with it already on will surface this new checkout field immediately on merge, before the FN half exists. Recommend Ron decide: hold for FN pairing, or merge now accepting the temporary gap.
+
+**Next:** Ron reviews/merges #947, or requests the FN half be paired first. #378 itself stays Blocked (money-path change, not the Builder's to attempt) until Ron authorizes and builds the `[FN]` piece.
 
 ## 2026-09-20 — Testing agent: daytime triage, all green
 
@@ -1756,3 +1802,31 @@ type extended locally for the three new columns until types are regenerated; the
 never writes them. Verified at 390px on the real route via vite preview + stubbed Supabase
 (green 13:17 / amber 19:17 / Not timed). Lint: only the two pre-existing set-state-in-effect
 errors on these pages; typecheck: only main's three pre-existing errors.
+
+## 2026-10-02 — Public "Brackets" tab: per-bracket standings + round-by-round games
+
+Ron: "create a page for each group that shows each round's games (scored once they are
+submitted) and standings — accessible via another tab like Details, Events, Results."
+New **Brackets** tab on the public tournament page (`?tab=brackets&event=<id>`, so the desk
+can link/QR a bracket): chip picker of events, then for the selected one — status line
+(phase · games played · on court), podium once medals exist, standings per pool (shared
+`components/StandingsTable`, playoff-position rows shaded for single-pool events), **pool
+play grouped into rounds** per pool, and playoff boxes titled by round with per-game
+captions (Semifinal 1 / Gold Medal Final / Bronze Medal Game; double elim uses stored
+labels). Scores show once submitted, "On Court N" while playing, "—" while waiting.
+Refreshes every 30s while open. Events tab cards get a "Standings & games →" link once a
+bracket has games.
+- **Rounds are derived**: RR matches are stored with round=1 (fair queue), so
+  `lib/roundRobinRounds.packRoundRobinRounds` packs them greedily by position into rounds
+  where no team plays twice (4-team pool → 3 rounds; odd pools get byes). 4 vitest cases.
+- Data: the `public_tournament_results` RPC (has pool_index), extracted to
+  `lib/publicResults.ts` and shared with `LiveResultsPage`. While there: fixed its pool
+  letter (1-based pool_index through the 0-based `poolLetter` showed Pool 1 as "B" — new
+  `poolLabel()` in bracketTeams) and its `status === "active"` check (enum is `in_progress`).
+- Verified on the REAL route at 390px + 1100px via vite dev + Playwright route mocks for
+  every Supabase call (no overflow; standings drop PF/PA under 480px so two names fit;
+  Events-tab link lands on `?tab=brackets&event=…`). typecheck clean apart from main's
+  known SchedulePage errors; lint clean on all new/touched files; 300 vitest pass (the
+  pdf-lib / xlsx suites can't load in this sandbox — those packages are egress-blocked).
+- NOT verified with a live tournament — Ron: open a running tournament's Brackets tab on
+  the PR preview and compare with the console's standings.
