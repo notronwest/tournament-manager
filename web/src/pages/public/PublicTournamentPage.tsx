@@ -14,6 +14,7 @@ import { SectionTabs } from "../../components/SectionTabs";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
 import { formatUsd } from "../../lib/pricing";
+import { parseDescription } from "../../lib/descriptionBlocks";
 import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
 import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
@@ -1322,17 +1323,7 @@ export default function PublicTournamentPage({
         )}
       {/* Description */}
       {tournament.description && (
-        <p
-          style={{
-            color: inkSoft,
-            margin: "0 0 24px",
-            fontSize: 15,
-            lineHeight: 1.6,
-            maxWidth: 640,
-          }}
-        >
-          {nl2br(tournament.description)}
-        </p>
+        <TournamentDescription text={tournament.description} />
       )}
       {/* Where/Courts/Nets/Surface/Ceiling moved to the persistent venue
           strip under the header. */}
@@ -3929,18 +3920,6 @@ function cancellationPresetSummary(p: CancellationPolicyPreset): string {
 // Minimal markdown renderer: paragraphs, unordered lists, bold, italic,
 // links. No external library — the content is organizer-authored and
 // limited to these constructs.
-// Turn carriage returns / line feeds (CR, LF, or CRLF) in plain organizer text
-// into <br/> line breaks, so what they typed across multiple lines renders that
-// way. React escapes each line, so this is XSS-safe (no dangerouslySetInnerHTML).
-function nl2br(text: string): ReactNode {
-  return text.split(/\r\n|\r|\n/).map((line, i) => (
-    <Fragment key={i}>
-      {i > 0 && <br />}
-      {line}
-    </Fragment>
-  ));
-}
-
 function renderSimpleMd(md: string): ReactNode {
   // Normalize line endings so CRLF/CR behave like LF for the block + line splits.
   const normalized = md.replace(/\r\n?/g, "\n");
@@ -3990,6 +3969,95 @@ function renderInline(text: string): ReactNode[] {
     }
     return tok;
   });
+}
+
+// Organizer-typed description, laid out from parseDescription()'s blocks:
+// "Heading:" lines become subheads, emoji / ✓ lines become an icon list
+// (fixed-width icon slot), short lines under a heading become chips or a
+// bullet list, and an item ending in ":" gets its following lines nested.
+function TournamentDescription({ text }: { text: string }) {
+  const blocks = parseDescription(text);
+  return (
+    <div style={{ color: inkSoft, fontSize: 15, lineHeight: 1.6, maxWidth: 680, margin: "0 0 24px" }}>
+      {blocks.map((b, i) => {
+        if (b.kind === "heading") {
+          return (
+            <h3 key={i} style={{ ...sectionH2Style, fontSize: 16, margin: i === 0 ? "0 0 10px" : "24px 0 10px" }}>
+              {b.text}
+            </h3>
+          );
+        }
+        if (b.kind === "paragraph") {
+          const lead = i === 0 && b.text.length <= 90 && blocks.length > 1;
+          return (
+            <p
+              key={i}
+              style={
+                lead
+                  ? { margin: "0 0 8px", color: ink, fontSize: 18, fontWeight: 700, lineHeight: 1.35 }
+                  : b.note
+                    ? { margin: "8px 0 12px", color: inkMuted, fontSize: 13, fontStyle: "italic" }
+                    : { margin: "0 0 12px" }
+              }
+            >
+              {renderInline(b.text)}
+            </p>
+          );
+        }
+        const plain = b.items.every((it) => !it.marker && !it.children.length);
+        if (plain && b.items.every((it) => it.text.length <= 24)) {
+          return (
+            <ul key={i} style={{ listStyle: "none", padding: 0, margin: "0 0 12px", display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {b.items.map((it, j) => (
+                <li
+                  key={j}
+                  style={{ background: cream, border: `1px solid ${rule}`, borderRadius: 999, padding: "4px 12px", color: ink, fontSize: 14, fontWeight: 600 }}
+                >
+                  {renderInline(it.text)}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        return (
+          <ul key={i} style={{ listStyle: "none", padding: 0, margin: "0 0 12px", display: "grid", gap: 8 }}>
+            {b.items.map((it, j) => (
+              <li key={j} style={{ display: "grid", gridTemplateColumns: "24px 1fr", columnGap: 8, alignItems: "start" }}>
+                <span aria-hidden style={{ textAlign: "center", color: it.marker && /[✓✔]/.test(it.marker) ? courtGreen : ink }}>
+                  {it.marker ?? "•"}
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  {renderLabeled(it.text)}
+                  {it.children.length > 0 && (
+                    <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                      {it.children.map((c, k) => (
+                        <li key={k}>{renderInline(c)}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        );
+      })}
+    </div>
+  );
+}
+
+// "Dates: Friday…" → bold "Dates:" lead-in; an item that ends in ":" (it
+// introduces nested lines) is bold throughout. Only for a short label so a
+// sentence that happens to contain a colon isn't half-bolded.
+function renderLabeled(text: string): ReactNode {
+  if (/:\s*$/.test(text)) return <strong style={{ color: ink }}>{renderInline(text)}</strong>;
+  const m = text.match(/^([^:]{1,24}:)(\s.*)?$/);
+  if (!m) return renderInline(text);
+  return (
+    <>
+      <strong style={{ color: ink }}>{m[1]}</strong>
+      {m[2] && renderInline(m[2])}
+    </>
+  );
 }
 
 function TournamentContentSection({
