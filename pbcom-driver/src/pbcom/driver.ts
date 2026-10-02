@@ -187,20 +187,21 @@ function control(scope: Locator | Page, nameRe: RegExp): Locator {
  * click. Verifies the radio ends up checked where possible.
  */
 async function selectRadioByOptionText(page: Page, textRe: RegExp): Promise<void> {
+  const T = { timeout: 4000 };
   const container = page.locator("label, tr, li, div").filter({ hasText: textRe }).last();
   const radio = container.locator('input[type="radio"]').first();
   if (await radio.count()) {
-    await radio.check().catch(async () => {
-      await radio.click().catch(() => {});
+    await radio.check(T).catch(async () => {
+      await radio.click(T).catch(() => {});
     });
     return;
   }
   const byRole = page.getByRole("radio", { name: textRe }).first();
   if (await byRole.count()) {
-    await byRole.check().catch(() => {});
+    await byRole.check(T).catch(() => {});
     return;
   }
-  await page.getByText(textRe).first().click().catch(() => {});
+  await page.getByText(textRe).first().click(T).catch(() => {});
 }
 
 /**
@@ -222,6 +223,7 @@ async function configureMedalRounds(page: Page, input: BracketPushInput): Promis
 
 /** Fill the pool "count moving to medal round" field(s) with N (input or select). */
 async function setMedalCount(page: Page, count: number): Promise<void> {
+  const T = { timeout: 2500 };
   const fields = page
     .locator("tr, div, label")
     .filter({ hasText: /medal round|moving to medal/i })
@@ -229,12 +231,33 @@ async function setMedalCount(page: Page, count: number): Promise<void> {
   const n = Math.min(await fields.count(), 10);
   for (let i = 0; i < n; i++) {
     const f = fields.nth(i);
-    await f.fill(String(count)).catch(async () => {
-      await f.selectOption({ label: String(count) }).catch(async () => {
-        await f.selectOption(String(count)).catch(() => {});
+    await f.fill(String(count), T).catch(async () => {
+      await f.selectOption({ label: String(count) }, T).catch(async () => {
+        await f.selectOption(String(count), T).catch(() => {});
       });
     });
   }
+}
+
+/** Every form field with its name/id/type/value/checked — the definitive s3 dump. */
+async function dumpFields(page: Page): Promise<string> {
+  const inputs = page.locator("input, select, textarea");
+  const n = Math.min(await inputs.count(), 70);
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const el = inputs.nth(i);
+    const name = (await el.getAttribute("name").catch(() => null)) ?? (await el.getAttribute("id").catch(() => null)) ?? `#${i}`;
+    const type = (await el.getAttribute("type").catch(() => null)) ?? "select";
+    let val = "";
+    try {
+      val = await el.inputValue({ timeout: 400 });
+    } catch {
+      /* radios/checkboxes/hidden */
+    }
+    const checked = type === "radio" || type === "checkbox" ? await el.isChecked().catch(() => false) : null;
+    out.push(`${name}[${type}${checked === true ? ":CHK" : ""}]=${String(val).slice(0, 20)}`);
+  }
+  return out.join(" ");
 }
 
 /** Visible labels of the clickable controls on the page — for a DOM dump on a miss. */
@@ -302,7 +325,7 @@ export async function createBracketOnPbcom(
     return {
       verified: false,
       pbcomDivisionId: eaid,
-      detail: `s3 Verify Settings Required Fields error. ${await settingsFormDetail(page)}`,
+      detail: `s3 Verify Settings Required Fields error. ${await settingsFormDetail(page)} || FIELDS: ${await dumpFields(page)}`,
     };
   }
 
