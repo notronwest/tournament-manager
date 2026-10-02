@@ -107,7 +107,12 @@ export class PbcomSession {
    */
   private async login(): Promise<void> {
     const page = this.page;
-    await page.goto(this.cfg.pbcomBaseUrl, { waitUntil: "load" });
+    // Wait for DOMContentLoaded, not full "load": PB.com's homepage pulls heavy
+    // third-party resources (ads/trackers) that can keep the `load` event from
+    // firing for >30s even when the page is usable — which failed an otherwise-fine
+    // run. The auth check below only needs the DOM. Generous timeout as a backstop.
+    await page.goto(this.cfg.pbcomBaseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {});
 
     // A. Persistent profile already authenticated → reuse it.
     if (await this.isAuthenticated()) {
