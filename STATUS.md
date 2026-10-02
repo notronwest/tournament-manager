@@ -5,6 +5,14 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-02 — Builder: #1052 mis-queued, no rebuild — fix already on PR #947
+
+Single-item dispatch for #1052 ("Unblock PR #947: extract shared DonationAmountPicker (D-0049) + resolve the main conflict"). Checked out the target branch (`feature/issue-946-donation-checkout-ux`) before touching anything and found both requested fixes already landed and pushed by an earlier run: `1f1f14f` extracts `web/src/components/DonationAmountPicker.tsx` (mounted by both `DonatePage.tsx` and `CheckoutPage.tsx`) and `9461115` merges `main` in, resolving the only conflict (`STATUS.md`, both entries kept). That run had already posted an "Addressed: both review findings" comment on PR #947 (2026-10-02T03:20:34Z) but never closed out #1052's board card, leaving it sitting in Agent Ready as if unstarted.
+
+Verified `gh pr view 947 --json mergeable,mergeStateStatus` → `MERGEABLE`/`CLEAN` — nothing left to build. Per the single-item mis-queue guard, did not rebuild or open a second PR: commented on #1052 with the evidence and moved its card to In Review. No branch created off #1052, no code touched.
+
+**Next:** reviewer/Ron re-review PR #947 against the now-clean branch; #1052 closes out once Ron confirms and merges #947 (it has no auto-closing PR of its own, so it needs a manual close once #947 lands).
+
 ## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
 
 Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
