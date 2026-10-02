@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { assignSuggestions } from "../../lib/courtSuggestions";
 import MatchTimer from "../../components/MatchTimer";
 import { plannedMinutesFor } from "../../lib/matchTiming";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
@@ -311,27 +312,17 @@ export default function CourtManagerPage() {
     [rankedPending, busyTeams],
   );
 
-  // Suggestions per empty court, greedily picked so no two suggestions
-  // share a team. We walk courts in order; each empty court gets the
-  // top remaining suggestion that doesn't overlap previously-suggested
-  // teams.
+  // Suggestions per empty court: no two suggestions share a team, and the
+  // set fills as many empty courts as the queue allows (assignSuggestions —
+  // the old greedy walk could strand the last court; see lib/courtSuggestions).
   const suggestionByCourt = useMemo(() => {
     const map = new Map<string, Match>();
-    const used = new Set<string>();
-    for (const c of courts) {
-      if (courtAssignments.has(c)) continue;
-      const next = eligibleRanked.find(
-        ({ match }) =>
-          !used.has(match.team_a_reg_id!) &&
-          !used.has(match.team_b_reg_id!) &&
-          !Array.from(map.values()).some((m) => m.id === match.id),
-      );
-      if (next) {
-        map.set(c, next.match);
-        used.add(next.match.team_a_reg_id!);
-        used.add(next.match.team_b_reg_id!);
-      }
-    }
+    const open = courts.filter((c) => !courtAssignments.has(c));
+    const picks = assignSuggestions(
+      eligibleRanked.map(({ match }) => match),
+      open.length,
+    );
+    picks.forEach((match, i) => map.set(open[i], match));
     return map;
   }, [courts, courtAssignments, eligibleRanked]);
 
