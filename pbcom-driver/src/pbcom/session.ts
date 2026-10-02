@@ -44,6 +44,16 @@ export class PbcomSession {
     return this._page;
   }
 
+  /**
+   * The configured DIRECTOR host (PBCOM_BASE_URL). Director surfaces (eDB.aspx
+   * console, ptsrr.aspx bracket) must be built against THIS, not `page.url()` —
+   * after login the page sits on the public portal (pickleballtournaments.com), so
+   * a URL built relative to it 404s on the wrong host (the rehearsal caught this).
+   */
+  get baseUrl(): string {
+    return this.cfg.pbcomBaseUrl;
+  }
+
   /** Launch an isolated browser, then log in. */
   async open(): Promise<void> {
     // A configured persistent profile keeps the PB.com login across runs (supervised

@@ -5,6 +5,26 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
+
+Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
+
+Blocking finding: the new entry's own title says "harness parse break persists (**4th occurrence**)" (and the commit headline repeats it) but its body says "**3 consecutive scheduled runs**" and lists only two distinct CI runs — the third list item ("this morning's triage of that same nightly run") is the same run (`36055375759`) as the second, double-counted. Title and body contradict each other within the same entry, and the "4th" isn't supported anywhere in the text added. Everything else checked out: correctly appended above (not rewriting) history, "No code changes" claim verified true, and the Job 2 claim (PR #965, regression spec for #64) verified to exist and match.
+
+Posted ✏️ REQUEST CHANGES with the fix (make title and body agree on one number) and applied `reviewed:changes`.
+
+**Next:** #963 needs a one-line fix from the Builder; #961/#947/#955 still in the review queue, not touched this session.
+
+## 2026-10-01 — Reviewer: PR #959 reviewed (APPROVE)
+
+Reviewed PR #959 ("docs(status): backfill 2026-09-23 Testing agent runs + 2026-09-24 morning run", Closes #958) — docs-only change to `STATUS.md`, no code/UI touched. Confirmed the claimed gap was real (`origin/main` topped out at the 2026-09-22 entry before this PR), the diff is pure addition in correct newest-first order with no history rewritten, and spot-checked the entries' factual claims against live GitHub state (PRs #951, #953, #955, #957) — all accurate. Posted ✅ APPROVE + label `reviewed:approve`.
+
+## 2026-10-01 — Reviewer: PR #947 reviewed (REQUEST CHANGES)
+
+Reviewed PR #947 ("Charity donations P2 [UX] — add-donation field + order-summary line at checkout", Closes #946) against its acceptance criteria, `DECISIONS.md`, and `CLAUDE.md`. Posted ✏️ REQUEST CHANGES + label `reviewed:changes`: (1) D-0049 — the new preset-chip donation-amount picker in `CheckoutPage.tsx` duplicates/diverges the existing one in `DonatePage.tsx` (same state shape and chip logic, different preset values, no shared component) instead of extracting a shared `DonationAmountPicker`; (2) the branch is `CONFLICTING`/`DIRTY` against `main` (flagged by the Builder itself on 2026-09-24, still unresolved). Also flagged non-blocking, already-disclosed-by-the-author context for Ron: once past the Payment Element step the "Pay $X →" button shows a donation-inclusive total that the real Stripe charge won't honor until #378's `[FN]` half ships. Scope/AC otherwise checked out (no payment/edge-function file touched, floor enforcement correct, gating on `accepts_donations` correct).
+
+**Next:** Builder picks this back up — extract the shared amount-picker component and rebase onto `main` before this can be re-reviewed/merged. Ron still owes the separate "hold vs. ship-with-gap" call on the donation preview/charge mismatch once #947 is otherwise clean.
+
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
 Triaged the newest untriaged regression run, [35737353782](https://github.com/notronwest/tournament-manager/actions/runs/35737353782) (2026-09-22 14:00 UTC) — workflow **failed** (56 passed, 1 failed, 1 flaky). `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" failed **both** attempt and retry #1 this time (`TimeoutError: locator.fill` on the partner-search placeholder) — same #936 signature, but landed persistent instead of flaky-then-pass, so this is the first of the last three occurrences to flip the run red. `registration.spec.ts` › "register for a singles event (no partner picker)" flaked once (`TimeoutError: locator.scrollIntoViewIfNeeded`) then passed on retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged — expected signature until it lands. Commented an update on #936 (with the severity bump noted) rather than filing a duplicate card; posted a one-line Discord triage summary to Backlog.
@@ -1704,3 +1724,35 @@ On-screen warning when matches are unscored / podiums undecided.
   (no overflow; day table stacks to cards) and 1100px, plus print-media render.
 - NOT verified against a real tournament on TEST — Ron: open a completed tournament's
   Summary report on the PR preview and eyeball the podiums vs the event consoles.
+
+## 2026-10-02 — Match timing: started_at / ended_at on matches — [DB] first, then the court-box clock
+
+Ron: "When you click 'Load this match…' start a timer and put it into the court box so we can
+see how long the match takes — store that data (start/end) with the game so we can track
+efficiency." DB half (#1055): migration `20261002120000_match_timing.sql` adds
+`matches.started_at`, `ended_at`, generated `duration_seconds`, and a BEFORE INSERT/UPDATE OF
+status trigger (`stamp_match_timing`, `clock_timestamp()`) — in_progress stamps start and
+clears end; completed stamps end; pending clears both; a value the statement itself sets is
+respected; score edits on a completed match don't touch either. Chose a trigger over client
+writes so the tournament + per-event court managers, the event console, the round simulator
+and any future scorer all record timing without code changes. No backfill (updated_at moves
+on court assignment and score edits, so it would be a guess). Verified on local Postgres 16
+(all 107 migrations + this one; pg_net/pg_cron stubbed): 8 transition cases incl. the
+"scored from console, never on a court" → duration null case. UX half (#1056) follows:
+`MatchTimer` component + `lib/matchTiming.ts` on both court manager cards.
+Note: main's `tsc -b` has 3 pre-existing errors (SchedulePage ×2, LiveResultsPage ×1) —
+not from this change.
+
+## 2026-10-02 — Court box clock (UX half of match timing, #1056)
+
+[DB] #1057 merged. UX: new `components/MatchTimer.tsx` (ticks 1/s from `matches.started_at`;
+m:ss, h:mm:ss past an hour; "Started 2:57 AM · 15 min planned"; turns amber with "4 min over
+the 15-min plan" once past the division's planned length; "Not timed" for a match loaded
+before the columns existed) and `lib/matchTiming.ts` (`useNow`, `formatElapsed`,
+`formatDurationShort`, `plannedMinutesFor` — playoff rows use their own minutes, round robin
+the event's pool minutes; 8 vitest cases). Mounted on the in-progress card of BOTH court
+managers (tournament + per-event), between the team names and the score inputs. `Match`
+type extended locally for the three new columns until types are regenerated; the client
+never writes them. Verified at 390px on the real route via vite preview + stubbed Supabase
+(green 13:17 / amber 19:17 / Not timed). Lint: only the two pre-existing set-state-in-effect
+errors on these pages; typecheck: only main's three pre-existing errors.

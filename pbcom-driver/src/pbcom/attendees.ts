@@ -91,7 +91,10 @@ export class PlaywrightAttendeesBrowser implements PbcomBrowserSession {
     await this.page
       .waitForFunction(
         () => {
-          const t = (document.body && document.body.innerText) || "";
+          // Runs in the BROWSER (Playwright serializes it there); `document` is
+          // reached via globalThis so the Node tsconfig needn't pull in the DOM lib.
+          const body = (globalThis as unknown as { document?: { body?: { innerText?: string } } }).document?.body;
+          const t = body?.innerText ?? "";
           if (!t || /please wait/i.test(t)) return false;
           // A rendered attendee row: an email, or a US phone (unmasked in director view).
           return /@/.test(t) || /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(t);

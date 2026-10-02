@@ -29,6 +29,15 @@ export function lastNameSet(names: readonly string[]): string[] {
   return Array.from(new Set(names.map(normalizeName).filter(Boolean))).sort();
 }
 
+/**
+ * A team's FIRST-name set — same normalization as last names. Used ONLY as a
+ * tiebreaker when two PB.com rows share a last-name-set key (e.g. two different
+ * "Smith / Jones" pairs in one division); never as the primary match key.
+ */
+export function firstNameSet(names: readonly string[]): string[] {
+  return Array.from(new Set(names.map(normalizeName).filter(Boolean))).sort();
+}
+
 /** A canonical string key for a team's last-name set (for equality / Map keys). */
 export function lastNameSetKey(names: readonly string[]): string {
   return lastNameSet(names).join("+");
@@ -37,6 +46,38 @@ export function lastNameSetKey(names: readonly string[]): string {
 /** A canonical, orientation-free key for a whole match (both teams). */
 export function matchTeamsKey(teamA: readonly string[], teamB: readonly string[]): string {
   return [lastNameSetKey(teamA), lastNameSetKey(teamB)].sort().join(" vs ");
+}
+
+/** One match's teams as last-name sets, for collision detection. */
+export interface MatchSurnames {
+  matchId: string;
+  teamALastNames: readonly string[];
+  teamBLastNames: readonly string[];
+}
+
+/**
+ * Find matches whose last-name-set pair is NOT unique within the set — the exact
+ * situation that makes `findMatchRow` return `ambiguous` (two matches PB.com can't
+ * tell apart by surnames alone, e.g. two "Smith / Jones vs Brown / Davis" games).
+ * Returns one group per colliding key with the match ids involved. First names (the
+ * findMatchRow tiebreak) can still resolve these at push time — the preflight warns
+ * so a human knows which games to watch.
+ */
+export function surnameCollisions(
+  matches: readonly MatchSurnames[],
+): { key: string; matchIds: string[] }[] {
+  const byKey = new Map<string, string[]>();
+  for (const m of matches) {
+    // Skip a match that isn't a real two-team game (a bye / unseeded slot).
+    if (lastNameSet(m.teamALastNames).length === 0 || lastNameSet(m.teamBLastNames).length === 0) continue;
+    const key = matchTeamsKey(m.teamALastNames, m.teamBLastNames);
+    const arr = byKey.get(key);
+    if (arr) arr.push(m.matchId);
+    else byKey.set(key, [m.matchId]);
+  }
+  return [...byKey.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([key, matchIds]) => ({ key, matchIds }));
 }
 
 // ── the PB.com match row model ────────────────────────────────────────────────────
@@ -52,6 +93,9 @@ export interface PbMatchRow {
   teamOneLastNames: string[];
   /** Last names PB.com shows for the SECOND team on the row (its "bottom" side). */
   teamTwoLastNames: string[];
+  /** First names for the first/second team, when the DOM gave them — tiebreak only. */
+  teamOneFirstNames?: string[];
+  teamTwoFirstNames?: string[];
   /** True when the row already shows a saved score (idempotency: skip it). */
   hasScore?: boolean;
 }
@@ -71,15 +115,28 @@ export type FindRowResult =
   | { ok: true; match: RowMatch }
   | { ok: false; reason: "not_found" | "ambiguous"; candidates: number };
 
+/** First names for a B&E match's two teams, to break a last-name-set tie. */
+export interface FirstNameHint {
+  teamAFirstNames?: readonly string[];
+  teamBFirstNames?: readonly string[];
+}
+
 /**
  * Locate the PB.com row for a B&E match by the two teams' last-name sets.
  * Returns the row plus the A/B ↔ team-one/team-two orientation. Fails (never guesses)
  * when zero rows match or more than one does — the caller escalates to needs_attention.
+ *
+ * When more than one row matches on last names (e.g. two "Smith / Jones" pairs in one
+ * division) AND first names are supplied on both the B&E side (`hint`) and the PB.com
+ * rows, the tie is broken by FIRST names, respecting each hit's A/B orientation. The
+ * tiebreak only ever NARROWS: it resolves to a single row or leaves it ambiguous — it
+ * never promotes a non-last-name match, so a wrong score is still impossible.
  */
 export function findMatchRow(
   teamALastNames: readonly string[],
   teamBLastNames: readonly string[],
   rows: readonly PbMatchRow[],
+  hint?: FirstNameHint,
 ): FindRowResult {
   const a = lastNameSetKey(teamALastNames);
   const b = lastNameSetKey(teamBLastNames);
@@ -97,6 +154,29 @@ export function findMatchRow(
 
   if (hits.length === 1) return { ok: true, match: hits[0]! };
   if (hits.length === 0) return { ok: false, reason: "not_found", candidates: 0 };
+
+  // Ambiguous on last names → try the FIRST-name tiebreak, if we have first names
+  // on the B&E side and on every candidate row. A candidate survives only when BOTH
+  // teams' first-name sets match in that row's orientation.
+  const aFirst = firstNameSet(hint?.teamAFirstNames ?? []);
+  const bFirst = firstNameSet(hint?.teamBFirstNames ?? []);
+  const haveHint = aFirst.length > 0 || bFirst.length > 0;
+  const rowsHaveFirst = hits.every(
+    (h) => (h.row.teamOneFirstNames?.length ?? 0) > 0 || (h.row.teamTwoFirstNames?.length ?? 0) > 0,
+  );
+  if (haveHint && rowsHaveFirst) {
+    const key = (ns?: readonly string[]) => firstNameSet(ns ?? []).join("+");
+    const refined = hits.filter((h) => {
+      const oneFirst = key(h.row.teamOneFirstNames);
+      const twoFirst = key(h.row.teamTwoFirstNames);
+      // In this hit's orientation, A is team-one iff aIsTeamOne.
+      const wantOne = h.aIsTeamOne ? aFirst.join("+") : bFirst.join("+");
+      const wantTwo = h.aIsTeamOne ? bFirst.join("+") : aFirst.join("+");
+      return oneFirst === wantOne && twoFirst === wantTwo;
+    });
+    if (refined.length === 1) return { ok: true, match: refined[0]! };
+  }
+
   return { ok: false, reason: "ambiguous", candidates: hits.length };
 }
 

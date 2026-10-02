@@ -103,6 +103,8 @@ export interface BandeTeam {
    * pbcom/matchMap.ts.
    */
   lastNames: string[];
+  /** The team members' player FIRST names, normalized + sorted — the findMatchRow tiebreak. */
+  firstNames: string[];
   /** The PB.com per-attendee ids (source_attendee_header_id), sorted — genuinely per-entry. */
   sourceAttendeeHeaderIds: string[];
   /**
