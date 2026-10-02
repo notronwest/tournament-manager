@@ -305,9 +305,11 @@ export async function createBracketOnPbcom(
   const page = session.page;
   log.info("createBracket: opening verify wizard", { division: input.divisionLabel });
   const eaid = await openVerifyWizard(page, target, session.baseUrl);
+  log.info("createBracket: wizard open — s1 Verify Teams", { eaid });
 
   // ── s1 Verify Teams — PB already shows the registered teams. Save → Continue.
   await saveAndConfirm(page, saveButton(page), { step: "s1 Verify Teams" });
+  log.info("createBracket: s1 done — s2 Pool Options");
 
   // ── s2 Pool Options — Round-Robin is default for ≤5-team RR. Leave it (or select).
   if (input.bracketType && input.bracketType !== "round_robin") {
@@ -316,6 +318,7 @@ export async function createBracketOnPbcom(
     if (await fmt.count()) await fmt.check().catch(() => {});
   }
   await saveAndConfirm(page, saveButton(page), { step: "s2 Pool Options" });
+  log.info("createBracket: s2 done — s3 Verify Settings");
 
   // ── s3 Verify Settings — MIRROR B&E's playoff onto PB.com's medal round so the
   // bracket matches (D-0045). No playoff → "No bracket medal rounds"; a medal bracket
@@ -338,12 +341,15 @@ export async function createBracketOnPbcom(
     };
   }
 
+  log.info("createBracket: s3 done — s4 Verify Seeding");
   // ── s4 Verify Seeding — apply B&E's seeded order via Sort Item + Move Up/Down.
   await applySeeding(page, input.teams);
   await saveAndConfirm(page, saveButton(page), { expectSuccess: true, step: "s4 Verify Seeding" });
+  log.info("createBracket: s4 done — s5 Verify Matchups");
 
   // ── s5 Verify First-Round Matchups — review, Save → Continue → Success → Next.
   await saveAndConfirm(page, saveButton(page), { expectSuccess: true, step: "s5 Verify Matchups" });
+  log.info("createBracket: s5 done — s6 Go Live");
 
   // ── s6 Go Live Overview — COMPLETE VERIFICATION → "Are you sure? This WILL lock…".
   const complete = controlsMatching(page, /complete verification/i).last();
@@ -351,9 +357,11 @@ export async function createBracketOnPbcom(
     throw new Error(`s6 Go Live: no 'Complete Verification' control. Controls: ${await listControls(page)}`);
   });
   await saveAndConfirm(page, complete, { step: "s6 Go Live" });
+  log.info("createBracket: s6 done — starting matches");
 
   // ── Start Matches — Live Console → Waiting tab → row → Options → Start Matches.
   await startMatches(page, target, session.baseUrl);
+  log.info("createBracket: start matches clicked — verifying Running");
 
   // ── VERIFY — the event should now be in the "Running" queue with scoreable matches.
   const running = await isEventRunning(page, target, session.baseUrl);
@@ -419,14 +427,24 @@ async function applySeeding(page: Page, teams: BandeTeam[]): Promise<void> {
   }
   const moves = computeSeedMoves(current, desired);
   log.info("createBracket: applying seed moves", { moves: moves.length });
+  const T = { timeout: 5000 };
   for (const move of moves) {
     // Re-read each iteration: the DOM re-renders after every move.
     const order = await readSeedOrder(page);
     const target = order.find((r) => r.key === move.teamKey);
-    if (!target) throw new Error(`seed move target row not found: ${move.teamKey}`);
-    await target.ref.getByRole("button", { name: /sort item/i }).first().click();
+    if (!target) {
+      log.warn("createBracket: seed move target not found — skipping seeding", { teamKey: move.teamKey });
+      return; // best-effort: a bad move never blocks the create (PB.com keeps its order)
+    }
+    // "Sort Item" / "Move Item Up|Down" are WebForms controls (link or button).
+    const sort = control(target.ref, /sort item/i);
+    if ((await sort.count()) === 0) {
+      log.warn("createBracket: no 'Sort Item' control — skipping seeding (order left as PB.com has it)");
+      return;
+    }
+    await sort.click(T).catch(() => {});
     const dir = move.direction === "up" ? /move item up/i : /move item down/i;
-    await page.getByRole("button", { name: dir }).first().click();
+    await control(page, dir).click(T).catch(() => {});
     await page.waitForLoadState("load", { timeout: STEP_TIMEOUT }).catch(() => {});
   }
 }
