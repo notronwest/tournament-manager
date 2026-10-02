@@ -105,4 +105,24 @@ describe("runPush", () => {
     expect(result.ran).toBe(true);
     expect(await ledger.list()).toHaveLength(1);
   });
+
+  it("score-only forces bracketToCreate=false so the drive skips the verify wizard", async () => {
+    // Default plan has bracketToCreate=true (no ledger record).
+    const seen: boolean[] = [];
+    const result = await runPush(
+      { tournamentId: "t-1", dryRun: false, forceHost: true, scoreOnly: true },
+      {
+        cfg: {} as never,
+        source: new StubSource(fixtureDraws()),
+        ledger: new MemoryLedger(),
+        drive: async (dp) => {
+          seen.push(dp.plan.bracketToCreate);
+          return { state: "running", recorded: [] };
+        },
+      },
+    );
+    expect(result.ran).toBe(true);
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((b) => b === false)).toBe(true);
+  });
 });

@@ -641,7 +641,8 @@ async function runRehearse(cfg: DriverConfig, tournamentId: string, divisionLabe
 function usage(): number {
   log.error(
     "usage:\n" +
-      "  cli.ts push <tournamentId> <divisionLabel|ALL> [--dry-run] [--fixture f.json] [--force-host]\n" +
+      "  cli.ts push <tournamentId> <divisionLabel|ALL> [--dry-run] [--fixture f.json] [--force-host] [--score-only]\n" +
+      "      --score-only: skip bracket create, push scores onto an already-live (e.g. hand-built) bracket\n" +
       "  cli.ts verify <tournamentId> [<divisionLabel>] [--fixture f.json]\n" +
       "  cli.ts link-partners <tournamentId> [--dry-run] [--force-host]  # supervised doubles partner-linkage\n" +
       "  cli.ts preflight <tournamentId> [--live]                        # READ-ONLY: prove the B&E⇄PB.com map before pushing (--live opens PB.com)\n" +
@@ -842,7 +843,7 @@ async function main(): Promise<number> {
 
   const deps: RunDeps = { cfg, source, ledger, drive };
   const result = await runPush(
-    { tournamentId, divisionLabel, dryRun, forceHost: flag("force-host") },
+    { tournamentId, divisionLabel, dryRun, forceHost: flag("force-host"), scoreOnly: flag("score-only") },
     deps,
   );
   if (!result.ran) {

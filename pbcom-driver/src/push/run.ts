@@ -368,6 +368,12 @@ export interface RunOptions {
   divisionLabel?: string;
   /** Ignore gate 1 for local debugging only. */
   forceHost?: boolean;
+  /**
+   * Skip bracket creation and push ONLY the score delta onto an already-live bracket
+   * — e.g. one the director built/verified by hand on PB.com (so the ledger has no
+   * create record, but re-running the verify wizard would fail on a Running event).
+   */
+  scoreOnly?: boolean;
   maxAttempts?: number;
   /** Override the same-machine lock path (tests use an isolated one). */
   lockPath?: string;
@@ -415,6 +421,12 @@ export async function runPush(opts: RunOptions, deps: RunDeps): Promise<RunResul
       if (divisions.length === 0) {
         return { ran: false, reason: `no pbcom division matching "${opts.divisionLabel}"`, divisions: [] };
       }
+    }
+
+    if (opts.scoreOnly) {
+      // Treat the bracket as already present (built by hand) — push scores only.
+      divisions = divisions.map((dp) => ({ ...dp, plan: { ...dp.plan, bracketToCreate: false } }));
+      log.info("score-only mode — skipping bracket create, pushing score delta onto the live bracket");
     }
 
     if (opts.dryRun) {
