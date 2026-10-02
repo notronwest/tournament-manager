@@ -171,6 +171,8 @@ describe("computePlan (reconcile / delta)", () => {
           digest: scoreDigest(draw.matches[0]!, teams),
           teamALastNames: [],
           teamBLastNames: [],
+          teamAFirstNames: [],
+          teamBFirstNames: [],
           teamAScore: 11,
           teamBScore: 6,
           winnerSide: "a",

@@ -18,6 +18,7 @@ function base(overrides: Partial<PreflightInput> = {}): PreflightInput {
     ],
     pbcomEntryCounts: new Map([["Mens Doubles Skill: (3.0 To 3.49)", 6]]),
     sessionAuthenticated: true,
+    surnameCollisions: [],
     ...overrides,
   };
 }
@@ -108,6 +109,23 @@ describe("buildPreflightReport — partner linkage", () => {
     const c = find(buildPreflightReport(d), "partner-linkage")!;
     expect(c.status).toBe("warn");
     expect(c.detail).toContain("2 doubles");
+  });
+});
+
+describe("buildPreflightReport — surname collisions", () => {
+  it("passes when none found", () => {
+    expect(find(buildPreflightReport(base()), "surname-collisions")!.status).toBe("pass");
+  });
+  it("warns per colliding division (does not fail — the push flags, never mis-writes)", () => {
+    const checks = buildPreflightReport(base({ surnameCollisions: [{ label: "Mens Doubles 3.0", matches: 2 }] }));
+    const c = checks.find((x) => x.name.startsWith("surname-collision:"))!;
+    expect(c.status).toBe("warn");
+    expect(c.detail).toContain("2 match(es)");
+    expect(preflightClear(checks)).toBe(true); // a warn never blocks
+  });
+  it("omits the check when not computed (null)", () => {
+    const checks = buildPreflightReport(base({ surnameCollisions: null }));
+    expect(checks.some((c) => c.name.startsWith("surname-collision"))).toBe(false);
   });
 });
 

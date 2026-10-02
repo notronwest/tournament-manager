@@ -55,6 +55,12 @@ export type PreflightInput = {
   pbcomEntryCounts: Map<string, number> | null;
   /** The live PB.com session authenticated (null = not checked / DB-only run). */
   sessionAuthenticated: boolean | null;
+  /**
+   * Divisions whose bracket contains matches PB.com can't tell apart by surname
+   * alone (two games with the same last-name pairing). `matches` is how many games
+   * are involved. Empty array = checked, none found. null = not computed.
+   */
+  surnameCollisions: { label: string; matches: number }[] | null;
 };
 
 const LIVE_HOST = "pickleballbrackets.com";
@@ -141,6 +147,23 @@ export function buildPreflightReport(input: PreflightInput): Check[] {
     }
   } else {
     checks.push({ name: "roster", status: "warn", detail: "not checked (no PB.com attendees scrape) — run preflight with the live session to prove the division map" });
+  }
+
+  // 5b) SURNAME COLLISIONS — matches PB.com can't tell apart by last names alone.
+  //     The push's first-name tiebreak resolves most, and it NEVER mis-writes (it
+  //     flags ambiguous rows), but a human should know which games to watch.
+  if (input.surnameCollisions) {
+    if (input.surnameCollisions.length === 0) {
+      checks.push({ name: "surname-collisions", status: "pass", detail: "every match is uniquely named — no surname clashes" });
+    } else {
+      for (const c of input.surnameCollisions) {
+        checks.push({
+          name: `surname-collision:${c.label}`,
+          status: "warn",
+          detail: `${c.matches} match(es) share identical surnames with another — the push uses first names to tell them apart and flags any it can't (never mis-writes); watch these games`,
+        });
+      }
+    }
   }
 
   // 6) Partner linkage — seeking doubles means the raS.aspx linkage hasn't been
