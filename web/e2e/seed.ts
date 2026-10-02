@@ -533,6 +533,8 @@ async function main() {
       .select("id")
       .single(),
     "tournament e2e-reopen-future-deadline",
+  );
+
   // 10. Pricing-preview fixtures (#12) — organizer-facing "override" copy on
   //     the event-fee field + the tournament wizard's "Preview math" box.
   //     Own tournament with a real (non-$0) pricing tier so the preview shows
