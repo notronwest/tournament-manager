@@ -403,6 +403,14 @@ async function applySeeding(page: Page, teams: BandeTeam[]): Promise<void> {
     return;
   }
   const current = (await readSeedOrder(page)).map((r) => r.key);
+  // When we read ZERO seed rows, the selector is wrong (not an empty page) — dump what
+  // we landed on so the next run reveals the real seed-list DOM, exactly like the score
+  // path. Without this, seeding skips silently and the bracket goes live UN-seeded.
+  if (current.length === 0) {
+    log.warn("s4 seeding: read 0 seed rows — dumping the page (bracket would go live UN-seeded)", {
+      dump: await dumpBracketPage(page),
+    });
+  }
   // Only reorder teams we can see; if the on-screen set differs, don't guess.
   const currentSet = [...current].sort().join("|");
   const desiredSet = [...desired].sort().join("|");
