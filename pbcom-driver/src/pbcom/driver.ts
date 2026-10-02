@@ -218,7 +218,16 @@ async function configureMedalRounds(page: Page, input: BracketPushInput): Promis
     return;
   }
   await selectRadioByOptionText(page, /single elimination bracket medal rounds/i);
-  await setMedalCount(page, input.teamsAdvancing);
+  // The medal custom-TYPE carries the implied count (avoids the separate "Pool N
+  // medal round count" field that "Normal" needs): top-3 → 3rd auto-bronze,
+  // top-4 → 1&2 Gold/Silver + 3&4 Bronze. NOTE: the exact PB.com bracket shape vs
+  // B&E's semis→final+bronze is verified against B&E's generated playoff later.
+  if (input.teamsAdvancing >= 4) {
+    await selectRadioByOptionText(page, /1st and 2nd seed play for gold.?silver and 3rd and 4th seed play for bronze/i);
+  } else {
+    await selectRadioByOptionText(page, /3rd seed automatically gets bronze/i);
+  }
+  await setMedalCount(page, input.teamsAdvancing); // harmless if no such field
 }
 
 /** Fill the pool "count moving to medal round" field(s) with N (input or select). */
@@ -242,7 +251,7 @@ async function setMedalCount(page: Page, count: number): Promise<void> {
 /** Every form field with its name/id/type/value/checked — the definitive s3 dump. */
 async function dumpFields(page: Page): Promise<string> {
   const inputs = page.locator("input, select, textarea");
-  const n = Math.min(await inputs.count(), 70);
+  const n = Math.min(await inputs.count(), 200);
   const out: string[] = [];
   for (let i = 0; i < n; i++) {
     const el = inputs.nth(i);
