@@ -86,7 +86,35 @@ export class FileLock {
       writeSync(this.fd, `${process.pid}\n`);
       return true;
     } catch {
-      return false;
+      // The lock file exists — but is its holder still ALIVE? A crashed / Ctrl-C'd
+      // run leaves a stale lock that would otherwise wedge EVERY future run (and the
+      // unattended loop). If the recorded PID is gone, reclaim it; if alive, it's a
+      // genuine concurrent run and we yield.
+      if (!this.isStale()) return false;
+      rmSync(this.path, { force: true });
+      try {
+        this.fd = openSync(this.path, "wx");
+        writeSync(this.fd, `${process.pid}\n`);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  /** True when the lock file's recorded PID is no longer a running process. */
+  private isStale(): boolean {
+    try {
+      const pid = parseInt(readFileSync(this.path, "utf8").trim(), 10);
+      if (!Number.isFinite(pid) || pid <= 0) return true; // empty/garbage → stale
+      try {
+        process.kill(pid, 0); // signal 0 = existence check; throws if no such process
+        return false; // holder is alive → genuinely held
+      } catch (e) {
+        return (e as NodeJS.ErrnoException).code === "ESRCH"; // no such process → stale
+      }
+    } catch {
+      return true; // can't read the lock → treat as stale
     }
   }
 
