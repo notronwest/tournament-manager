@@ -1844,3 +1844,20 @@ note; first short line → lead. `TournamentDescription` in PublicTournamentPage
 Verified with a throwaway harness at 390px (no overflow) and 1100px using the Leaf Peeper
 copy. Lint/typecheck: no new errors (same pre-existing ones; xlsx couldn't install here —
 cdn.sheetjs.com is blocked — so its 3 test files didn't run). Validate on the PR preview.
+
+## 2026-10-02 — Court manager suggestions fill the most courts (no more stranded court 3)
+
+Ron: the scheduler suggested games for courts 1 and 2 and left court 3 "pick a match" with no
+valid game, yet a different pair of picks would have filled all three. Cause: both court
+managers chose suggestions court-by-court (greedy — first ranked game whose teams weren't
+already suggested), so the two "fairest" games could block every remaining candidate.
+Fix: new pure `lib/courtSuggestions.assignSuggestions(ranked, openCourts)` — depth-first in
+rank order, keeps the assignment that fills the most courts, ties broken by rank (identical
+to greedy whenever greedy already filled every court; node budget falls back to greedy's
+path). `TournamentCourtManagerPage` runs it per event over that event's open courts;
+`CourtManagerPage` over its empty courts. Pickers unchanged (loading a different game
+re-suggests the other courts, which is what Ron saw). 7 vitest cases incl. Ron's shape and
+a 190-candidate / 8-court speed check. typecheck + build clean; lint unchanged on both
+pages; 313 vitest pass (pdf-lib / xlsx suites can't load in this sandbox).
+- NOT verified on a live court manager — Ron: on TEST, set up a 3-court event where the two
+  top games block the rest and confirm all three courts get a suggestion.
