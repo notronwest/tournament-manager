@@ -1802,3 +1802,18 @@ type extended locally for the three new columns until types are regenerated; the
 never writes them. Verified at 390px on the real route via vite preview + stubbed Supabase
 (green 13:17 / amber 19:17 / Not timed). Lint: only the two pre-existing set-state-in-effect
 errors on these pages; typecheck: only main's three pre-existing errors.
+
+## 2026-10-02 — Public Details tab: lay out the tournament description
+
+Ron: "fix the layout for the home page of the Leaf Peeper tournament" — the description
+rendered as one `<br/>`-separated wall (organizers paste copy with no blank lines or
+markdown). New `lib/descriptionBlocks.ts` (`parseDescription`, 6 vitest cases) turns the
+text into blocks with plain heuristics: a short line ending in ":" → subhead; a line
+led by an emoji / ✓ / • / `-` → icon list item (fixed 24px icon slot, "Label:" bolded);
+short lines under a heading → chips (e.g. skill levels) or a bullet list; lines after an
+item ending in ":" nest under it (pricing under "💰 Registration"); "(Note: …)" → muted
+note; first short line → lead. `TournamentDescription` in PublicTournamentPage replaces
+`nl2br` (removed). No data change — works for every tournament's existing description.
+Verified with a throwaway harness at 390px (no overflow) and 1100px using the Leaf Peeper
+copy. Lint/typecheck: no new errors (same pre-existing ones; xlsx couldn't install here —
+cdn.sheetjs.com is blocked — so its 3 test files didn't run). Validate on the PR preview.
