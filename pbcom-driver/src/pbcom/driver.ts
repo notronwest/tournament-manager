@@ -71,6 +71,20 @@ async function hasRequiredFieldsError(page: Page): Promise<boolean> {
   return (await page.getByText(/required fields/i).count()) > 0;
 }
 
+/**
+ * What the current settings step actually requires — the validation modal's text
+ * (usually naming the missing field) plus the step's option labels. The s3 config
+ * was traced for DOUBLES; SINGLES differs, so this surfaces the real form instead of
+ * an opaque "Required Fields" so the right field can be set.
+ */
+async function settingsFormDetail(page: Page): Promise<string> {
+  const modals = await page.locator('.modal, .popup, [role="dialog"]').allInnerTexts().catch(() => [] as string[]);
+  const modal = (modals.find((m) => /required/i.test(m)) ?? modals.join(" || ")).replace(/\s+/g, " ").trim();
+  const labels = await page.locator("label, legend").allInnerTexts().catch(() => [] as string[]);
+  const opts = labels.map((o) => o.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 40).join(" | ");
+  return `MODAL: ${modal.slice(0, 400) || "(none)"} || OPTIONS: ${opts || "(none)"}`;
+}
+
 // ── createBracketOnPbcom ───────────────────────────────────────────────────────
 
 /** The seeded draw B&E owns and wants reflected as a PB.com bracket. */
@@ -233,7 +247,7 @@ export async function createBracketOnPbcom(
     return {
       verified: false,
       pbcomDivisionId: eaid,
-      detail: "s3 Verify Settings still shows a Required Fields error (medal round config)",
+      detail: `s3 Verify Settings Required Fields error. ${await settingsFormDetail(page)}`,
     };
   }
 
