@@ -217,35 +217,20 @@ async function configureMedalRounds(page: Page, input: BracketPushInput): Promis
     await selectRadioByOptionText(page, /no bracket medal rounds/i);
     return;
   }
+  log.info("s3: selecting single-elim medal bracket");
   await selectRadioByOptionText(page, /single elimination bracket medal rounds/i);
-  // The medal custom-TYPE carries the implied count (avoids the separate "Pool N
-  // medal round count" field that "Normal" needs): top-3 → 3rd auto-bronze,
-  // top-4 → 1&2 Gold/Silver + 3&4 Bronze. NOTE: the exact PB.com bracket shape vs
-  // B&E's semis→final+bronze is verified against B&E's generated playoff later.
+  // The medal custom-TYPE carries the implied count (NO separate "Pool N medal round
+  // count" field): top-3 → 3rd auto-bronze, top-4 → 1&2 Gold/Silver + 3&4 Bronze. We
+  // do NOT fill a count field — each field change is a full WebForms postback, so the
+  // old count loop reloaded the heavy page ~10× (minutes). NOTE: the exact PB.com
+  // bracket shape vs B&E's semis→final+bronze is verified against B&E's playoff later.
+  log.info("s3: selecting medal custom type", { teamsAdvancing: input.teamsAdvancing });
   if (input.teamsAdvancing >= 4) {
     await selectRadioByOptionText(page, /1st and 2nd seed play for gold.?silver and 3rd and 4th seed play for bronze/i);
   } else {
     await selectRadioByOptionText(page, /3rd seed automatically gets bronze/i);
   }
-  await setMedalCount(page, input.teamsAdvancing); // harmless if no such field
-}
-
-/** Fill the pool "count moving to medal round" field(s) with N (input or select). */
-async function setMedalCount(page: Page, count: number): Promise<void> {
-  const T = { timeout: 2500 };
-  const fields = page
-    .locator("tr, div, label")
-    .filter({ hasText: /medal round|moving to medal/i })
-    .locator('input[type="number"], input[type="text"], select');
-  const n = Math.min(await fields.count(), 10);
-  for (let i = 0; i < n; i++) {
-    const f = fields.nth(i);
-    await f.fill(String(count), T).catch(async () => {
-      await f.selectOption({ label: String(count) }, T).catch(async () => {
-        await f.selectOption(String(count), T).catch(() => {});
-      });
-    });
-  }
+  log.info("s3: medal config set");
 }
 
 /** Every form field with its name/id/type/value/checked — the definitive s3 dump. */
@@ -328,11 +313,14 @@ export async function createBracketOnPbcom(
   if ((await s3Save.count()) === 0) {
     return { verified: false, pbcomDivisionId: eaid, detail: `s3 Verify Settings: no 'Save' control. Controls: ${await listControls(page)}` };
   }
-  await s3Save.click();
+  log.info("s3: clicking Save");
+  await s3Save.click({ timeout: 15_000 });
+  log.info("s3: waiting for Continue");
   const cont3 = controlsMatching(page, /^\s*continue\s*$/i).last();
   await cont3.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
   await cont3.click();
   await page.waitForLoadState("load", { timeout: STEP_TIMEOUT });
+  log.info("s3: save confirmed — checking validation");
   if (await hasRequiredFieldsError(page)) {
     return {
       verified: false,
