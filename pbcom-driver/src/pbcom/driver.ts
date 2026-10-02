@@ -175,6 +175,30 @@ function control(scope: Locator | Page, nameRe: RegExp): Locator {
   return controlsMatching(scope, nameRe).first();
 }
 
+/**
+ * Check the radio for an option identified by its visible TEXT — robust to WebForms
+ * layouts where the <input type=radio> has no accessible name (the label sits in a
+ * sibling cell, so getByRole("radio",{name}) misses it). Finds the smallest container
+ * holding the text, checks the radio inside it; falls back to role=radio, then a text
+ * click. Verifies the radio ends up checked where possible.
+ */
+async function selectRadioByOptionText(page: Page, textRe: RegExp): Promise<void> {
+  const container = page.locator("label, tr, li, div").filter({ hasText: textRe }).last();
+  const radio = container.locator('input[type="radio"]').first();
+  if (await radio.count()) {
+    await radio.check().catch(async () => {
+      await radio.click().catch(() => {});
+    });
+    return;
+  }
+  const byRole = page.getByRole("radio", { name: textRe }).first();
+  if (await byRole.count()) {
+    await byRole.check().catch(() => {});
+    return;
+  }
+  await page.getByText(textRe).first().click().catch(() => {});
+}
+
 /** Visible labels of the clickable controls on the page — for a DOM dump on a miss. */
 async function listControls(page: Page): Promise<string> {
   const texts = await page.locator('a, button, [role="button"]').allInnerTexts().catch(() => [] as string[]);
@@ -223,17 +247,12 @@ export async function createBracketOnPbcom(
   }
   await saveAndConfirm(page, saveButton(page), { step: "s2 Pool Options" });
 
-  // ── s3 Verify Settings — avoid the "Pool 1 medal round count cannot be zero" error by
-  // selecting "NO bracket medal rounds, medal based on end ranked results" (radio value 0).
-  const noMedal = page
-    .getByRole("radio", { name: /no bracket medal rounds/i })
-    .first();
-  if (await noMedal.count()) {
-    await noMedal.check();
-  } else {
-    // Fallback: the radio input whose value is "0" under the medal-round group.
-    await page.locator('input[type="radio"][value="0"]').first().check().catch(() => {});
-  }
+  // ── s3 Verify Settings — select "NO bracket medal rounds, medal based on end
+  // ranked results" so PB.com stops requiring a medal-round count (B&E's singles /
+  // RR has no playoff). On this WebForms page the radio's accessible name doesn't
+  // carry the option text, so finding the radio INSIDE the container that holds the
+  // text and checking it is the reliable path (getByRole/value-0 didn't stick).
+  await selectRadioByOptionText(page, /no bracket medal rounds/i);
   const s3Save = saveButton(page);
   if ((await s3Save.count()) === 0) {
     return { verified: false, pbcomDivisionId: eaid, detail: `s3 Verify Settings: no 'Save' control. Controls: ${await listControls(page)}` };
