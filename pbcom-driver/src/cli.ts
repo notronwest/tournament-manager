@@ -127,7 +127,7 @@ class DbDrawSource implements DrawSource {
 
     let eventsQuery = db
       .from("events")
-      .select("id, tournament_id, name, source_system, source_division_label, format, gender, bracket_type")
+      .select("id, tournament_id, name, source_system, source_division_label, format, gender, bracket_type, teams_advancing_to_playoff, playoff_rounds")
       .eq("tournament_id", tournamentId)
       .eq("source_system", "pbcom")
       .is("deleted_at", null);
@@ -164,6 +164,8 @@ class DbDrawSource implements DrawSource {
           format: ev.format,
           gender: ev.gender,
           bracketType: ev.bracket_type,
+          teamsAdvancingToPlayoff: (ev.teams_advancing_to_playoff as number | null) ?? 0,
+          playoffRounds: (ev.playoff_rounds as number | null) ?? 1,
         },
         entries: (regs ?? []).map((r) => {
           const player = Array.isArray(r.players) ? r.players[0] : r.players;
@@ -223,6 +225,8 @@ async function driveDivisionOnSession(
     const res = await createBracketOnPbcom(session, target, {
       divisionLabel: dp.plan.divisionLabel,
       bracketType: dp.draw.division.bracketType,
+      teamsAdvancing: dp.draw.division.teamsAdvancingToPlayoff,
+      playoffRounds: dp.draw.division.playoffRounds,
       teams: dp.plan.teams,
       matches: dp.draw.matches,
     });

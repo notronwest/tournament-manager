@@ -61,6 +61,8 @@ function doublesDraw(): BandeDraw {
       format: "doubles",
       gender: "men",
       bracketType: "round_robin",
+      teamsAdvancingToPlayoff: 0,
+      playoffRounds: 1,
     },
     entries: [
       entry({ registrationId: "reg-a1", partnerRegistrationId: "reg-a2", seed: 1, sourceActivityId: "AID-1001", sourceTeamId: "T-1" }),

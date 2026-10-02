@@ -56,6 +56,8 @@ function draw(tid: string, label: string, opts: { withScore?: boolean } = {}): B
       format: "doubles",
       gender: "men",
       bracketType: "round_robin",
+      teamsAdvancingToPlayoff: 0,
+      playoffRounds: 1,
     },
     entries: [
       entry("a1", "a2", "T1", "Alpha"),

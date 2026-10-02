@@ -44,6 +44,14 @@ export interface BandeDivision {
     | "double_elim"
     | "pool_then_bracket"
     | null;
+  /**
+   * events.teams_advancing_to_playoff — 0 = no playoff (final standings from pool),
+   * ≥3 = a medal bracket of this many teams. The push MIRRORS this onto PB.com's
+   * medal-round settings so the PB.com bracket matches B&E (D-0045).
+   */
+  teamsAdvancingToPlayoff: number;
+  /** events.playoff_rounds — rounds in the medal bracket (top-4 = 2: semis → final+bronze). */
+  playoffRounds: number;
 }
 
 /**

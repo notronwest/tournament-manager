@@ -98,6 +98,10 @@ export interface BracketPushInput {
     | "double_elim"
     | "pool_then_bracket"
     | null;
+  /** events.teams_advancing_to_playoff — 0 = no medal round; ≥3 = a medal bracket of N. */
+  teamsAdvancing: number;
+  /** events.playoff_rounds — rounds in the medal bracket (top-4 = 2: semis → final+bronze). */
+  playoffRounds: number;
   /** The teams (singles=1 entry, doubles=2), each carrying last names + seed. */
   teams: BandeTeam[];
   /** The generated match structure (slots/rounds), pre-scores, from the `matches` table. */
@@ -199,6 +203,40 @@ async function selectRadioByOptionText(page: Page, textRe: RegExp): Promise<void
   await page.getByText(textRe).first().click().catch(() => {});
 }
 
+/**
+ * Configure PB.com's s3 medal-round settings to MIRROR B&E's playoff (D-0045):
+ *   • teamsAdvancing < 3 → "No bracket medal rounds" (final standings from pool).
+ *   • else → "single-elimination bracket medal rounds" and set the pool's "count
+ *     moving to medal round" to teamsAdvancing (top-4 → 4: semis → final + bronze).
+ * The exact PB.com fields are confirmed via the s3 Required-Fields dump; this handles
+ * the type radio + the count field and leaves PB.com's defaults for the rest.
+ */
+async function configureMedalRounds(page: Page, input: BracketPushInput): Promise<void> {
+  if (input.teamsAdvancing < 3) {
+    await selectRadioByOptionText(page, /no bracket medal rounds/i);
+    return;
+  }
+  await selectRadioByOptionText(page, /single elimination bracket medal rounds/i);
+  await setMedalCount(page, input.teamsAdvancing);
+}
+
+/** Fill the pool "count moving to medal round" field(s) with N (input or select). */
+async function setMedalCount(page: Page, count: number): Promise<void> {
+  const fields = page
+    .locator("tr, div, label")
+    .filter({ hasText: /medal round|moving to medal/i })
+    .locator('input[type="number"], input[type="text"], select');
+  const n = Math.min(await fields.count(), 10);
+  for (let i = 0; i < n; i++) {
+    const f = fields.nth(i);
+    await f.fill(String(count)).catch(async () => {
+      await f.selectOption({ label: String(count) }).catch(async () => {
+        await f.selectOption(String(count)).catch(() => {});
+      });
+    });
+  }
+}
+
 /** Visible labels of the clickable controls on the page — for a DOM dump on a miss. */
 async function listControls(page: Page): Promise<string> {
   const texts = await page.locator('a, button, [role="button"]').allInnerTexts().catch(() => [] as string[]);
@@ -247,12 +285,10 @@ export async function createBracketOnPbcom(
   }
   await saveAndConfirm(page, saveButton(page), { step: "s2 Pool Options" });
 
-  // ── s3 Verify Settings — select "NO bracket medal rounds, medal based on end
-  // ranked results" so PB.com stops requiring a medal-round count (B&E's singles /
-  // RR has no playoff). On this WebForms page the radio's accessible name doesn't
-  // carry the option text, so finding the radio INSIDE the container that holds the
-  // text and checking it is the reliable path (getByRole/value-0 didn't stick).
-  await selectRadioByOptionText(page, /no bracket medal rounds/i);
+  // ── s3 Verify Settings — MIRROR B&E's playoff onto PB.com's medal round so the
+  // bracket matches (D-0045). No playoff → "No bracket medal rounds"; a medal bracket
+  // → single-elim medal rounds with the pool's "count moving to medal round" = N.
+  await configureMedalRounds(page, input);
   const s3Save = saveButton(page);
   if ((await s3Save.count()) === 0) {
     return { verified: false, pbcomDivisionId: eaid, detail: `s3 Verify Settings: no 'Save' control. Controls: ${await listControls(page)}` };

@@ -34,6 +34,8 @@ function division(p: Partial<BandeDivision> = {}): BandeDivision {
     format: "doubles",
     gender: "men",
     bracketType: "round_robin",
+    teamsAdvancingToPlayoff: 0,
+    playoffRounds: 1,
     ...p,
   };
 }
