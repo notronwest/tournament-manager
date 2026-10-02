@@ -1,0 +1,42 @@
+Attendees
+Total: 1 to 8 of 8
+
+Alder, Quen · Age: 34 Gender: M · +1 5550000001 · q***@ex.com · DUPR: 88800001 · Paid: $0.00
+Self D: 3.25 S: 3.10 SS: 3.00
+DUPR ID: 88800001 D: 3.30 S: 3.12 SS: 3.05
+Self 3.25 Mens Doubles Skill: (3.0 To 3.49) Self 3.20 Birch, Rowan +1 5550000002 r***@ex.com EVT: 2026-10-03
+
+Birch, Rowan · Age: 31 Gender: M · +1 5550000002 · r***@ex.com · DUPR: 88800002 · Paid: $0.00
+Self D: 3.20 S: 3.05 SS: 2.95
+DUPR ID: 88800002 D: 3.22 S: 3.08 SS: 3.00
+Self 3.20 Mens Doubles Skill: (3.0 To 3.49) Self 3.25 Alder, Quen +1 5550000001 q***@ex.com EVT: 2026-10-03
+
+Cedar, Sage · Age: 42 Gender: F · +1 5550000003 · s***@ex.com · DUPR: 88800003 · Paid: $0.00
+Self D: 3.70 S: 3.55 SS: 3.40
+DUPR ID: 88800003 D: 3.72 S: 3.58 SS: 3.45
+Self 3.70 Mixed Doubles Skill: (3.5 To 3.99) Self 3.60 Dune, Wren Waiting List +1 5550000004 w***@ex.com EVT: 2026-10-04 WL: 2026-09-20
+
+Dune, Wren · Age: 39 Gender: M · +1 5550000004 · w***@ex.com · DUPR: 88800004 · Paid: $0.00
+Self D: 3.60 S: 3.45 SS: 3.30
+DUPR ID: 88800004 D: 3.62 S: 3.48 SS: 3.35
+Self 3.60 Mixed Doubles Skill: (3.5 To 3.99) Self 3.70 Cedar, Sage +1 5550000003 s***@ex.com EVT: 2026-10-04
+
+Elm, Fenn · Age: 27 Gender: M · +1 5550000005 · f***@ex.com · DUPR: 88800005 · Paid: $0.00
+Self D: 3.10 S: 3.00 SS: 2.90
+DUPR ID: 88800005 D: 3.12 S: 3.02 SS: 2.92
+Self 3.10 Mens Doubles Skill: (3.0 To 3.49) Self 3.05 Sc, R EVT: 2026-10-03
+
+Fir, Glen · Age: 45 Gender: M · +1 5550000006 · g***@ex.com · DUPR: 88800006 · Paid: $0.00
+Self D: 3.15 S: 3.05 SS: 2.95
+DUPR ID: 88800006 D: 3.18 S: 3.08 SS: 2.98
+Self 3.15 Mens Doubles Skill: (3.0 To 3.49) Self 3.10 Ghost, Nomatch +93 6039312769 x***@ex.com EVT: 2026-10-03
+
+Holly, Iris · Age: 36 Gender: F · +1 5550000007 · i***@ex.com · DUPR: 88800007 · Paid: $0.00
+Self D: 3.20 S: 3.10 SS: 3.00
+DUPR ID: 88800007 D: 3.24 S: 3.12 SS: 3.02
+Self 3.20 Womens Singles Skill: (3.0 To 3.49) EVT: 2026-10-05
+
+Juniper, Kit · Age: 29 Gender: M · +1 5550000008 · k***@ex.com · DUPR: 88800008 · Paid: $0.00
+Self D: 3.15 S: 3.05 SS: 2.95
+DUPR ID: 88800008 D: 3.16 S: 3.06 SS: 2.96
+Self 3.15 Mens Doubles Skill: (3.0 To 3.49) EVT: 2026-10-03

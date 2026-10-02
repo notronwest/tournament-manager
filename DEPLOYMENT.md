@@ -95,6 +95,13 @@ which means the frontend can deploy while the schema silently doesn't.
 `migration-lint.yml` gates PRs on duplicate versions. An out-of-order timestamp
 fails closed and wedges the pipeline.
 
+**Scheduled jobs live in the database, not in CI.** `pg_cron` (enabled by
+migration `20260914200000`) runs `sweep-stale-pending-regs` every 5 minutes on
+whichever project the migration applied to — there is no external cron and no
+secret involved. Verify: `select jobname, schedule, active from cron.job;` and
+`select * from cron.job_run_details order by start_time desc limit 10;`. Pause /
+retune with `cron.alter_job(...)` (recipe at the top of that migration).
+
 Runbook: [`supabase/MIGRATIONS.md`](./supabase/MIGRATIONS.md)
 
 **Per-project prerequisites this workflow can't set up on its own** (each new
@@ -192,6 +199,13 @@ green can also mean *inert*, so confirm the target's secrets exist with
   and email templates are set by hand per Supabase project; the CLI doesn't
   manage them, so they never ride a deploy.
 - **`regression.yml`** — Playwright E2E. It's a **gate**, not a deploy target.
+- **The offline runtime** — `scripts/offline.sh`, `scripts/offline-verify.sh`,
+  the `--mode offline` Vite build, the local Supabase stack, and the
+  `web/e2e/offline/*` specs are **local dev/venue tooling for running a
+  tournament with no Internet** (see [`docs/OFFLINE.md`](./docs/OFFLINE.md)).
+  None of it ships: normal `npm run dev`/`build` and CI never touch `--mode
+  offline`, and `[inbucket] enabled = false` in `supabase/config.toml` only
+  affects the **local** CLI stack, never a hosted Supabase project.
 - **Tier 2 self-serve custom domains** — designed but not built. Every organizer
   domain today is hand-wired.
 

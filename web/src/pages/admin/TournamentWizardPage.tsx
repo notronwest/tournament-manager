@@ -175,6 +175,9 @@ export default function TournamentWizardPage() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Non-error confirmation after a save that changed more than the fields
+  // typed ("Registration reopened until …").
+  const [notice, setNotice] = useState<string | null>(null);
   // Brief "✓ Saved" confirmation on the section Save button after a successful
   // save (the section stays put in edit mode, so the button is the only signal).
   const [justSaved, setJustSaved] = useState(false);
@@ -405,9 +408,22 @@ export default function TournamentWizardPage() {
       return true;
     }
     // Resume mode → UPDATE existing draft.
+    // The tournament page auto-flips published → closed once the deadline
+    // passes, and nothing flips it back. If the organizer is pushing the
+    // deadline LATER and into the future on a closed tournament, reopening is
+    // clearly the intent — do it here rather than making them find the
+    // "Reopen registration" button. An early manual close (deadline still in
+    // the future, unchanged) is left alone.
+    const newCloses = payload.registration_closes_at ? new Date(payload.registration_closes_at) : null;
+    const oldCloses = tournament.registration_closes_at ? new Date(tournament.registration_closes_at) : null;
+    const reopen =
+      tournament.status === "closed" &&
+      newCloses !== null &&
+      newCloses.getTime() > Date.now() &&
+      (oldCloses === null || newCloses.getTime() > oldCloses.getTime());
     const { data, error: updErr } = await supabase
       .from("tournaments")
-      .update(payload)
+      .update(reopen ? { ...payload, status: "published" as const } : payload)
       .eq("id", tournament.id)
       .select()
       .single();
@@ -416,6 +432,11 @@ export default function TournamentWizardPage() {
       setError(updErr?.message ?? "Failed to save.");
       return false;
     }
+    setNotice(
+      reopen && newCloses
+        ? `Registration reopened — it now closes ${newCloses.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
+        : null,
+    );
     setTournament(data);
     // Slug may have changed — keep URL in sync with same step.
     if (data.slug !== routeSlug) {
@@ -910,6 +931,23 @@ export default function TournamentWizardPage() {
           />
         )}
 
+        {notice && !error && (
+          <div
+            role="status"
+            style={{
+              marginTop: 16,
+              padding: 12,
+              background: successBg,
+              border: `1px solid ${successFg}`,
+              borderRadius: 6,
+              color: successFg,
+              fontSize: 13,
+              fontFamily: bodyFontStack,
+            }}
+          >
+            {notice}
+          </div>
+        )}
         {error && (
           <div
             style={{

@@ -13,6 +13,12 @@ A guide for organizers hosting a tournament with **Bert & Erne**. Two parts:
 > (Engineering: see the "opportunity → tournament funnel" proposal in the
 > backlog — this doc is the customer-facing half.)
 
+> **Running the event itself?** This guide covers setup intake, not the
+> event-day operations. For the checklists we actually follow before and
+> during a tournament, see
+> [`docs/runbooks/TOURNAMENT-PREP.md`](./runbooks/TOURNAMENT-PREP.md) and
+> [`docs/runbooks/TOURNAMENT-DAY.md`](./runbooks/TOURNAMENT-DAY.md).
+
 ---
 
 ## Part 1 — Setup intake (what we'll ask you)

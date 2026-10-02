@@ -53,6 +53,21 @@ export const SEED = {
     registrantEmail: "e2e-cam@wmpc.test", // Cam, pending reg w/ Pat
     newPartnerQuery: "Quinn",
   },
+  // Partner-not-notified-until-checkout copy (#10). Each its own tournament.
+  partnerNotice: {
+    tournamentSlug: "e2e-partner-notice",
+    pickerEmail: "e2e-noa-notice@wmpc.test", // Noa — picks existing partner Pat
+    partnerQuery: "Pat",
+    seekerTournamentSlug: "e2e-partner-notice-seeker",
+    seekerEmail: "e2e-sage-notice@wmpc.test", // Sage — "I need a partner"
+    singlesTournamentSlug: "e2e-partner-notice-singles",
+    singlesEmail: "e2e-milo-notice@wmpc.test", // Milo — singles, no partner section at all
+  // Partner-mode segmented control (#15) — the "I have a partner / I need a
+  // partner" toggle renders as a real radiogroup, not two action buttons.
+  partnerMode: {
+    tournamentSlug: "e2e-partner-mode",
+    registrantEmail: "e2e-uma-mode@wmpc.test", // Uma
+  },
   inviteAccept: {
     tournamentSlug: "e2e-invite",
     token: "e2e-accept-token",
@@ -66,6 +81,19 @@ export const SEED = {
   },
   invitesView: {
     inviteeEmail: "e2e-vic@wmpc.test", // dedicated invitee — invite never consumed
+  },
+  // Pricing-model clarity in the admin forms (#12): event-fee "override"
+  // hint on EventFormPage + the tournament wizard's "Preview math" box.
+  pricingPreview: {
+    tournamentSlug: "e2e-pricing-preview",
+    eventName: "E2E Pricing Preview Doubles",
+    adminEmail: "e2e-organizer@wmpc.test", // Olive, org owner
+    // Matches seed.ts §10: first_event_fee_cents 3000 / additional 1500 /
+    // event_fee_cents (override) 2000.
+    firstEventFeeUsd: "$30.00",
+    twoEventsUsd: "$45.00",
+    threeEventsUsd: "$60.00",
+    eventOverrideUsd: "$20.00",
   },
   // Manage-registration editor (#657). Organizer (Olive, an org owner) drives
   // the admin Attendees editor. One event per scenario; unique player names so
@@ -85,6 +113,25 @@ export const SEED = {
     // the Issue-refund section must not appear (refunds are paid-only).
     refundRemove: { player: "Rita Refund", email: "mr-rita@wmpc.test", event: "MR Refund Remove" },
     refundGatingPending: { player: "Gary Gating", email: "mr-gary@wmpc.test", event: "MR Refund Pending" },
+  },
+  // Reopen-on-Basics-edit (#860). Organizer (Olive) edits the Basics step of
+  // the tournament wizard on a CLOSED tournament. Two scenarios, each its own
+  // tournament so the specs don't race each other's status field:
+  //   pastDeadline — registration_closes_at already in the past (plausibly
+  //     auto-closed) — pushing the deadline into the future must reopen it.
+  //   futureDeadline — registration_closes_at still in the future (an early
+  //     manual "Close registration") — an unrelated Basics edit must NOT
+  //     reopen it.
+  reopen: {
+    adminEmail: "e2e-organizer@wmpc.test", // Olive, org owner
+    pastDeadline: {
+      tournamentSlug: "e2e-reopen-past-deadline",
+      tournamentName: "E2E Reopen Past-Deadline Cup",
+    },
+    futureDeadline: {
+      tournamentSlug: "e2e-reopen-future-deadline",
+      tournamentName: "E2E Reopen Future-Deadline Cup",
+    },
   },
 };
 

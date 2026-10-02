@@ -26,6 +26,12 @@ export type PackItem = {
   order: number;
   segments: PackSegment[];
   players: ReadonlySet<string>;
+  // Earliest this item may start — its DAY FLOOR. The packer never places it
+  // before max(anchorMs, minStartMs), so a pinned start on a later day (and
+  // everything after it in run order, via a monotonic floor the caller sets)
+  // stays on that day instead of being pulled back to the anchor's day.
+  // Omitted → just the anchor, i.e. the original single-day behaviour.
+  minStartMs?: number;
 };
 
 export type PlacedSegment = {
@@ -93,13 +99,19 @@ export function packSchedule(
       : [{ kind: "pool" as const, minutes: 1, courtsNeeded: 1 }];
     const durMs = segs.reduce((m, g) => m + g.minutes * 60_000, 0);
 
-    // Candidate starts: the anchor, and just after every placed segment end
+    // This item's floor: never before the anchor, and never before its own day
+    // floor (a pin on this or an earlier event in run order). Everything else
+    // below is measured from here, so the greedy "earliest feasible" can't pull
+    // the item back onto an earlier day.
+    const itemAnchor = Math.max(anchorMs, item.minStartMs ?? anchorMs);
+
+    // Candidate starts: the floor, and just after every placed segment end
     // (with the buffer) — pool play ending frees courts even while that
     // event's bracket is still running. Earliest feasible wins.
     const candidates = Array.from(
-      new Set([anchorMs, ...placed.flatMap((p) => p.segments.map((g) => g.endMs + bufferMs))]),
+      new Set([itemAnchor, ...placed.flatMap((p) => p.segments.map((g) => g.endMs + bufferMs))]),
     )
-      .filter((t) => t >= anchorMs)
+      .filter((t) => t >= itemAnchor)
       .sort((a, b) => a - b);
 
     let chosen: Placement | null = null;
@@ -156,7 +168,7 @@ export function packSchedule(
     }
     if (!chosen) {
       // Only reachable with an empty candidate list; place after everything.
-      const t = Math.max(anchorMs, ...placed.map((p) => p.endMs + bufferMs));
+      const t = Math.max(itemAnchor, ...placed.map((p) => p.endMs + bufferMs));
       let cursor = t;
       const placedSegs: PlacedSegment[] = segs.map((g) => {
         const seg = { kind: g.kind, startMs: cursor, endMs: cursor + g.minutes * 60_000, courts: Array.from({ length: g.courtsNeeded }, (_, i) => i + 1) };

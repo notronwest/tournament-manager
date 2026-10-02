@@ -61,10 +61,23 @@ port = 54323
 api_url = "http://127.0.0.1"
 openai_api_key = "env(OPENAI_API_KEY)"
 
-# Email testing server. Emails sent with the local dev setup are not actually sent - rather, they
-# are monitored, and you can view the emails that would have been sent from the web interface.
+# Email testing server (dev email inbox). Emails sent with the local dev setup are not actually
+# sent - rather, they are monitored, and you can view the emails that would have been sent from the
+# web interface.
+#
+# DISABLED ON PURPOSE. Two reasons, both permanent:
+#   1. The offline tournament runtime (scripts/offline.sh, docs/OFFLINE.md) runs `supabase start`
+#      on a venue laptop with no Internet. The pinned Supabase CLI (v2.105.0) has a bug where the
+#      inbucket/mailpit container fails to publish its port ("ports are not available: exposing
+#      port TCP 0.0.0.0:54324 -> 127.0.0.1:0"), which aborts the WHOLE `supabase start`. Disabling
+#      inbucket removes that container from the stack, so `supabase start` comes up clean on any
+#      CLI version — no manual config edit at the venue (blocker hit live 2026-09-11).
+#   2. This app never uses the local dev inbox: auth email confirmations are off
+#      (enable_confirmations = false), and nothing in the codebase reads port 54324.
+# If you genuinely need to inspect dev emails locally, flip this to true temporarily — but do NOT
+# commit it enabled, or you reintroduce the offline `supabase start` failure.
 [inbucket]
-enabled = true
+enabled = false
 port = 54324
 
 [storage]

@@ -1,0 +1,11 @@
+# The ONE host allowed to run the PickleballBrackets.com results push (singleton
+# gate 1). A COMMITTED FACT, like courtreserve-api's EVENTS-DRAIN-HOST / BILLING-HOST
+# and BUILDER-HOST — not install discipline. reconcile.sh copies this repo to every
+# machine, so "I only installed the launchd job on the mini" is not a guarantee;
+# runAutoPush / runPush refuse to drive anywhere but the host named here. An
+# UNSET/empty file stops the fleet rather than authorizing it (fail-closed).
+#
+# It must be the mini: PB.com is driven with real (non-headless) Google Chrome on
+# the club's residential IP — from a datacenter/headless IP PB.com's WebForms bot
+# management blocks it, exactly like the Court Reserve scraper.
+wmpcMacMini1

@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type CSSProperties } from "react";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { impersonatePlayer } from "../../lib/impersonation";
 import { sendLoginLink, resendWelcome } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { RatingPicker } from "../../components/RatingPicker";
 import {
   RegistrationEditorModal,
   type EditableRegistration,
@@ -105,15 +106,13 @@ async function fnError(fnErr: unknown): Promise<string> {
 }
 
 // Mirror ProfilePage.parseRating: blank → null, clamp to [0, 9.99].
-function parseRating(s: string): number | null {
-  const trimmed = s.trim();
-  if (!trimmed) return null;
-  const n = parseFloat(trimmed);
-  if (Number.isNaN(n)) return null;
-  if (n < 0) return 0;
-  if (n > 9.99) return 9.99;
-  return n;
-}
+const ratingRowLabelStyle: CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: inkSoft,
+  marginBottom: 8,
+};
+
 
 const fmtDate = (iso: string | null) =>
   iso
@@ -435,10 +434,11 @@ function ProfileSection({
   const [gender, setGender] = useState<Gender | "">(player.gender ?? "");
   const [city, setCity] = useState(player.city ?? "");
   const [state, setState] = useState(player.state ?? "");
-  const ratingStr = (n: number | null) => (n != null ? String(n) : "");
-  const [ratingDoubles, setRatingDoubles] = useState(ratingStr(player.self_rating_doubles));
-  const [ratingMixed, setRatingMixed] = useState(ratingStr(player.self_rating_mixed));
-  const [ratingSingles, setRatingSingles] = useState(ratingStr(player.self_rating_singles));
+  // Same control + scale as the player's own Profile page (RatingPicker chips);
+  // values are numbers or null, exactly what admin-update-player stores.
+  const [ratingDoubles, setRatingDoubles] = useState<number | null>(player.self_rating_doubles);
+  const [ratingMixed, setRatingMixed] = useState<number | null>(player.self_rating_mixed);
+  const [ratingSingles, setRatingSingles] = useState<number | null>(player.self_rating_singles);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -451,9 +451,9 @@ function ProfileSection({
     gender !== (player.gender ?? "") ||
     city !== (player.city ?? "") ||
     state !== (player.state ?? "") ||
-    ratingDoubles !== ratingStr(player.self_rating_doubles) ||
-    ratingMixed !== ratingStr(player.self_rating_mixed) ||
-    ratingSingles !== ratingStr(player.self_rating_singles);
+    ratingDoubles !== player.self_rating_doubles ||
+    ratingMixed !== player.self_rating_mixed ||
+    ratingSingles !== player.self_rating_singles;
 
   const save = async () => {
     setSaving(true);
@@ -473,9 +473,9 @@ function ProfileSection({
             gender: gender === "" ? null : gender,
             city,
             state,
-            ratingDoubles: parseRating(ratingDoubles),
-            ratingMixed: parseRating(ratingMixed),
-            ratingSingles: parseRating(ratingSingles),
+            ratingDoubles,
+            ratingMixed,
+            ratingSingles,
           },
         },
       },
@@ -499,9 +499,9 @@ function ProfileSection({
       gender: gender === "" ? null : gender,
       city: city.trim() || null,
       state: state.trim() || null,
-      self_rating_doubles: parseRating(ratingDoubles),
-      self_rating_mixed: parseRating(ratingMixed),
-      self_rating_singles: parseRating(ratingSingles),
+      self_rating_doubles: ratingDoubles,
+      self_rating_mixed: ratingMixed,
+      self_rating_singles: ratingSingles,
     });
   };
 
@@ -526,10 +526,10 @@ function ProfileSection({
             onChange={(e) => { setGender(e.target.value as Gender | ""); setSaved(false); }}
             style={{ ...fieldInput, height: 38 }}
           >
-            <option value="">— (unset)</option>
-            <option value="M">M — Men's-eligible</option>
-            <option value="F">F — Women's-eligible</option>
-            <option value="X">X — Other / prefer not to say</option>
+            <option value="">—</option>
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+            <option value="X">Other / prefer not to say</option>
           </select>
         </Field>
         <Field label="City">
@@ -540,25 +540,42 @@ function ProfileSection({
         </Field>
       </div>
 
-      <div style={{ fontSize: 12, fontWeight: 600, color: ink, margin: "20px 0 8px" }}>
-        Self-reported ratings{" "}
-        <span style={{ fontWeight: 400, color: inkMuted }}>
-          (0–9.99 · used for bracket eligibility)
+      {/* Mirrors ProfilePage's rating block — one control, one scale, one
+          set of words, whether the player or an organizer sets it. */}
+      <div style={{ fontSize: 13, color: ink, margin: "20px 0 4px" }}>
+        <strong>Self-reported rating</strong>{" "}
+        <span style={{ color: inkMuted }}>
+          (optional — helps organizers seed brackets; tap a level, tap again to clear)
         </span>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-        <Field label="Doubles (same-gender)">
-          <input type="number" step="0.01" min="0" max="9.99" placeholder="e.g. 3.5"
-            value={ratingDoubles} onChange={(e) => { setRatingDoubles(e.target.value); setSaved(false); }} style={fieldInput} />
-        </Field>
-        <Field label="Mixed doubles">
-          <input type="number" step="0.01" min="0" max="9.99" placeholder="e.g. 3.5"
-            value={ratingMixed} onChange={(e) => { setRatingMixed(e.target.value); setSaved(false); }} style={fieldInput} />
-        </Field>
-        <Field label="Singles">
-          <input type="number" step="0.01" min="0" max="9.99" placeholder="e.g. 3.0"
-            value={ratingSingles} onChange={(e) => { setRatingSingles(e.target.value); setSaved(false); }} style={fieldInput} />
-        </Field>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
+        <div>
+          <div style={ratingRowLabelStyle}>Doubles (same-gender)</div>
+          <RatingPicker
+            value={ratingDoubles}
+            onChange={(v) => { setRatingDoubles(v); setSaved(false); }}
+            disabled={saving}
+            ariaLabel="Doubles self-rating"
+          />
+        </div>
+        <div>
+          <div style={ratingRowLabelStyle}>Mixed doubles</div>
+          <RatingPicker
+            value={ratingMixed}
+            onChange={(v) => { setRatingMixed(v); setSaved(false); }}
+            disabled={saving}
+            ariaLabel="Mixed doubles self-rating"
+          />
+        </div>
+        <div>
+          <div style={ratingRowLabelStyle}>Singles</div>
+          <RatingPicker
+            value={ratingSingles}
+            onChange={(v) => { setRatingSingles(v); setSaved(false); }}
+            disabled={saving}
+            ariaLabel="Singles self-rating"
+          />
+        </div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>

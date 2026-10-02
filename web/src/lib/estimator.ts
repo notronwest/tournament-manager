@@ -7,6 +7,8 @@
 // win / win-by (Ron, 2026-09-11). The primitive functions take numbers +
 // enums so they unit-test cleanly; estimateEvent adapts an events row.
 
+import { bracketRoundsForN, buildSingleElimBracket } from "./playoffBracket";
+
 // ─────────────────────────────────────────────────────────────────────
 // Pool play
 // ─────────────────────────────────────────────────────────────────────
@@ -117,13 +119,15 @@ export function estimatePoolPlay(i: PoolPlayInputs): PoolPlayResult {
 export type MedalInputs = {
   courts: number;
   teamsAdvancing: number;
-  rounds: 1 | 2;
+  // 1 = pairwise medal matches; >= 2 = single-elimination bracket (the exact
+  // round count and shape are derived from teamsAdvancing, not trusted here).
+  rounds: number;
   // The final (gold + bronze) — or the only round when rounds === 1.
   format: "single_game" | "best_of_3";
   minutesPerGame: number;
-  // Semifinal round when rounds === 2. Events carry their own semifinal
-  // settings (semifinal_match_format / semifinal_minutes_per_game); when
-  // omitted the medal settings apply to both rounds.
+  // Earlier (quarter/semi) rounds of a bracket. Events carry their own
+  // semifinal settings (semifinal_match_format / semifinal_minutes_per_game);
+  // when omitted the medal settings apply to every round.
   semifinalFormat?: "single_game" | "best_of_3";
   semifinalMinutesPerGame?: number;
 };
@@ -134,48 +138,128 @@ export type MedalResult = {
   summary: string;
 };
 
-// Two supported structures, matching the playoff generator:
+// Two playoff styles, matching the generator (see playoffBracket.ts):
 //   * 1 round: pairwise (1v2, 3v4, …) — N/2 parallel medal matches.
-//   * 2 rounds (top-4 only): semis (1v4, 2v3) → gold + bronze.
-// best_of_3 is planned as worst-case 3 games per match so scheduling
-// has headroom rather than overrunning when matches go to 3.
+//   * >= 2 rounds: single-elimination bracket with a bronze game. The final
+//     round (gold + bronze) runs at the medal format; earlier rounds (quarters
+//     / semis) at the semifinal format. Matches in a round run in parallel
+//     across the courts, so each round costs ceil(matches/courts) × minutes.
+// best_of_3 is planned as worst-case 3 games per match so scheduling has
+// headroom rather than overrunning when matches go to 3.
 export function estimateMedalRound(i: MedalInputs): MedalResult {
   const courts = Math.max(1, i.courts);
   const advancing = Math.max(2, i.teamsAdvancing);
   const minutes = Math.max(1, i.minutesPerGame);
   const gamesPerMatch = i.format === "best_of_3" ? 3 : 1;
   const matchMinutes = gamesPerMatch * minutes;
+  const semiMinutes = Math.max(1, i.semifinalMinutesPerGame ?? minutes);
+  const semiGames = (i.semifinalFormat ?? i.format) === "best_of_3" ? 3 : 1;
+  const semiMatchMinutes = semiGames * semiMinutes;
 
-  let totalMatches: number;
-  let totalMinutes: number;
-  let structure: string;
-
-  if (i.rounds === 1) {
+  if (i.rounds <= 1) {
     const matches = Math.floor(advancing / 2);
-    totalMatches = matches;
-    totalMinutes = Math.ceil(matches / courts) * matchMinutes;
-    structure = `${matches} medal match${matches === 1 ? "" : "es"} in 1 round`;
-  } else {
-    const semis = Math.floor(advancing / 2);
-    const round2 = 2;
-    const semiMinutes = Math.max(1, i.semifinalMinutesPerGame ?? minutes);
-    const semiGames = (i.semifinalFormat ?? i.format) === "best_of_3" ? 3 : 1;
-    totalMatches = semis + round2;
-    totalMinutes =
-      Math.ceil(semis / courts) * semiGames * semiMinutes +
-      Math.ceil(round2 / courts) * matchMinutes;
-    const semiFmt = semiGames === 3 ? "best of 3" : "1 game";
-    const finalFmt = gamesPerMatch === 3 ? "best of 3" : "1 game";
-    structure = `${semis} semis (${semiFmt}, ${semiMinutes} min/game) → gold + bronze (${finalFmt}, ${minutes} min/game)`;
-    return { totalMatches, totalMinutes, summary: `${structure}.` };
+    const totalMinutes = Math.ceil(matches / courts) * matchMinutes;
+    const fmt = gamesPerMatch === 3 ? "best of 3" : "1 game";
+    return {
+      totalMatches: matches,
+      totalMinutes,
+      summary: `${matches} medal match${matches === 1 ? "" : "es"} in 1 round; ${fmt}, ${minutes} min/game.`,
+    };
   }
 
-  const fmt = i.format === "best_of_3" ? "best of 3" : "1 game";
+  // Bracket. Count matches per round from the real bracket shape when N
+  // supports one; otherwise approximate (semis + gold + bronze) so an
+  // out-of-range N still yields a sane estimate rather than throwing.
+  const R = bracketRoundsForN(advancing);
+  let perRound: number[]; // index 0 = round 1
+  if (R != null) {
+    const counts = new Map<number, number>();
+    for (const m of buildSingleElimBracket(advancing)) {
+      counts.set(m.round, (counts.get(m.round) ?? 0) + 1);
+    }
+    perRound = Array.from({ length: R }, (_, k) => counts.get(k + 1) ?? 0);
+  } else {
+    perRound = [Math.floor(advancing / 2), 2]; // semis → final + bronze
+  }
+
+  const rounds = perRound.length;
+  let totalMatches = 0;
+  let totalMinutes = 0;
+  perRound.forEach((count, idx) => {
+    totalMatches += count;
+    const isFinal = idx === rounds - 1;
+    totalMinutes += Math.ceil(count / courts) * (isFinal ? matchMinutes : semiMatchMinutes);
+  });
+
+  const semiFmt = semiGames === 3 ? "best of 3" : "1 game";
+  const finalFmt = gamesPerMatch === 3 ? "best of 3" : "1 game";
   return {
     totalMatches,
     totalMinutes,
-    summary: `${structure}; ${fmt}, ${minutes} min/game.`,
+    summary: `${advancing}-team single-elim bracket, ${rounds} rounds: earlier rounds ${semiFmt} (${semiMinutes} min/game) → gold + bronze ${finalFmt} (${minutes} min/game).`,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Double elimination — layers from lib/doubleElim, courts capped per layer
+// ─────────────────────────────────────────────────────────────────────
+
+import { buildDoubleElim, playLayers } from "./doubleElim";
+
+// Courts a double-elimination bracket can keep busy at its widest (round 1).
+export function doubleElimCourtsNeeded(teams: number): number {
+  let P = 4;
+  while (P < Math.max(3, teams)) P *= 2;
+  return P / 2;
+}
+
+function estimateDoubleElim(event: EstimableEvent, teamCount: number, courts: number): EventEstimate {
+  const n = Math.max(3, teamCount);
+  const de = buildDoubleElim(n, event.double_elim_final ?? "crossover");
+  const layers = playLayers(de);
+  const poolMin = Math.max(1, event.pool_minutes_per_game);
+  const medalMin = Math.max(1, event.medal_minutes_per_game);
+  const isMedalLayer = (layer: (typeof layers)[number]) =>
+    layer[0].bracket === "final" || (layer[0].bracket === "consolation" && layer[0].round === Math.max(...de.slots.filter((s) => s.bracket === "consolation").map((s) => s.round)));
+  let bracketMinutes = 0;
+  let bracketMatches = 0;
+  let medalMinutes = 0;
+  let medalMatches = 0;
+  let rounds = 0;
+  let widest = 0;
+  for (const layer of layers) {
+    const waves = Math.ceil(layer.length / courts);
+    widest = Math.max(widest, layer.length);
+    rounds += waves;
+    if (isMedalLayer(layer)) {
+      medalMinutes += waves * medalMin;
+      medalMatches += layer.length;
+    } else {
+      bracketMinutes += waves * poolMin;
+      bracketMatches += layer.length;
+    }
+  }
+  const utilization = Math.min(1, ((bracketMatches * poolMin + medalMatches * medalMin)) / ((bracketMinutes + medalMinutes) * courts || 1));
+  const pool: PoolPlayResult = {
+    matchesPerPool: bracketMatches,
+    totalMatches: bracketMatches,
+    gamesPerTeam: Math.round((2 * (bracketMatches + medalMatches)) / n),
+    courtBoundMinutes: bracketMinutes,
+    teamBoundMinutes: bracketMinutes,
+    totalMinutes: bracketMinutes,
+    courtRounds: rounds,
+    bindingConstraint: courts < widest ? "court" : "team",
+    utilization,
+  };
+  const medal: MedalResult = {
+    totalMatches: medalMatches,
+    totalMinutes: medalMinutes,
+    summary:
+      event.double_elim_final === "bronze_only"
+        ? `Winners Final for gold/silver; consolation final for bronze; ${medalMin} min/game.`
+        : `Final (+ if-necessary game) and consolation final; ${medalMin} min/game.`,
+  };
+  return { teamsPerPool: n, courts, pool, medal, totalMinutes: bracketMinutes + medalMinutes };
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -191,6 +275,59 @@ export function fmtDuration(mins: number): string {
   return `${h} hr ${m} min`;
 }
 
+// Compact "Xh Ym" / "Ym" form for the tight Event Console line
+// (fmtDuration's "1 hr 20 min" is too long there).
+export function fmtCompactDuration(mins: number): string {
+  const total = Math.max(0, Math.round(mins));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Live completion estimate — Event Console, once games are created
+// ─────────────────────────────────────────────────────────────────────
+
+// A running "how much longer will this event take" figure for the Event
+// Console. Unlike estimateEvent (a pre-generation planner fed by the
+// event's settings + roster), this is derived from the *live* match
+// state: matches still to play, courts, and the per-match minutes.
+//
+// Matches run up to `courts` in parallel, so the matches left need
+// ceil(matchesRemaining / courts) waves of play, each perMatchMinutes
+// long:  estMinutes = ceil(matchesRemaining / courts) * perMatchMinutes.
+// As matches finish, matchesRemaining drops and the estimate shrinks —
+// no polling needed, the console recomputes from match state.
+export type CompletionInputs = {
+  matchesRemaining: number;
+  courts: number;
+  perMatchMinutes: number;
+};
+
+export type CompletionEstimate = {
+  minutes: number;
+  // Parallel waves of play still to run (ceil(remaining / courts)).
+  waves: number;
+};
+
+// Returns null when it can't be computed — no courts assigned or no
+// per-match minutes set — so the caller can hide the line or prompt the
+// director to set match length & courts. A finished event (nothing
+// remaining) returns a concrete 0, distinct from "can't estimate".
+export function estimateCompletion(
+  i: CompletionInputs,
+): CompletionEstimate | null {
+  const remaining = Math.max(0, Math.floor(i.matchesRemaining));
+  if (remaining === 0) return { minutes: 0, waves: 0 };
+  const courts = Math.floor(i.courts);
+  const perMatch = i.perMatchMinutes;
+  if (courts < 1 || perMatch < 1) return null;
+  const waves = Math.ceil(remaining / courts);
+  return { minutes: waves * perMatch, waves };
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Per-event adapter — the one place an events row becomes an estimate
 // ─────────────────────────────────────────────────────────────────────
@@ -198,6 +335,9 @@ export function fmtDuration(mins: number): string {
 // The subset of an events row the estimate depends on. Kept as a pick so
 // callers can pass a full Row or a hand-built object.
 export type EstimableEvent = {
+  // Round robin pools (default) or a double-elimination bracket.
+  bracket_type?: string | null;
+  double_elim_final?: "crossover" | "bronze_only" | null;
   pool_count: number;
   play_each_team_times: number;
   pool_minutes_per_game: number;
@@ -226,6 +366,9 @@ export function estimateEvent(
   courts: number,
 ): EventEstimate {
   const courtsForEvent = Math.max(1, courts);
+  if (event.bracket_type === "double_elim") {
+    return estimateDoubleElim(event, teamCount, courtsForEvent);
+  }
   const teamsPerPool =
     event.pool_count > 0
       ? Math.max(2, Math.ceil(teamCount / event.pool_count))
@@ -242,7 +385,7 @@ export function estimateEvent(
       ? estimateMedalRound({
           courts: courtsForEvent,
           teamsAdvancing: event.teams_advancing_to_playoff,
-          rounds: event.playoff_rounds === 2 ? 2 : 1,
+          rounds: event.playoff_rounds,
           format: event.medal_match_format,
           minutesPerGame: event.medal_minutes_per_game,
           semifinalFormat: event.semifinal_match_format,

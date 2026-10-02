@@ -10,6 +10,8 @@ import {
   createOrgContact,
   removeOrgContact,
   type OrgContact,
+  matchesSource,
+  type SourceFilter,
   type ContactSource,
   type ContactInput,
 } from "../../lib/orgContacts";
@@ -76,7 +78,7 @@ export default function OrgContactsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("none");
   const [search, setSearch] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<"all" | ContactSource>("all");
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [subscribedOnly, setSubscribedOnly] = useState(false);
   const [addedSince, setAddedSince] = useState("");
   const [actionMsg, setActionMsg] = useState<string | null>(null);
@@ -131,7 +133,7 @@ export default function OrgContactsPage() {
     const q = search.trim().toLowerCase();
     return (contacts ?? []).filter((c) => {
       if (q && !`${c.firstName} ${c.lastName} ${c.email ?? ""} ${c.city ?? ""}`.toLowerCase().includes(q)) return false;
-      if (sourceFilter !== "all" && c.source !== sourceFilter) return false;
+      if (!matchesSource(c, sourceFilter)) return false;
       if (subscribedOnly && c.unsubscribed) return false;
       if (addedSince) {
         if (!c.addedAt || c.addedAt.slice(0, 10) < addedSince) return false;
@@ -217,7 +219,7 @@ export default function OrgContactsPage() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
             <select
               value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value as "all" | ContactSource)}
+              onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
               style={{ ...inputStyle, maxWidth: 180 }}
               aria-label="Filter by source"
             >
@@ -271,7 +273,12 @@ export default function OrgContactsPage() {
                     </td>
                     <td style={tdStyle}>{c.phone ?? "—"}</td>
                     <td style={tdStyle}>{c.city ?? "—"}</td>
-                    <td style={tdStyle}><SourcePill source={c.source} /></td>
+                    <td style={tdStyle}>
+                      <SourcePill source={c.source} />
+                      {c.isRegistrant && c.source !== "registrant" && (
+                        <span style={{ marginLeft: 6, fontSize: 11, color: inkMuted }} title="Also holds an active registration — included under the Registrants filter">· registered</span>
+                      )}
+                    </td>
                     <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                       <button style={rowBtn} onClick={() => setRegisterTarget(c)}>Register</button>
                       <button style={rowBtn} onClick={() => setRegsTarget(c)}>Registrations</button>

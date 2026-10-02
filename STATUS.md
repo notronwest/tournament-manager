@@ -5,6 +5,621 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
+
+Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
+
+Blocking finding: the new entry's own title says "harness parse break persists (**4th occurrence**)" (and the commit headline repeats it) but its body says "**3 consecutive scheduled runs**" and lists only two distinct CI runs — the third list item ("this morning's triage of that same nightly run") is the same run (`36055375759`) as the second, double-counted. Title and body contradict each other within the same entry, and the "4th" isn't supported anywhere in the text added. Everything else checked out: correctly appended above (not rewriting) history, "No code changes" claim verified true, and the Job 2 claim (PR #965, regression spec for #64) verified to exist and match.
+
+Posted ✏️ REQUEST CHANGES with the fix (make title and body agree on one number) and applied `reviewed:changes`.
+
+**Next:** #963 needs a one-line fix from the Builder; #961/#947/#955 still in the review queue, not touched this session.
+
+## 2026-10-01 — Reviewer: PR #959 reviewed (APPROVE)
+
+Reviewed PR #959 ("docs(status): backfill 2026-09-23 Testing agent runs + 2026-09-24 morning run", Closes #958) — docs-only change to `STATUS.md`, no code/UI touched. Confirmed the claimed gap was real (`origin/main` topped out at the 2026-09-22 entry before this PR), the diff is pure addition in correct newest-first order with no history rewritten, and spot-checked the entries' factual claims against live GitHub state (PRs #951, #953, #955, #957) — all accurate. Posted ✅ APPROVE + label `reviewed:approve`.
+
+## 2026-10-01 — Reviewer: PR #947 reviewed (REQUEST CHANGES)
+
+Reviewed PR #947 ("Charity donations P2 [UX] — add-donation field + order-summary line at checkout", Closes #946) against its acceptance criteria, `DECISIONS.md`, and `CLAUDE.md`. Posted ✏️ REQUEST CHANGES + label `reviewed:changes`: (1) D-0049 — the new preset-chip donation-amount picker in `CheckoutPage.tsx` duplicates/diverges the existing one in `DonatePage.tsx` (same state shape and chip logic, different preset values, no shared component) instead of extracting a shared `DonationAmountPicker`; (2) the branch is `CONFLICTING`/`DIRTY` against `main` (flagged by the Builder itself on 2026-09-24, still unresolved). Also flagged non-blocking, already-disclosed-by-the-author context for Ron: once past the Payment Element step the "Pay $X →" button shows a donation-inclusive total that the real Stripe charge won't honor until #378's `[FN]` half ships. Scope/AC otherwise checked out (no payment/edge-function file touched, floor enforcement correct, gating on `accepts_donations` correct).
+
+**Next:** Builder picks this back up — extract the shared amount-picker component and rebase onto `main` before this can be re-reviewed/merged. Ron still owes the separate "hold vs. ship-with-gap" call on the donation preview/charge mismatch once #947 is otherwise clean.
+
+## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
+
+Triaged the newest untriaged regression run, [35737353782](https://github.com/notronwest/tournament-manager/actions/runs/35737353782) (2026-09-22 14:00 UTC) — workflow **failed** (56 passed, 1 failed, 1 flaky). `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" failed **both** attempt and retry #1 this time (`TimeoutError: locator.fill` on the partner-search placeholder) — same #936 signature, but landed persistent instead of flaky-then-pass, so this is the first of the last three occurrences to flip the run red. `registration.spec.ts` › "register for a singles event (no partner picker)" flaked once (`TimeoutError: locator.scrollIntoViewIfNeeded`) then passed on retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged — expected signature until it lands. Commented an update on #936 (with the severity bump noted) rather than filing a duplicate card; posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run). **Next:** #951 merging is the actual fix — worth prioritizing given today's run crossed from flaky-green to red.
+
+## 2026-09-21 — Testing agent (daytime run): Job 1 triage, green with known #936 flake, no new card
+
+Triaged the newest untriaged regression run, [35655046570](https://github.com/notronwest/tournament-manager/actions/runs/35655046570) (2026-09-21 21:05 UTC) — **overall green** (56 passed, 2 flaky). Both flakes are the same tracked #936 family: `registration.spec.ts` › "register needing a partner" and `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" each failed attempt 1 (`TimeoutError: locator.fill` on the partner-search placeholder) but passed retry #1. Notably better than the prior run (35621868067), where Path 1 failed both attempt and retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged, so this is the expected signature until it lands — commented an update on #936 rather than filing a duplicate card. Posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped (daytime slot; authoring cap belongs to the morning run). **Next:** once #951 merges, the following run is the real signal on whether #936's flake clears for good.
+
+## 2026-09-21 — Testing agent (daytime run): Job 1 triage, known #936 flake, no new card
+
+Triaged the newest untriaged regression run, [35621868067](https://github.com/notronwest/tournament-manager/actions/runs/35621868067) (2026-09-21 15:52 UTC). Only persistent failure (failed both attempt and retry #1): `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" — `TimeoutError: locator.fill` on the partner-search placeholder, same signature already tracked in #936. Two more flaked-then-passed on retry #1 (`registration.spec.ts` › "register needing a partner", and `mobile/audit.spec.ts` (iphone) › "register tab — pending card actions usable") — same shared-mutable-seed-state family, not previously named in #936 but same root cause.
+
+This run predates PR #951 (Builder's self-seeding fix for #950) merging, so it's the expected signature until that lands — not new information. Commented an update on #936 rather than filing a duplicate card. Posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped — this is the ~15:00-local (daytime) slot per `agents/testing/PROMPT.md`, and Job 2's per-day cap belongs to the morning run. Note: no "Testing agent morning run" STATUS entry exists for 2026-09-21, so it's unclear whether this morning's run fired — flagging in case the 07:00 slot needs a look, but not investigating scheduler health here (out of this agent's scope). **Next:** once #951 merges, the following run is the real signal on whether #936's flake clears.
+
+## 2026-09-21 — Builder: single-item orphan recovery, #936 reconciled to Backlog
+
+Single-item mode: recover orphaned **In Progress** card #936 (dispatcher assumed a `feature/db/fn/issue-936-*` branch existed with no open PR). Checked local + all remote branches — no branch for #936 exists anywhere; nothing to build or open a PR for.
+
+Found the real state via #936's own comment thread: CoS triage (2026-09-21) already diagnosed and resolved this — the actionable fix was dispatched as **#950** (self-seeding isolation fix), which has an open, mergeable PR **#951** (In Review, see the entry below). That same CoS comment said "This card moves to Backlog as the tracking issue," but the board move was never applied, leaving #936 stranded in In Progress with no work attached to it.
+
+Action: moved #936's board status **In Progress → Backlog** via `gh project item-edit`, and left an explanatory comment (`<!-- wmpc-builder -->`) pointing to #950/#951 and the disposition. No branch, no code, no PR — this card had nothing to build. **Next:** #936 stays open until a week of clean regression runs on the affected specs, per #950's note; nothing further for the Builder here.
+
+## 2026-09-21 — Builder: single-item run, PR #951 for #950 (self-seeding e2e fix)
+
+Built issue #950 in single-item mode (no sub-issues/PRs existed yet — a fresh build, not a mis-queue). Scope: make the five specific subtests named in #950's AC self-seeding (four in `registration.spec.ts` + issue-09 "Path 1"), fixing the recurring #936 flake's root cause (shared single-use seed state from `e2e/seed.ts`).
+
+Added `web/e2e/registration-fixtures.ts` — a Playwright fixture `seedRegistration(kind)` that creates its own tournament/event/player(s) per test invocation (keyed by a fresh random id) and tears them down after, so two runs, two tests, or a CI retry can never collide. Wired it into the four named `registration.spec.ts` subtests and issue-09's "Path 1"; left "change partner", "accept a partner invite", and issue-09 "Path 2" on the shared seed since they weren't named in the AC. Diff confined to `web/e2e/` per the AC — `e2e/seed.ts` and the CI workflow untouched. typecheck/build/lint all clean (lint: scoped diff clean; full run shows the same pre-existing `main` errors, none new).
+
+One snag caught before opening: my first PR body phrase "Fixes the recurring #936 flake" (and "doesn't close #936") tripped GitHub's closing-keyword parser and auto-linked #936 as a second closing issue — violates the one-issue-per-PR rule. Reworded to neutral phrasing ("Addresses... investigated in #936" / "issue #936 should stay open...") and re-verified only #950 closes.
+
+PR: [#951](https://github.com/notronwest/tournament-manager/pull/951) (Closes #950), card moved to In Review. **Next:** Ron reviews/merges; per #950's note, #936 itself stays open until a week of clean regression runs on these specs.
+
+## 2026-09-20 — Testing agent: daytime triage, all green
+
+**Job 1 (triage):** newest untriaged run ([35513866940](https://github.com/notronwest/tournament-manager/actions/runs/35513866940), 2026-09-20 13:33 UTC) — **all green, 56 passed** (up from 33 pre-#945/#942/#938 spec additions still pending merge, so this run reflects the existing merged suite only). No failures to triage, no card needed. Not Monday, so no heartbeat posted to Discord per cadence rules (quiet-when-green).
+
+**Job 2 (author):** skipped — daytime run, per-day authoring cap already spent on this morning's run (PR #945 for #10).
+
+**Housekeeping:** confirmed the previously-flagged locally-modified `CLAUDE.md` (missing Engineering-standard/UI-work/Deployment blocks vs. `origin/main`) is still present and still untouched by me — out of scope for this run, flagging again in case it's stale. Draft PRs #945 (#10), #942 (#862), #938 (#860) remain open awaiting harness-access selector tuning; nothing new to do on them this run.
+
+## 2026-09-20 — Testing agent: morning triage + spec PR for #10 + backlog-scope flag
+
+**Job 1 (triage):** newest untriaged run ([35463990606](https://github.com/notronwest/tournament-manager/actions/runs/35463990606), 2026-09-19 19:19 UTC) failed only the two `e2e/offline/*` specs — the known #934 signature, and this run predates #935 (the fix) merging later the same day, so no new information. Commented on #934 for the record; no new card. `registration.spec.ts` + #936's specs were clean this run.
+
+**Job 2 (author):** opened draft PR [#945](https://github.com/notronwest/tournament-manager/pull/945) (Closes #944) — `web/e2e/issue-10-partner-notice.spec.ts`, translating #10's AC ("partner won't be notified until checkout" copy). Added a dedicated tournament/event/player per scenario in `seed.ts` (not reusing `#253`'s fixtures, to avoid feeding the #936 shared-state race). Verified the copy is still live in `PublicTournamentPage.tsx` before writing the spec. **Draft, not normal PR:** this interactive session has no local access to the CI-only `E2E_*` secrets (they exist only as GH Actions repo secrets), so I could not run the spec against the deployed test app to tune selectors — needs that pass from whoever has harness access (Builder host or Ron) before it can come off draft. Tracking issue #944 set to **Blocked** for that reason. typecheck + lint clean; `playwright test --list` confirms the spec is discovered (33 tests / 8 files, was 30/7).
+
+**Scope flag:** swept the board's Done items for resolved issues with `## Acceptance criteria` lacking a spec — found **~100+** (numbers 10–549), far past the per-run cap of 5 and mostly predating the AC/spec convention. Only picked #10 this run (oldest, simplest, verified-still-live). Worth Ron deciding: keep chipping at 5/day (~20+ days to clear), raise the cap for a dedicated backfill, or accept the older ones as out of scope. **Next:** if continuing the backfill, #12 (pricing-override admin copy) is the next-oldest verified candidate.
+
+**Unrelated observation:** found `CLAUDE.md` locally modified (uncommitted) in this checkout — missing the Engineering-standard/UI-work/Deployment blocks that are present on `origin/main`. Did not touch it (not part of this run's scope, and it may be another agent's in-progress edit on this shared host) — flagging in case it's unintentional.
+
+## 2026-09-19 — Reviewer: PR #935 reviewed (APPROVE)
+
+Reviewed PR #935 ("test(e2e): exclude offline/ specs from the deployed-CI chromium project",
+closes #934) per `daemon/agents/reviewer/PROMPT.md`. Diff is a single-file change to
+`web/playwright.config.ts`: adds `"**/offline/**"` to the `chromium` project's `testIgnore`
+alongside the existing `"**/mobile/**"` exclusion, so `e2e/offline/first-paint.spec.ts` and
+`e2e/offline/network-audit.spec.ts` (which abort any non-localhost request to simulate the
+network being down) stop running under the deployed-CI regression, where they were 100%-repro
+failing on the first `page.goto` (6+ consecutive nightly runs, 2026-09-15 through 2026-09-17).
+
+Verified independently rather than trusting the PR body: pulled the branch into a scratch
+worktree and ran `npx playwright test --list --project=chromium` myself — 30 tests / 7 files,
+no `offline/**` specs listed (matches the PR's claimed 32→30 / 9→7 before/after). Confirmed
+`scripts/offline-verify.sh` and `playwright.offline.config.ts` are untouched (AC #2), and that
+the `iphone`/`pixel` projects (explicit `testMatch` whitelist, never included `offline/**`) are
+unaffected (32 tests / 3 files, unchanged). No UI change, no `DECISIONS.md` record touches CI
+test scoping. Scope matches #934's acceptance criteria exactly — no scope creep.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** queue clear for this session (#878, #884, #935 all reviewed 2026-09-19).
+
+## 2026-09-19 — Reviewer: PR #884 reviewed (REQUEST CHANGES)
+
+Reviewed PR #884 ("feat(tournament): in-app printable round-robin pool tracking sheets") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue (`closingIssuesReferences` empty;
+searched for a matching story across "print", "pool sheets", "round robin", "tracking sheet",
+"gen_sheets" — none found) — flagged as a non-blocking hygiene note, graded against the PR's own
+stated contract instead.
+
+Blocking finding: `PoolSheetsPage.tsx:31` (local `Team` type) and `:427-468` (local `buildTeams`)
+reimplement, field-for-field, the `Team` type + `buildTeams` already in `web/src/lib/bracketTeams.ts`
+(which `EventConsolePage.tsx` imports) — extracted there specifically so every consumer computes
+teams "exactly the way the console shows them." The duplicate happens to match today, but the next
+fix to the canonical `buildTeams` won't propagate here, silently breaking the PR's own claim that
+printed `T1..Tn` numbers match the app's. Cited CLAUDE.md's "reuse before adding" and gave the fix
+(import `buildTeams`/`Team` from `lib/bracketTeams` instead).
+
+Independently verified the circle-method round-robin schedule (n=4,5,6,7: every pair plays exactly
+once, no dupes/omissions), the multi-tenant scoping on the event fetch, and that the registration
+status filter (`SPOT_HOLDING_STATUSES`) matches `EventConsolePage`'s own team-list query.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:changes`.
+
+**Next:** #935 still open in the queue, not reviewed this session (out of this session's scope).
+
+## 2026-09-19 — Reviewer: PR #878 reviewed (REQUEST CHANGES)
+
+Reviewed PR #878 ("feat(playoff): single-elimination brackets for Top-6 and Top-8") per
+`daemon/agents/reviewer/PROMPT.md`. Verified correctness independently rather than trusting the PR
+body: pulled the branch into a scratch worktree, ran `vitest run` (83/83 green, incl. the new
+20-case `playoffBracket.test.ts`) and `tsc -b --noEmit` (clean) myself, and hand-traced the Top-6/
+Top-8 seeding, bye pre-placement, and `winnerTarget`/`bronzeTarget` feed-forward math in
+`web/src/lib/playoffBracket.ts`, plus the bye-restore path in `EventConsolePage.tsx`'s
+`onResetAllScores` (`:349-388`) — all correct, including the Top-6 play-in-upset-into-bronze edge
+case the tests cover.
+
+Blocked on one hard, CI-enforced finding: `gh pr view 878 --json closingIssuesReferences` is empty
+and the required `PR links an issue` check is **FAILING**
+(https://github.com/notronwest/tournament-manager/actions/runs/34672782995/job/103497197636). Per
+`wmpc-meta/conventions/backlog.md` § "Every PR ties to an issue," every PR must `Closes #N`; I found
+no existing story for this Top-6/Top-8 work (the double-elim epic #892/893/896/898 is a different,
+separate feature). Builder needs to open a small tracking issue and add the closing keyword.
+
+Design/scope/hygiene: clean — the new `playoff_rounds` `<option>`s reuse the existing native
+`<select>` pattern (not a mode-selection surface, so the choice-tiles convention doesn't apply), and
+the `matchLabel`/`playoffStageLabel` generalizations are in-scope for supporting 3-round brackets.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:changes`.
+
+**Next:** per the task scope, did not review #884 or #935 this session — still open in the queue.
+
+## 2026-09-19 — Reviewer: PR #877 reviewed (APPROVE)
+
+Reviewed PR #877 ("fix(schedule): explain locked setup dropdowns in per-event panels") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue (`closingIssuesReferences` empty,
+no matching story found) — same Ron-productized-local-fix pattern as #874/#869, so graded against
+the PR's own stated goal plus written standards rather than acceptance criteria.
+
+Diff is a single file, `web/src/pages/admin/SchedulePage.tsx`, +19/-0: new `locked: boolean` prop
+threaded from the page's `const locked = !!tournament?.schedule_locked_at` (`:377`) through the
+single `<SetupPanel>` call site (`:1412`) into the component's props type and a new hint block
+(`:1710-1725`) rendered when locked. Confirmed only one `<SetupPanel>` call site exists (no other
+caller missing the new prop), and the hint's copy ("click \"Unlock schedule\" at the top") matches
+the actual button label at `:972` exactly.
+
+This is a direct instance of the documented design-system convention (`wmpc-meta/design-system/DESIGN_SYSTEM.md`
+changelog, 2026-06-06): "Don't render dead ends" — gate the affordance and show the reason instead
+of silently disabling. Styling reuses the file's existing `warnBg`/`warnFg` tokens (no new raw hex)
+and matches the visual pattern of the adjacent `warning`/`error` blocks and the existing lock banner
+elsewhere in the same file. No `DECISIONS.md` entry applies (no migration, no deploy/branch change,
+no money path). Independently verified `npm run typecheck` clean in a scratch worktree off the PR
+branch rather than trusting the PR body's claim.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** Reviewer queue (867/869/872/874/877) is now fully drained for this pass.
+
+## 2026-09-19 — Reviewer: PR #874 reviewed (APPROVE)
+
+Reviewed PR #874 ("feat(scorecards): show pool on printed round-robin scorecards") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue exists (`closingIssuesReferences`
+empty, no matching story found) — same pattern as #869/#877, read as Ron productizing a fix he'd
+already verified locally, so graded against the PR's own stated goal (multi-pool round-robin
+scorecards were printing identical, unsorted-by-pool) plus written standards. Diff is a single
+file, `web/src/pages/admin/ScorecardsPage.tsx`: new `poolLetter()` helper is byte-identical to the
+existing convention in `EventConsolePage.tsx` (1-based `pool_index` → A/B/C), the pool is only
+shown when `event.pool_count > 1 && m.stage === "round_robin"` (matches the file's existing stage
+filter), and playoff matches correctly show no pool since they can be cross-pool. Lookup keys off
+`team_a_reg_id` only, safe because round-robin matches are always intra-pool; null-safety checked
+throughout (no crash paths for a missing team or unset `pool_index`).
+
+Independently verified in a scratch worktree off the PR head rather than trusting the PR body's
+claims: `npm install && npx tsc -b --noEmit && npm run build` all clean. No `DECISIONS.md`
+violations (no migration, single file, no direct-to-main push). Design is a plain-text addition
+next to the existing "Match:" label in the printed card's meta line — no new component/token,
+nothing in `docs/DESIGN_PREFERENCES.md` it could violate. Scope matches the PR description exactly.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** queue still has #877 awaiting review (out of scope for this session).
+
+## 2026-09-19 — Reviewer: PR #872 reviewed (APPROVE)
+
+Reviewed PR #872 ("fix(standings): break record ties by head-to-head before differential,"
+Closes #873, part of #40) per `daemon/agents/reviewer/PROMPT.md`. Bug: `computeStandings`
+(feeds both the Standings tab and playoff seeding) broke record ties by differential then
+points-for, never considering head-to-head — real data showed a 4-2 three-way tie seeded
+exactly backwards (worst-record-vs-the-tied-group ranked #1). Fix builds a head-to-head win
+map while tallying, then within each equal-wins group sorts by H2H wins scoped to *that
+tied group* (mini round-robin), falling through to diff → points-for on a circular tie.
+Extracted into new `web/src/lib/standings.ts` (React-free, mirrors `lib/resultsExport.ts`)
+so it's unit-testable; `EventConsolePage.tsx` now imports it instead of defining it inline.
+
+Independently verified in a scratch worktree on the PR head (not just trusting the PR body):
+`tsc -b --noEmit` clean, `vitest run` 59/59 green (incl. 3 new tiebreak tests: 2-way, 3-way
+mini round-robin, circular), `eslint` clean on both new files. Traced the algorithm by hand
+against the issue's required order and confirmed `captainRegId` is used consistently as the
+match-team key everywhere else in `EventConsolePage.tsx`, so the H2H map keys line up. No
+DECISIONS.md entry governs this; no UI touched; scope is tight. PR body's own "⚠️ Seeding
+impact" section already flags that this reorders standings/seeding for any event with record
+ties and recommends a sanity check before PROD promotion.
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`.
+
+**Next:** queue still has #874, #877 awaiting review (out of scope for this session).
+
+## 2026-09-19 — Reviewer: PR #869 reviewed (REQUEST CHANGES)
+
+Reviewed PR #869 ("feat(admin): preview the playoff bracket before generating it") per
+`daemon/agents/reviewer/PROMPT.md`. No `Closes #N` / linked issue exists for this PR
+(`closingIssuesReferences` empty, no matching story issue found) — read as Ron
+productizing his own dry-run prototype, so graded against the PR's own stated design
+goal ("what an organizer confirms can't drift from what gets created") plus written
+repo standards. Independently verified `tsc -b` clean and `vitest run` 65/65 pass in a
+scratch checkout of the PR head. Two concrete findings, both REQUEST CHANGES-worthy:
+
+1. **Correctness** — the preview only shows its "not enough teams" warning when
+   `previewSeeds.length === 0` (`EventConsolePage.tsx:2302`), but the non-cross-pool
+   path can return a short-but-nonempty array (e.g. 3 of 4 needed — the exact case
+   `playoffSeeding.test.ts` documents). Preview silently renders an incomplete
+   matchup as fine; `onGenerate` then rejects it *after* the organizer confirms —
+   the drift the PR claims the shared helper prevents.
+2. **Design/mobile** — `ConfirmModal`'s `modalStyle` (`ConfirmModal.tsx:122-128`) has
+   no `maxHeight`/scroll, and this PR is the first caller to pass an unbounded-height
+   body (full standings table + lists) into it. On a phone viewport with a realistic
+   team count, content will clip the Generate/Go-back buttons with no way to scroll —
+   violates DESIGN_PREFERENCES.md's mobile-first hard rule (test populated states at
+   390px) and DESIGN_SYSTEM.md's Adaptive principle (#9).
+
+Posted the verdict comment (`<!-- wmpc-reviewer -->` marker) and applied
+`reviewed:changes`, creating that label in the repo (only `reviewed:approve` existed
+so far).
+
+**Next:** Builder picks up #869's two findings for rework. Queue still has #872, #874,
+#877 awaiting review (out of scope for this session).
+
+## 2026-09-19 — Reviewer: PR #867 reviewed (APPROVE)
+
+Reviewed PR #867 ("Polish and unify score entry across all three surfaces," Closes #868) per
+`daemon/agents/reviewer/PROMPT.md` — the first PR review by the new Reviewer agent (D-0018).
+Checked the diff against #868's acceptance bullets (numeric `type="text"` score boxes replacing
+`type="number"`'s misaligned spin-arrows, `aria-label` replacing the redundant A/B placeholder,
+Enter-to-submit on all three surfaces, validation paths unchanged) — all implemented, none
+missing. Independently re-verified in a scratch worktree off the PR head rather than trusting
+the PR body's claims: `typecheck` clean, `build` clean, and `eslint` on the three touched files
+shows the same 4 pre-existing `set-state-in-effect` errors present on `main` (no new lint
+findings). No `DECISIONS.md` violations (no migration, no direct-to-main push); design aligns
+with `wmpc-meta/design-system/DESIGN_SYSTEM.md` principles 2 and 8. Scope was clean — exactly
+the three files the issue named, PR body explicitly excludes unrelated local changes. Posted the
+verdict comment (`<!-- wmpc-reviewer -->` marker) and applied `reviewed:approve`, creating that
+label in the repo since it didn't exist yet (also needed for future `reviewed:changes` /
+`reviewed:escalate` verdicts).
+
+**Next:** merge #867 (Ron's step per D-0018 — Reviewer never merges); the queue still has #869,
+#872, #874, #877 awaiting review (out of scope for this session, which was scoped to #867 only).
+
+## 2026-09-19 — Testing agent (daytime run): Job 1 triage only, no new signal
+
+Triaged the newest regression run, [35444828534](https://github.com/notronwest/tournament-manager/actions/runs/35444828534) (2026-09-19 13:07 UTC, the scheduled daytime cron — the two `workflow_dispatch` runs from this morning's #862 debugging were skipped as not part of the triage cadence). Final tally: 2 failed / 55 passed. Both failure classes are already-tracked, no new cards:
+
+- **Offline scoping bug (#934):** `first-paint.spec.ts` + `network-audit.spec.ts` still `ERR_INTERNET_DISCONNECTED` on both base + retry — same signature as every prior run. Fix is PR #935, still unmerged. Commented an update on #934.
+- **Shared-state flake (#936):** three `registration.spec.ts` subtests ("register with a new partner", "register needing a partner", "register for a singles event") each failed on attempt 1, passed on retry — net 0 failures on this file, consistent with the documented race. Still Blocked on Ron's isolation-vs-quarantine call (already asked in the issue body — not re-proposing). Commented an update on #936.
+
+No Discord post — both patterns already surfaced today, nothing new to report. Job 2 skipped (daytime run; authoring cap belongs to mornings). Noticed in passing: #934 and #936 don't appear on the WMPC Roadmap board (Project #1) despite being filed as bug issues — only #862 (unrelated) shows up under tournament-manager in a 500-item board pull. Not fixing that today (out of scope for a triage pass), flagging so it doesn't silently stay a gap.
+
+**Next:** same as this morning — Ron reviews/merges #935 (quick, mechanical, verified); decides #936's isolation-vs-quarantine question; PR #942 still needs its second failure root-caused (untouched today, Job 2 is morning-only).
+
+## 2026-09-19 — Testing agent (morning run): Job 1 triage + #862 regression spec (PR #942, verification in flight)
+
+**Job 1:** triaged the newest run, [35386996729](https://github.com/notronwest/tournament-manager/actions/runs/35386996729) (2026-09-18 19:37 UTC — later than the daytime run already covered, so a real third run needed its own pass). All 4 failures matched already-filed issues: the offline/ CI-scoping bug (#934, fix PR #935 still unmerged) and `registration.spec.ts` "register for a singles event" + `issue-09-confirm-cancel.spec.ts` Path 1 — both instances of the shared-mutable-DB flake tracked in #936 (still Blocked on Ron's isolation-vs-quarantine call). Commented an update on #936 with the new subtest + the prior run's "register with a new partner" flake-then-pass, rather than filing a duplicate. No new cards.
+
+Housekeeping: found CLAUDE.md + STATUS.md uncommitted in the working tree at session start — yesterday's daytime-triage STATUS entry had never made it into a commit before the next `git pull` fast-forwarded past it, silently dropping it. Recovered it from the stash and committed (`bb9707e`); dropped an unrelated, already-in-progress CLAUDE.md block-reorder edit rather than commit something out of this agent's scope.
+
+**Job 2:** authored `web/e2e/issue-862-admin-rating-picker.spec.ts` for #862 ("Admin player profile editor should use the same rating picker and gender UX as the player's Profile page," Done, no spec) — the oldest resolved-and-uncovered issue found. Tracking issue #941, PR #942 (`test/issue-862-spec`), draft. First dispatch (run 35439313256) **failed** — "Not authorized to view this player": the spec targeted Pam (`SEED.playerEmail`), whose *only* registration is the exact one `issue-09-confirm-cancel.spec.ts`'s Path 2 test cancels earlier in the same suite run, so by the time this spec ran she no longer belonged to the org and `resolvePlayerAccess` denied it — a shared-mutable-seed-state bug in the spec itself, same failure class as #936. Fixed by targeting Mona (`SEED.selfService.viewerEmail`) instead — her registration is a stable "read-only view" fixture nothing else touches. Re-dispatched (run 35439668974): **still failed**, same assertion (radiogroup not found) but ~4x faster (2.7s vs. the first run's full 10s timeout) — a different cause than the first failure, not yet root-caused. Session ran out of budget to keep debugging live against CI; left **draft** with both failure signatures noted on PR #942 for the next run or a manual look.
+
+**Next:** Ron reviews/merges #935 (quick, mechanical, verified); decides #936's isolation-vs-quarantine question; PR #942 needs its second failure root-caused before it can go green — do not merge as-is.
+
+## 2026-09-18 — SYNCED NH Baners results from the offline laptop → PROD
+
+Ron: "Sync the nh baners tournament from my laptop to production." Same hand
+procedure as the Angels sync (memory `offline-to-prod-sync`), one transaction via
+`supabase db query --linked --file`, PROD pre-state in
+`backups/prod-pre-sync-nh-baners-20260918T141527.tgz`.
+
+What the desk did on event day: re-created the field as **7 teams / 14 regs** (PROD
+had 6 teams / 12), all at 18:52–18:55 UTC 09-15. Mapping applied: 7 players already
+on PROD → their PROD reg rows updated (seed, paid, partner) and match refs remapped;
+desk-created "Ron West" (no email) → Ron's real PROD player; 6 genuinely new players
+inserted (Berg, G+D Gove, Kalis, K+L Wilhite — no emails on file); 5 PROD players who
+never played → `withdrawn` (Candace Byrnes, Stephen Kendall, Evangelista, Wade,
+Parisi; Ron decides refunds); 12 completed matches (crossover DE, feeds wired after
+insert), event_courts 1–2, event `complete`, tournament `completed`. Verified: 14
+paid regs all mutually paired, seeds 1–7, 0 dangling team refs; Final = Berg / West
+def. Kalis / Laurinaitis 15–8. Public Results tab now shows it.
+
+Gotcha (cost one rollback): `event_registrations.partner_status` is NOT NULL
+(default `solo`) — withdrawn rows must use `'solo'`, not null. Local tournament had
+picked a saved `location_id` that doesn't exist on PROD; PROD kept its text
+location fields (not synced).
+
+Still true: every NH Baners player has **no email**, so the summary email can't reach
+them until addresses are added on their player records. Next: build `push-live.py`
+so this stops being a hand job (third time now).
+
+## 2026-09-18 — Testing agent: offline/ specs were failing every regression run (scoping bug, not a product break)
+
+Morning triage of the nightly+daytime regression runs found the last 6+ runs (2026-09-15
+through 2026-09-17) all red on exactly `e2e/offline/first-paint.spec.ts` +
+`e2e/offline/network-audit.spec.ts`, 100% reproducible, same `ERR_INTERNET_DISCONNECTED`
+error every time. Root cause: those two specs (added in #843, part of the offline epic
+#732) are purpose-built to run ONLY via `scripts/offline-verify.sh` +
+`playwright.offline.config.ts` against `localhost` — each installs a `context.route` guard
+that aborts any non-localhost request to simulate the network being down. They were never
+excluded from `web/playwright.config.ts`'s `chromium` project (which runs the deployed
+nightly suite against `E2E_BASE_URL`), so the guard aborted the very first navigation.
+**Not a product regression** — the app never broke. Filed #934, fixed in PR #935 (adds
+`"**/offline/**"` to the chromium project's `testIgnore`, mirroring the existing
+`"**/mobile/**"` exclusion). Verified locally: `--list --project=chromium` goes from
+32→30 tests / 9→7 files; typecheck clean; lint unchanged from `main` (27 pre-existing,
+unrelated errors). **Not merged — awaiting Ron's review.**
+
+Also surfaced (not this run's regression, but a pattern worth a card): `registration.spec.ts`
++ `issue-09-confirm-cancel.spec.ts` failed intermittently in 4 of the last 6 runs — a shared
+mutable-DB-state race the suite's own config comments already call out (`workers: 1` because
+the suite "mutates registration state" against one shared `tm-test` deploy), clean on the
+most recent run. Filed #936, **Blocked** — needs a call from Ron: per-test seed isolation vs.
+quarantining those specs.
+
+Also kicked off (background agent, morning-only Job 2 cap): a regression spec for #860
+(registration-deadline reopen bug Ron hit live on PB Angels 2026-09-11) — tracking issue
+#937, PR #938 (`test/issue-860-spec`). The agent had no local E2E credentials so it
+authored the spec from source only, never ran it. Verified that directly: manually
+dispatched the real regression workflow against that branch (run 35338842927) — both new
+tests fail. **Converted PR #938 to draft** with the failure-run link, rather than leave an
+unverified spec looking merge-ready.
+
+**Next:** Ron reviews/merges PR #935 (quick, mechanical, verified); decides #936's
+isolation-vs-quarantine question; PR #938 stays draft until a future Testing-agent run (with
+real E2E creds) or Ron tunes it against the linked failure traces.
+
+## 2026-09-18 — Testing agent (daytime run): newest regression run reconfirms #934/#936, no new cards
+
+Daytime (~15:00 local) Job 1 triage of run [35350980672](https://github.com/notronwest/tournament-manager/actions/runs/35350980672) (13:34 UTC, the newest one not yet covered by this morning's triage). All 3 failures matched already-filed issues exactly — the offline/ CI-scoping bug (#934, fix PR #935 still unmerged) and the shared-mutable-DB registration/issue-09 flake (#936, still Blocked on Ron's isolation-vs-quarantine call). Commented an update on each rather than filing duplicates (idempotency rule); no new Discord post since nothing changed beyond confirming the pattern persists.
+
+**Next:** unchanged from the morning entry above — merge #935, decide #936.
+
+## 2026-09-16 — Email/Contacts "Registrants" filter now overlaps with Imported
+
+Ron: Email page said 44 registrants for Pickleball Angels; PROD has 70 active
+registrant players with email. Cause: `lib/orgContacts` gives each contact ONE
+label (manual > import > registrant) and the filter compared the label, so the 26
+registrants who were also on the imported list only showed under "Imported".
+Fix: `OrgContact.isRegistrant` + pure `lib/contactSource.ts` `matchesSource()`
+(tests) — "Registrants" = anyone with an active registration, "Imported"/"Added
+manually" = how the link was created; used by EmailPage and OrgContactsPage;
+Contacts table shows "· registered" next to an Imported/Manual pill when the
+person also registered. Labels and recipients otherwise unchanged.
+
+Also found: the 12 NH Baners players (wmpc org) have **no email on file**, so no
+summary/broadcast can reach them until emails are added to their player records.
+
+## 2026-09-15 — PDF attachments on the admin Email page (story #925)
+
+Ron: "attach the pdf to the normal email functionality we have as an admin." Same
+mechanics as the summary email: `send-contact-broadcast` keeps its `/emails/batch`
+path when no attachments, and switches to per-recipient windowed sends
+(`attachments[]`, `cursor`/`limit`/`broadcastId`) when PDFs are attached; the
+attachment validation + paced `sendOne` move to `_shared/attachments.ts` and
+`send-tournament-summary` is refactored onto it. UX: Email page composer gets
+**Attach PDF…** (≤3 files, 5 MB total, chips, inline rejections) and the progress
+loop from `SummaryEmailModal`. Worktrees `feat/broadcast-attachments-fn` (`[FN]`
+first) and `feat/broadcast-attachments-ux`. No new secret.
+Shipped: `[FN]` PR #926 (15dacea: `_shared/attachments.ts`, windowed path in
+`send-contact-broadcast`, summary fn refactored onto the helper) + UX PR (this one:
+`lib/emailAttachments.ts` + 13 tests, EmailPage picker/chips/drag-drop/progress loop).
+Gates green; **not browser-checked at 390px** (composer is behind admin auth; no env
+here). Next: Ron sends himself a test with a PDF from the Email page on PROD.
+
+## 2026-09-15 — Event morning: offline laptop DB restored to pristine NH Baners snapshot
+
+Ron finished dry-running double elim on the laptop; ran `backups/restore-pristine.sh`
+(snapshot `pa-loaded-pristine.sql`, refreshed 09-14 19:50 after the NH Baners pull).
+Verified after restore: NH Baners 1 event, 12 registrations all paired, 0 seeds,
+0 matches, 0 check-ins, 0 court slices; director org membership intact; app at
+:5173 answers 200. Local DB is at migration head (`20260914220000`). Script's
+"95 registrations" success line is stale copy from the Angels weekend — harmless.
+Next: run the event per the cheat sheet; afterwards "sync the tournament back to
+B&E" (procedure in memory `offline-to-prod-sync`).
+
+**In flight (same day, Ron's ask: "send the summary to attendees as an attachment"):**
+building "Email to attendees" on the Summary report page. Design: client-side
+text PDF via `pdf-lib` (`web/src/lib/summaryPdf.ts`, dynamic import) — also a
+new "Download PDF" button so the file Ron downloads is byte-identical to what
+attendees get; new edge fn `send-tournament-summary` (mirrors
+`send-tournament-briefing`: staff auth, spot-holding registrants deduped by
+email, `contact_broadcasts` logging) sending ONE Resend request per recipient
+with `attachments[]` because `/emails/batch` can't carry attachments, paced for
+Resend's 2 req/s and windowed (`cursor`/`limit`/`broadcastId`, client loops).
+UI: `components/SummaryEmailModal.tsx` (count preview, send-test-to-me, consent,
+confirm, progress). Worktrees `feat/summary-email-fn` (`[FN]` PR first) and
+`feat/summary-email-ux`. No new secret needed (RESEND_* exist on both projects).
+Shipped: story #920; `[FN]` PR #921 (b63c41a) + UX PR (this one): `lib/summaryPdf.ts`
+(pdf-lib 1.17.1, lazy chunk ~438 kB/181 kB gz, WinAnsi-sanitized text, 7 tests),
+`components/SummaryEmailModal.tsx`, Summary page buttons **Email to attendees** /
+**Download PDF** / Print / Copy as text. Not browser-verified end to end (needs a
+logged-in admin on TEST with Resend) — typecheck/135 tests/lint/build green, sample PDF
+eyeballed. Next: Ron sends himself a test from a real tournament on PROD.
+
+## 2026-09-14 — Double elimination shipped to PROD; day-of PRs merged for tomorrow's NH Baners event; laptop offline stack
+
+**Double elimination (epic built end-to-end, all on PROD):** PRs #902 (pure
+`lib/doubleElim.ts` + 17 tests), #903 (`[DB]` migration
+`20260914210000_double_elim.sql` — `events.double_elim_final` enum
+`crossover|bronze_only`, `matches.bracket/slot_key/label/if_necessary/
+feeds_winner_to(+side)/feeds_loser_to(+side)`), #905 (event form "Tournament
+style" round_robin|double_elim + Final format; Teams tab seed randomizers;
+Event console `DoubleElimSection` — Generate inserts slots then wires feeds by
+`slot_key`; data-driven `feedForwardPlayoffWinners` — W-champ wins F1 deletes
+the if-necessary F2; fair court queue via `bracketRank`), #907 (public
+Results tab — medals + playoff/bracket scores), #910 (`BracketView`: zoomable
+0.4–2×, scrollable, real bracket picture; Bracket|Table toggle; click a card to
+score). Design notes in memory `double-elim-design.md`. Ron's call: **offer both**
+finals — crossover (true DE, 2N−2 games +1 if F2) and bronze-only (consolation
+ends at L(2k−3), 2N−4 games).
+
+**Merged today for the event (Builder PRs Ron asked to run "today"):** #880
+`[DB]` `event_registrations.checked_in_at` (renumbered to
+`20260914220000` — the original `20260912…` stamp was behind remote head and
+would have failed closed; TEST migration workflow green), #865 offline
+runtime hardening, #866 assign Player B to a partnerless team, #881 day-of
+check-in screen + printable sheet + Start gate (rebased; kept both import
+groups), #870 score-entry safety (rebased; `MatchRow` now requires `event` —
+added at both `DoubleElimSection` call sites). Typecheck / 125 vitest / build
+green on each. Tracking issues for the Builder PRs' `Closes` check: #912 (#865),
+#913 (#866). Promotion PR main→production follows this entry.
+
+**Laptop / offline for NH Baners:** `backups/pull-live.py` now takes
+`TM_ORG_ID` / `TM_TID` env and clears a same-slug seeded org before load;
+run order in `backups/OFFLINE-CHEATSHEET.md`; `.claude/launch.json` has an
+`offline` config (`scripts/offline.sh`, :5173). Local DB migrated to head
+(`checked_in_at` present; migration is idempotent). Docker reinstalled on the
+new laptop via Homebrew cask.
+
+**Incident (this session):** a failed `cd` into a worktree made a
+`reset --hard` + rebase run in the shared main checkout, wiping its
+*uncommitted* STATUS.md/CLAUDE.md edits (CLAUDE.md is the bootstrap block
+sync — harmless; the STATUS content is re-recorded in this entry). Rule
+re-learned: `cd "$WT" || exit 1` before any destructive git op, and the
+worktree script wants the **repo path**, not its basename.
+
+**Still open / not merged:** Builder PRs #867, #869, #872, #874, #877, #878,
+#884, #885; medal-match score editing for brackets on Edit event; bracket
+rounds on the print sheet; pg_net on PROD (#785).
+
+## 2026-09-11 — Score-entry safety: valid-score enforcement + confirm modal (#871/#868), PR #870 open
+
+Productized two score-entry safety features Ron applied locally on the offline
+laptop from live tournament-desk feedback: score entry accepted physically
+impossible finals (a game to 11 win-by-2 took 9–7, which nobody had won —
+only NaN/negative/tied were checked). New shared, tested helper
+`web/src/lib/scoreValidation.ts`: `resolveScoreRules(match,event)` (per-match
+`points_to_win`/`win_by` win — playoff rows carry their semifinal/medal config
+stamped at bracket generation; round-robin falls back to the event) +
+`validateScore` (reach the target, win by the margin, end by exactly win-by
+past the target; target checks only when a target is known so time-capped
+formats aren't false-rejected). Wired into both Court Manager screens
+(validate → ConfirmModal showing teams/scores/winner before writing) and the
+Games-tab MatchRow (validation inline, no modal). Also folded in the #868
+polish across all three surfaces: `number`→`text inputMode=numeric` + digit
+sanitize + `aria-label`s + Enter-to-submit. Tests: all required cases (11-9 ok,
+11-10/9-7/13-9 rejected, 12-10/15-13 ok) + guards + RR-vs-playoff resolution;
+full suite 71/71, `tsc -b` clean, Pages preview built.
+
+**Scope note:** the offline laptop also had UNRELATED uncommitted edits in
+`EventConsolePage.tsx` (doubles partner-registration fix + playoff-bracket
+preview modal) and `supabase/config.toml`/`seed.sql` — deliberately left out
+of this PR; still uncommitted in the main checkout for separate handling.
+
+**Next:** Ron review + merge PR #870 → TEST, validate at a desk (9–7 rejected,
+valid score confirms the winner), then promote via a `main`→`production` PR.
+## 2026-09-12 — Day-of player check-in: schema PR #880 + UX PR #881 open
+
+Requested live by Ron during the Pickleball Angels tournament — nothing
+check-in-related existed (front desk ran off the paper `backups/checkin-sheet.html`).
+Built in two PRs per the DB/UX split (a PR preview runs against the live DB):
+
+- **#880 (schema, `feat/checkin-schema`)** — nullable
+  `event_registrations.checked_in_at` + `(event_id, checked_in_at)` index. No
+  RLS added (existing org-staff update / org-member select cover it).
+- **#881 (frontend, `feat/player-checkin`)** — `lib/checkin.ts` (pure, tested:
+  build roster, check-ALL-a-player's-events, `eventCheckInGate`); `CheckInPage`
+  at `…/tournaments/:slug/checkin` (autofocus search, Enter to check in top
+  match, running count, missing filter, per-player check-in/undo across all
+  their events); `CheckInPrintModal` (A–Z printable master sheet mirroring the
+  paper stopgap); and a **hard-block gate with organizer override** on Generate
+  matches (RoundRobinSection) and Start event (draft/ready→active) that lists
+  missing players. Resume/Reopen aren't gated.
+
+Check-in is a PLAYER action (stamps every spot-holding reg they hold in the
+tournament at once; undo nulls them). `checked_in_at` lags the generated types,
+so it's read via `"*"` + written through an untyped client (repo convention,
+cf. `schedule_order`). `tsc -b` clean, 77 tests pass, `vite build` clean.
+
+**Next:** merge #880 → applies to TEST; then merge #881; validate check-in +
+the Start gate on TEST; promote `main`→`production` when ready.
+## 2026-09-11 — Event console: assigning a Player B to a partner-seeker no longer silently drops (PR #866)
+
+Ron (fix pre-applied uncommitted on the offline laptop, reproduced properly here with review
++ tests): in the event console **Teams** editor, editing a doubles team with no Player B yet
+(a solo / partner-seeker — `partner_status='seeking'`, `partner_registration_id` null),
+picking a Player B and clicking **Save** silently no-op'd — no request, no error, row refetched
+unchanged. Root cause: `saveEdit` only had an UPDATE-existing-partner path; no CREATE path when
+none existed. Fix (`web/src/pages/admin/EventConsolePage.tsx`): when the doubles team is
+partnerless, CREATE the partner `event_registration` and link both directions, mirroring the
+working `addTeam` flow (insert Player B with `partner_registration_id=captainRegId`, then point
+the captain reg at the new reg and flip its `partner_status` seeking→confirmed); the existing
+swap-`player_id` path is preserved. Branch selection extracted to a pure
+`resolvePartnerBAction()` helper (`web/src/lib/teamEdit.ts`) with unit coverage
+(`teamEdit.test.ts`, 5 cases) — matches the repo's `src/lib/*.test.ts` convention; the Teams
+editor has no component-test harness. Edge cases verified against schema: singles skipped;
+seeking→confirmed on the captain update; the paired-roles side trigger
+(`check_paired_roles_sides_trigger`) and any constraint error surface via `setError` (both
+insert and update errors captured), so a bad pairing isn't silent — mirrors `addTeam`; seed /
+pool_index untouched by the writes and preserved by `buildTeams`' coalesce. `npm run typecheck`
+clean, full `vitest run` green (61); the 2 EventConsolePage lint errors are pre-existing
+`set-state-in-effect` (line 635 on origin/main, untouched). NOT included: the laptop's
+`supabase/config.toml` + `seed.sql` offline-dev tweaks (unrelated, left uncommitted there).
+
+**Next:** Ron review + merge PR #866 → TEST, validate assigning a partner to a seeker (Judy
+Poulin + Laurie Walmsley was the manual repro), then promote main→production for PROD.
+## 2026-09-11 — Offline runtime hardened: fresh machine goes offline with one clean command (epic #732)
+
+Fixed the two blockers hit live tonight setting up Ron's tournament laptop, so
+a fresh checkout runs `bash scripts/offline.sh` and comes up clean with **no
+manual config edits**:
+
+1. **Missing web deps.** `scripts/offline.sh` now installs `web/node_modules`
+   before launching Vite (`ensure_web_deps` → `npm ci`, guarded by a
+   lockfile-hash stamp so reruns at the venue are instant and never needlessly
+   wipe deps). A checkout predating the self-hosted `@fontsource/*` fonts
+   (#735/#843) used to die at Vite import time — no longer.
+2. **Inbucket port bug.** `[inbucket] enabled = false` is now committed in
+   `supabase/config.toml` (with a comment explaining why). The pinned Supabase
+   CLI (v2.105.0) can't publish inbucket's port and aborts the whole
+   `supabase start`; this app never uses the local dev inbox, so it's off for
+   good — CLI-version-independent, no venue-side edit. (Tonight's live
+   workaround was the same toggle, uncommitted, on the shared `main` checkout.)
+
+New verification harness (#735): `scripts/offline-verify.sh` runs the whole
+check in one command — bundle grep + clean-checkout `npm ci` + real
+`supabase start` via `offline.sh` + **first-paint with the network simulated
+down** (new `web/e2e/offline/first-paint.spec.ts`, non-destructive). `--full`
+also runs the existing full mock-event `network-audit.spec.ts` (which writes to
+the local DB — don't use against a live event). Docs updated: `docs/OFFLINE.md`
+(one-time setup now just "run offline.sh once online"; new harness section) and
+`DEPLOYMENT.md` ("Does NOT deploy" now lists the offline tooling). `.gitignore`
+now covers `supabase/.branches/` and `web/test-results/`.
+
+**Verified:** clean-checkout `npm ci` + `build:offline` (fonts resolve, no
+import error); `ensure_web_deps` stamp idempotency (install → instant no-op →
+reinstall on drift); `offline-verify.sh` green end-to-end against the running
+local stack (bundle grep, npm ci, runtime up on :5174, first-paint offline);
+`typecheck` + `eslint` clean. **Not verified against a fully fresh
+`supabase start`** — the local stack is a singleton by `project_id` and was up
+for tonight's live setup, so I didn't cycle it; the running stack already has
+inbucket disabled and came up clean (no `:54324` container), which is the same
+committed config. Run `scripts/offline-verify.sh --full` on a clean clone at
+the Friday dry-run to close that gap.
+
+**Branch:** `fix/offline-runtime-hardening` (worktree) → PR.
+## 2026-09-14 — SYNCED Pickleball Angels results from the offline laptop DB → PROD (+ session recap 09-10→09-14)
+
+**Sync (today).** Sat Sep 12 ran on the offline stack; PROD had 0 matches. Started Docker +
+local Supabase, exported both sides, field-diffed, applied ONE transaction via
+`supabase db query --linked` (PROD pre-state: backups/prod-pre-sync-20260914T142707.tgz):
+99 matches (ids preserved); event statuses (4 complete; Mixed Doubles 3.5 = medal_round — its
+**BRONZE match Sarah Thibault v Cristina Omahen has no score: Ron enters it**); 66 pool_index;
+event_courts (Mixed 2.75 → 5–8, Womens → 3,6,7); 3 new players (Caryn West, Erin Ma, Beth
+Goldenberg) + 8 desk-created regs; 3 desk regs remapped onto PROD seeker rows (Terragni,
+Thoresen, Gagnon — payments kept); 7 PROD regs the desk removed set **withdrawn** (Judy Poulin
+Womens; Mixed 2.75: DeFranc, Duffy, Cogdill×2, French, Walmsley) — **refund decisions: Ron**.
+Skipped the offline paid→pending flip on Nicole Richard. First attempt rolled back on an FK
+order issue (insert new regs with partner null, then link). Procedure saved to memory
+(offline-to-prod-sync). Local stack left running (`supabase stop` is safe; never --no-backup).
+Working tree: Saturday's offline-only edits were **stashed** (superseded by open PRs #865
+#866 #880 #881 #884) — `git stash list` → "offline-only tweaks from the Sep 12 PB Angels event".
+
+**Recap of this session's shipped work (its STATUS entries were lost to a working-tree reset).**
+All promoted to PROD unless noted: waitlist pay-to-claim + status parity (#758/#761→#766);
+pg_net story #785 (Agent Ready); stories #770 #771 (Agent Ready); pair seekers by division
+(#787→#790) + emails both players (#792→#793); pending-invites "Last sent" (#803/#805);
+event-form pool team info (#814); RR estimator moved into Schedule, tool retired (#816);
+schedule reorder + parallel packer by courts needed (#820/#821); inline setup + drag-drop
+(#824); plan hold reasons (#827); cross-pool medal seeding (#830/#831); medal-round phase
+(#834); schedule lock + cascade (#837/#838); formatted print sheet (#841); reopen on deadline
+extend (#861); admin profile RatingPicker (#863). **#784 (pg_cron sweep) still HELD** — 4
+Angels pending regs are now moot (event over): merge after Ron reconciles or accepts.
+
 ## 2026-09-11 — Builder: offer-waitlist-spot promotes the confirmed partner too (#770), PR #788 open
 
 Built issue #770: offering a waitlist spot to one half of a confirmed doubles
@@ -1060,3 +1675,52 @@ compose the address the way the public tournament page does (`composeLocationAdd
 the legacy columns stay as the fallback. Briefing harness (stubbed client) confirms the
 intro "at <venue>" line, the "Where" block and the Maps link with the composed address.
 web typecheck + lint + FN tsc clean. Ships as one PR (function + page are independent).
+
+## 2026-09-11 — Pool distribution/reassignment locked once games exist (data-integrity guard)
+
+Redistributing pools rewrites each team's `pool_index`, but generated matches already
+reference those teams and their pool assignment — so re-pooling (or moving one team's pool)
+*after* games are created corrupts the bracket/standings. In `EventConsolePage.tsx`
+`TeamsSection`: `distributePools` now early-returns with an error when `hasMatches` and routes
+its writes through a new pure `planPoolDistribution()` (in `poolDistribution.ts`) that returns an
+empty plan whenever games exist; both pool buttons get `|| hasMatches` on `disabled` + a
+"Locked — reset all matches first" title. Applied the **same guard to the per-team Pool
+dropdown** (`onSetPool`) — same corruption vector — blocking the handler and disabling the
+`<select>`. Seed drag-reorder left unguarded on purpose (matches key off registration ids, not
+seeds; reseeding is reversible/cosmetic). Extracted `snakePoolIndex`+planner and added
+`poolDistribution.test.ts` (7 cases, headline = no-op when matches exist). typecheck clean,
+vitest 7/7; no CI runs eslint/tsc/vitest on web (Pages builds `vite build` only). Productized
+just this guard out of a larger mixed local diff on the offline laptop — partner-B add / playoff
+preview / H2H tiebreak already have their own branches. Shipped in PR #875 (Closes #876),
+squash-merged to `main` → **TEST**. **Next:** validate on test.bertanderne.com, then promote to
+PROD via a `main`→`production` PR.
+
+## 2026-09-13 — End-of-tournament summary report (client-facing wrap-up)
+
+Ron: "build an end-of-tournament summary report I send to the client — every bracket +
+its winners, plus fun stats (players, teams, points, how long it lasted)." New admin page
+`/admin/:orgSlug/tournaments/:slug/summary` ("Summary report" button on the tournament
+home, next to Player briefing). Loads the tournament + its events, spot-holding regs,
+players and matches (paged past the 1000-row cap) and renders a printable sheet:
+masthead (dates/venue), optional note to the client (page-local, not saved), "By the
+numbers" tiles (players, teams, brackets, matches, points, medals, days/hours of play,
+courts used), every bracket with its Gold/Silver/Bronze podium, a Highlights grid
+(highest-scoring match, closest finish, nail-biters, most lopsided, shutouts, most
+dominant pool run, undefeated teams, most matches played, multi-event players, busiest
+court, longest day) and a day-by-day table. Print / Save as PDF (visibility-based print
+CSS in the component, Letter + ½in margins) and Copy-as-text for pasting into email.
+On-screen warning when matches are unscored / podiums undecided.
+- **Data honesty:** matches have no started_at/completed_at, so "how long it lasted" is
+  first score → last score per day (a completed match's `updated_at` = when its score was
+  recorded). Per-match durations would need two timestamp columns + a status trigger on
+  `matches` — flagged as a follow-up migration, not done here.
+- **Refactor:** `buildTeams` / `computeStandings` / medal derivation moved out of
+  `EventConsolePage` into `lib/bracketTeams.ts` (page re-exports the types) so the report
+  decides winners exactly as the console does. Round-robin-only events podium from
+  standings (labelled as such); medal events from the final-round matches.
+- Pure summary math in `lib/tournamentSummary.ts` + 11 vitest cases (74 total pass).
+  typecheck + build clean; lint clean on all touched/new files (27 pre-existing hook-rule
+  errors elsewhere unchanged). Browser-verified via a throwaway fixture harness at 390px
+  (no overflow; day table stacks to cards) and 1100px, plus print-media render.
+- NOT verified against a real tournament on TEST — Ron: open a completed tournament's
+  Summary report on the PR preview and eyeball the podiums vs the event consoles.

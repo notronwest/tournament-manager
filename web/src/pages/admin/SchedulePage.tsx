@@ -10,7 +10,6 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
-  estimateEvent,
   fmtDuration,
   poolPlayExplanation,
   utilizationLabel,
@@ -18,13 +17,19 @@ import {
 } from "../../lib/estimator";
 import { SPOT_HOLDING_STATUSES, teamCountFor } from "../../lib/registrationStatus";
 import {
-  medalCourtsNeeded,
   packSchedule,
   parallelGroups,
-  poolCourtsNeeded,
   type Placement,
-  type PlacedSegment,
 } from "../../lib/schedulePacker";
+import {
+  dayFloors,
+  eventPlacementFacts,
+  toFixedPlacement,
+  toPackItem,
+  type EventPlacementFacts,
+} from "../../lib/eventPlacement";
+import { fmtTime, fromLocalInput, toLocalInput } from "../../lib/scheduleTime";
+import { bracketRoundsForN } from "../../lib/playoffBracket";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { SchedulePrintModal } from "../../components/SchedulePrintModal";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -63,6 +68,10 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
 type Event = Database["public"]["Tables"]["events"]["Row"] & {
   schedule_order?: number | null;
   playoff_seeding?: "overall" | "cross_pool" | null;
+  // scheduled_pinned landed in migration 20261001120000; generated types lag it.
+  // A PINNED event is a day anchor the organizer set by hand — auto-schedule
+  // holds it at its start and re-flows every un-pinned event around it.
+  scheduled_pinned?: boolean | null;
 };
 const untyped = supabase as unknown as SupabaseClient;
 
@@ -107,6 +116,10 @@ type EventRow = {
   // the calendar work from these, so a bracket only "holds" the courts it
   // is really using.
   phases: RowPhase[];
+  // The shared event→schedule mapping this row was derived from — reused
+  // directly for the auto-schedule plan and the cascade so the page never
+  // rebuilds pack items / fixed placements by hand.
+  facts: EventPlacementFacts;
 };
 
 type RowPhase = { kind: "pool" | "medal"; start: Date; end: Date; courts: number[] };
@@ -297,79 +310,113 @@ export default function SchedulePage() {
       const courtNumbers = (courtsByEvent.get(event.id) ?? []).sort(
         (a, b) => a - b,
       );
-      // Fall back to 1 court when an event hasn't claimed any — the
-      // estimate still renders, just pessimistically.
-      const courts = Math.max(1, courtNumbers.length);
-      // One adapter for every view (schedule table, calendar, tournament
-      // event cards) so they can never disagree on an end time.
-      const estimate = estimateEvent(event, teamCount, courts);
-      const { teamsPerPool, pool, medal, totalMinutes } = estimate;
-      const planTeams = teamCount >= 2 ? teamCount : Math.max(2, event.max_teams ?? 2);
-      const venueCourts = tournament?.locations?.court_count ?? courts;
-      const courtsNeeded = Math.min(Math.max(1, venueCourts), poolCourtsNeeded(planTeams, event.pool_count));
-      const medalNeed = Math.min(Math.max(1, venueCourts), medalCourtsNeeded(event.teams_advancing_to_playoff));
+      // The one event→schedule mapping (durations, court needs, plan/fixed
+      // placement shapes) — shared with the Bracket Setup wizard's Courts
+      // and Start-time steps so they can never disagree (see eventPlacement).
+      const facts = eventPlacementFacts({
+        event,
+        teamCount,
+        courtNumbers,
+        // Venue court count caps court needs; fall back to the event's own
+        // allocation when the venue's isn't known yet.
+        venueCourts:
+          tournament?.locations?.court_count ?? Math.max(1, courtNumbers.length),
+        players: playersByEvent.get(event.id) ?? new Set<string>(),
+      });
+      const { estimate } = facts;
+      const { pool, medal } = estimate;
       const scheduledStart = event.scheduled_start_at
         ? new Date(event.scheduled_start_at)
         : null;
       const scheduledEnd = scheduledStart
-        ? new Date(scheduledStart.getTime() + totalMinutes * 60_000)
+        ? new Date(scheduledStart.getTime() + facts.totalMinutes * 60_000)
         : null;
       const phases: RowPhase[] = [];
       if (scheduledStart) {
         const poolEnd = new Date(scheduledStart.getTime() + pool.totalMinutes * 60_000);
-        const poolCourts = courtNumbers.slice(0, Math.max(1, Math.min(courtNumbers.length || 1, courtsNeeded)));
+        const poolCourts = facts.courtNumbers.slice(0, Math.max(1, Math.min(facts.courtNumbers.length || 1, facts.courtsNeeded)));
         phases.push({ kind: "pool", start: scheduledStart, end: poolEnd, courts: poolCourts.length ? poolCourts : [1] });
         if (medal && medal.totalMinutes > 0) {
-          phases.push({ kind: "medal", start: poolEnd, end: scheduledEnd!, courts: (poolCourts.length ? poolCourts : [1]).slice(0, Math.max(1, medalNeed)) });
+          phases.push({ kind: "medal", start: poolEnd, end: scheduledEnd!, courts: (poolCourts.length ? poolCourts : [1]).slice(0, Math.max(1, facts.medalCourtsNeeded)) });
         }
       }
       return {
         event,
         teamCount,
-        teamsPerPool,
-        courts,
-        courtNumbers,
-        poolMinutes: pool.totalMinutes,
-        medalMinutes: medal?.totalMinutes ?? 0,
-        totalMinutes,
+        teamsPerPool: estimate.teamsPerPool,
+        courts: facts.courts,
+        courtNumbers: facts.courtNumbers,
+        poolMinutes: facts.poolMinutes,
+        medalMinutes: facts.medalMinutes,
+        totalMinutes: facts.totalMinutes,
         poolBindingConstraint: pool.bindingConstraint,
         estimate,
-        planTeams,
-        courtsNeeded,
-        medalCourtsNeeded: medalNeed,
+        planTeams: facts.planTeams,
+        courtsNeeded: facts.courtsNeeded,
+        medalCourtsNeeded: facts.medalCourtsNeeded,
         scheduledStart,
         scheduledEnd,
         phases,
+        facts,
       };
     });
-  }, [events, eventCourts, teamsByEvent, tournament]);
+  }, [events, eventCourts, teamsByEvent, tournament, playersByEvent]);
 
   // The auto-schedule PLAN, recomputed live from order / anchor / buffer so
   // the page can say what parallelism it found before anything is written.
+  // PINNED events are the day anchors the organizer set by hand — held fixed at
+  // their start. Everything else (auto-placed starts included) re-flows around
+  // them, so re-running auto-schedule can actually fix a bad layout instead of
+  // freezing whatever start each event happens to carry.
+  const pinnedFixed = useMemo<Placement[]>(
+    () =>
+      rows
+        .filter((r) => r.event.scheduled_pinned && r.scheduledStart)
+        .map((r) => toFixedPlacement(r.facts, r.scheduledStart!.getTime())),
+    [rows],
+  );
+  // The re-flowed (un-pinned) placements — what Auto-schedule WRITES.
   const plan: Placement[] = useMemo(() => {
     const anchorIso = fromLocalInput(anchorLocal);
     const venueCourts = tournament?.locations?.court_count ?? 0;
     if (!anchorIso || venueCourts < 1 || rows.length === 0) return [];
     const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
-    return packSchedule(
-      rows.map((r, i) => ({
+    const anchorMs = new Date(anchorIso).getTime();
+    // Day floors come ONLY from pinned anchors: once a pinned start lands a later
+    // day, every event after it in run order floors to that day, so the days the
+    // organizer pinned are kept instead of the greedy packer collapsing them.
+    const floors = dayFloors(
+      rows.map((r) => ({
         id: r.event.id,
-        order: i,
-        segments: [
-          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
-          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
-        ],
-        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
+        pinnedStartMs:
+          r.event.scheduled_pinned && r.scheduledStart ? r.scheduledStart.getTime() : null,
       })),
-      new Date(anchorIso).getTime(),
+      anchorMs,
+    );
+    const movable = rows.filter((r) => !r.event.scheduled_pinned);
+    const fixedPlayers = new Map<string, ReadonlySet<string>>(
+      rows
+        .filter((r) => r.event.scheduled_pinned && r.scheduledStart)
+        .map((r) => [r.event.id, r.facts.players]),
+    );
+    return packSchedule(
+      movable.map((r, i) => toPackItem(r.facts, i, floors.get(r.event.id))),
+      anchorMs,
       bufferMs,
       venueCourts,
+      pinnedFixed,
+      fixedPlayers,
     );
-  }, [rows, anchorLocal, bufferLocal, tournament, playersByEvent]);
-  const planSpanMinutes = plan.length
-    ? Math.round((Math.max(...plan.map((p) => p.endMs)) - Math.min(...plan.map((p) => p.startMs))) / 60_000)
+  }, [rows, anchorLocal, bufferLocal, tournament, pinnedFixed]);
+  // Pinned anchors + re-flowed events together — what the PREVIEW shows.
+  const planAll = useMemo<Placement[]>(
+    () => [...pinnedFixed, ...plan].sort((a, b) => a.startMs - b.startMs),
+    [pinnedFixed, plan],
+  );
+  const planSpanMinutes = planAll.length
+    ? Math.round((Math.max(...planAll.map((p) => p.endMs)) - Math.min(...planAll.map((p) => p.startMs))) / 60_000)
     : 0;
-  const planGroups = useMemo(() => parallelGroups(plan), [plan]);
+  const planGroups = useMemo(() => parallelGroups(planAll), [planAll]);
   const [confirmAuto, setConfirmAuto] = useState(false);
   // "Moved 3 later events" after a manual start-time change cascaded.
   const [cascadeNote, setCascadeNote] = useState<string | null>(null);
@@ -513,17 +560,23 @@ export default function SchedulePage() {
   const onAutoSchedule = async () => {
     setConfirmAuto(false);
     setError(null);
-    if (plan.length === 0) {
+    if (!fromLocalInput(anchorLocal)) {
       setError("Pick a start date/time first.");
+      return;
+    }
+    if (plan.length === 0) {
+      setError("Every event is pinned — nothing to auto-place. Un-pin (📌) the ones you want re-flowed.");
       return;
     }
     setBusy(true);
     const ids = plan.map((p) => p.id);
+    // Pinned events are the organizer's day anchors — auto-schedule only places
+    // the rest, and marks them un-pinned so a future run can re-flow them again.
     const startResults = await Promise.all(
       plan.map((p) =>
-        supabase
+        untyped
           .from("events")
-          .update({ scheduled_start_at: new Date(p.startMs).toISOString() })
+          .update({ scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false })
           .eq("id", p.id),
       ),
     );
@@ -550,7 +603,7 @@ export default function SchedulePage() {
     setEvents((prev) =>
       prev.map((e) => {
         const p = plan.find((x) => x.id === e.id);
-        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false } : e;
       }),
     );
     setEventCourts((prev) => [
@@ -641,9 +694,9 @@ export default function SchedulePage() {
     setError(null);
     if (rows.length === 0) return;
     setBusy(true);
-    const { error: updErr } = await supabase
+    const { error: updErr } = await untyped
       .from("events")
-      .update({ scheduled_start_at: null })
+      .update({ scheduled_start_at: null, scheduled_pinned: false })
       .in(
         "id",
         rows.map((r) => r.event.id),
@@ -653,7 +706,7 @@ export default function SchedulePage() {
       setBusy(false);
       return;
     }
-    setEvents((prev) => prev.map((e) => ({ ...e, scheduled_start_at: null })));
+    setEvents((prev) => prev.map((e) => ({ ...e, scheduled_start_at: null, scheduled_pinned: false })));
     setBusy(false);
   };
 
@@ -692,16 +745,27 @@ export default function SchedulePage() {
     setTournament({ ...tournament, schedule_locked_at: next });
   };
 
-  // A row as a fixed placement for the cascade (its phases → segments).
-  const placementFor = (r: EventRow, startMs: number): Placement => {
-    const poolCourts = r.courtNumbers.slice(0, Math.max(1, Math.min(r.courtNumbers.length || 1, r.courtsNeeded)));
-    const pc = poolCourts.length ? poolCourts : [1];
-    const poolEnd = startMs + r.poolMinutes * 60_000;
-    const segments: PlacedSegment[] = [{ kind: "pool", startMs, endMs: poolEnd, courts: pc }];
-    if (r.medalMinutes > 0) {
-      segments.push({ kind: "medal" as const, startMs: poolEnd, endMs: poolEnd + r.medalMinutes * 60_000, courts: pc.slice(0, Math.max(1, r.medalCourtsNeeded)) });
+  // A row as a fixed placement for the cascade — the shared mapping so it
+  // matches the auto-schedule plan exactly.
+  const placementFor = (r: EventRow, startMs: number): Placement =>
+    toFixedPlacement(r.facts, startMs);
+
+  // Pin / un-pin an event as a day anchor WITHOUT changing its start. A pinned
+  // event is held in place by auto-schedule; an un-pinned one re-flows. Only an
+  // event that already has a start can be pinned (the start IS the anchor).
+  const onTogglePin = async (eventId: string) => {
+    const e = events.find((x) => x.id === eventId);
+    if (!e || !e.scheduled_start_at) return;
+    const next = !e.scheduled_pinned;
+    const { error: updErr } = await untyped
+      .from("events")
+      .update({ scheduled_pinned: next })
+      .eq("id", eventId);
+    if (updErr) {
+      setError(updErr.message);
+      return;
     }
-    return { id: r.event.id, startMs, endMs: startMs + r.totalMinutes * 60_000, courts: r.courtNumbers, segments, heldBy: null };
+    setEvents((prev) => prev.map((x) => (x.id === eventId ? { ...x, scheduled_pinned: next } : x)));
   };
 
   // Manual start change. Then CASCADE: every event after this one in run
@@ -712,15 +776,19 @@ export default function SchedulePage() {
     setError(null);
     setCascadeNote(null);
     const iso = localValue ? fromLocalInput(localValue) : null;
-    const { error: updErr } = await supabase
+    // Typing a start time PINS the event as a day anchor; clearing it un-pins.
+    const pinned = iso != null;
+    const { error: updErr } = await untyped
       .from("events")
-      .update({ scheduled_start_at: iso })
+      .update({ scheduled_start_at: iso, scheduled_pinned: pinned })
       .eq("id", eventId);
     if (updErr) {
       setError(updErr.message);
       return;
     }
-    updateLocalEventScheduled(eventId, iso);
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? { ...e, scheduled_start_at: iso, scheduled_pinned: pinned } : e)),
+    );
     if (!iso || locked) return;
 
     const idx = rows.findIndex((r) => r.event.id === eventId);
@@ -737,16 +805,28 @@ export default function SchedulePage() {
       fixedPlayers.set(r.event.id, playersByEvent.get(r.event.id) ?? new Set<string>());
     });
     const bufferMs = Math.max(0, parseInt(bufferLocal || "0", 10) || 0) * 60_000;
-    const moved = packSchedule(
-      later.map((r, i) => ({
+    // Floor the later events to the new start, and to any pin among them — so a
+    // start set on a still-later day keeps the events after IT on that day too,
+    // not pulled back onto this one.
+    const laterFloors = dayFloors(
+      later.map((r) => ({
         id: r.event.id,
-        order: i,
-        segments: [
-          { kind: "pool" as const, minutes: r.poolMinutes, courtsNeeded: r.courtsNeeded },
-          ...(r.medalMinutes > 0 ? [{ kind: "medal" as const, minutes: r.medalMinutes, courtsNeeded: r.medalCourtsNeeded }] : []),
-        ],
-        players: playersByEvent.get(r.event.id) ?? new Set<string>(),
+        pinnedStartMs:
+          r.event.scheduled_pinned && r.scheduledStart ? r.scheduledStart.getTime() : null,
       })),
+      newStartMs,
+    );
+    // A later event that is itself pinned (its own day anchor) stays put — add it
+    // to the fixed set so the cascade routes around it instead of moving it.
+    later.forEach((r) => {
+      if (r.event.scheduled_pinned && r.scheduledStart) {
+        fixed.push(placementFor(r.event, r.scheduledStart.getTime()));
+        fixedPlayers.set(r.event.id, playersByEvent.get(r.event.id) ?? new Set<string>());
+      }
+    });
+    const movableLater = later.filter((r) => !r.event.scheduled_pinned);
+    const moved = packSchedule(
+      movableLater.map((r, i) => toPackItem(r.facts, i, laterFloors.get(r.event.id))),
       newStartMs,
       bufferMs,
       venueCourts,
@@ -754,13 +834,13 @@ export default function SchedulePage() {
       fixedPlayers,
     );
     const changed = moved.filter((p) => {
-      const r = later.find((x) => x.event.id === p.id);
+      const r = movableLater.find((x) => x.event.id === p.id);
       return !r?.scheduledStart || r.scheduledStart.getTime() !== p.startMs || fmtCourtRange(r.courtNumbers) !== fmtCourtRange(p.courts);
     });
     if (changed.length === 0) return;
     setBusy(true);
     const results = await Promise.all(
-      changed.map((p) => supabase.from("events").update({ scheduled_start_at: new Date(p.startMs).toISOString() }).eq("id", p.id)),
+      changed.map((p) => untyped.from("events").update({ scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false }).eq("id", p.id)),
     );
     const firstErr = results.find((r) => r.error)?.error;
     if (firstErr) {
@@ -775,7 +855,7 @@ export default function SchedulePage() {
     setEvents((prev) =>
       prev.map((e) => {
         const p = changed.find((x) => x.id === e.id);
-        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString() } : e;
+        return p ? { ...e, scheduled_start_at: new Date(p.startMs).toISOString(), scheduled_pinned: false } : e;
       }),
     );
     if (!insErr) {
@@ -875,6 +955,7 @@ export default function SchedulePage() {
             <span>Tournament start</span>
             <input
               type="datetime-local"
+              step={900}
               value={anchorLocal}
               onChange={(e) => setAnchorLocal(e.target.value)}
               style={{
@@ -998,7 +1079,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      {plan.length > 0 && !locked && (
+      {planAll.length > 0 && !locked && (
         <div
           style={{
             marginTop: 12,
@@ -1012,15 +1093,17 @@ export default function SchedulePage() {
           }}
         >
           <strong style={{ color: ink }}>Auto-schedule plan</strong> — {fmtDuration(planSpanMinutes)} from{" "}
-          {fmtTime(new Date(plan[0].startMs))}, in the order below, using the courts each event can actually keep busy.
+          {fmtTime(new Date(planAll[0].startMs))}, in the order below, using the courts each event can actually keep busy. 📌 = a day anchor you pinned (kept in place).
           <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>
             {rows.map((r) => {
-              const p = plan.find((x) => x.id === r.event.id);
+              const p = planAll.find((x) => x.id === r.event.id);
               if (!p) return null;
-              const alongside = plan.filter((q) => q.id !== p.id && q.startMs < p.endMs && q.endMs > p.startMs);
-              const reason = planReason(p, rows);
+              const pinned = !!r.event.scheduled_pinned;
+              const alongside = planAll.filter((q) => q.id !== p.id && q.startMs < p.endMs && q.endMs > p.startMs);
+              const reason = pinned ? null : planReason(p, rows);
               return (
                 <li key={p.id} style={{ marginBottom: 2 }}>
+                  {pinned && <span title="Pinned day anchor">📌 </span>}
                   <strong style={{ color: ink }}>{fmtTime(new Date(p.startMs))}</strong> {r.event.name}
                   <span style={{ color: inkMuted }}>
                     {p.segments.map((g) => (
@@ -1265,6 +1348,22 @@ export default function SchedulePage() {
                       >
                         {openDetails.has(r.event.id) ? "Hide setup ▴" : "Details & setup ▾"}
                       </button>
+                      {/* Jump straight to the full event console (teams /
+                          settings / games) or the Setup & Start wizard for this
+                          event — the same screens the tournament events list
+                          links to. */}
+                      <Link
+                        to={`/admin/${org.slug}/tournaments/${tournamentSlug}/events/${r.event.id}`}
+                        style={eventLinkStyle}
+                      >
+                        Open console ↗
+                      </Link>
+                      <Link
+                        to={`/admin/${org.slug}/tournaments/${tournamentSlug}/events/${r.event.id}?wizard=1`}
+                        style={eventLinkStyle}
+                      >
+                        Setup &amp; start ↗
+                      </Link>
                     </div>
                     <div
                       style={{ fontSize: 11, color: inkMuted, marginTop: 2 }}
@@ -1367,22 +1466,50 @@ export default function SchedulePage() {
                     {r.teamCount < 2 ? "—" : fmtDuration(r.totalMinutes)}
                   </td>
                   <td style={tdStyle}>
-                    <input
-                      type="datetime-local"
-                      value={toLocalInput(r.event.scheduled_start_at)}
-                      onChange={(e) =>
-                        void onSetEventStart(r.event.id, e.target.value)
-                      }
-                      disabled={frozen}
-                      style={{
-                        padding: "4px 6px",
-                        border: `1px solid ${rule}`,
-                        borderRadius: 4,
-                        fontSize: 12,
-                        fontFamily: bodyFontStack,
-                        background: "#ffffff",
-                      }}
-                    />
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <input
+                        type="datetime-local"
+                        step={900}
+                        value={toLocalInput(r.event.scheduled_start_at)}
+                        onChange={(e) =>
+                          void onSetEventStart(r.event.id, e.target.value)
+                        }
+                        disabled={frozen}
+                        style={{
+                          padding: "4px 6px",
+                          border: `1px solid ${rule}`,
+                          borderRadius: 4,
+                          fontSize: 12,
+                          fontFamily: bodyFontStack,
+                          background: "#ffffff",
+                        }}
+                      />
+                      {r.event.scheduled_start_at && (
+                        <button
+                          type="button"
+                          onClick={() => void onTogglePin(r.event.id)}
+                          disabled={frozen}
+                          title={
+                            r.event.scheduled_pinned
+                              ? "Pinned day anchor — auto-schedule keeps it here. Click to un-pin so it re-flows."
+                              : "Not pinned — auto-schedule may move it. Click to pin as a day anchor."
+                          }
+                          aria-pressed={!!r.event.scheduled_pinned}
+                          style={{
+                            cursor: frozen ? "not-allowed" : "pointer",
+                            border: "none",
+                            background: "transparent",
+                            fontSize: 14,
+                            lineHeight: 1,
+                            padding: 2,
+                            opacity: r.event.scheduled_pinned ? 1 : 0.35,
+                            filter: r.event.scheduled_pinned ? "none" : "grayscale(1)",
+                          }}
+                        >
+                          📌
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td
                     style={{
@@ -1409,6 +1536,7 @@ export default function SchedulePage() {
                         row={r}
                         courtCount={courtCount}
                         busy={frozen}
+                        locked={locked}
                         error={rowErr[r.event.id] ?? ""}
                         onPatch={(patch) => void onPatchEvent(r.event.id, patch)}
                         onToggleCourt={(c) => void onToggleCourt(r.event.id, c)}
@@ -1556,6 +1684,7 @@ function SetupPanel({
   row,
   courtCount,
   busy,
+  locked,
   error,
   onPatch,
   onToggleCourt,
@@ -1563,6 +1692,7 @@ function SetupPanel({
   row: EventRow;
   courtCount: number;
   busy: boolean;
+  locked: boolean;
   error: string;
   onPatch: (
     patch: Partial<
@@ -1582,13 +1712,16 @@ function SetupPanel({
   const advancingOptions = [0, 2, 4, 6, 8, 10, 12, 16].filter((n) => n === 0 || n <= Math.max(teams, advancing));
   if (!advancingOptions.includes(advancing)) advancingOptions.push(advancing);
   advancingOptions.sort((a, b) => a - b);
+  const bracketR = bracketRoundsForN(advancing);
   const warning =
     advancing === 0
       ? null
       : rounds === 1 && advancing % 2 !== 0
         ? "Single-round playoffs need an even Top-N (pairs play for each medal slot)."
-        : rounds === 2 && advancing !== 4
-          ? "2-round playoffs (semis + final + bronze) support Top-4 only."
+        : rounds >= 2 && bracketR !== rounds
+          ? bracketR == null
+            ? `A single-elimination bracket isn't supported for Top-${advancing} — use 1 round (pairwise), or set Top-4/6/8.`
+            : `Top-${advancing} is a ${bracketR}-round bracket — pick ${bracketR} rounds (or 1 round for pairwise).`
           : null;
   const label: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: inkSoft };
   const select: CSSProperties = {
@@ -1615,6 +1748,12 @@ function SetupPanel({
           <span>Courts <span style={{ color: inkMuted }}>· click to assign or release · needs {row.courtsNeeded} of {courtCount}</span></span>
           <CourtPills total={courtCount} assigned={row.courtNumbers} onToggle={busy ? undefined : onToggleCourt} />
         </div>
+        {(event as { bracket_type?: string }).bracket_type === "double_elim" ? (
+          <div style={{ ...label, gridColumn: "1 / -1", color: inkMuted }}>
+            Double-elimination bracket — seeding and the final format are set on Edit event; pools and Top-N don't apply.
+          </div>
+        ) : (
+          <>
         <label style={label}>
           <span>Pools <span style={{ color: inkMuted }}>· {teams} teams{row.teamCount < 2 ? " (max)" : ""}</span></span>
           <select
@@ -1651,8 +1790,15 @@ function SetupPanel({
             disabled={busy}
             onChange={(e) => {
               const n = parseInt(e.target.value, 10);
-              // Leaving top-4 makes a 2-round bracket invalid — drop to 1 round.
-              onPatch(n !== 4 && rounds === 2 ? { teams_advancing_to_playoff: n, playoff_rounds: 1 } : { teams_advancing_to_playoff: n });
+              // Bracket round count follows from N (Top-4 → 2, Top-6/8 → 3).
+              // When already in a bracket, re-derive it for the new N; if the
+              // new N can't form a bracket, fall back to pairwise (1 round).
+              if (rounds >= 2) {
+                const bR = bracketRoundsForN(n);
+                onPatch({ teams_advancing_to_playoff: n, playoff_rounds: bR ?? 1 });
+              } else {
+                onPatch({ teams_advancing_to_playoff: n });
+              }
             }}
             style={select}
           >
@@ -1685,14 +1831,19 @@ function SetupPanel({
             disabled={busy || advancing === 0}
             onChange={(e) => onPatch({ playoff_rounds: parseInt(e.target.value, 10) })}
             style={select}
-            title={advancing !== 4 ? "2 rounds (semis + final + bronze) is available for Top-4 only." : undefined}
+            title="1 round pairs seeds for each medal. A single-elim bracket needs Top-4 (2 rounds) or Top-6/8 (3 rounds)."
           >
             <option value={1}>1 round (pairwise medal matches)</option>
             <option value={2} disabled={advancing !== 4}>
-              2 rounds (semis + final + bronze){advancing !== 4 ? " — Top-4 only" : ""}
+              2 rounds — bracket (semifinals → final + bronze){advancing !== 4 ? " — Top-4" : ""}
+            </option>
+            <option value={3} disabled={bracketR !== 3}>
+              3 rounds — bracket ({advancing === 6 ? "play-in" : "quarterfinals"} → semis → final + bronze){bracketR !== 3 ? " — Top-6/8" : ""}
             </option>
           </select>
         </label>
+          </>
+        )}
       </div>
       {warning && (
         <div style={{ marginTop: 8, padding: "6px 10px", background: warnBg, color: warnFg, borderRadius: 4, fontSize: 12 }}>
@@ -1702,6 +1853,22 @@ function SetupPanel({
       {error && (
         <div style={{ marginTop: 8, padding: "6px 10px", background: dangerBg, color: dangerFg, borderRadius: 4, fontSize: 12 }}>
           {error}
+        </div>
+      )}
+      {locked && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "6px 10px",
+            background: warnBg,
+            color: warnFg,
+            borderRadius: 4,
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          🔒 Schedule is locked — click “Unlock schedule” at the top to change
+          setup.
         </div>
       )}
       <div style={{ marginTop: 8, fontSize: 11, color: inkMuted }}>
@@ -2339,6 +2506,20 @@ const detailsBtnStyle: CSSProperties = {
   minHeight: 24,
 };
 
+// Per-event jump links (console / wizard) beside the Details & setup toggle.
+const eventLinkStyle: CSSProperties = {
+  padding: "2px 8px",
+  fontSize: 11,
+  fontWeight: 600,
+  color: courtBlue,
+  textDecoration: "none",
+  border: `1px solid ${courtBlue}`,
+  borderRadius: 4,
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 24,
+};
+
 // "waits for Womens 2.75+ — 1 shared player" / "courts full until 10:35".
 function planReason(p: Placement, rows: EventRow[]): string | null {
   const h = p.heldBy;
@@ -2449,31 +2630,4 @@ const tdStyle: CSSProperties = {
   verticalAlign: "top",
 };
 
-// `<input type="datetime-local">` expects "YYYY-MM-DDTHH:MM" in
-// **local** time with no timezone suffix. Going either direction:
-//   - toLocalInput: ISO/timestamptz → local-time slug for the input
-//   - fromLocalInput: local-time slug → ISO with the browser's offset
-// Both round-trip the same wall-clock moment the organizer sees.
-function toLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fromLocalInput(local: string): string | null {
-  if (!local) return null;
-  // new Date("YYYY-MM-DDTHH:MM") parses as local time in browsers,
-  // then .toISOString() gives us the UTC-equivalent storage form.
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
-
-function fmtTime(d: Date): string {
-  return d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 

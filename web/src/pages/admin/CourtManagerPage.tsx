@@ -16,6 +16,8 @@ import {
   playoffStageStyle,
 } from "../../lib/matchLabel";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
+import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   bg,
   ink,
@@ -249,6 +251,14 @@ export default function CourtManagerPage() {
   // both teams populated. Playoff matches enter the queue as soon
   // as feedForwardPlayoffWinners fills their team slots.
   const rankedPending = useMemo(() => {
+    // Double elimination: keep the winners and consolation brackets moving
+    // evenly — prefer the bracket that has completed fewer games so far, so
+    // consolation teams never sit while the winners bracket monopolises courts.
+    const doneByBracket = new Map<string, number>();
+    for (const m of matches as (Match & { bracket?: string | null })[]) {
+      if (m.bracket && m.status === "completed") doneByBracket.set(m.bracket, (doneByBracket.get(m.bracket) ?? 0) + 1);
+    }
+    const bracketRank = (m: Match & { bracket?: string | null }) => (m.bracket ? doneByBracket.get(m.bracket) ?? 0 : 0);
     return matches
       .filter(
         (m) =>
@@ -267,12 +277,14 @@ export default function CourtManagerPage() {
           minPlayed: Math.min(playedA, playedB),
           maxPlayed: Math.max(playedA, playedB),
           stageRank: m.stage === "round_robin" ? 0 : 1,
+          bracketRank: bracketRank(m),
         };
       })
       .sort(
         (x, y) =>
           x.minPlayed - y.minPlayed ||
           x.maxPlayed - y.maxPlayed ||
+          x.bracketRank - y.bracketRank ||
           x.stageRank - y.stageRank ||
           x.score - y.score ||
           x.match.round - y.match.round ||
@@ -479,6 +491,7 @@ export default function CourtManagerPage() {
               suggestion={suggestion}
               suggestionStageLabel={suggestionStageLabel}
               teamByAnyRegId={teamByAnyRegId}
+              event={event}
               onLoad={(matchId) => onLoad(matchId, court)}
               onCancel={onCancel}
               onSubmitScore={onSubmitScore}
@@ -564,6 +577,7 @@ function CourtCard({
   suggestion,
   suggestionStageLabel,
   teamByAnyRegId,
+  event,
   pickerOptions,
   onLoad,
   onCancel,
@@ -575,6 +589,7 @@ function CourtCard({
   suggestion: Match | null;
   suggestionStageLabel: string | null;
   teamByAnyRegId: Map<string, Team>;
+  event: Event | null;
   pickerOptions: Match[];
   onLoad: (matchId: string) => Promise<void>;
   onCancel: (matchId: string) => Promise<void>;
@@ -584,6 +599,7 @@ function CourtCard({
   const [scoreA, setScoreA] = useState("");
   const [scoreB, setScoreB] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [pendingScore, setPendingScore] = useState<{ a: number; b: number } | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerValue, setPickerValue] = useState("");
   // Local state resets cleanly when assigned changes because the parent
@@ -594,24 +610,27 @@ function CourtCard({
     regId ? (teamByAnyRegId.get(regId)?.label ?? "—") : "—";
 
   if (assigned) {
-    const submit = async () => {
+    // Validate against the game's rules (reach the target, win by the
+    // margin), then confirm before writing. Round-robin uses the event's
+    // points_to_win/win_by; playoff matches carry their own on the row.
+    const submit = () => {
       const a = parseInt(scoreA, 10);
       const b = parseInt(scoreB, 10);
-      if (Number.isNaN(a) || Number.isNaN(b)) {
-        setErr("Both scores required.");
+      const result = validateScore(a, b, resolveScoreRules(assigned, event));
+      if (!result.ok) {
+        setErr(result.error);
         return;
       }
-      if (a < 0 || b < 0) {
-        setErr("Scores can't be negative.");
-        return;
-      }
-      if (a === b) {
-        setErr("Scores can't be tied.");
-        return;
-      }
+      setErr(null);
+      setPendingScore({ a, b });
+    };
+
+    const doSubmit = async () => {
+      if (!pendingScore) return;
       setBusy(true);
-      await onSubmitScore(assigned, a, b);
+      await onSubmitScore(assigned, pendingScore.a, pendingScore.b);
       setBusy(false);
+      setPendingScore(null);
     };
 
     return (
@@ -636,26 +655,28 @@ function CourtCard({
           }}
         >
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min="0"
+            pattern="[0-9]*"
             value={scoreA}
-            onChange={(e) => setScoreA(e.target.value)}
+            onChange={(e) => setScoreA(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
             disabled={busy}
             style={bigScoreInput}
-            placeholder="A"
+            aria-label={`${teamLabel(assigned.team_a_reg_id)} score`}
             autoFocus
           />
           <span style={{ color: inkMuted, fontSize: 18 }}>–</span>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min="0"
+            pattern="[0-9]*"
             value={scoreB}
-            onChange={(e) => setScoreB(e.target.value)}
+            onChange={(e) => setScoreB(e.target.value.replace(/[^0-9]/g, ""))}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
             disabled={busy}
             style={bigScoreInput}
-            placeholder="B"
+            aria-label={`${teamLabel(assigned.team_b_reg_id)} score`}
           />
         </div>
 
@@ -691,6 +712,41 @@ function CourtCard({
             Cancel
           </button>
         </div>
+
+        {pendingScore && (
+          <ConfirmModal
+            title="Confirm final score"
+            confirmLabel="Save score"
+            cancelLabel="Go back"
+            destructive={false}
+            onCancel={() => setPendingScore(null)}
+            onConfirm={doSubmit}
+            body={
+              <div style={{ fontSize: 15, fontFamily: bodyFontStack }}>
+                <div style={scoreConfirmRow}>
+                  <span>{teamLabel(assigned.team_a_reg_id)}</span>
+                  <b style={{ fontSize: 20 }}>{pendingScore.a}</b>
+                </div>
+                <div style={scoreConfirmRow}>
+                  <span>{teamLabel(assigned.team_b_reg_id)}</span>
+                  <b style={{ fontSize: 20 }}>{pendingScore.b}</b>
+                </div>
+                <div style={scoreConfirmWinner}>
+                  Winner:{" "}
+                  <b>
+                    {teamLabel(
+                      pendingScore.a > pendingScore.b
+                        ? assigned.team_a_reg_id
+                        : assigned.team_b_reg_id,
+                    )}
+                  </b>{" "}
+                  {Math.max(pendingScore.a, pendingScore.b)}–
+                  {Math.min(pendingScore.a, pendingScore.b)}
+                </div>
+              </div>
+            }
+          />
+        )}
       </div>
     );
   }
@@ -1016,6 +1072,22 @@ const bigScoreInput: CSSProperties = {
   fontFamily: bodyFontStack,
   textAlign: "center",
   fontWeight: 600,
+};
+
+const scoreConfirmRow: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 20,
+  padding: "6px 0",
+  borderBottom: `1px solid ${ruleSoft}`,
+};
+
+const scoreConfirmWinner: CSSProperties = {
+  marginTop: 12,
+  paddingTop: 10,
+  borderTop: `2px solid ${ink}`,
+  fontSize: 15,
 };
 
 const thStyle: CSSProperties = {
