@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Handshake, HandHelping } from "lucide-react";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
@@ -26,6 +26,7 @@ import type { Database } from "../../types/supabase";
 import { computeMedals, type Team as BracketTeam } from "../../lib/bracketTeams";
 import { playoffStageLabel } from "../../lib/matchLabel";
 import { BracketView } from "../../components/BracketView";
+import { BracketStandingsPanel } from "../../components/BracketStandingsPanel";
 import {
   bg as v5Bg,
   ink,
@@ -83,8 +84,13 @@ type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
 const SECTION_TABS = [
   { key: "details" as const, label: "Details" },
   { key: "register" as const, label: "Events" },
+  { key: "brackets" as const, label: "Brackets" },
   { key: "results" as const, label: "Results" },
 ];
+type SectionTab = (typeof SECTION_TABS)[number]["key"];
+function isSectionTab(v: string | null): v is SectionTab {
+  return SECTION_TABS.some((t) => t.key === v);
+}
 type MatchRow = Database["public"]["Tables"]["matches"]["Row"] & {
   bracket?: "winners" | "consolation" | "final" | null;
   label?: string | null;
@@ -270,7 +276,43 @@ export default function PublicTournamentPage({
   // Public page is split into tabs (Details first, then Register). Built to
   // grow — Schedule / Results land here later. Details = pricing + the info
   // sections; Register = the events list (+ inbound-invite banner).
-  const [tab, setTab] = useState<"details" | "register" | "results">("details");
+  // ?tab= and ?event= are the only URL-backed bits of this page — so the desk
+  // can hand players a link (or QR) straight to their bracket's standings.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const [tab, setTabState] = useState<SectionTab>(isSectionTab(urlTab) ? urlTab : "details");
+  const bracketEventId = searchParams.get("event");
+  const setTab = useCallback(
+    (next: SectionTab) => {
+      setTabState(next);
+      setSearchParams(
+        (prev) => {
+          const sp = new URLSearchParams(prev);
+          if (next === "details") sp.delete("tab");
+          else sp.set("tab", next);
+          if (next !== "brackets") sp.delete("event");
+          return sp;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  const openBracket = useCallback(
+    (eventId: string) => {
+      setTabState("brackets");
+      setSearchParams(
+        (prev) => {
+          const sp = new URLSearchParams(prev);
+          sp.set("tab", "brackets");
+          sp.set("event", eventId);
+          return sp;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   // Every match in the tournament (RLS lets the public read them once the
   // tournament is published) — drives the Results tab.
   const [matchesByEvent, setMatchesByEvent] = useState<Map<string, MatchRow[]>>(new Map());
@@ -602,8 +644,9 @@ export default function PublicTournamentPage({
   // across /t/:slug navigations, so without this the tab would carry over
   // from the previous tournament.
   useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab");
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setTab("details");
+    setTabState(isSectionTab(t) ? t : "details");
   }, [orgSlug, tournamentSlug]);
 
   if (loading) {
@@ -1210,6 +1253,9 @@ export default function PublicTournamentPage({
                 isDimmed={focusedEventId !== null && focusedEventId !== ev.id}
                 onRequestFocus={() => setFocusedEventId(ev.id)}
                 onReleaseFocus={() => setFocusedEventId(null)}
+                onViewBracket={
+                  (matchesByEvent.get(ev.id)?.length ?? 0) > 0 ? () => openBracket(ev.id) : undefined
+                }
                 onChanged={async () => {
                   // Refetch both the page's local state AND the
                   // site-wide pending bar — they read different
@@ -1236,6 +1282,17 @@ export default function PublicTournamentPage({
         )}
       </section>
       </div>
+      )}
+
+      {tab === "brackets" && (
+        <div role="tabpanel" id="tournament-panel-brackets" aria-labelledby="tournament-tab-brackets">
+          <BracketStandingsPanel
+            orgSlug={orgSlug ?? ""}
+            tournamentSlug={tournamentSlug ?? ""}
+            selectedEventId={bracketEventId}
+            onSelectEvent={openBracket}
+          />
+        </div>
       )}
 
       {tab === "results" && (
@@ -1446,6 +1503,7 @@ function EventCard({
   onReleaseFocus,
   onChanged,
   onNeedsAuth,
+  onViewBracket,
 }: {
   event: Event;
   registrationOpen: boolean;
@@ -1475,6 +1533,8 @@ function EventCard({
   onReleaseFocus: () => void;
   onChanged: () => Promise<void> | void;
   onNeedsAuth: () => void;
+  // Set once the bracket has games: opens the Brackets tab on this event.
+  onViewBracket?: () => void;
 }) {
   const chips = eligibilityChips(event);
   const isDoubles = event.format === "doubles";
@@ -2692,6 +2752,7 @@ function EventCard({
         maxTeams={event.max_teams}
         rosterOpen={rosterOpen}
         onToggle={() => setRosterOpen((o) => !o)}
+        onViewBracket={onViewBracket}
       />
       {rosterOpen && (
         <RosterPanel
@@ -3082,12 +3143,14 @@ function RosterToggleBar({
   maxTeams,
   rosterOpen,
   onToggle,
+  onViewBracket,
 }: {
   rosterRows: RosterRow[];
   isDoubles: boolean;
   maxTeams: number | null;
   rosterOpen: boolean;
   onToggle: () => void;
+  onViewBracket?: () => void;
 }) {
   let countLabel: string;
   if (isDoubles) {
@@ -3121,11 +3184,29 @@ function RosterToggleBar({
       }}
     >
       <span style={{ fontSize: 12, color: "#555" }}>{countLabel}</span>
+      {onViewBracket && (
+        <button
+          type="button"
+          onClick={onViewBracket}
+          style={{
+            marginLeft: "auto",
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontSize: 12,
+            color: "#2563eb",
+            fontFamily: "inherit",
+            padding: 0,
+          }}
+        >
+          Standings &amp; games →
+        </button>
+      )}
       <button
         type="button"
         onClick={onToggle}
         style={{
-          marginLeft: "auto",
+          marginLeft: onViewBracket ? undefined : "auto",
           background: "none",
           border: "none",
           cursor: "pointer",

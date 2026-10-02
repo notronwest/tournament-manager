@@ -1803,6 +1803,33 @@ never writes them. Verified at 390px on the real route via vite preview + stubbe
 (green 13:17 / amber 19:17 / Not timed). Lint: only the two pre-existing set-state-in-effect
 errors on these pages; typecheck: only main's three pre-existing errors.
 
+## 2026-10-02 — Public "Brackets" tab: per-bracket standings + round-by-round games
+
+Ron: "create a page for each group that shows each round's games (scored once they are
+submitted) and standings — accessible via another tab like Details, Events, Results."
+New **Brackets** tab on the public tournament page (`?tab=brackets&event=<id>`, so the desk
+can link/QR a bracket): chip picker of events, then for the selected one — status line
+(phase · games played · on court), podium once medals exist, standings per pool (shared
+`components/StandingsTable`, playoff-position rows shaded for single-pool events), **pool
+play grouped into rounds** per pool, and playoff boxes titled by round with per-game
+captions (Semifinal 1 / Gold Medal Final / Bronze Medal Game; double elim uses stored
+labels). Scores show once submitted, "On Court N" while playing, "—" while waiting.
+Refreshes every 30s while open. Events tab cards get a "Standings & games →" link once a
+bracket has games.
+- **Rounds are derived**: RR matches are stored with round=1 (fair queue), so
+  `lib/roundRobinRounds.packRoundRobinRounds` packs them greedily by position into rounds
+  where no team plays twice (4-team pool → 3 rounds; odd pools get byes). 4 vitest cases.
+- Data: the `public_tournament_results` RPC (has pool_index), extracted to
+  `lib/publicResults.ts` and shared with `LiveResultsPage`. While there: fixed its pool
+  letter (1-based pool_index through the 0-based `poolLetter` showed Pool 1 as "B" — new
+  `poolLabel()` in bracketTeams) and its `status === "active"` check (enum is `in_progress`).
+- Verified on the REAL route at 390px + 1100px via vite dev + Playwright route mocks for
+  every Supabase call (no overflow; standings drop PF/PA under 480px so two names fit;
+  Events-tab link lands on `?tab=brackets&event=…`). typecheck clean apart from main's
+  known SchedulePage errors; lint clean on all new/touched files; 300 vitest pass (the
+  pdf-lib / xlsx suites can't load in this sandbox — those packages are egress-blocked).
+- NOT verified with a live tournament — Ron: open a running tournament's Brackets tab on
+  the PR preview and compare with the console's standings.
 ## 2026-10-02 — Public Details tab: lay out the tournament description
 
 Ron: "fix the layout for the home page of the Leaf Peeper tournament" — the description
