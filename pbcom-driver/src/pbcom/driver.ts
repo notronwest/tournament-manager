@@ -588,6 +588,44 @@ async function openDivisionBracket(page: Page, target: ResolvedDivisionTarget, b
     .first()
     .click();
   await page.waitForLoadState("load", { timeout: STEP_TIMEOUT });
+  // The score grid may be AJAX-rendered after load (the attendees grid was). Give any
+  // table rows a bounded chance to appear before we parse — best-effort, never throws.
+  await page.locator("table tr").first().waitFor({ state: "visible", timeout: 5_000 }).catch(() => {});
+}
+
+/**
+ * Diagnostic dump of whatever score page we actually landed on, for when
+ * `parseMatchRows` comes back empty. The live score surface was traced but has never
+ * been driven, so a `candidates=0` is far more likely a wrong page / wrong row selector
+ * than a genuinely empty bracket — print the URL, the raw table shape, and a text
+ * sample so the next supervised run shows the real DOM instead of an opaque count.
+ */
+async function dumpBracketPage(page: Page): Promise<string> {
+  const url = page.url();
+  const count = async (sel: string) => await page.locator(sel).count().catch(() => -1);
+  const tables = await count("table");
+  const trs = await count("tr");
+  const tds = await count("td");
+  const sel = {
+    scorecell: await count("[data-scorecell]"),
+    tdScore: await count("td.score"),
+    bracketTr: await count("table.bracket tr"),
+    simpleBtn: await count('button:has-text("Simple")'),
+    team: await count("[data-team], td.team, .match-team"),
+  };
+  // A visible-text sample of the first few tables — enough to see how a match row reads.
+  let sample = "";
+  try {
+    sample = (await page.locator("table").first().innerText({ timeout: 2_000 })).replace(/\s+\n/g, "\n").slice(0, 1200);
+  } catch {
+    sample = (await page.locator("body").innerText({ timeout: 2_000 }).catch(() => "")).slice(0, 1200);
+  }
+  return [
+    `url=${url}`,
+    `tables=${tables} tr=${trs} td=${tds}`,
+    `selMatches: ${Object.entries(sel).map(([k, v]) => `${k}=${v}`).join(" ")}`,
+    `firstTableText=⟪${sample}⟫`,
+  ].join("\n  ");
 }
 
 /**
@@ -604,6 +642,11 @@ export async function submitScoreCard(
   await openDivisionBracket(page, target, session.baseUrl);
 
   const rows = await parseMatchRows(page);
+  if (rows.length === 0) {
+    log.warn("score: parsed 0 match rows — dumping the page we landed on", {
+      dump: await dumpBracketPage(page),
+    });
+  }
   const found = findMatchRow(input.teamALastNames, input.teamBLastNames, rows, { teamAFirstNames: input.teamAFirstNames, teamBFirstNames: input.teamBFirstNames });
   if (!found.ok) {
     return {
