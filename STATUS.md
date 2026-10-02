@@ -31,6 +31,16 @@ Verified `gh pr view 947 --json mergeable,mergeStateStatus` → `MERGEABLE`/`CLE
 
 **Next:** reviewer/Ron re-review PR #947 against the now-clean branch; #1052 closes out once Ron confirms and merges #947 (it has no auto-closing PR of its own, so it needs a manual close once #947 lands).
 
+## 2026-10-02 — Builder: re-rebased PR #947 after a second "needs rebase" (D-0052)
+
+Single-item rework on issue #946 — already closed by open PR #947 — triggered by a second reviewer "needs rebase" comment (2026-10-02T04:51:50Z), posted right after the reviewer's own `VERDICT: APPROVE` (04:18:16Z), because `main` moved again in between (this file picked up more entries). No findings to address this round — just the conflict.
+
+Merged `origin/main` into the existing branch (`feature/issue-946-donation-checkout-ux`, no new branch/PR). The only conflict was this append-only `STATUS.md` log; resolved by keeping all entries, placing `main`'s three newer 2026-10-02 entries above this branch's own prior 2026-10-01 rework entry (which they supersede) per the file's newest-on-top convention. `CheckoutPage.tsx` and the rest of the diff auto-merged cleanly — no code conflict.
+
+Re-verified on the merged branch: `npm run typecheck` and `npm run lint` match the `origin/main` baseline exactly (3 pre-existing typecheck errors, 38 pre-existing lint problems, none introduced); `npm run build` is clean. Pushed to the same branch.
+
+**Next:** reviewer re-reviews PR #947 on this push (D-0052); card moved back to **In Review**.
+
 ## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
 
 Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
@@ -88,6 +98,16 @@ Added `web/e2e/registration-fixtures.ts` — a Playwright fixture `seedRegistrat
 One snag caught before opening: my first PR body phrase "Fixes the recurring #936 flake" (and "doesn't close #936") tripped GitHub's closing-keyword parser and auto-linked #936 as a second closing issue — violates the one-issue-per-PR rule. Reworded to neutral phrasing ("Addresses... investigated in #936" / "issue #936 should stay open...") and re-verified only #950 closes.
 
 PR: [#951](https://github.com/notronwest/tournament-manager/pull/951) (Closes #950), card moved to In Review. **Next:** Ron reviews/merges; per #950's note, #936 itself stays open until a week of clean regression runs on these specs.
+
+## 2026-09-20 — Builder: PR #947 for #946 (checkout donation UX)
+
+Single-item run on issue #946 ("Charity donations P2 [UX] — add-donation field + order-summary line at checkout"), the UX-only sub-slice split out of #378 (which stays Blocked on the money-touching `[FN]` half). No sub-issues/open PRs already existed under #946, so this was a normal build, not a mis-queued rework.
+
+Opened this PR (#947, Closes #946) on `feature/issue-946-donation-checkout-ux` — single-file diff to `web/src/pages/public/CheckoutPage.tsx`: optional donation field (presets + custom amount, mirrors the existing `/donate` page's pattern) shown only when `accepts_donations` is on, its own order-summary line, live-updating total, and floor enforcement (never displays below required fees). `donationCents` is forwarded to `create-payment-intent`, which currently ignores it — no Stripe/edge-function/webhook file touched. typecheck clean, build clean, lint adds zero new errors (confirmed against a `main` baseline worktree: 27 errors/4 warnings on both).
+
+**Flagged prominently in the PR** (not a blocker, but Ron should read before merging): until #378's `[FN]` half ships, the UI will preview a donation-inclusive total throughout checkout but the actual Stripe charge stays registration-only — a real preview/charge mismatch. Also, `accepts_donations` is the same flag already live for the standalone `/donate` page (#377), so any tournament with it already on will surface this new checkout field immediately on merge, before the FN half exists. Recommend Ron decide: hold for FN pairing, or merge now accepting the temporary gap.
+
+**Next:** Ron reviews/merges #947, or requests the FN half be paired first. #378 itself stays Blocked (money-path change, not the Builder's to attempt) until Ron authorizes and builds the `[FN]` piece.
 
 ## 2026-09-20 — Testing agent: daytime triage, all green
 
