@@ -61,6 +61,14 @@ export type PreflightInput = {
    * are involved. Empty array = checked, none found. null = not computed.
    */
   surnameCollisions: { label: string; matches: number }[] | null;
+  /**
+   * READ-ONLY probes of each division's LIVE score page (ptsrr.aspx): can we open
+   * it and parse the match rows, and do they line up with B&E's match count. The
+   * score surface is traced but never driven live, so this proves it parses before
+   * we trust the write path. `reachable:false`/`rows:0` = the division isn't Running
+   * yet (normal before it starts) — never a failure. null = not probed (DB-only run).
+   */
+  bracketProbes: { label: string; reachable: boolean; rows: number; expectedMatches: number }[] | null;
 };
 
 const LIVE_HOST = "pickleballbrackets.com";
@@ -162,6 +170,22 @@ export function buildPreflightReport(input: PreflightInput): Check[] {
           status: "warn",
           detail: `${c.matches} match(es) share identical surnames with another — the push uses first names to tell them apart and flags any it can't (never mis-writes); watch these games`,
         });
+      }
+    }
+  }
+
+  // 5c) LIVE SCORE SURFACE — can we open each division's score page and parse its
+  //     match rows? This is the write surface we're least sure of (traced, never
+  //     driven live). A division that hasn't started isn't Running yet → rows:0,
+  //     reported as info, NEVER a fail (nothing to push there yet anyway).
+  if (input.bracketProbes) {
+    for (const p of input.bracketProbes) {
+      if (!p.reachable || p.rows === 0) {
+        checks.push({ name: `score-page:${p.label}`, status: "warn", detail: "live score page not reachable yet — normal before the division starts; re-run once it's Running to confirm the surface" });
+      } else if (p.expectedMatches > 0 && p.rows !== p.expectedMatches) {
+        checks.push({ name: `score-page:${p.label}`, status: "warn", detail: `PB.com shows ${p.rows} match row(s), B&E has ${p.expectedMatches} — the bracket may differ; scores could mis-locate` });
+      } else {
+        checks.push({ name: `score-page:${p.label}`, status: "pass", detail: `live score page parses ${p.rows} match row(s) — the write surface is reachable` });
       }
     }
   }

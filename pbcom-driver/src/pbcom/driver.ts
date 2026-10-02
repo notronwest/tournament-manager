@@ -523,5 +523,47 @@ async function selectWinLoss(select: Locator, win: boolean): Promise<void> {
   }
 }
 
+/** What a read-only probe of a division's live score page found. */
+export interface BracketProbe {
+  /** The live score page opened and parsed into match rows. */
+  reachable: boolean;
+  /** Match rows parsed off the page (0 when not created / not Running yet). */
+  rows: number;
+  /** Rows that already show a saved score. */
+  withScores: number;
+  detail: string;
+}
+
+/**
+ * READ-ONLY probe of a division's live score page (ptsrr.aspx). Opens the bracket
+ * exactly as submitScoreCard will, parses the match rows, and returns the counts —
+ * but NEVER opens a score modal or writes anything. Lets the preflight confirm the
+ * LIVE score surface is reachable + parses before we trust the automated write path
+ * (the surface that is traced but has never been driven live). A division that has
+ * not started yet simply isn't on the Running tab, so this returns reachable:false /
+ * rows:0 — the caller treats that as "not started", not a failure.
+ */
+export async function probeDivisionBracket(
+  session: PbcomSession,
+  target: ResolvedDivisionTarget,
+): Promise<BracketProbe> {
+  const page = session.page;
+  try {
+    await openDivisionBracket(page, target);
+  } catch (err) {
+    return { reachable: false, rows: 0, withScores: 0, detail: `could not open the live score page: ${String((err as Error)?.message ?? err)}` };
+  }
+  const rows = await parseMatchRows(page);
+  const withScores = rows.filter((r) => r.hasScore).length;
+  return {
+    reachable: rows.length > 0,
+    rows: rows.length,
+    withScores,
+    detail: rows.length > 0
+      ? `score page parses ${rows.length} match row(s), ${withScores} already scored`
+      : "no match rows parsed (division not started, or the live page differs from the trace)",
+  };
+}
+
 // Re-export the pure helpers the CLI/tests use alongside the driver.
 export { lastNameSet };

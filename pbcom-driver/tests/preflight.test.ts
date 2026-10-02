@@ -19,6 +19,7 @@ function base(overrides: Partial<PreflightInput> = {}): PreflightInput {
     pbcomEntryCounts: new Map([["Mens Doubles Skill: (3.0 To 3.49)", 6]]),
     sessionAuthenticated: true,
     surnameCollisions: [],
+    bracketProbes: null,
     ...overrides,
   };
 }
@@ -126,6 +127,28 @@ describe("buildPreflightReport — surname collisions", () => {
   it("omits the check when not computed (null)", () => {
     const checks = buildPreflightReport(base({ surnameCollisions: null }));
     expect(checks.some((c) => c.name.startsWith("surname-collision"))).toBe(false);
+  });
+});
+
+describe("buildPreflightReport — live score-surface probe", () => {
+  const L = "Mens Doubles Skill: (3.0 To 3.49)";
+  it("passes when the live score page parses the right number of rows", () => {
+    const c = find(buildPreflightReport(base({ bracketProbes: [{ label: L, reachable: true, rows: 10, expectedMatches: 10 }] })), `score-page:${L}`)!;
+    expect(c.status).toBe("pass");
+  });
+  it("warns (never fails) when the division isn't Running yet — the normal pre-event state", () => {
+    const checks = buildPreflightReport({ ...base(), bracketProbes: [{ label: L, reachable: false, rows: 0, expectedMatches: 10 }] });
+    const c = checks.find((x) => x.name === `score-page:${L}`)!;
+    expect(c.status).toBe("warn");
+    expect(preflightClear(checks)).toBe(true); // pre-event probe never blocks
+  });
+  it("warns on a row-count mismatch (bracket differs)", () => {
+    const c = find(buildPreflightReport(base({ bracketProbes: [{ label: L, reachable: true, rows: 8, expectedMatches: 10 }] })), `score-page:${L}`)!;
+    expect(c.status).toBe("warn");
+    expect(c.detail).toContain("8 match row(s), B&E has 10");
+  });
+  it("omits the check when not probed (null)", () => {
+    expect(buildPreflightReport(base({ bracketProbes: null })).some((c) => c.name.startsWith("score-page"))).toBe(false);
   });
 });
 
