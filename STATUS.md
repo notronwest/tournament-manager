@@ -1742,3 +1742,17 @@ on court assignment and score edits, so it would be a guess). Verified on local 
 `MatchTimer` component + `lib/matchTiming.ts` on both court manager cards.
 Note: main's `tsc -b` has 3 pre-existing errors (SchedulePage ×2, LiveResultsPage ×1) —
 not from this change.
+
+## 2026-10-02 — Court box clock (UX half of match timing, #1056)
+
+[DB] #1057 merged. UX: new `components/MatchTimer.tsx` (ticks 1/s from `matches.started_at`;
+m:ss, h:mm:ss past an hour; "Started 2:57 AM · 15 min planned"; turns amber with "4 min over
+the 15-min plan" once past the division's planned length; "Not timed" for a match loaded
+before the columns existed) and `lib/matchTiming.ts` (`useNow`, `formatElapsed`,
+`formatDurationShort`, `plannedMinutesFor` — playoff rows use their own minutes, round robin
+the event's pool minutes; 8 vitest cases). Mounted on the in-progress card of BOTH court
+managers (tournament + per-event), between the team names and the score inputs. `Match`
+type extended locally for the three new columns until types are regenerated; the client
+never writes them. Verified at 390px on the real route via vite preview + stubbed Supabase
+(green 13:17 / amber 19:17 / Not timed). Lint: only the two pre-existing set-state-in-effect
+errors on these pages; typecheck: only main's three pre-existing errors.
