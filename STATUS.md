@@ -5,6 +5,16 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-02 — Reviewer: PR #947 re-reviewed after rework (APPROVE)
+
+Re-reviewed PR #947 (Closes #946, checkout donation UX) per `daemon/agents/reviewer/PROMPT.md` after the Builder's rework commit (`1f1f14f`) addressed the prior REQUEST CHANGES. Checked all six of #946's acceptance criteria against the diff, confirmed `create-payment-intent`'s `Body` type still has no `donationCents` field (extra field is genuinely inert, not just claimed), and verified the D-0049 fix: the duplicated preset-chip UI is now `web/src/components/DonationAmountPicker.tsx`, mounted by both `CheckoutPage.tsx` and `DonatePage.tsx` — the deliberate shared-extraction D-0049 asks for, not a new duplicate.
+
+Ran typecheck/lint/build myself from a fresh worktree at the PR's actual head rather than trusting the PR body's numbers: 3 typecheck errors and 38 lint problems, both pre-existing/unrelated to the changed files; build clean.
+
+Checked D-0047 (phone gate) against the actual decision record (`daemon/decisions/D-0047-*.md`) rather than applying the reviewer prompt's generic language blind: its `repos:` scope is `club-dashboard, daemon, wmpc-meta` only, and it explicitly defers tournament-manager's adoption. `e2e/mobile/audit.spec.ts`'s checkout case is `test.fixme` (pre-existing, unrelated seed-isolation gap) and only runs nightly post-merge, never as a PR-blocking check — so didn't block on a gate this repo hasn't actually wired in yet.
+
+Posted `VERDICT: APPROVE`, applied `reviewed:approve` (swapped off the stale `reviewed:changes` from the pre-rework review). **Next:** dispatcher merges per D-0052.
+
 ## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
 
 Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
