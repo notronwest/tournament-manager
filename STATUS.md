@@ -5,6 +5,17 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-01 — Builder: single-item rework, PR #947 for #946 (D-0052)
+
+Single-item mode on issue #946 — already closed by open PR #947, so this was rework on the existing branch (`feature/issue-946-donation-checkout-ux`), not a new build. Addressed both the reviewer's 2026-10-01 REQUEST CHANGES findings and the separate "needs rebase" comment.
+
+1. **D-0049 (reuse)** — the checkout donation picker duplicated `DonatePage.tsx`'s preset-chip + custom-amount UI under new names instead of reusing it. Extracted `web/src/components/DonationAmountPicker.tsx` (presets, active-chip styling, custom-input bounds parameterized via props); both `CheckoutPage.tsx` and `DonatePage.tsx` now mount it, each keeping its own state/validation/visual styling.
+2. **Branch conflict** — merged `origin/main` into the branch; the only conflict was the append-only `STATUS.md` entry (resolved by keeping both entries, in chronological order); `CheckoutPage.tsx` auto-merged cleanly.
+
+Re-verified on the merged branch in an isolated worktree: typecheck and lint match a fresh `origin/main` baseline worktree exactly (3 pre-existing typecheck errors, 38 pre-existing lint problems — none new from this diff); build is clean. Pushed to the same branch (no second PR), posted an `Addressed:` comment, refreshed the PR body with a "Rework" section, and PR #947 now reads `MERGEABLE`.
+
+**Next:** Ron re-reviews #947; card moved back to **In Review**. #378's `[FN]` half (Stripe charge actually including the donation) stays Blocked/out of scope — unchanged by this rework.
+
 ## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
 
 Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
