@@ -219,3 +219,26 @@ describe("surnameCollisions", () => {
     ])).toHaveLength(0);
   });
 });
+
+import { eventsConsoleUrl, divisionBracketUrl } from "../src/pbcom/driver.js";
+
+describe("director URLs are built against the configured host (not page.url())", () => {
+  it("eventsConsoleUrl uses the director base, not wherever the browser sits", () => {
+    // The rehearsal caught this: after login the page is on pickleballtournaments.com,
+    // so a URL built relative to it 404s. It must use PBCOM_BASE_URL.
+    expect(eventsConsoleUrl("https://pickleballbrackets.com", "eid-1")).toBe(
+      "https://pickleballbrackets.com/a5_u/pbt/eDB.aspx?eid=eid-1",
+    );
+    expect(eventsConsoleUrl("https://train.pickleballbrackets.dev", "eid-1")).toBe(
+      "https://train.pickleballbrackets.dev/a5_u/pbt/eDB.aspx?eid=eid-1",
+    );
+  });
+  it("falls back to the live director host when base is empty", () => {
+    expect(eventsConsoleUrl("", "eid-2")).toBe("https://pickleballbrackets.com/a5_u/pbt/eDB.aspx?eid=eid-2");
+  });
+  it("divisionBracketUrl (ptsrr) uses the director base too", () => {
+    expect(divisionBracketUrl("https://pickleballbrackets.com", "plid-9")).toBe(
+      "https://pickleballbrackets.com/a5_u/pbt/ptsrr.aspx?plid=plid-9",
+    );
+  });
+});

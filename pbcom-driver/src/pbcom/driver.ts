@@ -97,8 +97,8 @@ export interface BracketPushResult {
  * "Verify Event" button, and return the wizard `eaid` (the per-division handle
  * assigned when Verify Event is clicked).
  */
-async function openVerifyWizard(page: Page, target: ResolvedDivisionTarget): Promise<string> {
-  await page.goto(`${eventsConsoleUrl(page, target.pbcomEid)}`, NAV);
+async function openVerifyWizard(page: Page, target: ResolvedDivisionTarget, baseUrl: string): Promise<string> {
+  await page.goto(`${eventsConsoleUrl(baseUrl, target.pbcomEid)}`, NAV);
   // The "Verify N" tab lists divisions each with a "Verify Event" button.
   const verifyTab = page.getByRole("tab", { name: /verify/i }).first();
   if (await verifyTab.count()) {
@@ -116,8 +116,19 @@ async function openVerifyWizard(page: Page, target: ResolvedDivisionTarget): Pro
   return eaid;
 }
 
-function eventsConsoleUrl(page: Page, eid: string): string {
-  return new URL(`/a5_u/pbt/eDB.aspx?eid=${encodeURIComponent(eid)}`, page.url() || "https://pickleballbrackets.com").toString();
+/**
+ * The director Live-Console URL for an event, built against the configured DIRECTOR
+ * host (PBCOM_BASE_URL) — NEVER `page.url()`. After login the page sits on the public
+ * portal (pickleballtournaments.com); building a director path relative to that 404s
+ * on the wrong host. Exported for a unit test that pins this.
+ */
+export function eventsConsoleUrl(baseUrl: string, eid: string): string {
+  return new URL(`/a5_u/pbt/eDB.aspx?eid=${encodeURIComponent(eid)}`, baseUrl || "https://pickleballbrackets.com").toString();
+}
+
+/** The round-robin bracket (ptsrr.aspx) URL for a pinned PB.com pool id — director host. */
+export function divisionBracketUrl(baseUrl: string, pbcomDivisionId: string): string {
+  return new URL(`/a5_u/pbt/ptsrr.aspx?plid=${encodeURIComponent(pbcomDivisionId)}`, baseUrl || "https://pickleballbrackets.com").toString();
 }
 
 function escapeRe(s: string): string {
@@ -140,7 +151,7 @@ export async function createBracketOnPbcom(
 ): Promise<BracketPushResult> {
   const page = session.page;
   log.info("createBracket: opening verify wizard", { division: input.divisionLabel });
-  const eaid = await openVerifyWizard(page, target);
+  const eaid = await openVerifyWizard(page, target, session.baseUrl);
 
   // ── s1 Verify Teams — PB already shows the registered teams. Save → Continue.
   await saveAndConfirm(page, saveButton(page));
@@ -190,10 +201,10 @@ export async function createBracketOnPbcom(
   await saveAndConfirm(page, complete);
 
   // ── Start Matches — Live Console → Waiting tab → row → Options → Start Matches.
-  await startMatches(page, target);
+  await startMatches(page, target, session.baseUrl);
 
   // ── VERIFY — the event should now be in the "Running" queue with scoreable matches.
-  const running = await isEventRunning(page, target);
+  const running = await isEventRunning(page, target, session.baseUrl);
   return {
     verified: running,
     pbcomDivisionId: eaid,
@@ -269,8 +280,8 @@ async function applySeeding(page: Page, teams: BandeTeam[]): Promise<void> {
 }
 
 /** Live Console → Waiting tab → the event row → Options → Start Matches. */
-async function startMatches(page: Page, target: ResolvedDivisionTarget): Promise<void> {
-  await page.goto(eventsConsoleUrl(page, target.pbcomEid), NAV);
+async function startMatches(page: Page, target: ResolvedDivisionTarget, baseUrl: string): Promise<void> {
+  await page.goto(eventsConsoleUrl(baseUrl, target.pbcomEid), NAV);
   const waitingTab = page.getByRole("tab", { name: /waiting/i }).first();
   if (await waitingTab.count()) await waitingTab.click().catch(() => {});
   const row = page
@@ -286,8 +297,8 @@ async function startMatches(page: Page, target: ResolvedDivisionTarget): Promise
 }
 
 /** Verify the event moved to the Running queue. */
-async function isEventRunning(page: Page, target: ResolvedDivisionTarget): Promise<boolean> {
-  await page.goto(eventsConsoleUrl(page, target.pbcomEid), NAV);
+async function isEventRunning(page: Page, target: ResolvedDivisionTarget, baseUrl: string): Promise<boolean> {
+  await page.goto(eventsConsoleUrl(baseUrl, target.pbcomEid), NAV);
   const runningTab = page.getByRole("tab", { name: /running/i }).first();
   if (await runningTab.count()) await runningTab.click().catch(() => {});
   const row = page.locator("tr", { hasText: new RegExp(escapeRe(target.divisionLabel), "i") });
@@ -405,17 +416,14 @@ async function parseMatchRows(page: Page): Promise<PbMatchRow[]> {
 }
 
 /** Navigate to the division's round-robin bracket page (ptsrr.aspx). */
-async function openDivisionBracket(page: Page, target: ResolvedDivisionTarget): Promise<void> {
+async function openDivisionBracket(page: Page, target: ResolvedDivisionTarget, baseUrl: string): Promise<void> {
   if (target.pbcomDivisionId) {
-    // When the bind pins the pool id, go straight there.
-    await page.goto(
-      new URL(`/a5_u/pbt/ptsrr.aspx?plid=${encodeURIComponent(target.pbcomDivisionId)}`, page.url() || "https://pickleballbrackets.com").toString(),
-      NAV,
-    );
+    // When the bind pins the pool id, go straight there (director host, not page.url()).
+    await page.goto(divisionBracketUrl(baseUrl, target.pbcomDivisionId), NAV);
     return;
   }
   // Otherwise reach it from the Live Console: open the Running division's bracket.
-  await page.goto(eventsConsoleUrl(page, target.pbcomEid), NAV);
+  await page.goto(eventsConsoleUrl(baseUrl, target.pbcomEid), NAV);
   const runningTab = page.getByRole("tab", { name: /running/i }).first();
   if (await runningTab.count()) await runningTab.click().catch(() => {});
   const row = page.locator("tr", { hasText: new RegExp(escapeRe(target.divisionLabel), "i") }).first();
@@ -438,7 +446,7 @@ export async function submitScoreCard(
   input: ScoreCardInput,
 ): Promise<ScoreCardResult> {
   const page = session.page;
-  await openDivisionBracket(page, target);
+  await openDivisionBracket(page, target, session.baseUrl);
 
   const rows = await parseMatchRows(page);
   const found = findMatchRow(input.teamALastNames, input.teamBLastNames, rows, { teamAFirstNames: input.teamAFirstNames, teamBFirstNames: input.teamBFirstNames });
@@ -487,7 +495,7 @@ export async function submitScoreCard(
 
   // VERIFY: a saved score card adds scid to the URL and the row shows the final score.
   const scid = new URL(page.url()).searchParams.get("scid");
-  await openDivisionBracket(page, target);
+  await openDivisionBracket(page, target, session.baseUrl);
   const after = await parseMatchRows(page);
   const reFound = findMatchRow(input.teamALastNames, input.teamBLastNames, after, { teamAFirstNames: input.teamAFirstNames, teamBFirstNames: input.teamBFirstNames });
   const landed = reFound.ok && reFound.match.row.hasScore === true;
@@ -549,7 +557,7 @@ export async function probeDivisionBracket(
 ): Promise<BracketProbe> {
   const page = session.page;
   try {
-    await openDivisionBracket(page, target);
+    await openDivisionBracket(page, target, session.baseUrl);
   } catch (err) {
     return { reachable: false, rows: 0, withScores: 0, detail: `could not open the live score page: ${String((err as Error)?.message ?? err)}` };
   }
