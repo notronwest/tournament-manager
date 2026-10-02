@@ -109,7 +109,7 @@ async function openVerifyWizard(page: Page, target: ResolvedDivisionTarget, base
     .locator("tr", { hasText: new RegExp(escapeRe(target.divisionLabel), "i") })
     .first();
   await row.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
-  await row.getByRole("button", { name: /verify event/i }).first().click();
+  await clickControl(row, /verify event/i, "verify event");
   await page.waitForURL(/aV\.aspx/i, { timeout: STEP_TIMEOUT });
   const eaid = new URL(page.url()).searchParams.get("eaid");
   if (!eaid) throw new Error("verify wizard opened but no eaid in the URL");
@@ -133,6 +133,35 @@ export function divisionBracketUrl(baseUrl: string, pbcomDivisionId: string): st
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * A clickable control within `scope` whose accessible name OR visible text matches
+ * `nameRe` — matching a button, LINK, input-button, menuitem, or any [role=button].
+ * PB.com's WebForms render these inconsistently: "Verify Event" reads as a LINK, not
+ * a button, so `getByRole("button")` alone waits forever for something that isn't
+ * there. Matching role=button only is the brittle pattern this replaces.
+ */
+function control(scope: Locator | Page, nameRe: RegExp): Locator {
+  return scope
+    .getByRole("button", { name: nameRe })
+    .or(scope.getByRole("link", { name: nameRe }))
+    .or(scope.getByRole("menuitem", { name: nameRe }))
+    .or(scope.locator('a, button, input[type="button"], input[type="submit"], [role="button"]').filter({ hasText: nameRe }))
+    .first();
+}
+
+/**
+ * Click a `control` by name; on a miss, throw with the scope's HTML so the real DOM
+ * is visible in the log instead of an opaque 30s timeout (the rehearsal's feedback loop).
+ */
+async function clickControl(scope: Locator, nameRe: RegExp, what: string): Promise<void> {
+  const ctl = control(scope, nameRe);
+  if ((await ctl.count()) === 0) {
+    const html = await scope.innerHTML().catch(() => "(couldn't read HTML)");
+    throw new Error(`${what}: no control matching ${nameRe} on PB.com — row DOM: ${html.slice(0, 1000)}`);
+  }
+  await ctl.click({ timeout: STEP_TIMEOUT });
 }
 
 /** The green "Save" button visible on the current wizard step. */
@@ -288,11 +317,8 @@ async function startMatches(page: Page, target: ResolvedDivisionTarget, baseUrl:
     .locator("tr", { hasText: new RegExp(escapeRe(target.divisionLabel), "i") })
     .first();
   await row.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
-  await row.getByRole("button", { name: /options/i }).first().click();
-  await page.getByRole("menuitem", { name: /start matches/i })
-    .or(page.getByRole("button", { name: /start matches/i }))
-    .first()
-    .click();
+  await clickControl(row, /options/i, "options");
+  await control(page, /start matches/i).click({ timeout: STEP_TIMEOUT });
   await page.waitForLoadState("load", { timeout: STEP_TIMEOUT });
 }
 
