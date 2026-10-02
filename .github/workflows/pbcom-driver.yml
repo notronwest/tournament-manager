@@ -1,0 +1,38 @@
+name: pbcom-driver checks
+
+# Typecheck + unit tests for the mini-hosted PB.com sync driver (pbcom-driver/).
+# The driver runs on the club mini via `tsx`, which STRIPS types at runtime — so a
+# tsc error never surfaces when it runs, and the repo had no gate on it. A latent
+# type error slipped through exactly this way (a browser-context `document` in
+# attendees.ts, #1036). This job catches tsc + unit-test regressions in CI.
+#
+# No secrets, no browser, no DB: `npm run typecheck` + the pure-logic vitest suite.
+# Scoped to pbcom-driver/** so it only runs when the driver changes.
+
+on:
+  pull_request:
+    paths: ["pbcom-driver/**"]
+  push:
+    branches: [main]
+    paths: ["pbcom-driver/**"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pbcom-driver
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: pbcom-driver/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
