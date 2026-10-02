@@ -9,6 +9,7 @@ import {
 import { supabase } from "../../supabase";
 import { getStripeForAccount, stripeConfigured } from "../../lib/stripe";
 import { formatUsd } from "../../lib/pricing";
+import DonationAmountPicker from "../../components/DonationAmountPicker";
 import {
   ink,
   inkSoft,
@@ -254,58 +255,33 @@ export default function DonatePage() {
         >
           <fieldset style={{ border: "none", margin: 0, padding: 0 }}>
             <legend style={labelStyle}>Amount</legend>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {PRESET_CENTS.map((c) => {
-                const active = !usingCustom && amountCents === c;
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => {
-                      setUsingCustom(false);
-                      setAmountCents(c);
-                    }}
-                    style={active ? amountBtnActive : amountBtn}
-                  >
-                    {formatUsd(c)}
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setUsingCustom(true)}
-                style={usingCustom ? amountBtnActive : amountBtn}
-              >
-                Custom
-              </button>
-            </div>
-            {usingCustom && (
-              <div style={{ marginTop: 10, position: "relative", maxWidth: 200 }}>
-                <span
-                  style={{
-                    position: "absolute",
-                    left: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: inkMuted,
-                    fontFamily: bodyFontStack,
-                  }}
-                >
-                  $
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="1"
-                  max="100000"
-                  step="1"
-                  value={customDollars}
-                  onChange={(e) => setCustomDollars(e.target.value)}
-                  placeholder="50"
-                  style={{ ...fieldStyle, paddingLeft: 24 }}
-                />
-              </div>
-            )}
+            <DonationAmountPicker
+              presetsCents={PRESET_CENTS}
+              selectedCents={amountCents}
+              usingCustom={usingCustom}
+              onSelectPreset={(c) => {
+                setUsingCustom(false);
+                setAmountCents(c);
+              }}
+              onToggleCustom={() => setUsingCustom(true)}
+              customValue={customDollars}
+              onCustomChange={setCustomDollars}
+              customPlaceholder="50"
+              customMin="1"
+              customMax="100000"
+              customMaxWidth={200}
+              chipStyle={amountBtn}
+              chipActiveStyle={amountBtnActive}
+              inputStyle={fieldStyle}
+              dollarSignStyle={{
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: inkMuted,
+                fontFamily: bodyFontStack,
+              }}
+            />
             {usingCustom && customDollars !== "" && !amountValid && (
               <p style={{ ...errorTextStyle, marginTop: 6 }}>
                 Enter an amount between $1 and $100,000.

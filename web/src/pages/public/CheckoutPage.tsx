@@ -49,15 +49,17 @@ import {
 } from "@stripe/react-stripe-js";
 import { getStripeForAccount, stripeConfigured } from "../../lib/stripe";
 import { trackEvent } from "../../lib/analytics";
+import DonationAmountPicker from "../../components/DonationAmountPicker";
 import type { Database } from "../../types/supabase";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
 
-// Donation add-on at checkout (#946 — UX-only half of #378). Mirrors the
-// standalone DonatePage's preset chips. The amount is carried to
-// create-payment-intent as donationCents; until the [FN] half of #378 ships,
-// the function ignores it and the actual Stripe charge stays registration-only
-// — see the PR notes for the resulting preview/charge gap.
+// Donation add-on at checkout (#946 — UX-only half of #378). Shares
+// DonationAmountPicker with the standalone DonatePage's preset chips. The
+// amount is carried to create-payment-intent as donationCents; until the
+// [FN] half of #378 ships, the function ignores it and the actual Stripe
+// charge stays registration-only — see the PR notes for the resulting
+// preview/charge gap.
 const DONATION_PRESET_CENTS = [500, 1000, 2500];
 
 // Per-event row loaded for the checkout. Carries enough to display
@@ -1021,62 +1023,35 @@ export default function CheckoutPage() {
                   {tournament.donation_prompt}
                 </p>
               )}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {DONATION_PRESET_CENTS.map((c) => {
-                  const active = !usingCustomDonation && donationPreset === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => {
-                        setUsingCustomDonation(false);
-                        setDonationPreset(active ? null : c);
-                      }}
-                      style={active ? donationChipActive : donationChip}
-                    >
-                      {formatUsd(c)}
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsingCustomDonation((v) => !v);
-                    setDonationPreset(null);
-                  }}
-                  style={usingCustomDonation ? donationChipActive : donationChip}
-                >
-                  Custom
-                </button>
-              </div>
-              {usingCustomDonation && (
-                <div
-                  style={{ marginTop: 10, position: "relative", maxWidth: 160 }}
-                >
-                  <span
-                    style={{
-                      position: "absolute",
-                      left: 12,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      color: inkMuted,
-                      fontSize: 13,
-                    }}
-                  >
-                    $
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="1"
-                    value={customDonationDollars}
-                    onChange={(e) => setCustomDonationDollars(e.target.value)}
-                    placeholder="0"
-                    style={{ ...couponInputStyle, paddingLeft: 22, width: "100%" }}
-                  />
-                </div>
-              )}
+              <DonationAmountPicker
+                presetsCents={DONATION_PRESET_CENTS}
+                selectedCents={donationPreset}
+                usingCustom={usingCustomDonation}
+                onSelectPreset={(c) => {
+                  setUsingCustomDonation(false);
+                  setDonationPreset((prev) => (prev === c ? null : c));
+                }}
+                onToggleCustom={() => {
+                  setUsingCustomDonation((v) => !v);
+                  setDonationPreset(null);
+                }}
+                customValue={customDonationDollars}
+                onCustomChange={setCustomDonationDollars}
+                customPlaceholder="0"
+                customMin="0"
+                customMaxWidth={160}
+                chipStyle={donationChip}
+                chipActiveStyle={donationChipActive}
+                inputStyle={{ ...couponInputStyle, width: "100%" }}
+                dollarSignStyle={{
+                  position: "absolute",
+                  left: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: inkMuted,
+                  fontSize: 13,
+                }}
+              />
             </div>
           )}
 
