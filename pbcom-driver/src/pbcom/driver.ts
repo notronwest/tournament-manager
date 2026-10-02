@@ -42,18 +42,25 @@ const STEP_TIMEOUT = 30_000;
 async function saveAndConfirm(
   page: Page,
   save: Locator,
-  opts: { expectSuccess?: boolean } = {},
+  opts: { expectSuccess?: boolean; step?: string } = {},
 ): Promise<void> {
+  if ((await save.count()) === 0) {
+    throw new Error(`${opts.step ?? "wizard"}: no 'Save' control found. Controls on page: ${await listControls(page)}`);
+  }
   await save.scrollIntoViewIfNeeded();
   await save.click();
-  // "Are you sure?" → Continue. WebForms renders it as a Bootstrap-style modal button.
-  const cont = page.getByRole("button", { name: /^\s*continue\s*$/i }).last();
-  await cont.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
+  // "Are you sure?" → Continue. WebForms renders it as a Bootstrap-style modal button OR link.
+  const cont = controlsMatching(page, /^\s*continue\s*$/i).last();
+  await cont.waitFor({ state: "visible", timeout: STEP_TIMEOUT }).catch(async () => {
+    throw new Error(`${opts.step ?? "wizard"}: no 'Continue' control after Save. Controls: ${await listControls(page)}`);
+  });
   await cont.click();
   if (opts.expectSuccess) {
     // A "Success!" modal → "Go to Next Verification Page" advances the wizard.
-    const goNext = page.getByRole("button", { name: /go to next verification page/i }).last();
-    await goNext.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
+    const goNext = controlsMatching(page, /go to next verification page/i).last();
+    await goNext.waitFor({ state: "visible", timeout: STEP_TIMEOUT }).catch(async () => {
+      throw new Error(`${opts.step ?? "wizard"}: no 'Go to Next Verification Page' control. Controls: ${await listControls(page)}`);
+    });
     await goNext.click();
   }
   await page.waitForLoadState("load", { timeout: STEP_TIMEOUT });
@@ -142,13 +149,22 @@ function escapeRe(s: string): string {
  * a button, so `getByRole("button")` alone waits forever for something that isn't
  * there. Matching role=button only is the brittle pattern this replaces.
  */
-function control(scope: Locator | Page, nameRe: RegExp): Locator {
+function controlsMatching(scope: Locator | Page, nameRe: RegExp): Locator {
   return scope
     .getByRole("button", { name: nameRe })
     .or(scope.getByRole("link", { name: nameRe }))
     .or(scope.getByRole("menuitem", { name: nameRe }))
-    .or(scope.locator('a, button, input[type="button"], input[type="submit"], [role="button"]').filter({ hasText: nameRe }))
-    .first();
+    .or(scope.locator('a, button, input[type="button"], input[type="submit"], [role="button"]').filter({ hasText: nameRe }));
+}
+
+function control(scope: Locator | Page, nameRe: RegExp): Locator {
+  return controlsMatching(scope, nameRe).first();
+}
+
+/** Visible labels of the clickable controls on the page — for a DOM dump on a miss. */
+async function listControls(page: Page): Promise<string> {
+  const texts = await page.locator('a, button, [role="button"]').allInnerTexts().catch(() => [] as string[]);
+  return texts.map((t) => t.trim()).filter(Boolean).slice(0, 40).join(" | ") || "(no clickable controls found)";
 }
 
 /**
@@ -164,9 +180,9 @@ async function clickControl(scope: Locator, nameRe: RegExp, what: string): Promi
   await ctl.click({ timeout: STEP_TIMEOUT });
 }
 
-/** The green "Save" button visible on the current wizard step. */
+/** The "Save" control on the current wizard step — a button OR link OR input (WebForms). */
 function saveButton(page: Page): Locator {
-  return page.getByRole("button", { name: /^\s*save\s*$/i }).last();
+  return controlsMatching(page, /^\s*save\s*$/i).last();
 }
 
 /**
@@ -183,7 +199,7 @@ export async function createBracketOnPbcom(
   const eaid = await openVerifyWizard(page, target, session.baseUrl);
 
   // ── s1 Verify Teams — PB already shows the registered teams. Save → Continue.
-  await saveAndConfirm(page, saveButton(page));
+  await saveAndConfirm(page, saveButton(page), { step: "s1 Verify Teams" });
 
   // ── s2 Pool Options — Round-Robin is default for ≤5-team RR. Leave it (or select).
   if (input.bracketType && input.bracketType !== "round_robin") {
@@ -191,7 +207,7 @@ export async function createBracketOnPbcom(
     const fmt = page.getByRole("radio", { name: bracketRadioLabel(input.bracketType) }).first();
     if (await fmt.count()) await fmt.check().catch(() => {});
   }
-  await saveAndConfirm(page, saveButton(page));
+  await saveAndConfirm(page, saveButton(page), { step: "s2 Pool Options" });
 
   // ── s3 Verify Settings — avoid the "Pool 1 medal round count cannot be zero" error by
   // selecting "NO bracket medal rounds, medal based on end ranked results" (radio value 0).
@@ -204,8 +220,12 @@ export async function createBracketOnPbcom(
     // Fallback: the radio input whose value is "0" under the medal-round group.
     await page.locator('input[type="radio"][value="0"]').first().check().catch(() => {});
   }
-  await saveButton(page).click();
-  const cont3 = page.getByRole("button", { name: /^\s*continue\s*$/i }).last();
+  const s3Save = saveButton(page);
+  if ((await s3Save.count()) === 0) {
+    return { verified: false, pbcomDivisionId: eaid, detail: `s3 Verify Settings: no 'Save' control. Controls: ${await listControls(page)}` };
+  }
+  await s3Save.click();
+  const cont3 = controlsMatching(page, /^\s*continue\s*$/i).last();
   await cont3.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
   await cont3.click();
   await page.waitForLoadState("load", { timeout: STEP_TIMEOUT });
@@ -219,15 +239,17 @@ export async function createBracketOnPbcom(
 
   // ── s4 Verify Seeding — apply B&E's seeded order via Sort Item + Move Up/Down.
   await applySeeding(page, input.teams);
-  await saveAndConfirm(page, saveButton(page), { expectSuccess: true });
+  await saveAndConfirm(page, saveButton(page), { expectSuccess: true, step: "s4 Verify Seeding" });
 
   // ── s5 Verify First-Round Matchups — review, Save → Continue → Success → Next.
-  await saveAndConfirm(page, saveButton(page), { expectSuccess: true });
+  await saveAndConfirm(page, saveButton(page), { expectSuccess: true, step: "s5 Verify Matchups" });
 
   // ── s6 Go Live Overview — COMPLETE VERIFICATION → "Are you sure? This WILL lock…".
-  const complete = page.getByRole("button", { name: /complete verification/i }).last();
-  await complete.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
-  await saveAndConfirm(page, complete);
+  const complete = controlsMatching(page, /complete verification/i).last();
+  await complete.waitFor({ state: "visible", timeout: STEP_TIMEOUT }).catch(async () => {
+    throw new Error(`s6 Go Live: no 'Complete Verification' control. Controls: ${await listControls(page)}`);
+  });
+  await saveAndConfirm(page, complete, { step: "s6 Go Live" });
 
   // ── Start Matches — Live Console → Waiting tab → row → Options → Start Matches.
   await startMatches(page, target, session.baseUrl);
