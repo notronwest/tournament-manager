@@ -1830,3 +1830,17 @@ bracket has games.
   pdf-lib / xlsx suites can't load in this sandbox — those packages are egress-blocked).
 - NOT verified with a live tournament — Ron: open a running tournament's Brackets tab on
   the PR preview and compare with the console's standings.
+## 2026-10-02 — Public Details tab: lay out the tournament description
+
+Ron: "fix the layout for the home page of the Leaf Peeper tournament" — the description
+rendered as one `<br/>`-separated wall (organizers paste copy with no blank lines or
+markdown). New `lib/descriptionBlocks.ts` (`parseDescription`, 6 vitest cases) turns the
+text into blocks with plain heuristics: a short line ending in ":" → subhead; a line
+led by an emoji / ✓ / • / `-` → icon list item (fixed 24px icon slot, "Label:" bolded);
+short lines under a heading → chips (e.g. skill levels) or a bullet list; lines after an
+item ending in ":" nest under it (pricing under "💰 Registration"); "(Note: …)" → muted
+note; first short line → lead. `TournamentDescription` in PublicTournamentPage replaces
+`nl2br` (removed). No data change — works for every tournament's existing description.
+Verified with a throwaway harness at 390px (no overflow) and 1100px using the Leaf Peeper
+copy. Lint/typecheck: no new errors (same pre-existing ones; xlsx couldn't install here —
+cdn.sheetjs.com is blocked — so its 3 test files didn't run). Validate on the PR preview.
