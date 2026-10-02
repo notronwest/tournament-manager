@@ -154,6 +154,206 @@ adding a new one. Hand-editing a repo's `DECISIONS.md`.
 
 **Forbids.** No auto-posting to public social, and no paid Canva or paid-ads action, without a Ron approval. No creds in the repo (mini env only). No per-platform repo sprawl — extend `marketing-api`, don't add a second service.
 
+### D-0045 — Bert & Erne ⇄ PickleballBrackets.com — a two-way bridge; registrations pull in, the live event pushes out by driving PB.com as a human
+
+*2026-09-28 · scope: `a new Bert & Erne (bande.com) product feature integrating with PickleballBrackets.com for orgs that register on PB.com but run in B&E; tracking issue tournament-manager#970` · source: Ron 2026-09-28 — corrected daemon's framing twice, then confirmed the full shape: "a new feature … for organizations that run registration through pb.com because of their reach but want the ease of use for bande.com" + "we DO need a push … PB.com would be driven as if it were being manually managed by a human."*
+
+**Decision.** Build a **two-way B&E ⇄ PB.com bridge** as a Bert & Erne product capability — for any org (WMPC
+included) that takes **registration on PickleballBrackets.com for its reach** but wants to **run the event in Bert &
+Erne for ease of use**:
+
+1. **Pull registrations in** — **PB.com → B&E, pre-event, ONLINE.** The org's registrant list comes from PB.com into
+   B&E (players, divisions, registrations). **Ship-first: CSV export → import** (the org exports their own registrants
+   from PB.com; B&E imports + field-maps). A connected pull is a later option, not day one.
+2. **Push the live event out** — **B&E → PB.com, during play, ONLINE.** A bracket started in B&E starts in PB.com; a
+   game scored in B&E is scored in PB.com. **PB.com is DRIVEN AS IF a human director were operating it**, because it
+   has **no public API.**
+
+**The push is a PB.com "driver."** It performs on PB.com the same actions a human would, authenticated as the org's
+**own PB.com account**:
+- **Trace first (the pivotal step):** capture a real PB.com director session (start a bracket, enter a score) to map
+  each action to what PB.com actually does. This decides, per action, **XHR-replay (preferred — fast, headless) vs
+  headless UI automation (fallback)** and proves feasibility before any build.
+- **Driver service:** listens to B&E events → performs the PB.com equivalent → **verifies it landed and reconciles
+  drift** (idempotent, self-healing — the same executor discipline as the CR billing/membership drains, because we're
+  driving an external system). The pattern mirrors **court-reserve-scheduler** (Playwright-driving a no-public-API
+  site), reuse its lessons.
+
+**Build order.** Director-session **trace first** → the **push driver** (XHR-preferred/UI-fallback); the
+**registration import** (CSV-first) is the simpler, independent parallel track.
+
+**Honest risks (named, not hidden).** Automating a no-public-API third-party site is **ToS-grey, brittle to PB.com's
+UI/API changes, and a standing maintenance burden.** It is *defensible* — each org's own account acting on their own
+event's data — but the fragility is a conscious product trade, not a surprise. Reconciliation + a human-visible
+"PB.com out of sync" signal are required, not optional.
+
+**Corrects daemon's earlier wrong framings (recorded so the mistake is legible):** (a) NOT a live results-sync
+B&E→PB.com under an *offline/queue-and-replay* constraint (daemon wrongly imported B&E's venue-offline fact into a
+feature that runs online); (b) NOT import-only. It is the two-way bridge above.
+
+**Binds.** A B&E (tournament-manager) product feature; relates to D-0021 (events hub). Tracking: **tournament-manager
+#970** (body corrected to this). **Owed:** correct the Hopper card + any STATUS notes carrying the old framing; set
+the director-session-trace task Agent Ready as the first build step.
+
+### D-0049 — Reuse before you build — a component or surface that already exists is reused or shared, never copied; a second implementation is a defect the gates reject
+
+*2026-09-29 · scope: `every React/frontend product repo's web/src/** (components, pages, hooks, lib), agents/builder/**, agents/reviewer/**, docs/design-system.md, the wmpc-meta ui-work + engineering-standard CLAUDE blocks` · source: Ron 2026-09-29 — after finding the event-settings form had been built in scattered places and only shared late (tournament-manager #1006): "reusing components is imperative — this HAS to be in the application architecture framework — the code the agents are building on. This is rookie development. Let's not be rookies. I've worked too hard to have this kind of development be 'acceptable'."*
+
+**Decision.** In every frontend product repo, **reuse is the default and a second copy is a defect.**
+Before writing any component, page section, hook, or utility, you **search for one that already does
+the job** and, if it exists, you **reuse it** — or, if it *almost* fits, you **extend it or extract a
+shared version** (a `variant`/props, a shared hook, a shared lib function). You do **not** copy an
+existing surface into a new file and diverge it. This is a **gate enforced at three points**, not a
+style preference:
+
+1. **The CLAUDE block agents build on states it as a gate.** `wmpc-meta`'s `ui-work` and
+   `engineering-standard` blocks (synced into every repo's `CLAUDE.md`) carry the rule up front with
+   the concrete pre-write step: *grep the components/feature dir for the thing you're about to build;
+   if it exists, reuse; if it almost exists, extend or extract; never a second copy.*
+2. **The Builder's pre-build gate applies it.** Before implementing a UI/section/hook, the Builder
+   searches for an existing implementation. If one exists and the card would duplicate it, the
+   Builder **reuses or extracts-and-shares** it and **names that choice in the PR's Reviewer notes**
+   ("reuses `EventSettingsForm`", or "extracted `<X>` so the console and the wizard share it"). A
+   card that can only be met by duplicating an existing surface is a shaping problem → route it back,
+   don't build a copy.
+3. **The Reviewer rejects a duplicate.** A PR that introduces a second implementation of a component
+   or surface that already exists — same UI, same logic, copied and diverged — is **REQUEST CHANGES**
+   (cite this record and both files). Where it is genuinely unclear whether to extend vs extract,
+   **ESCALATE** (an architecture call, D-0015) rather than wave the copy through.
+
+**One surface, one component, mounted many ways.** The proven shape (tournament-manager #1006): a
+single editable component rendered in every place it is needed via a `variant`/`mode` prop —
+`EventSettingsForm` is the `/edit` page (`variant="page"`), the console Settings tab, **and** the
+Bracket Setup wizard's settings step (`variant="inline"`), all off one file. That is the target: the
+wizard did not get its own settings code; it mounts the same one. Divergence between a "page form" and
+a "console summary" of the same data is the anti-pattern this kills.
+
+**Why.** "Reuse before adding" already existed as a buried one-liner in the engineering block — which
+is exactly why it was not enforced: a reminder is install discipline, and install discipline fails the
+same way it failed for singletons (D-0002) and phone layout (D-0047). Agents generated a second copy
+of a settings surface because nothing in the gate stopped them, and it was only consolidated after the
+fact. Component reuse is the whole reason a React codebase stays maintainable; a portfolio of apps that
+each re-implement the same surface is the rookie failure Ron built the shop past. The fleet rule is
+**enforce in code, not by memory** — this applies it to component reuse.
+
+**Forbids.** No second implementation of a component/section/hook/util that already exists — reuse it,
+extend it, or extract a shared version. No copy-and-diverge of an existing page or surface into a new
+file. No agent marks a UI card done, and no reviewer approves it, when it ships a duplicate of an
+existing surface. This never blocks a *deliberate* shared-component extraction (that is the desired
+outcome) and never forces a genuinely new surface to contort into an ill-fitting existing one — when
+extend-vs-new is a real judgment call, it escalates, it does not copy.
+
+**Binds.** Extends the `engineering-standard` block's "reuse before adding" and the `ui-work` block's
+"reuse existing components and tokens"; sits beside **D-0047** (the phone gate) as the second
+code-enforced frontend-quality gate, and **D-0018** (gates, not Ron) as the enforcement model; relates
+to **Pillar 5 / `docs/design-system.md`** (shared vocabulary) — reuse is the component-level companion
+to token-level consistency. **Execute:** (1) strengthen the two wmpc-meta CLAUDE blocks; (2) the
+Builder pre-build + Reviewer-notes lines; (3) the Reviewer's duplicate-surface check; (4) a
+"Component reuse" section in `docs/design-system.md`.
+
+### D-0050 — The B&E → PB.com results push runs as a standing unattended service — reused director session, live delta sync, fail-closed
+
+*2026-09-30 · scope: `productionizing the D-0045 push (pbcom-driver) from an on-demand supervised tool into a standing, unattended, singleton service on the mini — the auth model, cadence, home, and gates` · source: Ron 2026-09-30 — "Automate #991 so results auto-push to PB.com." The pbcom-driver (#991/#982) shipped deliberately on-demand + supervised; its DESIGN.md flagged "standing/unattended running is a SEPARATE INFRA-INTAKE decision with Ron." This is that decision.*
+
+**Decision.** The B&E → PickleballBrackets.com results push (D-0045's outbound half, the `pbcom-driver`) runs
+as a **standing, unattended service on the mini** — it creates the bracket on PB.com and keeps scores in sync
+on its own, no per-run operator. Ron's INFRA-INTAKE calls fix the model:
+
+1. **Auth = a reused director session, not a hands-off login.** PB.com authenticates by an emailed one-time
+   code, so there is no fully unattended login (and none is invented). The service reuses a **persistent
+   logged-in Chrome profile** on the mini (`PBCOM_PROFILE_DIR`), the same custody model as courtreserve-api.
+   When PB.com expires the session, the service does **not** loop-fail: it records `needs_attention`, **posts a
+   Discord alert to re-auth**, and exits cleanly; a human re-enters the code once (headed) and it resumes next
+   tick. Occasional re-auth is inherent to PB.com's OTP, not a defect.
+2. **Full live sync, ~150 s poll.** Each tick, for every active + PB.com-bound division: create the bracket on
+   PB.com if the ledger shows it isn't there yet, then push the **score delta** for matches scored since the
+   last confirmed push. Idempotent by construction — keyed on PB.com source ids + match identity (never
+   round/position) — so a crashed or re-run tick pushes only the delta and a corrected score re-pushes.
+3. **Home = mini-hosted in `tournament-manager/pbcom-driver`** (not a new repo). It ships to the mini through
+   an installer + launchd; the repo's branch-routing (`main`→TEST Cloudflare Pages) does **not** deploy it —
+   but the `pbcom_push_ledger` migration **does** ship via branch routing, and `DEPLOYMENT.md` documents that
+   split.
+
+**The gates stay — unattended is not "no rules."** Singleton enforced in code, not by install discipline: a
+committed **`PBCOM-PUSH-HOST`** fact (unset = nobody drives, fail-closed — the `EVENTS-DRAIN-HOST` pattern), a
+same-machine exclusive lock, and the **DB push-ledger** claim as the backstop. **Verify-before-ledger:** a push
+is recorded only after PB.com reads back the write; a write it cannot verify parks `needs_attention` (the
+D-0045 "PB.com out of sync" signal), never a silent success. The driver **never deletes** on PB.com — orphans
+are reported, not removed. No credentials or webhooks are committed (env-only, mini's gitignored `.env`).
+
+**No silent debut (D-0039 discipline).** This service has never run unattended, and it writes to an external
+site. Its **first live `--auto` run is a named supervised run** — `--dry-run --auto`, then a watched `--auto`
+on the mini — before the launchd tick is trusted with it.
+
+**Why.** D-0045 set the direction (B&E runs the event; results push back to PB.com) but the push stayed manual,
+so results only reached PB.com when someone ran the CLI. Ron wants them to arrive on their own. Turning the
+push unattended is the same move D-0039 made for the CoS loop: keep every safety gate, remove the human from
+the routine path, and surface the one thing a human must still do (here, the occasional OTP re-auth) instead of
+failing in the dark. Ron owns the club's PB.com tournaments and is authorizing his own automation against them.
+
+**Forbids.** No unattended run without its host fact + lock + ledger. No push recorded without a PB.com verify.
+No deletion on PB.com. No headless/secret PB.com login (the reused session + re-auth ping is the only path). No
+first-ever live `--auto` run in the dark — it is a surfaced supervised debut. Branch-routing never becomes the
+service's trigger (only the ledger migration ships that way; the launchd job is a mini install).
+
+**Binds.** Extends **D-0045** (the bridge; this productionizes its outbound push). Mirrors **D-0039** (unattended
+loop, gates intact, no silent debut) and the **`EVENTS-DRAIN-HOST` / courtreserve-api** singleton + saved-profile
+archetype. Built on the merged `pbcom-driver` (tournament-manager#991/#982). **Owed:** the auto layer
+(`pbcom_push_ledger` migration + DB ledger, `--auto` poll, session-lapse→Discord, PBCOM-PUSH-HOST + install.sh),
+then Ron's one-time mini bootstrap + the supervised first run.
+
+### D-0052 — Approved work merges itself — Ron merges only promotions and the hard set; every unattended gate has a heartbeat and a staleness alarm
+
+*2026-10-01 · scope: `agents/reviewer/**, agents/builder/**, infrastructure/reviewer-dispatch/**, infrastructure/builder-dispatch/**, infrastructure/cos-dispatch/**, infrastructure/heartbeat/**, every repo's .github/workflows/**` · source: Ron 2026-10-01, on finding 33 cards In Review and 4 Blocked after the reviewer had been dead 11 days — "I am still frustrated to how we are here — STILL — when was the last time I spoke about this being the bottleneck — how do we fix it? What gates need to be in place. THIS WILL MAKE ME FAIL." Builds on D-0018 (2026-09-18, "I can no longer be the bottleneck"), D-0023, D-0028, D-0039.*
+
+**Decision.** D-0018 said *gates, not Ron* and built the reviewer — but left Ron as the **merge click on
+every PR**, and left the gates with **no way to say they had stopped**. Both are fixed in code:
+
+1. **A reviewed PR merges itself.** When the reviewer's verdict is **APPROVE**, CI is green, the PR is not
+   a draft and not `CONFLICTING`, the **reviewer merges it to `main`** (squash/merge per repo convention)
+   and moves the card to **Done**. No human click. In branch-routed repos `main` is TEST (D-0007), so a
+   migration or edge function riding the PR lands on TEST, where it belongs; **PROD is still reached only
+   by a `main`→`production` promotion PR, and that is Ron's.** In mini-hosted repos the merge lands code;
+   the mini apply (`setup.sh` / `migrate`) is the next automation to close, not a reason to hold the merge.
+2. **Ron's merge is the hard set only:** promotions to PROD; **wmpc-web** (its `main` is the live public
+   site — D-0051 keeps "live = Ron's merge"); anything the reviewer **ESCALATEs** (money paths, schema
+   deletion, a new external service, a decision it cannot ground in a written standard); and a money
+   executor's first live run (D-0039). Everything else is the system's to finish.
+3. **REQUEST CHANGES and CONFLICTING go back to the Builder, not to Ron.** A verdict of REQUEST CHANGES
+   or a PR that has gone `CONFLICTING` from `main` drift re-queues the card to the Builder's **rework
+   lane** (rebase/fix on the same branch, re-review). Ron never rebases.
+4. **Every unattended gate has a heartbeat, and silence is an alarm.** Each singleton (Builder, reviewer,
+   CoS dispatcher + listener, triage, the drains, fleet-sync) writes a **heartbeat on every completed
+   real run**. One fleet watchdog (on the always-on mini, itself a heartbeating singleton) posts a
+   deduped Discord alert when: a job has not completed a run in **2× its interval**; a lock is older
+   than its stale threshold (and reclaims it); an **In Review** card has no verdict after **24 h**; an
+   **Agent Ready** card has had no Builder spawn after **2 ticks**; a repo with board cards is **not in
+   `BUILDER-REPOS`**; a card's PR is merged but the card is not Done. The reviewer's 11 silent days
+   (2026-09-20 → 10-01: a stale lock, 43 "skip" lines a day, nobody told) is the failure this ends.
+5. **The standup's "Need you" is the only queue Ron works.** It lists exactly the hard-set items above
+   and the watchdog's alarms — nothing routine. If it is empty, Ron has nothing to merge.
+
+**Why.** Ron has said "I am the bottleneck" on 09-18, 09-20, 09-25, 09-26, 09-28 and again today, and
+each time we built a gate — then kept his click at the end of it, and never built the thing that tells us
+a gate died. So the pile came back twice over: once because every green PR still waited for him, and once
+because the reviewer stopped and looked idle. A gate Ron must still click is not a gate; a singleton that
+can stop without an alarm is not unattended. Fixing both is what "runs unattended, survives him being away
+a week, self-heals" (INFRA-INTAKE) has meant all along.
+
+**Forbids.** No PR waits on Ron's click once APPROVE + green, outside the hard set. No singleton without a
+heartbeat; no `mkdir` lock without a stale reclaim; no "idle" log line where "skipped because locked"
+is the truth. No card sits In Review or Agent Ready past the thresholds without an alarm. The reviewer
+never merges a draft, a CONFLICTING PR, a promotion, or a wmpc-web PR, and never merges on its own
+REQUEST CHANGES. The Builder still never merges (D-0018: nobody grades their own homework).
+
+**Binds.** Extends D-0018 (gates not Ron), D-0002 (singletons in code), D-0028/D-0039 (approved work
+executes), D-0043 (the board is the process). **Execute, in order:** (1) `infrastructure/heartbeat/` —
+heartbeat helper + watchdog + Discord alert, wired into every dispatcher (reviewer, builder, cos, triage,
+drains, fleet-sync) with their DESIGN.md INFRA-INTAKE answers updated; (2) reviewer: APPROVE → merge + card
+Done, REQUEST CHANGES / CONFLICTING → rework lane; (3) Builder: rework lane (rebase on the same branch);
+(4) the watchdog's board checks. Each ships as its own PR; the first live auto-merge is announced in the
+standup.
+
 ## Proposed (not binding yet)
 
 _None._

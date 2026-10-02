@@ -8,6 +8,8 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import MatchTimer from "../../components/MatchTimer";
+import { plannedMinutesFor } from "../../lib/matchTiming";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import {
@@ -48,7 +50,14 @@ type Player = Database["public"]["Tables"]["players"]["Row"];
 type EventRegistration =
   Database["public"]["Tables"]["event_registrations"]["Row"];
 type EventCourt = Database["public"]["Tables"]["event_courts"]["Row"];
-type Match = Database["public"]["Tables"]["matches"]["Row"];
+// started_at / ended_at / duration_seconds are newer than the generated
+// types (migration 20261002120000); extend locally until `supabase gen
+// types` is re-run. Stamped by the DB on status change — never written here.
+type Match = Database["public"]["Tables"]["matches"]["Row"] & {
+  started_at?: string | null;
+  ended_at?: string | null;
+  duration_seconds?: number | null;
+};
 
 type Team = {
   captainRegId: string;
@@ -925,6 +934,11 @@ function CourtCard({
         <div style={teamRow}>
           <span style={teamNameStyle}>{teamLabel(assigned.team_b_reg_id)}</span>
         </div>
+
+        <MatchTimer
+          startedAt={assigned.started_at}
+          expectedMinutes={plannedMinutesFor(assigned, assignedEvent)}
+        />
 
         <div
           style={{

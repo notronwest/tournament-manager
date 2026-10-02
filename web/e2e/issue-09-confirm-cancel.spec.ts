@@ -1,4 +1,5 @@
-import { test, expect, loginAs, gotoRegister, SEED } from "./fixtures";
+import { expect, loginAs, gotoRegister, SEED } from "./fixtures";
+import { test } from "./registration-fixtures";
 
 // Regression for issue #9 — "Cancelling a registration with a picked partner
 // needs a confirm step." Translated from the issue's ## Acceptance criteria.
@@ -45,14 +46,19 @@ test.describe("#9 confirm before dropping a partner", () => {
     },
   );
 
-  test("Path 1 — backing out of the register form after picking a partner", async ({ page }) => {
-    // A registrant with no existing reg on the discard event picks a partner,
-    // then backs out → must confirm before the pick is discarded.
-    await loginAs(page, SEED.discard.registrantEmail);
-    await gotoRegister(page, SEED.orgSlug, SEED.discard.tournamentSlug);
+  test("Path 1 — backing out of the register form after picking a partner", async ({
+    page,
+    seedRegistration,
+  }) => {
+    // A registrant with no existing reg on a freshly-seeded (#950) discard
+    // event picks a partner, then backs out → must confirm before the pick
+    // is discarded.
+    const fixture = await seedRegistration("discard");
+    await loginAs(page, fixture.registrantEmail);
+    await gotoRegister(page, fixture.orgSlug, fixture.tournamentSlug);
 
     await page.getByRole("button", { name: /^register$/i }).click();
-    await page.getByPlaceholder(/search by name, email, or phone/i).fill(SEED.discard.partnerQuery);
+    await page.getByPlaceholder(/search by name, email, or phone/i).fill(fixture.partnerQuery!);
     await page.getByRole("button", { name: /^search$/i }).click();
     await page.getByRole("button", { name: /^pick$/i }).first().click();
 

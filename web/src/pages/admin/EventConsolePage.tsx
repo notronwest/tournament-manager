@@ -2,18 +2,20 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
 import {
   buildTeams,
   computeMedals,
   computeStandings,
+  groupStandingsByPool,
   type Medal,
   type Team,
   type Standing,
@@ -22,6 +24,8 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import {
   planPoolDistribution,
+  poolControlsLocked,
+  POOL_LOCK_MESSAGE,
   type PoolPattern,
 } from "./poolDistribution";
 import {
@@ -31,6 +35,7 @@ import {
   type PlayerSelection,
 } from "../../components/PlayerPicker";
 import { eligibilityChips } from "../../lib/eligibility";
+import { estimateCompletion, fmtCompactDuration } from "../../lib/estimator";
 import { autoTransitionEventStatus } from "../../lib/eventStatus";
 import { resolvePartnerBAction } from "../../lib/teamEdit";
 import {
@@ -39,22 +44,53 @@ import {
   type CheckInPlayerLite,
 } from "../../lib/checkin";
 import { feedForwardPlayoffWinners } from "../../lib/playoffFeedForward";
+import {
+  replaceRoundRobinMatches,
+  replacePlayoffMatches,
+  buildPlayoffRows,
+  clearEventMatches,
+  type MatchesWriteClient,
+} from "../../lib/matchGeneration";
 import { buildDoubleElim, describeSource, type Slot } from "../../lib/doubleElim";
 import { resolveScoreRules, validateScore } from "../../lib/scoreValidation";
 import { pairRegistrations } from "../../lib/registrations";
+import {
+  seedTeams,
+  divisionFromEvent,
+  type SeedableTeam,
+  type PlayerRatings,
+} from "../../lib/seedTeams";
 import { BracketView } from "../../components/BracketView";
 import type { SupabaseClient } from "@supabase/supabase-js";
 // Double-elimination columns (migration 20260914210000) — generated types lag.
 const untyped = supabase as unknown as SupabaseClient;
 type DEEvent = { bracket_type?: string | null; double_elim_final?: "crossover" | "bronze_only" | null };
 const isDoubleElim = (e: { bracket_type?: string | null } | null | undefined) => e?.bracket_type === "double_elim";
+import {
+  buildSingleElimBracket,
+  bracketRoundsForN,
+  playoffRoundName,
+} from "../../lib/playoffBracket";
 import { downloadCsv } from "../../lib/rosterExport";
+import {
+  BracketSetupWizard,
+  WizardReviewRow,
+  type BracketWizardStepView,
+} from "./BracketSetupWizard";
+import { EventSettingsForm } from "./EventSettingsForm";
+import { CourtAssignmentStep } from "./CourtAssignmentStep";
+import { EventStartTimeStep } from "./EventStartTimeStep";
+import {
+  bracketWizardStepGate,
+  type BracketWizardContext,
+} from "../../lib/bracketWizard";
 import {
   standingsToRows,
   resultsToCsv,
   resultsFilename,
 } from "../../lib/resultsExport";
 import type { Database } from "../../types/supabase";
+import { selectPlayoffSeeds, pairPlayoffSeeds } from "../../lib/playoffSeeding";
 import {
   ink,
   inkSoft,
@@ -67,6 +103,7 @@ import {
   courtBlue,
   courtRed,
   courtYellow,
+  courtGreen,
   successBg,
   successFg,
   dangerBg,
@@ -87,6 +124,62 @@ type EventRegistration =
   Database["public"]["Tables"]["event_registrations"]["Row"];
 type Match = Database["public"]["Tables"]["matches"]["Row"];
 
+// ── DUPR seeding (#970 / D-0045) ──────────────────────────────────────────
+// Console Team rows carry the full player rows on `captain` / `partner`, which
+// hold the DUPR + self-rating columns. Adapt them into the shape seedTeams
+// wants. The DUPR columns lag the generated Player type (migration
+// 20260928120000), so they're read structurally via a cast.
+function toSeedableTeams(teams: Team[]): SeedableTeam[] {
+  return teams.map((t) => ({
+    captainRegId: t.captainRegId,
+    partnerRegId: t.partnerRegId,
+    captain: t.captain as unknown as PlayerRatings,
+    partner: t.partner ? (t.partner as unknown as PlayerRatings) : null,
+  }));
+}
+
+// Compute DUPR seeds for a division's teams and persist them onto
+// event_registrations.seed — both halves of a confirmed doubles pair get the
+// pair's single seed. Deterministic + idempotent (re-running on the same data
+// yields the same seeds). Returns the seed keyed by captainRegId so a caller
+// can order the draw immediately, without waiting for a reload.
+async function persistDuprSeeds(
+  event: Event,
+  teams: Team[],
+): Promise<{ seedByCaptain: Map<string, number>; error: string | null }> {
+  const division = divisionFromEvent({
+    format: event.format,
+    gender: event.gender,
+    min_rating: event.min_rating,
+    // source_division_label rides the PB.com import migration; types lag it.
+    source_division_label:
+      (event as { source_division_label?: string | null }).source_division_label ?? null,
+  });
+  const seeded = seedTeams(toSeedableTeams(teams), division);
+  const writes = seeded.map((s) => {
+    const ids = [s.captainRegId];
+    if (s.partnerRegId) ids.push(s.partnerRegId);
+    return supabase.from("event_registrations").update({ seed: s.seed }).in("id", ids);
+  });
+  const results = await Promise.all(writes);
+  const firstErr = results.find((r) => r.error)?.error;
+  const seedByCaptain = new Map(seeded.map((s) => [s.captainRegId, s.seed]));
+  return { seedByCaptain, error: firstErr?.message ?? null };
+}
+
+// Sort a copy of `teams` by a freshly-computed seed map (unseeded last). Used
+// to order the draw within the same call that persists the seeds, before the
+// parent reload re-derives the order from event_registrations.seed.
+function orderBySeed(teams: Team[], seedByCaptain: Map<string, number>): Team[] {
+  return teams
+    .slice()
+    .sort(
+      (a, b) =>
+        (seedByCaptain.get(a.captainRegId) ?? Number.POSITIVE_INFINITY) -
+        (seedByCaptain.get(b.captainRegId) ?? Number.POSITIVE_INFINITY),
+    );
+}
+
 // Team / Standing / Medal and their builders live in lib/bracketTeams so the
 // tournament summary report computes results exactly as this console does.
 // Re-exported here because resultsExport (and its test) import the types
@@ -106,6 +199,7 @@ export type { Medal, Team, Standing } from "../../lib/bracketTeams";
 // directly by the organizer.
 export default function EventConsolePage() {
   const { org } = useCurrentOrg();
+  const navigate = useNavigate();
   const { tournamentSlug, eventId } = useParams<{
     tournamentSlug: string;
     eventId: string;
@@ -116,6 +210,9 @@ export default function EventConsolePage() {
   const [regs, setRegs] = useState<EventRegistration[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
+  // Courts assigned to this event (event_courts) — drives the wizard's court
+  // gate. Fetched in reload so accepting the recommendation clears the gate.
+  const [courtCount, setCourtCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -171,7 +268,7 @@ export default function EventConsolePage() {
     setTournament(t);
     setEvent(ev as Event);
 
-    const [regsRes, matchesRes] = await Promise.all([
+    const [regsRes, matchesRes, courtsRes] = await Promise.all([
       // Only spot-holding regs become bracket teams. Without the status
       // filter withdrawn / cancelled / refunded / free-waitlisted rows were
       // all counted ("Teams (15 / 12)" on a 12-team event).
@@ -189,6 +286,7 @@ export default function EventConsolePage() {
         .order("stage", { ascending: true })
         .order("round", { ascending: true })
         .order("position", { ascending: true }),
+      supabase.from("event_courts").select("court_number").eq("event_id", eventId),
     ]);
     if (regsRes.error) {
       setError(regsRes.error.message);
@@ -200,6 +298,7 @@ export default function EventConsolePage() {
       setLoading(false);
       return;
     }
+    setCourtCount((courtsRes.data ?? []).length);
     const regsData = regsRes.data ?? [];
     setRegs(regsData);
     setMatches(matchesRes.data ?? []);
@@ -260,10 +359,10 @@ export default function EventConsolePage() {
   // matches at round=playoff_rounds:
   //   * position 0 = the gold-medal match  → winner=gold, loser=silver
   //   * position 1 = the bronze-medal game → winner=bronze
-  // Works for both pairwise (R=1, N=4) and bracket-with-bronze
-  // (R=2, N=4) since both store the medal matches at the final
-  // round. Returns an empty array until the gold match is
-  // completed; bronze is added later when its match finishes.
+  // Works for every playoff style — pairwise (R=1), single-elim brackets
+  // (Top-4 → R=2, Top-6/8 → R=3), and double-elim — since all of them store
+  // the medal matches at the final round. Returns an empty array until the
+  // gold match is completed; bronze is added later when its match finishes.
   const medals = useMemo<Medal[]>(
     () => (event ? computeMedals(event as typeof event & DEEvent, playoffMatches, teamByAnyRegId) : []),
     [event, playoffMatches, teamByAnyRegId],
@@ -275,6 +374,10 @@ export default function EventConsolePage() {
   // For playoff matches in round > 1 we also null the team slots,
   // because those teams were populated by feedForwardPlayoffWinners
   // from upstream winners — replaying earlier rounds will refeed.
+  // Exception: bye seeds (e.g. Top-6 seeds 1-2 pre-placed into the
+  // semifinals) were seeded at generation, not fed forward, so they
+  // must be restored after the blanket null — otherwise replaying the
+  // bracket would lose them (see onResetAllScores bye handling below).
   // If the event was complete/verified we also bump it back to
   // active so it re-enters the court manager.
   const onResetAllScores = async () => {
@@ -312,6 +415,49 @@ export default function EventConsolePage() {
       return;
     }
 
+    // Restore bye pre-placements the blanket null just wiped. A bye seed sits
+    // in a round >= 2 slot from generation (not feed-forward), so the bracket
+    // shape tells us exactly which (round, position, slot) to refill, and with
+    // whom (the team currently occupying that slot, captured pre-reset).
+    const R = event.playoff_rounds;
+    if (R >= 2 && bracketRoundsForN(event.teams_advancing_to_playoff) === R) {
+      // supabase-js returns thenable PostgrestFilterBuilders, not strict
+      // Promises — PromiseLike is what Promise.all actually needs.
+      const restores: PromiseLike<unknown>[] = [];
+      for (const b of buildSingleElimBracket(event.teams_advancing_to_playoff)) {
+        if (b.round < 2) continue;
+        const live = playoffMatches.find(
+          (m) => m.round === b.round && m.position === b.position,
+        );
+        if (!live) continue;
+        if (b.seedA != null && live.team_a_reg_id) {
+          restores.push(
+            supabase
+              .from("matches")
+              .update({ team_a_reg_id: live.team_a_reg_id })
+              .eq("id", live.id),
+          );
+        }
+        if (b.seedB != null && live.team_b_reg_id) {
+          restores.push(
+            supabase
+              .from("matches")
+              .update({ team_b_reg_id: live.team_b_reg_id })
+              .eq("id", live.id),
+          );
+        }
+      }
+      const restoreResults = await Promise.all(restores);
+      const restoreErr = restoreResults.find(
+        (r) => (r as { error?: { message: string } }).error,
+      ) as { error?: { message: string } } | undefined;
+      if (restoreErr?.error) {
+        setError(restoreErr.error.message);
+        setResetting(false);
+        return;
+      }
+    }
+
     // Bump status back if the event had drifted into a finished state.
     if (event.status === "complete" || event.status === "verified") {
       const { error: statusErr } = await supabase
@@ -328,6 +474,112 @@ export default function EventConsolePage() {
     setResetting(false);
     setResetConfirmOpen(false);
     await reload();
+  };
+
+  // ── Bracket Setup wizard (#943, #1005) ──────────────────────────────
+  // A standalone, guided path over the five actions that today live in
+  // five different places to start an event's bracket: mark ready →
+  // confirm teams → confirm settings → build → start. Every step reuses
+  // this page's existing sections / handlers — the wizard consolidates
+  // the flow, it doesn't reimplement generation or the start transition.
+  //
+  // It launches two ways: the header "Set up & start" button, and the
+  // events list on the tournament home page, which links here with
+  // ?wizard=1 (#1005). Closing the wizard strips that param so a refresh
+  // doesn't reopen it.
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const closeWizard = useCallback(() => {
+    setWizardOpen(false);
+    if (searchParams.get("wizard")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("wizard");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+  // Deep-link launch from the tournament home page events list (#1005):
+  // ?wizard=1 opens the wizard once the event has loaded, but only while
+  // it's still draft/ready — the same gate as the header launcher.
+  useEffect(() => {
+    if (searchParams.get("wizard") !== "1") return;
+    if (event && (event.status === "draft" || event.status === "ready")) {
+      setWizardOpen(true);
+    }
+  }, [searchParams, event]);
+  const [markingReady, setMarkingReady] = useState(false);
+  const [starting, setStarting] = useState(false);
+  // Check-in confirm for the terminal Start step — same gate the Generate
+  // handlers use, surfaced when the director starts with players still out.
+  const [startGateMissing, setStartGateMissing] = useState<
+    { playerId: string; name: string }[] | null
+  >(null);
+
+  // Same check-in computation the RoundRobin generate uses — reused here
+  // so "Start event" from the wizard honors the identical gate.
+  const startCheckInGate = useMemo(() => {
+    const playerById = new Map<string, CheckInPlayerLite>(
+      players.map((p) => [p.id, p]),
+    );
+    return eventCheckInGate(regs as unknown as CheckInReg[], playerById);
+  }, [regs, players]);
+
+  // Step 1 handler — draft → ready (mirrors the TournamentDetailPage
+  // "Mark ready" control; a plain status write, no generation).
+  const markReady = async () => {
+    if (!event) return;
+    setMarkingReady(true);
+    setError(null);
+    const { error: updErr } = await supabase
+      .from("events")
+      .update({ status: "ready" })
+      .eq("id", event.id);
+    setMarkingReady(false);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    await reload();
+  };
+
+  // Terminal action — draft/ready → active. Gates the genuine start on
+  // check-in (resume/reopen aren't starts), matching setEventStatus on
+  // TournamentDetailPage. Games appear in the Court Manager once active.
+  const doStart = async () => {
+    if (!event) return;
+    setStarting(true);
+    setError(null);
+    const { error: updErr } = await supabase
+      .from("events")
+      .update({ status: "active" })
+      .eq("id", event.id);
+    setStarting(false);
+    if (updErr) {
+      setError(updErr.message);
+      return;
+    }
+    setStartGateMissing(null);
+    // Setup is done — hand off straight to the Court Manager, where this
+    // event's games now live. Falls back to closing the wizard in place if a
+    // slug is somehow unavailable.
+    if (org && tournament && event) {
+      navigate(
+        `/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/courts`,
+      );
+    } else {
+      closeWizard();
+      await reload();
+    }
+  };
+
+  const startEvent = () => {
+    if (
+      event &&
+      (event.status === "draft" || event.status === "ready") &&
+      !startCheckInGate.allCheckedIn
+    ) {
+      setStartGateMissing(startCheckInGate.missing);
+      return;
+    }
+    void doStart();
   };
 
   if (!org) return null;
@@ -349,6 +601,207 @@ export default function EventConsolePage() {
     );
   }
   if (!event || !tournament) return null;
+
+  // ── Wizard wiring (built here so `event`/`teams`/`matches` are live) ──
+  const isDoubles = event.format === "doubles";
+  const isDE = isDoubleElim(event);
+  const unpairedCount = isDoubles
+    ? teams.filter((t) => t.partnerRegId === null).length
+    : 0;
+  const unassignedPoolCount =
+    event.pool_count > 1
+      ? teams.filter((t) => t.poolIndex === null).length
+      : 0;
+  const wizardCtx: BracketWizardContext = {
+    status: event.status,
+    teamCount: teams.length,
+    isDoubles,
+    unpairedCount,
+    poolCount: event.pool_count,
+    unassignedPoolCount,
+    matchCount: matches.length,
+    courtsAssignedCount: courtCount,
+    hasStartTime: !!event.scheduled_start_at,
+  };
+  // Player ids on this event's roster — for the Courts / Start-time steps'
+  // clash detection against the day's other events.
+  const eventPlayerIds = new Set(regs.map((r) => r.player_id));
+
+  const playoffSummary =
+    event.teams_advancing_to_playoff > 0
+      ? `Top ${event.teams_advancing_to_playoff} · ${event.playoff_rounds} round${event.playoff_rounds === 1 ? "" : "s"}`
+      : "No playoff";
+  const statusReady =
+    event.status !== "draft" ? "Ready to play" : "Draft (not ready yet)";
+
+  const wizardSteps: BracketWizardStepView[] = [
+    {
+      id: "ready",
+      gate: bracketWizardStepGate("ready", wizardCtx),
+      content: (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: inkSoft, lineHeight: 1.55 }}>
+            Marking the event ready locks it as configured and waiting to
+            start. It doesn’t generate any games yet.
+          </p>
+          <div style={{ fontSize: 13, color: inkMuted }}>
+            Status: <strong style={{ color: ink }}>{statusReady}</strong>
+          </div>
+          {event.status === "draft" ? (
+            <button
+              onClick={() => void markReady()}
+              disabled={markingReady || teams.length < 2}
+              title={teams.length < 2 ? "Add at least 2 teams first." : undefined}
+              style={primaryBtn(markingReady || teams.length < 2)}
+            >
+              {markingReady ? "Marking…" : "Mark ready"}
+            </button>
+          ) : (
+            <div
+              style={{
+                padding: "8px 12px",
+                background: successBg,
+                border: `1px solid ${successFg}`,
+                borderRadius: 6,
+                color: successFg,
+                fontSize: 13,
+                alignSelf: "flex-start",
+              }}
+            >
+              ✓ Event is marked ready
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: "teams",
+      gate: bracketWizardStepGate("teams", wizardCtx),
+      content: (
+        <TeamsSection
+          event={event}
+          teams={teams}
+          hasMatches={matches.length > 0}
+          onChange={reload}
+        />
+      ),
+    },
+    {
+      id: "settings",
+      gate: bracketWizardStepGate("settings", wizardCtx),
+      // The real, editable settings screen — rendered inline so the
+      // director changes format / pools / playoff config without leaving
+      // the wizard (#1005). Same component the /edit route and the
+      // console "Settings" tab use; saving reloads the console so the
+      // wizard's downstream gates (pool assignment, build) see the change.
+      content: (
+        <EventSettingsForm mode="edit" variant="inline" onSaved={reload} />
+      ),
+    },
+    {
+      id: "court",
+      gate: bracketWizardStepGate("court", wizardCtx),
+      // Recommends the courts this event should use, accounting for the day's
+      // other events; self-saves to event_courts and reloads.
+      content: (
+        <CourtAssignmentStep
+          event={event}
+          tournament={tournament}
+          teamCount={teams.length}
+          players={eventPlayerIds}
+          orgSlug={org.slug}
+          tournamentSlug={tournament.slug}
+          onSaved={reload}
+        />
+      ),
+    },
+    {
+      id: "starttime",
+      gate: bracketWizardStepGate("starttime", wizardCtx),
+      // Recommends when this event should start, fit around the day's other
+      // events; self-saves to events.scheduled_start_at and reloads.
+      content: (
+        <EventStartTimeStep
+          event={event}
+          tournament={tournament}
+          teamCount={teams.length}
+          players={eventPlayerIds}
+          orgSlug={org.slug}
+          tournamentSlug={tournament.slug}
+          onSaved={reload}
+        />
+      ),
+    },
+    {
+      id: "build",
+      gate: bracketWizardStepGate("build", wizardCtx),
+      content: isDE ? (
+        <DoubleElimSection
+          event={event as typeof event & DEEvent}
+          teams={teams}
+          teamByAnyRegId={teamByAnyRegId}
+          matches={playoffMatches}
+          onChange={reload}
+        />
+      ) : (
+        <RoundRobinSection
+          event={event}
+          teams={teams}
+          matches={rrMatches}
+          teamByAnyRegId={teamByAnyRegId}
+          regs={regs}
+          players={players}
+          onChange={reload}
+        />
+      ),
+    },
+    {
+      id: "start",
+      gate: bracketWizardStepGate("start", wizardCtx),
+      content: (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 13.5, color: inkSoft, lineHeight: 1.55 }}>
+            Review the setup, then start the event. Its games move into the
+            Court Manager the moment it goes active.
+          </p>
+          <WizardReviewRow label="Format" value={`${capitalize(event.format)} · ${event.bracket_type.replace(/_/g, " ")}`} />
+          <WizardReviewRow label="Teams" value={String(teams.length)} />
+          {event.pool_count > 1 && (
+            <WizardReviewRow label="Pools" value={String(event.pool_count)} />
+          )}
+          <WizardReviewRow label="Playoff" value={playoffSummary} />
+          <WizardReviewRow label="Games built" value={String(matches.length)} warn={matches.length === 0} />
+          <WizardReviewRow
+            label="Checked in"
+            value={`${startCheckInGate.checkedIn} / ${startCheckInGate.total}`}
+            warn={!startCheckInGate.allCheckedIn && startCheckInGate.total > 0}
+          />
+          {event.status === "active" && (
+            <Link
+              to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/courts`}
+              className="no-print"
+              style={{
+                alignSelf: "flex-start",
+                marginTop: 12,
+                padding: "10px 16px",
+                minHeight: 44,
+                display: "inline-flex",
+                alignItems: "center",
+                background: courtBlue,
+                color: "#fff",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              Go to Court Manager →
+            </Link>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
@@ -421,10 +874,70 @@ export default function EventConsolePage() {
                 ))}
               </div>
             )}
+            {/* Live completion estimate — shows once games are created
+                (READY TO PLAY). Derived from match state: matches still
+                to play run up to `court_count` in parallel, each taking
+                pool_minutes_per_game. Shrinks as matches finish; no
+                polling. Pure math lives in lib/estimator. */}
+            {matches.length > 0 &&
+              (() => {
+                const matchesRemaining = matches.filter(
+                  (m) => m.status !== "completed",
+                ).length;
+                const courts = tournament.court_count;
+                const perMatchMinutes = event.pool_minutes_per_game;
+                const est = estimateCompletion({
+                  matchesRemaining,
+                  courts,
+                  perMatchMinutes,
+                });
+                let text: string;
+                if (est === null) {
+                  text = "Set match length & courts to estimate completion.";
+                } else if (matchesRemaining === 0) {
+                  text = "All matches complete.";
+                } else {
+                  text = `Est. ~${fmtCompactDuration(est.minutes)} to complete · ${matchesRemaining} ${matchesRemaining === 1 ? "match" : "matches"} left · ${courts} ${courts === 1 ? "court" : "courts"} · ${perMatchMinutes} min/match`;
+                }
+                return (
+                  <p
+                    style={{
+                      color: inkSoft,
+                      fontSize: 13,
+                      margin: "6px 0 0",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {text}
+                  </p>
+                );
+              })()}
           </div>
           {/* Edit format moved into the Settings tab below — header
               keeps cross-cutting actions only (Print, Reset). */}
           <div className="no-print" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(event.status === "draft" || event.status === "ready") && (
+              <button
+                onClick={() => setWizardOpen(true)}
+                title="Guided setup: mark ready, confirm teams & settings, build the bracket, and start the event."
+                style={{
+                  padding: "8px 16px",
+                  background: ink,
+                  color: cream,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: headingFontStack,
+                  letterSpacing: "0.03em",
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Set up &amp; start
+              </button>
+            )}
             {event.is_paired_roles && (
               <Link
                 to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/pair-teams`}
@@ -441,6 +954,24 @@ export default function EventConsolePage() {
                 }}
               >
                 Pair teams
+              </Link>
+            )}
+            {teams.length > 0 && (
+              <Link
+                to={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/pool-sheets`}
+                style={{
+                  padding: "8px 16px",
+                  background: "#ffffff",
+                  color: courtBlue,
+                  textDecoration: "none",
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  border: `1px solid ${courtBlue}`,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Print pool sheets
               </Link>
             )}
             {matches.length > 0 && (
@@ -491,10 +1022,7 @@ export default function EventConsolePage() {
       </div>
 
       {activeTab === "settings" && (
-        <SettingsTab
-          event={event}
-          editUrl={`/admin/${org.slug}/tournaments/${tournament.slug}/events/${event.id}/edit`}
-        />
+        <EventSettingsForm mode="edit" variant="inline" onSaved={reload} />
       )}
 
       {activeTab === "teams" && (
@@ -547,6 +1075,57 @@ export default function EventConsolePage() {
         />
       )}
 
+      {wizardOpen && (
+        <BracketSetupWizard
+          eventName={event.name}
+          steps={wizardSteps}
+          onClose={closeWizard}
+          onStart={startEvent}
+          starting={starting}
+          startDisabledReason={
+            matches.length === 0 ? "Build the bracket first." : null
+          }
+        />
+      )}
+      {startGateMissing && (
+        <ConfirmModal
+          title="Not everyone is checked in"
+          body={
+            <div>
+              <p style={{ marginTop: 0 }}>
+                {startGateMissing.length}{" "}
+                {startGateMissing.length === 1 ? "player" : "players"} in this
+                event {startGateMissing.length === 1 ? "hasn't" : "haven't"}{" "}
+                checked in yet:
+              </p>
+              <ul
+                style={{
+                  margin: "0 0 12px",
+                  paddingLeft: 20,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                }}
+              >
+                {startGateMissing.map((m) => (
+                  <li key={m.playerId} style={{ fontSize: 13 }}>
+                    {m.name}
+                  </li>
+                ))}
+              </ul>
+              <p style={{ margin: 0 }}>
+                Check them in first, or start anyway if they’ve withdrawn or
+                you’re handling it another way.
+              </p>
+            </div>
+          }
+          confirmLabel={starting ? "Starting…" : "Start anyway"}
+          onCancel={() => setStartGateMissing(null)}
+          onConfirm={async () => {
+            setStartGateMissing(null);
+            await doStart();
+          }}
+        />
+      )}
       {resetConfirmOpen && (
         <ConfirmModal
           title="Reset all scores?"
@@ -1062,6 +1641,10 @@ function TeamsSection({
   const showPoolColumn = event.pool_count > 1;
   const isDE = isDoubleElim(event);
   const showSeedColumn = event.pool_count > 1 || isDE;
+  // Once games exist, pool assignment (and the seed order it derives from) is
+  // frozen — re-pooling would corrupt the generated bracket. This one flag
+  // drives every locked pool control plus the inline explanation below.
+  const poolsLocked = poolControlsLocked(hasMatches);
 
   // Double elimination: seeds drive the bracket, so let organizers shuffle
   // them, and pair everyone still solo/seeking at random (hand-built teams
@@ -1075,6 +1658,27 @@ function TeamsSection({
     }
     setTeams(shuffled);
     await persistOrder(shuffled);
+  };
+
+  // Seed the field by combined DUPR (seed 1 = strongest). Persists
+  // event_registrations.seed for every team and reorders the list. The
+  // round-robin and double-elim generators consume this order directly, so a
+  // generated draw is ranked by strength. Organizers can still drag rows to
+  // fine-tune afterward (or before generating).
+  const [seeding, setSeeding] = useState(false);
+  const seedByDupr = async () => {
+    if (hasMatches || teams.length < 2) return;
+    setError(null);
+    setSeeding(true);
+    const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
+    if (seedErr) {
+      setError(seedErr);
+      setSeeding(false);
+      return;
+    }
+    setTeams(orderBySeed(teams, seedByCaptain)); // optimistic; reload confirms
+    await onChange();
+    setSeeding(false);
   };
   const [randomizing, setRandomizing] = useState(false);
   const loose = teams.filter((t) => t.partnerRegId === null);
@@ -1125,6 +1729,16 @@ function TeamsSection({
                 Saving order…
               </span>
             )}
+            {!hasMatches && teams.length >= 2 && (
+              <button
+                onClick={() => void seedByDupr()}
+                disabled={busy || savingOrder || seeding}
+                style={tinySecondaryBtn}
+                title="Order every team by combined DUPR (seed 1 = strongest). Falls back to singles DUPR, then self-rating, then the division floor. Drag rows to fine-tune afterward."
+              >
+                {seeding ? "Seeding…" : "Seed by DUPR"}
+              </button>
+            )}
             {isDE && (
               <>
                 <button
@@ -1152,11 +1766,11 @@ function TeamsSection({
                 <button
                   onClick={() => distributePools("alternate")}
                   disabled={
-                    busy || savingOrder || teams.length === 0 || hasMatches
+                    busy || savingOrder || teams.length === 0 || poolsLocked
                   }
                   style={tinyPrimaryBtn}
                   title={
-                    hasMatches
+                    poolsLocked
                       ? "Locked — games already created. Reset all matches first to redistribute pools."
                       : "Alternate teams across pools by seeded order: seed 1 → pool 1, seed 2 → pool 2, seed 3 → pool 1, etc."
                   }
@@ -1166,11 +1780,11 @@ function TeamsSection({
                 <button
                   onClick={() => distributePools("snake")}
                   disabled={
-                    busy || savingOrder || teams.length === 0 || hasMatches
+                    busy || savingOrder || teams.length === 0 || poolsLocked
                   }
                   style={tinySecondaryBtn}
                   title={
-                    hasMatches
+                    poolsLocked
                       ? "Locked — games already created. Reset all matches first to redistribute pools."
                       : "Snake-draft teams for competitive balance: 1,2,2,1,1,2,2,1. Keeps the average seed equal across pools."
                   }
@@ -1218,6 +1832,31 @@ function TeamsSection({
       </form>
 
       {error && <ErrorBox message={error} />}
+
+      {poolsLocked && showPoolColumn && (
+        <div
+          role="note"
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "flex-start",
+            padding: 12,
+            marginBottom: 16,
+            background: warnBg,
+            border: `1px solid ${courtYellow}`,
+            borderRadius: 6,
+            color: warnFg,
+            fontSize: 13,
+            fontWeight: 500,
+            lineHeight: 1.4,
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 15, lineHeight: 1.3 }}>
+            🔒
+          </span>
+          <span>{POOL_LOCK_MESSAGE}</span>
+        </div>
+      )}
 
       {teams.length === 0 ? (
         <Empty>No teams yet — add one above.</Empty>
@@ -1329,14 +1968,22 @@ function TeamsSection({
                     return (
                       <tr
                         key={team.captainRegId}
-                        draggable={showSeedColumn && editingTeamId === null}
+                        draggable={
+                          showSeedColumn && editingTeamId === null && !poolsLocked
+                        }
                         onDragStart={(e) => {
-                          if (!showSeedColumn || editingTeamId !== null) return;
+                          if (
+                            !showSeedColumn ||
+                            editingTeamId !== null ||
+                            poolsLocked
+                          )
+                            return;
                           setDragIdx(i);
                           e.dataTransfer.effectAllowed = "move";
                         }}
                         onDragOver={(e) => {
-                          if (!showSeedColumn || dragIdx === null) return;
+                          if (!showSeedColumn || dragIdx === null || poolsLocked)
+                            return;
                           e.preventDefault();
                           e.dataTransfer.dropEffect = "move";
                           if (overIdx !== i) setOverIdx(i);
@@ -1362,7 +2009,9 @@ function TeamsSection({
                             ? `2px solid ${courtBlue}`
                             : tableRow.borderBottom,
                           cursor:
-                            showSeedColumn && editingTeamId === null
+                            showSeedColumn &&
+                            editingTeamId === null &&
+                            !poolsLocked
                               ? "grab"
                               : undefined,
                         }}
@@ -1391,9 +2040,9 @@ function TeamsSection({
                           <td style={tdStyle}>
                             <select
                               value={team.poolIndex ?? ""}
-                              disabled={hasMatches}
+                              disabled={poolsLocked}
                               title={
-                                hasMatches
+                                poolsLocked
                                   ? "Locked — games already created. Reset all matches first to change pools."
                                   : undefined
                               }
@@ -1520,6 +2169,12 @@ function RoundRobinSection({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Synchronous re-entrancy guard for generate. `busy` disables the button,
+  // but its React state update isn't visible until the next render — a
+  // double-click (or any second invoke in the same tick) can slip through
+  // before that. This ref flips synchronously, so the second call returns
+  // immediately. Belt to the delete-then-insert idempotency's suspenders.
+  const generatingRef = useRef(false);
   // Check-in gate. Set when Generate is blocked because not every registered
   // player is checked in — holds the missing list for the override confirm.
   const [gateBlocked, setGateBlocked] = useState<{
@@ -1534,46 +2189,49 @@ function RoundRobinSection({
   }, [regs, players]);
 
   // The actual generation, once validated and past (or overriding) the gate.
+  //
+  // Idempotent (bug #993): replaceRoundRobinMatches DELETEs the event's
+  // existing round-robin matches — and dependent playoff matches, since a
+  // regenerated round robin invalidates the standings the playoff seeded
+  // from — before inserting the fresh set. A second generate therefore
+  // REPLACES rather than APPENDs. generatingRef makes a concurrent invoke a
+  // no-op (busy's state update lags a render); the DB unique index (migration
+  // 20260929120000) is the final backstop.
   const doGenerate = async () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
     setBusy(true);
-    const rows: Database["public"]["Tables"]["matches"]["Insert"][] = [];
-    let position = 0;
-    const poolGroups: Team[][] =
-      event.pool_count > 1
-        ? Array.from({ length: event.pool_count }, (_, idx) =>
-            teams.filter((t) => t.poolIndex === idx + 1),
-          )
-        : [teams];
-    // Each pairing is generated once per `play_each_team_times`.
-    // Multi-pool: pairings only happen within a single pool. The match
-    // doesn't carry a pool_index column — pool membership is derived
-    // from either team's event_registration.pool_index at read time.
-    for (let rep = 0; rep < event.play_each_team_times; rep++) {
-      for (const group of poolGroups) {
-        for (let i = 0; i < group.length; i++) {
-          for (let j = i + 1; j < group.length; j++) {
-            rows.push({
-              event_id: event.id,
-              stage: "round_robin",
-              round: 1,
-              position: position++,
-              team_a_reg_id: group[i].captainRegId,
-              team_b_reg_id: group[j].captainRegId,
-              status: "pending",
-            });
-          }
+    try {
+      // DUPR-seed the field first if it has never been seeded, so the generated
+      // draw (schedule order, and — for a single pool — pairing order) reflects
+      // team strength. Respect any existing seeds (manual drag / Seed by DUPR /
+      // pool distribution / a prior run): only auto-seed when a team is still
+      // unseeded. Multi-pool membership is set on the Teams tab before this
+      // runs, so this just backfills the seed values there.
+      let orderedTeams = teams;
+      if (teams.some((t) => t.seed == null)) {
+        const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
+        if (seedErr) {
+          setError(seedErr);
+          return;
         }
+        orderedTeams = orderBySeed(teams, seedByCaptain);
       }
-    }
-    const { error: insErr } = await supabase.from("matches").insert(rows);
-    if (insErr) {
+      const { error: insErr } = await replaceRoundRobinMatches(
+        supabase as unknown as MatchesWriteClient,
+        event,
+        orderedTeams,
+      );
+      if (insErr) {
+        setError(insErr.message);
+        return;
+      }
+      await autoTransitionEventStatus(event.id);
+      await onChange();
+    } finally {
       setBusy(false);
-      setError(insErr.message);
-      return;
+      generatingRef.current = false;
     }
-    await autoTransitionEventStatus(event.id);
-    setBusy(false);
-    await onChange();
   };
 
   // Validate, then gate on check-in. Generating matches starts play, so we
@@ -1666,29 +2324,18 @@ function RoundRobinSection({
             : "No matches yet. Click “Generate matches” to create the round-robin pairings."}
         </Empty>
       ) : (
-        <table style={tableStyle}>
-          <thead>
-            <tr style={tableHeadRow}>
-              <th style={{ ...thStyle, width: 40 }}>#</th>
-              <th style={thStyle}>Team A</th>
-              <th style={{ ...thStyle, width: 80, textAlign: "center" }}>Score</th>
-              <th style={thStyle}>Team B</th>
-              <th style={{ ...thStyle, width: 100 }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matches.map((m, i) => (
-              <MatchRow
-                key={m.id}
-                match={m}
-                index={i + 1}
-                teamByAnyRegId={teamByAnyRegId}
-                event={event}
-                onSaved={onChange}
-              />
-            ))}
-          </tbody>
-        </table>
+        <div style={matchGridStyle}>
+          {matches.map((m, i) => (
+            <MatchCard
+              key={m.id}
+              match={m}
+              index={i + 1}
+              teamByAnyRegId={teamByAnyRegId}
+              event={event}
+              onSaved={onChange}
+            />
+          ))}
+        </div>
       )}
 
       {/* Check-in status hint before matches exist — tells the organizer why
@@ -1736,10 +2383,17 @@ function RoundRobinSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Match row (used by both RR and playoff sections)
+// Match card (used by the RR, playoff, and double-elim sections)
+//
+// Layout only: a self-contained card that reads well at phone width
+// (issue #500 — mobile-first). Teams stack vertically with their score
+// input aligned to the right edge (tabular), a status accent runs down
+// the left border, and Save sits in its own action row. The score-save
+// logic (onSave / validateScore / feed-forward) is unchanged from the
+// prior table-row rendering.
 // ─────────────────────────────────────────────────────────────────────
 
-function MatchRow({
+function MatchCard({
   match,
   index,
   teamByAnyRegId,
@@ -1817,27 +2471,37 @@ function MatchRow({
     await onSaved();
   };
 
+  // Status accent runs down the card's left border so a director can
+  // scan pending / live / final at a glance mid-tournament.
+  const statusAccent =
+    match.status === "completed"
+      ? courtGreen
+      : match.status === "in_progress"
+        ? courtYellow
+        : rule;
+  const winnerA = match.winner_reg_id === match.team_a_reg_id;
+  const winnerB = match.winner_reg_id === match.team_b_reg_id;
+
   return (
-    <tr style={tableRow}>
-      <td style={{ ...tdStyle, color: inkMuted }}>{index}</td>
-      <td
-        style={{
-          ...tdStyle,
-          fontWeight: match.winner_reg_id === match.team_a_reg_id ? 600 : 400,
-          color: teamA ? ink : inkMuted,
-        }}
-      >
-        {teamA?.label ?? "TBD"}
-      </td>
-      <td
-        style={{
-          ...tdStyle,
-          textAlign: "center",
-          whiteSpace: "nowrap",
-        }}
-      >
-        <div className="no-print" style={{ display: "inline-flex", alignItems: "center", flexWrap: "wrap" }}>
+    <div style={{ ...matchCardStyle, borderLeftColor: statusAccent }}>
+      <div style={matchCardHeader}>
+        <span style={matchNumStyle}>Match {index}</span>
+        <MatchStatusBadge status={match.status} />
+      </div>
+
+      <div style={matchTeamsBlock}>
+        <div style={matchTeamRow}>
+          <span
+            style={{
+              ...matchTeamName,
+              fontWeight: winnerA ? 700 : 500,
+              color: teamA ? ink : inkMuted,
+            }}
+          >
+            {teamA?.label ?? "TBD"}
+          </span>
           <input
+            className="no-print"
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -1848,8 +2512,27 @@ function MatchRow({
             style={scoreInputStyle}
             aria-label={`${teamA?.label ?? "Team A"} score`}
           />
-          <span style={{ margin: "0 4px", color: inkMuted }}>–</span>
+          {/* Plain text so a printed bracket shows the finished score
+              instead of an empty-looking form control. */}
+          <span className="print-score" style={matchPrintScore}>
+            {match.team_a_score ?? "–"}
+          </span>
+        </div>
+
+        <span style={matchVsStyle}>vs</span>
+
+        <div style={matchTeamRow}>
+          <span
+            style={{
+              ...matchTeamName,
+              fontWeight: winnerB ? 700 : 500,
+              color: teamB ? ink : inkMuted,
+            }}
+          >
+            {teamB?.label ?? "TBD"}
+          </span>
           <input
+            className="no-print"
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
@@ -1860,40 +2543,23 @@ function MatchRow({
             style={scoreInputStyle}
             aria-label={`${teamB?.label ?? "Team B"} score`}
           />
-          <button
-            onClick={onSave}
-            disabled={!canPlay || busy}
-            style={{ ...tinyPrimaryBtn, marginLeft: 8 }}
-          >
-            {busy ? "…" : "Save"}
-          </button>
-          {err && (
-            <div style={{ color: dangerFg, fontSize: 11, marginTop: 4 }}>
-              {err}
-            </div>
-          )}
+          <span className="print-score" style={matchPrintScore}>
+            {match.team_b_score ?? "–"}
+          </span>
         </div>
-        {/* Plain text so a printed bracket shows a finished score
-            instead of an empty-looking form control. */}
-        <span className="print-score">
-          {match.team_a_score !== null && match.team_b_score !== null
-            ? `${match.team_a_score}–${match.team_b_score}`
-            : "–"}
-        </span>
-      </td>
-      <td
-        style={{
-          ...tdStyle,
-          fontWeight: match.winner_reg_id === match.team_b_reg_id ? 600 : 400,
-          color: teamB ? ink : inkMuted,
-        }}
-      >
-        {teamB?.label ?? "TBD"}
-      </td>
-      <td style={tdStyle}>
-        <MatchStatusBadge status={match.status} />
-      </td>
-    </tr>
+      </div>
+
+      <div className="no-print" style={matchCardActions}>
+        {err && <span style={{ color: dangerFg, fontSize: 12 }}>{err}</span>}
+        <button
+          onClick={onSave}
+          disabled={!canPlay || busy}
+          style={matchSaveBtn(!canPlay || busy)}
+        >
+          {busy ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1941,28 +2607,12 @@ function StandingsSection({
   medals: Medal[];
 }) {
   const multiPool = event.pool_count > 1;
-  const grouped = useMemo(() => {
-    if (!multiPool) return [{ pool: null as number | null, rows: standings }];
-    const map = new Map<number, Standing[]>();
-    const unassigned: Standing[] = [];
-    for (const s of standings) {
-      const p = s.team.poolIndex;
-      if (p == null) {
-        unassigned.push(s);
-        continue;
-      }
-      const arr = map.get(p) ?? [];
-      arr.push(s);
-      map.set(p, arr);
-    }
-    const groups = Array.from(map.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([pool, rows]) => ({ pool: pool as number | null, rows }));
-    if (unassigned.length > 0) {
-      groups.push({ pool: null, rows: unassigned });
-    }
-    return groups;
-  }, [standings, multiPool]);
+  // Reuse the one grouping helper (lib/bracketTeams) so the console and the
+  // public results page split pools identically (D-0049).
+  const grouped = useMemo(
+    () => groupStandingsByPool(standings, multiPool),
+    [standings, multiPool],
+  );
 
   return (
     <section>
@@ -2138,6 +2788,12 @@ function PlayoffSection({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Re-entrancy guard — same rationale as RoundRobinSection.doGenerate:
+  // `busy` disables the button but its state update lags a render, so a
+  // double-click could double-generate. This ref blocks the second call
+  // synchronously.
+  const generatingRef = useRef(false);
+
   const N = event.teams_advancing_to_playoff;
   const R = event.playoff_rounds;
   // playoff_seeding (migration 20260911190000) — generated types lag it.
@@ -2145,7 +2801,65 @@ function PlayoffSection({
     (event as unknown as { playoff_seeding?: "overall" | "cross_pool" }).playoff_seeding ?? "overall";
   const crossPool = seeding === "cross_pool" && event.pool_count === 2 && N === 4 && R === 1;
 
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Preview = exactly what onGenerate will build. Both read the same
+  // helpers, so what the organizer confirms is what gets created.
+  const previewSeeds = selectPlayoffSeeds(standings, N, crossPool);
+  const previewPairs = pairPlayoffSeeds(previewSeeds, R);
+
+  const ordinal = (n: number) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+  };
+
+  // Why this team qualifies: pool finish (cross-pool) or overall rank, + record.
+  const seedReason = (s: Standing, seedIdx: number) => {
+    const rec = `${s.wins}-${s.losses}, ${s.diff >= 0 ? "+" : ""}${s.diff} pts`;
+    if (crossPool) {
+      // Seeds arrive [PoolA#1, PoolB#1, PoolA#2, PoolB#2] — 0,1 are pool
+      // winners, 2,3 the runners-up. Pool letter comes from the team's
+      // 1-indexed pool (1 → A, 2 → B).
+      const letter = poolLetter(s.team.poolIndex ?? 0);
+      return `${seedIdx < 2 ? "Won" : "Runner-up in"} Pool ${letter} · ${rec}`;
+    }
+    return `${ordinal(seedIdx + 1)} overall · ${rec}`;
+  };
+
+  const pairLabel = (i: number) =>
+    R === 1
+      ? i === 0
+        ? "Gold / Silver match"
+        : i === 1
+          ? "Bronze / 4th match"
+          : `Medal match ${i + 1}`
+      : `Semifinal ${i + 1}`;
+
+  const ppLbl: CSSProperties = {
+    fontWeight: 700,
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: inkMuted,
+    margin: "13px 0 5px",
+  };
+  const ppTh: CSSProperties = {
+    padding: "3px 6px",
+    fontSize: 10,
+    textTransform: "uppercase",
+    color: inkMuted,
+    borderBottom: `1px solid ${rule}`,
+    textAlign: "center",
+  };
+  const ppTd: CSSProperties = {
+    padding: "3px 6px",
+    borderBottom: `1px solid ${ruleSoft}`,
+    textAlign: "center",
+  };
+
   const onGenerate = async () => {
+    if (generatingRef.current) return;
     setError(null);
     if (N === 0) {
       setError(
@@ -2153,132 +2867,73 @@ function PlayoffSection({
       );
       return;
     }
-    let top = standings.slice(0, N).map((s) => s.team);
-    if (top.length < N) {
-      setError(`Need at least ${N} teams in the standings.`);
-      return;
-    }
     if (R === 1 && N % 2 !== 0) {
       setError("Single-round playoffs need an even Top-N.");
       return;
     }
-    if (R === 2 && N !== 4) {
-      setError("2-round playoffs (semis + final + bronze) support Top-4 only.");
+    if (R >= 2 && bracketRoundsForN(N) !== R) {
+      const supported = bracketRoundsForN(N);
+      setError(
+        supported == null
+          ? `A single-elimination bracket isn't supported for Top-${N}. Use 1 round (pairwise medal matches), or set Top-4/6/8.`
+          : `Top-${N} is a ${supported}-round bracket — set playoff rounds to ${supported} (or 1 for pairwise), not ${R}.`,
+      );
       return;
     }
-    // Cross-pool seeding (2 pools, top 4, 1 round): Pool 1 #1 v Pool 2 #1
-    // for gold (position 0), Pool 1 #2 v Pool 2 #2 for bronze (position 1).
-    // Standings are already ordered by record, so filtering by pool keeps
-    // each pool's placement order.
+    // Cross-pool seeding reads each pool's placement order, so every team
+    // must be assigned to a pool first.
     if (crossPool) {
-      const inPool = (p: number) => standings.filter((s) => s.team.poolIndex === p).map((s) => s.team);
-      const p1 = inPool(1);
-      const p2 = inPool(2);
       const unassigned = standings.filter((s) => s.team.poolIndex == null).length;
       if (unassigned > 0) {
         setError(`${unassigned} team${unassigned === 1 ? " is" : "s are"} not assigned to a pool — assign pools on the Teams tab first.`);
         return;
       }
-      if (p1.length < 2 || p2.length < 2) {
-        setError("Cross-pool seeding needs at least 2 teams in each pool.");
-        return;
-      }
-      top = [p1[0], p2[0], p1[1], p2[1]];
     }
-
-    setBusy(true);
-    const rows: Database["public"]["Tables"]["matches"]["Insert"][] = [];
-
-    // Two config bundles. For R=1 every match is a medal match and
-    // uses medalConfig. For R=2 the semis (round 1) use semiConfig
-    // and the final + bronze (round 2) use medalConfig. Values are
-    // copied onto each match row at generation so per-match edits
-    // diverge cleanly and event-default changes don't retro-rewrite
-    // an in-flight bracket.
-    const medalConfig = {
-      match_format: event.medal_match_format,
-      match_points_to_win: event.medal_points_to_win,
-      match_win_by: event.medal_win_by,
-      match_minutes_per_game: event.medal_minutes_per_game,
-    } as const;
-    const semiConfig = {
-      match_format: event.semifinal_match_format,
-      match_points_to_win: event.semifinal_points_to_win,
-      match_win_by: event.semifinal_win_by,
-      match_minutes_per_game: event.semifinal_minutes_per_game,
-    } as const;
-
-    if (R === 1) {
-      // Pairwise medal matches: (seed1 v seed2), (seed3 v seed4), …
-      // Each pair plays directly for that medal slot — no feed-forward.
-      for (let i = 0; i < N; i += 2) {
-        rows.push({
-          event_id: event.id,
-          stage: "playoff",
-          round: 1,
-          position: i / 2,
-          team_a_reg_id: top[i].captainRegId,
-          team_b_reg_id: top[i + 1].captainRegId,
-          status: "pending",
-          ...medalConfig,
-        });
-      }
-    } else {
-      // R=2, N=4: two semis (1v4, 2v3) → gold final + bronze game.
-      // Semis carry semiConfig; round 2 carries medalConfig.
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 1,
-        position: 0,
-        team_a_reg_id: top[0].captainRegId,
-        team_b_reg_id: top[3].captainRegId,
-        status: "pending",
-        ...semiConfig,
-      });
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 1,
-        position: 1,
-        team_a_reg_id: top[1].captainRegId,
-        team_b_reg_id: top[2].captainRegId,
-        status: "pending",
-        ...semiConfig,
-      });
-      // Round 2 gold + bronze placeholders. team slots are populated
-      // via feedForwardPlayoffWinners as the semis complete.
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 2,
-        position: 0,
-        team_a_reg_id: null,
-        team_b_reg_id: null,
-        status: "pending",
-        ...medalConfig,
-      });
-      rows.push({
-        event_id: event.id,
-        stage: "playoff",
-        round: 2,
-        position: 1,
-        team_a_reg_id: null,
-        team_b_reg_id: null,
-        status: "pending",
-        ...medalConfig,
-      });
-    }
-
-    const { error: insErr } = await supabase.from("matches").insert(rows);
-    if (insErr) {
-      setBusy(false);
-      setError(insErr.message);
+    // Who advances, in seed order. Shared with the confirm preview
+    // (playoffSeeding.selectPlayoffSeeds) so the two can't diverge:
+    // overall = top-N of the standings; cross-pool (2 pools, top 4) =
+    // [Pool A #1, Pool B #1, Pool A #2, Pool B #2].
+    const seeds = selectPlayoffSeeds(standings, N, crossPool);
+    if (seeds.length < N) {
+      setError(
+        crossPool
+          ? "Cross-pool seeding needs at least 2 teams in each pool."
+          : `Need at least ${N} teams in the standings.`,
+      );
       return;
     }
-    await autoTransitionEventStatus(event.id);
-    setBusy(false);
-    await onChange();
+    const top = seeds.map((s) => s.team);
+
+    generatingRef.current = true;
+    setBusy(true);
+    try {
+      // Idempotent (bug #993): replacePlayoffMatches DELETEs the event's
+      // existing playoff matches (mirrors "Reset playoff") before inserting
+      // the fresh bracket, so a second generate REPLACES rather than APPENDs.
+      // Round-robin matches are untouched. buildPlayoffRows owns every
+      // playoff shape and copies the event's medal/semifinal config onto each
+      // row: R=1 pairwise medal matches, and the single-elimination brackets
+      // (Top-4 → 2 rounds, Top-6/8 → 3) whose byes/seeding/bronze routing come
+      // from playoffBracket.ts (empty slots filled by feedForwardPlayoffWinners
+      // as upstream matches complete). The seeds fed in come from
+      // selectPlayoffSeeds — the same helper the confirm preview uses — so what
+      // an organizer confirms in the preview is what gets created.
+      const rows = buildPlayoffRows(event, top);
+      const { error: insErr } = await replacePlayoffMatches(
+        supabase as unknown as MatchesWriteClient,
+        event.id,
+        rows,
+      );
+      if (insErr) {
+        setError(insErr.message);
+        return;
+      }
+      await autoTransitionEventStatus(event.id);
+      await onChange();
+    } finally {
+      setBusy(false);
+      generatingRef.current = false;
+    }
   };
 
   const onReset = async () => {
@@ -2374,11 +3029,127 @@ function PlayoffSection({
                 ? crossPool
                   ? "1 round — cross-pool: pool winners for gold, runners-up for bronze"
                   : "1 round (pairwise medal matches)"
-                : "2 rounds (semis + final + bronze)"}
+                : R === 2
+                  ? "2 rounds (semis → final + bronze)"
+                  : `${R} rounds (${N === 6 ? "play-in" : "quarterfinals"} → semis → final + bronze)`}
             </div>
-            <button onClick={onGenerate} disabled={busy} style={primaryBtn(busy)}>
+            <button
+              onClick={() => setShowPreview(true)}
+              disabled={busy}
+              style={primaryBtn(busy)}
+            >
               {busy ? "Generating…" : "Generate playoff bracket"}
             </button>
+            {showPreview && (
+              <ConfirmModal
+                title="Generate playoff bracket?"
+                confirmLabel="Generate bracket"
+                cancelLabel="Go back"
+                destructive={false}
+                onCancel={() => setShowPreview(false)}
+                onConfirm={async () => {
+                  setShowPreview(false);
+                  await onGenerate();
+                }}
+                body={
+                  <div
+                    style={{
+                      fontFamily: bodyFontStack,
+                      fontSize: 13,
+                      maxWidth: 560,
+                    }}
+                  >
+                    <div style={ppLbl}>Final standings</div>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr>
+                          <th style={ppTh}>#</th>
+                          <th style={{ ...ppTh, textAlign: "left" }}>Team</th>
+                          <th style={ppTh}>W-L</th>
+                          <th style={ppTh}>Diff</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {standings.map((s, i) => {
+                          const advancing = previewSeeds.includes(s);
+                          return (
+                            <tr
+                              key={s.team.captainRegId}
+                              style={
+                                advancing ? { background: successBg } : undefined
+                              }
+                            >
+                              <td style={ppTd}>{i + 1}</td>
+                              <td
+                                style={{
+                                  ...ppTd,
+                                  textAlign: "left",
+                                  fontWeight: advancing ? 700 : 400,
+                                }}
+                              >
+                                {s.team.label}
+                                {advancing ? " ✓" : ""}
+                              </td>
+                              <td style={ppTd}>
+                                {s.wins}-{s.losses}
+                              </td>
+                              <td style={ppTd}>
+                                {s.diff >= 0 ? "+" : ""}
+                                {s.diff}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+
+                    <div style={ppLbl}>
+                      Advancing to the playoff ({previewSeeds.length})
+                    </div>
+                    {previewSeeds.length === 0 ? (
+                      <div style={{ color: dangerFg }}>
+                        {crossPool
+                          ? "Each pool needs at least 2 teams to seed a cross-pool bracket."
+                          : "Not enough teams in the standings to seed a bracket."}
+                      </div>
+                    ) : (
+                      <ol style={{ margin: 0, paddingLeft: 20 }}>
+                        {previewSeeds.map((s, i) => (
+                          <li
+                            key={s.team.captainRegId}
+                            style={{ marginBottom: 3 }}
+                          >
+                            <b>{s.team.label}</b> — {seedReason(s, i)}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+
+                    {previewPairs.length > 0 && (
+                      <>
+                        <div style={ppLbl}>Proposed matchups</div>
+                        <ul style={{ margin: 0, paddingLeft: 20 }}>
+                          {previewPairs.map(([a, b], i) => (
+                            <li key={i} style={{ marginBottom: 3 }}>
+                              <span style={{ color: inkMuted }}>
+                                {pairLabel(i)}:
+                              </span>{" "}
+                              <b>
+                                #{previewSeeds.indexOf(a) + 1} {a.team.label}
+                              </b>{" "}
+                              vs{" "}
+                              <b>
+                                #{previewSeeds.indexOf(b) + 1} {b.team.label}
+                              </b>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                }
+              />
+            )}
           </div>
         )
       ) : (
@@ -2399,37 +3170,18 @@ function PlayoffSection({
                 >
                   {playoffRoundLabel(round, R, ms.length)}
                 </h3>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr style={tableHeadRow}>
-                      <th style={{ ...thStyle, width: 40 }}>#</th>
-                      <th style={thStyle}>Team A</th>
-                      <th
-                        style={{
-                          ...thStyle,
-                          width: 80,
-                          textAlign: "center",
-                        }}
-                      >
-                        Score
-                      </th>
-                      <th style={thStyle}>Team B</th>
-                      <th style={{ ...thStyle, width: 100 }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ms.map((m, i) => (
-                      <MatchRow
-                        key={m.id}
-                        match={m}
-                        index={i + 1}
-                        teamByAnyRegId={teamByAnyRegId}
-                        event={event}
-                        onSaved={onChange}
-                      />
-                    ))}
-                  </tbody>
-                </table>
+                <div style={matchGridStyle}>
+                  {ms.map((m, i) => (
+                    <MatchCard
+                      key={m.id}
+                      match={m}
+                      index={i + 1}
+                      teamByAnyRegId={teamByAnyRegId}
+                      event={event}
+                      onSaved={onChange}
+                    />
+                  ))}
+                </div>
               </div>
             ))}
           {champion && (
@@ -2483,6 +3235,9 @@ function DoubleElimSection({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Re-entrancy guard — see RoundRobinSection.doGenerate. Blocks a
+  // double-click before `busy` re-renders the disabled button.
+  const generatingRef = useRef(false);
   const format = event.double_elim_final ?? "crossover";
   const isDoubles = event.format === "doubles";
   const rows = matches as DEMatchRow[];
@@ -2493,14 +3248,24 @@ function DoubleElimSection({
   const preview = useMemo(() => (teams.length >= 3 ? buildDoubleElim(teams.length, format) : null), [teams.length, format]);
 
   const onGenerate = async () => {
+    if (generatingRef.current) return;
     setError(null);
     if (teams.length < 3) { setError("Double elimination needs at least 3 teams."); return; }
-    if (unseeded > 0) { setError(`${unseeded} team${unseeded === 1 ? " has" : "s have"} no seed — drag the Teams tab into order or Randomize seeds.`); return; }
     if (unpaired > 0) { setError(`${unpaired} player${unpaired === 1 ? " is" : "s are"} unpaired — pair them (or Randomize remaining) first.`); return; }
+    generatingRef.current = true;
     setBusy(true);
     try {
+      // Seeds drive elimination placement (seedOrder puts byes on the top
+      // seeds). DUPR-seed the field when it isn't fully seeded yet; respect
+      // existing seeds (manual drag / Randomize / Seed by DUPR) otherwise.
+      let orderedSeeded = seeded;
+      if (unseeded > 0) {
+        const { seedByCaptain, error: seedErr } = await persistDuprSeeds(event, teams);
+        if (seedErr) throw new Error(seedErr);
+        orderedSeeded = orderBySeed(teams, seedByCaptain);
+      }
       const de = buildDoubleElim(teams.length, format);
-      const regOfSeed = (seed: number) => seeded[seed - 1]?.captainRegId ?? null;
+      const regOfSeed = (seed: number) => orderedSeeded[seed - 1]?.captainRegId ?? null;
       const poolConfig = {
         match_format: "single_game" as const,
         match_points_to_win: event.points_to_win,
@@ -2529,6 +3294,16 @@ function DoubleElimSection({
         status: "pending",
         ...(isMedal(x) ? medalConfig : poolConfig),
       }));
+      // Idempotent (bug #993): a DE event is entirely a playoff bracket, so —
+      // mirroring "Reset bracket" (onReset) — clear every existing match in
+      // the event before re-inserting. A second generate REPLACES rather than
+      // APPENDs. Done after seeding/row-build so a failure there leaves the
+      // existing bracket intact.
+      const { error: clearErr } = await clearEventMatches(
+        untyped as unknown as MatchesWriteClient,
+        event.id,
+      );
+      if (clearErr) throw new Error(clearErr.message);
       const { data: created, error: insErr } = await untyped.from("matches").insert(inserts).select("id, slot_key");
       if (insErr) throw new Error(insErr.message);
       const idBySlot = new Map<string, string>((created as { id: string; slot_key: string }[]).map((r) => [r.slot_key, r.id]));
@@ -2555,6 +3330,7 @@ function DoubleElimSection({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+      generatingRef.current = false;
     }
   };
 
@@ -2615,7 +3391,7 @@ function DoubleElimSection({
             {teams.length} seeded teams ·{" "}
             {format === "crossover" ? "crossover final (true double elimination)" : "bronze only (no crossover)"}
             {preview ? ` · ${preview.slots.filter((x) => !x.ifNecessary).length} matches${format === "crossover" ? " + 1 if necessary" : ""}` : ""}
-            {unseeded > 0 ? ` · ${unseeded} unseeded` : ""}
+            {unseeded > 0 ? ` · ${unseeded} unseeded (will be DUPR-seeded on generate)` : ""}
             {unpaired > 0 ? ` · ${unpaired} unpaired` : ""}
           </div>
           <button onClick={onGenerate} disabled={busy || teams.length < 3} style={primaryBtn(busy || teams.length < 3)}>
@@ -2631,11 +3407,7 @@ function DoubleElimSection({
                 <span>{selected.label ?? selected.slot_key} — enter the score</span>
                 <button onClick={() => setSelectedId(null)} style={tinySecondaryBtn}>Close</button>
               </div>
-              <table style={tableStyle}>
-                <tbody>
-                  <MatchRow key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
-                </tbody>
-              </table>
+              <MatchCard key={selected.id} match={selected} index={1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
             </div>
           )}
           {medals.length > 0 && (
@@ -2651,22 +3423,11 @@ function DoubleElimSection({
               <h3 className="print-round-head" style={{ fontSize: 13, color: inkMuted, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
                 {g.rows[0]?.label && g.rows.length === 1 ? g.rows[0].label : `${g.bracket === "final" ? "Final" : g.bracket === "winners" ? "Winners bracket" : "Consolation bracket"} · round ${g.round}`}
               </h3>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={tableHeadRow}>
-                    <th style={{ ...thStyle, width: 70 }}>#</th>
-                    <th style={thStyle}>Team A</th>
-                    <th style={{ ...thStyle, width: 80, textAlign: "center" }}>Score</th>
-                    <th style={thStyle}>Team B</th>
-                    <th style={{ ...thStyle, width: 100 }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.rows.map((r, i) => (
-                    <MatchRow key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
-                  ))}
-                </tbody>
-              </table>
+              <div style={matchGridStyle}>
+                {g.rows.map((r, i) => (
+                  <MatchCard key={r.id} match={r} index={i + 1} teamByAnyRegId={teamByAnyRegId} event={event} onSaved={onChange} />
+                ))}
+              </div>
               {g.rows.some((r) => !r.team_a_reg_id || !r.team_b_reg_id) && slotsByKey.size > 0 && (
                 <div style={{ fontSize: 11, color: inkMuted, marginTop: 4 }}>
                   {g.rows
@@ -2691,23 +3452,15 @@ function DoubleElimSection({
   );
 }
 
+// Round heading for the playoff table. Delegates to the shared bracket
+// vocabulary so Medal / Play-in / Quarterfinals / Semifinals / Final + bronze
+// read the same here, in the scheduler, and on the court manager.
 function playoffRoundLabel(
   round: number,
   totalRounds: number,
   matchesInRound: number,
 ): string {
-  // Pairwise medal round (R=1): single round of 1v2 / 3v4 / etc.
-  if (totalRounds === 1) return "Medal matches";
-  // 2-round bracket (R=2, N=4): semis, then final + bronze.
-  if (totalRounds === 2) {
-    if (round === 1) return "Semifinals";
-    if (round === 2) return "Final + bronze";
-  }
-  // Generic fallback.
-  if (matchesInRound === 1) return "Final";
-  if (matchesInRound === 2) return "Semifinals";
-  if (matchesInRound === 4) return "Quarterfinals";
-  return `Round ${round}`;
+  return playoffRoundName(round, totalRounds, matchesInRound);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -2821,124 +3574,11 @@ function TabStrip({
   );
 }
 
-// Settings tab — read-only view of every event-config column with an
-// "Edit settings" link to the existing form page. We don't inline-
-// edit yet because that'd require lifting EventFormPage's form into
-// a shared component; deferred until there's a clear need.
-function SettingsTab({
-  event,
-  editUrl,
-}: {
-  event: Event;
-  editUrl: string;
-}) {
-  const playoffSummary =
-    event.teams_advancing_to_playoff > 0
-      ? `${event.teams_advancing_to_playoff} (${event.playoff_rounds} round${event.playoff_rounds === 1 ? "" : "s"})`
-      : "None";
-  return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
-        <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: ink }}>
-          Event settings
-        </h2>
-        <Link
-          to={editUrl}
-          style={{
-            padding: "8px 16px",
-            background: ink,
-            color: cream,
-            textDecoration: "none",
-            borderRadius: 6,
-            fontSize: 13,
-            fontWeight: 600,
-            fontFamily: headingFontStack,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Edit settings →
-        </Link>
-      </div>
-      <dl
-        style={{
-          display: "grid",
-          gridTemplateColumns: "max-content 1fr",
-          rowGap: 8,
-          columnGap: 24,
-          fontSize: 13,
-          margin: 0,
-          maxWidth: 700,
-        }}
-      >
-        <DtDd label="Name" value={event.name} />
-        <DtDd label="Format" value={capitalize(event.format)} />
-        <DtDd label="Gender" value={capitalize(event.gender)} />
-        <DtDd
-          label="Bracket type"
-          value={event.bracket_type.replace(/_/g, " ")}
-        />
-        <DtDd label="Pools" value={String(event.pool_count)} />
-        <DtDd
-          label="Play each team"
-          value={`${event.play_each_team_times}×`}
-        />
-        <DtDd
-          label="Game"
-          value={`${event.points_to_win} win by ${event.win_by}`}
-        />
-        <DtDd
-          label="Timeouts per game"
-          value={String(event.timeouts_per_game)}
-        />
-        <DtDd label="Playoff" value={playoffSummary} />
-        <DtDd
-          label="Min age"
-          value={event.min_age != null ? String(event.min_age) : "—"}
-        />
-        <DtDd
-          label="Max age"
-          value={event.max_age != null ? String(event.max_age) : "—"}
-        />
-        <DtDd
-          label="Min rating"
-          value={event.min_rating != null ? String(event.min_rating) : "—"}
-        />
-        <DtDd
-          label="Max rating"
-          value={event.max_rating != null ? String(event.max_rating) : "—"}
-        />
-        <DtDd label="Rating source" value={event.rating_source ?? "—"} />
-        <DtDd
-          label="Event fee"
-          value={`$${(event.event_fee_cents / 100).toFixed(2)}`}
-        />
-        <DtDd
-          label="Max teams"
-          value={event.max_teams != null ? String(event.max_teams) : "Unlimited"}
-        />
-      </dl>
-    </section>
-  );
-}
-
-function DtDd({ label, value }: { label: string; value: string }) {
-  return (
-    <>
-      <dt style={{ color: inkMuted }}>{label}</dt>
-      <dd style={{ margin: 0, color: ink }}>{value}</dd>
-    </>
-  );
-}
+// The event "Settings" surface (console tab + wizard step) is now the
+// shared, editable <EventSettingsForm variant="inline">, so the director
+// edits format / pools / playoff config in place instead of navigating
+// to the /edit page. The old read-only SettingsTab + DtDd summary that
+// linked out lived here and was removed with #1005.
 
 function SectionHeader({
   title,
@@ -3033,14 +3673,116 @@ const tdStyle: CSSProperties = {
 };
 
 const scoreInputStyle: CSSProperties = {
-  width: 50,
-  padding: "4px 6px",
+  width: 60,
+  flexShrink: 0,
+  padding: "8px 6px",
   border: `1px solid ${rule}`,
-  borderRadius: 4,
-  fontSize: 13,
+  borderRadius: 6,
+  // 16px keeps iOS from zooming the viewport when the field is focused.
+  fontSize: 16,
   fontFamily: bodyFontStack,
+  fontVariantNumeric: "tabular-nums",
   textAlign: "center",
 };
+
+// ── Match card (Games tab) ───────────────────────────────────────────
+// The list container: a responsive grid that is a single column at phone
+// width (issue #500) and flows into multiple columns as space allows.
+const matchGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+  gap: 10,
+  alignItems: "start",
+};
+
+const matchCardStyle: CSSProperties = {
+  border: `1px solid ${rule}`,
+  borderLeft: `4px solid ${rule}`, // color overridden per status
+  borderRadius: 8,
+  background: "#fff",
+  padding: "12px 14px",
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  breakInside: "avoid",
+};
+
+const matchCardHeader: CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+};
+
+const matchNumStyle: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 0.6,
+  textTransform: "uppercase",
+  color: inkMuted,
+};
+
+const matchTeamsBlock: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+};
+
+const matchTeamRow: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+};
+
+const matchTeamName: CSSProperties = {
+  flex: "1 1 auto",
+  minWidth: 0,
+  fontSize: 15,
+  lineHeight: 1.3,
+  overflowWrap: "anywhere",
+};
+
+const matchVsStyle: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  color: inkMuted,
+  textAlign: "center",
+  padding: "2px 0",
+};
+
+const matchPrintScore: CSSProperties = {
+  fontSize: 15,
+  fontWeight: 700,
+  fontVariantNumeric: "tabular-nums",
+};
+
+const matchCardActions: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+function matchSaveBtn(disabled: boolean): CSSProperties {
+  return {
+    padding: "8px 20px",
+    minHeight: 40, // ≥44px tap target with the border box
+    background: disabled ? inkMuted : ink,
+    color: cream,
+    border: "none",
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 600,
+    fontFamily: headingFontStack,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
 
 function primaryBtn(busy: boolean): CSSProperties {
   return {

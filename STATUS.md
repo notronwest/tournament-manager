@@ -5,6 +5,64 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
+
+Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
+
+Blocking finding: the new entry's own title says "harness parse break persists (**4th occurrence**)" (and the commit headline repeats it) but its body says "**3 consecutive scheduled runs**" and lists only two distinct CI runs — the third list item ("this morning's triage of that same nightly run") is the same run (`36055375759`) as the second, double-counted. Title and body contradict each other within the same entry, and the "4th" isn't supported anywhere in the text added. Everything else checked out: correctly appended above (not rewriting) history, "No code changes" claim verified true, and the Job 2 claim (PR #965, regression spec for #64) verified to exist and match.
+
+Posted ✏️ REQUEST CHANGES with the fix (make title and body agree on one number) and applied `reviewed:changes`.
+
+**Next:** #963 needs a one-line fix from the Builder; #961/#947/#955 still in the review queue, not touched this session.
+
+## 2026-10-01 — Reviewer: PR #959 reviewed (APPROVE)
+
+Reviewed PR #959 ("docs(status): backfill 2026-09-23 Testing agent runs + 2026-09-24 morning run", Closes #958) — docs-only change to `STATUS.md`, no code/UI touched. Confirmed the claimed gap was real (`origin/main` topped out at the 2026-09-22 entry before this PR), the diff is pure addition in correct newest-first order with no history rewritten, and spot-checked the entries' factual claims against live GitHub state (PRs #951, #953, #955, #957) — all accurate. Posted ✅ APPROVE + label `reviewed:approve`.
+
+## 2026-10-01 — Reviewer: PR #947 reviewed (REQUEST CHANGES)
+
+Reviewed PR #947 ("Charity donations P2 [UX] — add-donation field + order-summary line at checkout", Closes #946) against its acceptance criteria, `DECISIONS.md`, and `CLAUDE.md`. Posted ✏️ REQUEST CHANGES + label `reviewed:changes`: (1) D-0049 — the new preset-chip donation-amount picker in `CheckoutPage.tsx` duplicates/diverges the existing one in `DonatePage.tsx` (same state shape and chip logic, different preset values, no shared component) instead of extracting a shared `DonationAmountPicker`; (2) the branch is `CONFLICTING`/`DIRTY` against `main` (flagged by the Builder itself on 2026-09-24, still unresolved). Also flagged non-blocking, already-disclosed-by-the-author context for Ron: once past the Payment Element step the "Pay $X →" button shows a donation-inclusive total that the real Stripe charge won't honor until #378's `[FN]` half ships. Scope/AC otherwise checked out (no payment/edge-function file touched, floor enforcement correct, gating on `accepts_donations` correct).
+
+**Next:** Builder picks this back up — extract the shared amount-picker component and rebase onto `main` before this can be re-reviewed/merged. Ron still owes the separate "hold vs. ship-with-gap" call on the donation preview/charge mismatch once #947 is otherwise clean.
+
+## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
+
+Triaged the newest untriaged regression run, [35737353782](https://github.com/notronwest/tournament-manager/actions/runs/35737353782) (2026-09-22 14:00 UTC) — workflow **failed** (56 passed, 1 failed, 1 flaky). `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" failed **both** attempt and retry #1 this time (`TimeoutError: locator.fill` on the partner-search placeholder) — same #936 signature, but landed persistent instead of flaky-then-pass, so this is the first of the last three occurrences to flip the run red. `registration.spec.ts` › "register for a singles event (no partner picker)" flaked once (`TimeoutError: locator.scrollIntoViewIfNeeded`) then passed on retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged — expected signature until it lands. Commented an update on #936 (with the severity bump noted) rather than filing a duplicate card; posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run). **Next:** #951 merging is the actual fix — worth prioritizing given today's run crossed from flaky-green to red.
+
+## 2026-09-21 — Testing agent (daytime run): Job 1 triage, green with known #936 flake, no new card
+
+Triaged the newest untriaged regression run, [35655046570](https://github.com/notronwest/tournament-manager/actions/runs/35655046570) (2026-09-21 21:05 UTC) — **overall green** (56 passed, 2 flaky). Both flakes are the same tracked #936 family: `registration.spec.ts` › "register needing a partner" and `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" each failed attempt 1 (`TimeoutError: locator.fill` on the partner-search placeholder) but passed retry #1. Notably better than the prior run (35621868067), where Path 1 failed both attempt and retry. PR #951 (self-seeding isolation fix for #950) is still open/unmerged, so this is the expected signature until it lands — commented an update on #936 rather than filing a duplicate card. Posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped (daytime slot; authoring cap belongs to the morning run). **Next:** once #951 merges, the following run is the real signal on whether #936's flake clears for good.
+
+## 2026-09-21 — Testing agent (daytime run): Job 1 triage, known #936 flake, no new card
+
+Triaged the newest untriaged regression run, [35621868067](https://github.com/notronwest/tournament-manager/actions/runs/35621868067) (2026-09-21 15:52 UTC). Only persistent failure (failed both attempt and retry #1): `issue-09-confirm-cancel.spec.ts` › "Path 1 — backing out of the register form after picking a partner" — `TimeoutError: locator.fill` on the partner-search placeholder, same signature already tracked in #936. Two more flaked-then-passed on retry #1 (`registration.spec.ts` › "register needing a partner", and `mobile/audit.spec.ts` (iphone) › "register tab — pending card actions usable") — same shared-mutable-seed-state family, not previously named in #936 but same root cause.
+
+This run predates PR #951 (Builder's self-seeding fix for #950) merging, so it's the expected signature until that lands — not new information. Commented an update on #936 rather than filing a duplicate card. Posted a one-line Discord triage summary to Backlog.
+
+Job 2 skipped — this is the ~15:00-local (daytime) slot per `agents/testing/PROMPT.md`, and Job 2's per-day cap belongs to the morning run. Note: no "Testing agent morning run" STATUS entry exists for 2026-09-21, so it's unclear whether this morning's run fired — flagging in case the 07:00 slot needs a look, but not investigating scheduler health here (out of this agent's scope). **Next:** once #951 merges, the following run is the real signal on whether #936's flake clears.
+
+## 2026-09-21 — Builder: single-item orphan recovery, #936 reconciled to Backlog
+
+Single-item mode: recover orphaned **In Progress** card #936 (dispatcher assumed a `feature/db/fn/issue-936-*` branch existed with no open PR). Checked local + all remote branches — no branch for #936 exists anywhere; nothing to build or open a PR for.
+
+Found the real state via #936's own comment thread: CoS triage (2026-09-21) already diagnosed and resolved this — the actionable fix was dispatched as **#950** (self-seeding isolation fix), which has an open, mergeable PR **#951** (In Review, see the entry below). That same CoS comment said "This card moves to Backlog as the tracking issue," but the board move was never applied, leaving #936 stranded in In Progress with no work attached to it.
+
+Action: moved #936's board status **In Progress → Backlog** via `gh project item-edit`, and left an explanatory comment (`<!-- wmpc-builder -->`) pointing to #950/#951 and the disposition. No branch, no code, no PR — this card had nothing to build. **Next:** #936 stays open until a week of clean regression runs on the affected specs, per #950's note; nothing further for the Builder here.
+
+## 2026-09-21 — Builder: single-item run, PR #951 for #950 (self-seeding e2e fix)
+
+Built issue #950 in single-item mode (no sub-issues/PRs existed yet — a fresh build, not a mis-queue). Scope: make the five specific subtests named in #950's AC self-seeding (four in `registration.spec.ts` + issue-09 "Path 1"), fixing the recurring #936 flake's root cause (shared single-use seed state from `e2e/seed.ts`).
+
+Added `web/e2e/registration-fixtures.ts` — a Playwright fixture `seedRegistration(kind)` that creates its own tournament/event/player(s) per test invocation (keyed by a fresh random id) and tears them down after, so two runs, two tests, or a CI retry can never collide. Wired it into the four named `registration.spec.ts` subtests and issue-09's "Path 1"; left "change partner", "accept a partner invite", and issue-09 "Path 2" on the shared seed since they weren't named in the AC. Diff confined to `web/e2e/` per the AC — `e2e/seed.ts` and the CI workflow untouched. typecheck/build/lint all clean (lint: scoped diff clean; full run shows the same pre-existing `main` errors, none new).
+
+One snag caught before opening: my first PR body phrase "Fixes the recurring #936 flake" (and "doesn't close #936") tripped GitHub's closing-keyword parser and auto-linked #936 as a second closing issue — violates the one-issue-per-PR rule. Reworded to neutral phrasing ("Addresses... investigated in #936" / "issue #936 should stay open...") and re-verified only #950 closes.
+
+PR: [#951](https://github.com/notronwest/tournament-manager/pull/951) (Closes #950), card moved to In Review. **Next:** Ron reviews/merges; per #950's note, #936 itself stays open until a week of clean regression runs on these specs.
+
 ## 2026-09-20 — Builder: PR #947 for #946 (checkout donation UX)
 
 Single-item run on issue #946 ("Charity donations P2 [UX] — add-donation field + order-summary line at checkout"), the UX-only sub-slice split out of #378 (which stays Blocked on the money-touching `[FN]` half). No sub-issues/open PRs already existed under #946, so this was a normal build, not a mis-queued rework.
@@ -14,6 +72,24 @@ Opened this PR (#947, Closes #946) on `feature/issue-946-donation-checkout-ux` �
 **Flagged prominently in the PR** (not a blocker, but Ron should read before merging): until #378's `[FN]` half ships, the UI will preview a donation-inclusive total throughout checkout but the actual Stripe charge stays registration-only — a real preview/charge mismatch. Also, `accepts_donations` is the same flag already live for the standalone `/donate` page (#377), so any tournament with it already on will surface this new checkout field immediately on merge, before the FN half exists. Recommend Ron decide: hold for FN pairing, or merge now accepting the temporary gap.
 
 **Next:** Ron reviews/merges #947, or requests the FN half be paired first. #378 itself stays Blocked (money-path change, not the Builder's to attempt) until Ron authorizes and builds the `[FN]` piece.
+
+## 2026-09-20 — Testing agent: daytime triage, all green
+
+**Job 1 (triage):** newest untriaged run ([35513866940](https://github.com/notronwest/tournament-manager/actions/runs/35513866940), 2026-09-20 13:33 UTC) — **all green, 56 passed** (up from 33 pre-#945/#942/#938 spec additions still pending merge, so this run reflects the existing merged suite only). No failures to triage, no card needed. Not Monday, so no heartbeat posted to Discord per cadence rules (quiet-when-green).
+
+**Job 2 (author):** skipped — daytime run, per-day authoring cap already spent on this morning's run (PR #945 for #10).
+
+**Housekeeping:** confirmed the previously-flagged locally-modified `CLAUDE.md` (missing Engineering-standard/UI-work/Deployment blocks vs. `origin/main`) is still present and still untouched by me — out of scope for this run, flagging again in case it's stale. Draft PRs #945 (#10), #942 (#862), #938 (#860) remain open awaiting harness-access selector tuning; nothing new to do on them this run.
+
+## 2026-09-20 — Testing agent: morning triage + spec PR for #10 + backlog-scope flag
+
+**Job 1 (triage):** newest untriaged run ([35463990606](https://github.com/notronwest/tournament-manager/actions/runs/35463990606), 2026-09-19 19:19 UTC) failed only the two `e2e/offline/*` specs — the known #934 signature, and this run predates #935 (the fix) merging later the same day, so no new information. Commented on #934 for the record; no new card. `registration.spec.ts` + #936's specs were clean this run.
+
+**Job 2 (author):** opened draft PR [#945](https://github.com/notronwest/tournament-manager/pull/945) (Closes #944) — `web/e2e/issue-10-partner-notice.spec.ts`, translating #10's AC ("partner won't be notified until checkout" copy). Added a dedicated tournament/event/player per scenario in `seed.ts` (not reusing `#253`'s fixtures, to avoid feeding the #936 shared-state race). Verified the copy is still live in `PublicTournamentPage.tsx` before writing the spec. **Draft, not normal PR:** this interactive session has no local access to the CI-only `E2E_*` secrets (they exist only as GH Actions repo secrets), so I could not run the spec against the deployed test app to tune selectors — needs that pass from whoever has harness access (Builder host or Ron) before it can come off draft. Tracking issue #944 set to **Blocked** for that reason. typecheck + lint clean; `playwright test --list` confirms the spec is discovered (33 tests / 8 files, was 30/7).
+
+**Scope flag:** swept the board's Done items for resolved issues with `## Acceptance criteria` lacking a spec — found **~100+** (numbers 10–549), far past the per-run cap of 5 and mostly predating the AC/spec convention. Only picked #10 this run (oldest, simplest, verified-still-live). Worth Ron deciding: keep chipping at 5/day (~20+ days to clear), raise the cap for a dedicated backfill, or accept the older ones as out of scope. **Next:** if continuing the backfill, #12 (pricing-override admin copy) is the next-oldest verified candidate.
+
+**Unrelated observation:** found `CLAUDE.md` locally modified (uncommitted) in this checkout — missing the Engineering-standard/UI-work/Deployment blocks that are present on `origin/main`. Did not touch it (not part of this run's scope, and it may be another agent's in-progress edit on this shared host) — flagging in case it's unintentional.
 
 ## 2026-09-19 — Reviewer: PR #935 reviewed (APPROVE)
 
@@ -1658,3 +1734,35 @@ On-screen warning when matches are unscored / podiums undecided.
   (no overflow; day table stacks to cards) and 1100px, plus print-media render.
 - NOT verified against a real tournament on TEST — Ron: open a completed tournament's
   Summary report on the PR preview and eyeball the podiums vs the event consoles.
+
+## 2026-10-02 — Match timing: started_at / ended_at on matches — [DB] first, then the court-box clock
+
+Ron: "When you click 'Load this match…' start a timer and put it into the court box so we can
+see how long the match takes — store that data (start/end) with the game so we can track
+efficiency." DB half (#1055): migration `20261002120000_match_timing.sql` adds
+`matches.started_at`, `ended_at`, generated `duration_seconds`, and a BEFORE INSERT/UPDATE OF
+status trigger (`stamp_match_timing`, `clock_timestamp()`) — in_progress stamps start and
+clears end; completed stamps end; pending clears both; a value the statement itself sets is
+respected; score edits on a completed match don't touch either. Chose a trigger over client
+writes so the tournament + per-event court managers, the event console, the round simulator
+and any future scorer all record timing without code changes. No backfill (updated_at moves
+on court assignment and score edits, so it would be a guess). Verified on local Postgres 16
+(all 107 migrations + this one; pg_net/pg_cron stubbed): 8 transition cases incl. the
+"scored from console, never on a court" → duration null case. UX half (#1056) follows:
+`MatchTimer` component + `lib/matchTiming.ts` on both court manager cards.
+Note: main's `tsc -b` has 3 pre-existing errors (SchedulePage ×2, LiveResultsPage ×1) —
+not from this change.
+
+## 2026-10-02 — Court box clock (UX half of match timing, #1056)
+
+[DB] #1057 merged. UX: new `components/MatchTimer.tsx` (ticks 1/s from `matches.started_at`;
+m:ss, h:mm:ss past an hour; "Started 2:57 AM · 15 min planned"; turns amber with "4 min over
+the 15-min plan" once past the division's planned length; "Not timed" for a match loaded
+before the columns existed) and `lib/matchTiming.ts` (`useNow`, `formatElapsed`,
+`formatDurationShort`, `plannedMinutesFor` — playoff rows use their own minutes, round robin
+the event's pool minutes; 8 vitest cases). Mounted on the in-progress card of BOTH court
+managers (tournament + per-event), between the team names and the score inputs. `Match`
+type extended locally for the three new columns until types are regenerated; the client
+never writes them. Verified at 390px on the real route via vite preview + stubbed Supabase
+(green 13:17 / amber 19:17 / Not timed). Lint: only the two pre-existing set-state-in-effect
+errors on these pages; typecheck: only main's three pre-existing errors.
