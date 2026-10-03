@@ -60,6 +60,9 @@ import {
 } from "./push/run.js";
 import type { PushState } from "./push/state.js";
 import type { PushLedger, PushLedgerEntry } from "./types.js";
+import { runPullScores, type ScoreWriter } from "./pull/run.js";
+import type { PulledScore } from "./pull/sync.js";
+import { PUBLIC_FETCH_HEADERS } from "./pbcom/results.js";
 
 function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
@@ -643,7 +646,8 @@ function usage(): number {
       "  cli.ts reconcile <tournamentId>                                 # READ-ONLY: 'are we in sync?' — B&E vs confirmed PB.com pushes\n" +
       "  cli.ts rehearse <tournamentId> <divisionLabel> [--allow-live]   # DRESS-REHEARSAL: drive ONE division end-to-end (training site; no DB ledger)\n" +
       "  cli.ts poll [--dry-run] [--fixture f.json] [--force-host]      # unattended all-active: link partners + push\n" +
-      "  cli.ts push --auto [...]                                        # alias for poll",
+      "  cli.ts push --auto [...]                                        # alias for poll\n" +
+      "  cli.ts poll-scores [<tournamentId>] [--dry-run] [--force-host]  # REVERSE: pull completed scores PB.com → B&E (public API, no login)",
   );
   return 1;
 }
@@ -739,12 +743,122 @@ async function runAutoMode(cfg: DriverConfig, fixture: string | undefined, dryRu
   }
 }
 
+/**
+ * The REVERSE write side (PB.com → B&E): POST a resolved score to the
+ * record-pbcom-score edge function, authenticated with the service-role key
+ * (service-to-service; the function re-checks the Bearer equals the service role).
+ */
+class EdgeFnScoreWriter implements ScoreWriter {
+  constructor(private readonly cfg: DriverConfig) {
+    if (!cfg.supabaseUrl || !cfg.supabaseServiceRoleKey) {
+      throw new MissingCredentials("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set");
+    }
+  }
+
+  async write(score: PulledScore, tournamentId: string): Promise<{ ok: boolean; detail?: string }> {
+    const url = `${this.cfg.supabaseUrl}/functions/v1/record-pbcom-score`;
+    const key = this.cfg.supabaseServiceRoleKey!;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          apikey: key,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tournamentId,
+          eventId: score.eventId,
+          matchId: score.matchId,
+          teamAScore: score.teamAScore,
+          teamBScore: score.teamBScore,
+          winnerRegId: score.winnerRegId,
+          source: { system: "pbcom", matchUuid: score.pbMatchUuid },
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        return { ok: false, detail: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, detail: String((err as Error)?.message ?? err) };
+    }
+  }
+}
+
+/**
+ * The REVERSE poll path (PB.com → B&E): read the PUBLIC results API for every bound
+ * tournament (or one, when a tid is given), match completed round-robin scores onto
+ * B&E matches, and write the delta via the edge function. No PB.com login — a plain
+ * public fetch. Fail-closed: an unmatched completed PB result is alerted, not written.
+ */
+async function runPullMode(cfg: DriverConfig, onlyTid: string | undefined, dryRun: boolean): Promise<number> {
+  let source: DrawSource;
+  try {
+    source = new DbDrawSource(cfg);
+  } catch (err) {
+    if (err instanceof MissingCredentials) {
+      log.warn(err.message);
+      return NO_CREDENTIALS;
+    }
+    throw err;
+  }
+
+  let binding;
+  try {
+    binding = loadBinding(cfg.bindingPath);
+  } catch (err) {
+    if (err instanceof BindingError) {
+      log.warn("pull: no usable binding config — nothing bound to PB.com", { error: err.message });
+      return 0;
+    }
+    throw err;
+  }
+
+  const tournamentIds = onlyTid ? [onlyTid] : binding.events.map((e) => e.tournamentId);
+  const eidFor = (tid: string): string => resolveEventBinding(binding, tid).pbcomEid;
+
+  try {
+    const writer = dryRun ? undefined : new EdgeFnScoreWriter(cfg);
+    const alert = dryRun ? undefined : new DiscordAlerter(cfg.discordWebhook);
+    const result = await runPullScores(
+      { tournamentIds, dryRun, forceHost: flag("force-host") },
+      { cfg, source, fetchFn: (url) => fetch(url, { headers: PUBLIC_FETCH_HEADERS }), writer, alert, eidFor },
+    );
+    if (!result.ran) {
+      log.warn("pull did not run", { reason: result.reason });
+      return 0;
+    }
+    for (const d of result.divisions) {
+      log.info("pull division", {
+        tournamentId: d.tournamentId,
+        division: d.divisionLabel,
+        matchedPb: d.matchedPbDivision,
+        written: d.written,
+        alreadyInSync: d.alreadyInSync,
+        unmatched: d.unmatched,
+        notReady: d.notReady,
+      });
+    }
+    log.info("pull complete", { divisions: result.divisions.length });
+    return 0;
+  } catch (err) {
+    if (err instanceof MissingCredentials) {
+      log.warn(err.message);
+      return NO_CREDENTIALS;
+    }
+    throw err;
+  }
+}
+
 async function main(): Promise<number> {
   const command = process.argv[2];
   if (
     command !== "push" &&
     command !== "verify" &&
     command !== "poll" &&
+    command !== "poll-scores" &&
     command !== "link-partners" &&
     command !== "preflight" &&
     command !== "reconcile" &&
@@ -759,9 +873,13 @@ async function main(): Promise<number> {
   const readOnly = command === "reconcile" || (command === "preflight" && !flag("live"));
   const dryRun = flag("dry-run") || command === "verify" || readOnly;
 
+  // The reverse poller reads the PUBLIC PB.com API — it never needs a PB.com login,
+  // so its credential requirement is the B&E service role only (enforced by
+  // DbDrawSource / EdgeFnScoreWriter), never PBCOM_USERNAME.
+  const needsPbLogin = !dryRun && command !== "poll-scores";
   let cfg: DriverConfig;
   try {
-    cfg = loadConfig(process.env, !dryRun); // creds required only for a real push
+    cfg = loadConfig(process.env, needsPbLogin); // PB creds required only for a real push
   } catch (err) {
     if (err instanceof MissingCredentials) {
       log.warn(err.message);
@@ -789,6 +907,13 @@ async function main(): Promise<number> {
   }
 
   if (auto) return runAutoMode(cfg, fixture, dryRun);
+
+  // ── REVERSE sync: poll-scores [<tournamentId>] (PB.com → B&E) ────────────────
+  // Read the public results API, mirror completed round-robin scores into B&E.
+  // No tid → every bound tournament (the launchd entry). --dry-run plans only.
+  if (command === "poll-scores") {
+    return runPullMode(cfg, positionals()[0], dryRun);
+  }
 
   // ── supervised doubles partner-linkage: link-partners <tournamentId> ─────────
   // The watched first live run (and the manual re-run): scrape raS.aspx + pair the

@@ -9,6 +9,13 @@ export const NO_CREDENTIALS = 2;
 
 export interface DriverConfig {
   pbcomBaseUrl: string;
+  /**
+   * The PUBLIC portal base for the REVERSE score poller (PB.com → B&E). This is
+   * pickleballtournaments.com — a DIFFERENT host from pbcomBaseUrl (the director
+   * backend). The public results API needs no login, so the reverse poller reads
+   * it with a plain fetch.
+   */
+  pbcomPublicBaseUrl: string;
   pbcomUsername: string;
   pbcomPassword: string;
   dbUrl: string | null;
@@ -66,6 +73,7 @@ export function loadConfig(
   const channelRaw = (env.PBCOM_BROWSER_CHANNEL ?? "chrome").toLowerCase();
   return {
     pbcomBaseUrl: (env.PBCOM_BASE_URL ?? "https://pickleballbrackets.com").replace(/\/+$/, ""),
+    pbcomPublicBaseUrl: (env.PBCOM_PUBLIC_BASE_URL ?? "https://pickleballtournaments.com").replace(/\/+$/, ""),
     pbcomUsername,
     pbcomPassword,
     dbUrl: env.PBCOM_DB_URL?.trim() || null,
