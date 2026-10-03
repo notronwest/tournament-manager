@@ -5,6 +5,24 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-02 — Reviewer: PR #1074 reviewed (REQUEST CHANGES)
+
+Reviewed PR #1074 ("fix(rr): schedule round-robin into real rounds via circle method (match PB.com)") per `daemon/agents/reviewer/PROMPT.md`. Blocking finding: the PR has **no linked issue** — `closingIssuesReferences` is empty, the body has no `Closes #N` keyword, and the repo's own required check "Require an issue reference in the PR body" is failing red (run 37090128908), per `conventions/backlog.md`'s CI-enforced rule. No issue also means no `## Acceptance criteria` to review correctness against, and `mergeable_state` is `UNSTABLE` regardless of the code. Reviewed the code anyway for when it comes back: the `circleMethodRounds` / `matchGeneration.ts` reimplementation (polygon-rotation method, round-1 "fold" to match PB.com, per-pool/per-rep round numbering) looks correct, and the new unit tests cover the right invariants (fold pairing, 21-unique-pairs/7-rounds, even counts, multi-pool isolation, `play_each_team_times=2`). No UI touched, so design/phone/reuse gates don't apply beyond the issue-link defect.
+
+Posted `VERDICT: REQUEST CHANGES` + label `reviewed:changes`, with the fix: open a small bug-tracking issue (round-robin always landed every match in round 1) with code-free AC, add it to the board, edit the PR body to `Closes #<that-issue>`.
+
+**Next:** Builder opens the tracking issue + fixes the PR body; once the required check goes green this should re-review clean.
+
+## 2026-10-02 — Reviewer: PR #1065 reviewed (APPROVE)
+
+Reviewed PR #1065 ("docs: STATUS entry — Builder single-item #1052 mis-queued, no rebuild", Closes #1064) per `daemon/agents/reviewer/PROMPT.md` — a re-review after rework: the prior pass had left a "needs rebase" comment (`main` had moved, branch was `CONFLICTING`) rather than a findings list.
+
+Checked the rebase actually fixed it (`gh api .../pulls/1065` now reads `mergeable:true`/`mergeable_state:"clean"`), pulled the PR head directly and confirmed the diff is still a pure `+16/-0` addition to `STATUS.md` only, correctly ordered newest-on-top with the one real conflict (both branches had appended an entry) resolved by actual commit timestamp. Independently verified the entry's claim about issue #1052 (comment + evidence present, left open/unlabeled as "moved to In Review" since it has no auto-closing PR). Docs-only, so design/reuse/phone gates don't apply. Noted but didn't block on: PR #947's "MERGEABLE/CLEAN" claim recorded in this log has since gone stale (`#947` is `dirty` again as of this review) — expected drift for an append-only log, not a defect in #1065.
+
+Posted `VERDICT: APPROVE` + label `reviewed:approve`.
+
+**Next:** dispatcher merges per D-0052; #947 will need its own re-review once rebased again (currently `dirty`).
+
 ## 2026-10-01 — Reviewer: PR #963 reviewed (REQUEST CHANGES)
 
 Reviewed PR #963 ("docs(status): 2026-09-25 morning Testing-agent triage entry", Closes #962) per `daemon/agents/reviewer/PROMPT.md` — docs-only change to `STATUS.md`, no code/UI touched, so reuse/design/phone gates don't apply.
@@ -1756,3 +1774,18 @@ type extended locally for the three new columns until types are regenerated; the
 never writes them. Verified at 390px on the real route via vite preview + stubbed Supabase
 (green 13:17 / amber 19:17 / Not timed). Lint: only the two pre-existing set-state-in-effect
 errors on these pages; typecheck: only main's three pre-existing errors.
+
+## 2026-10-02 — Reviewer: PR #1067 (public Brackets tab, #1066) — REQUEST CHANGES
+
+Reviewed PR #1067 (`BracketStandingsPanel` + a fourth "Brackets" tab on the public tournament
+page) against #1066's acceptance criteria, `DECISIONS.md`, and the D-0047 phone gate. Correctness
+and D-0049 reuse are clean — `StandingsTable` and `publicResults.ts`/`fetchPublicResults` were
+pulled out of `LiveResultsPage` and shared rather than copied. Blocked on D-0047: the repo's
+mobile Playwright suite (`web/e2e/mobile/audit.spec.ts`) covers Details/Register/home/login/
+my-tournaments/profile but has no case for Results or this new Brackets tab, and no workflow runs
+it on `pull_request` (`regression.yml` is schedule/dispatch-only and inert without secrets) —
+confirmed via `gh pr checks 1067` showing only the Cloudflare build and the linked-issue check, no
+phone-check status. Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes` asking for a 390px
+mobile-audit case covering the new chip picker / standings / round-grid / podium before
+re-review. Next: Builder adds the phone-check case and re-pushes; reviewer re-reviews on the next
+commit.
