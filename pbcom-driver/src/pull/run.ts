@@ -124,9 +124,11 @@ export async function runPullScores(opts: PullRunOptions, deps: PullRunDeps): Pr
   try {
     for (const tid of opts.tournamentIds) {
       const eid = deps.eidFor(tid);
-      const draws = deps.source.listActiveDivisionDraws
-        ? await deps.source.listActiveDivisionDraws(tid)
-        : await deps.source.listDivisionDraws(tid);
+      // Reverse model: B&E divisions often sit in `ready`/`draft` (never Started by an
+      // operator, because the tournament runs on PB.com), so sync ALL pbcom divisions
+      // with a bracket — NOT just the "active" ones. A division with no generated
+      // matches simply yields nothing to write.
+      const draws = await deps.source.listDivisionDraws(tid);
 
       // Discover the started PB.com divisions once per tournament/tick.
       const pbDivisions = await discoverDivisions(
