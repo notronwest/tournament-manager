@@ -587,16 +587,37 @@ async function openDivisionBracket(page: Page, target: ResolvedDivisionTarget, b
     await page.goto(divisionBracketUrl(baseUrl, target.pbcomDivisionId), NAV);
     return;
   }
-  // Otherwise reach it from the Live Console: open the Running division's bracket.
+  // Reach it from the Live Console the SAME way startMatches does — the row's Options
+  // menu — since that path is proven for a Running division. The exact menu item that
+  // opens the score page isn't traced yet, so DUMP the menu items, then click the best
+  // score/bracket match. NEVER "Official" (it prints a paper sheet + blocks on a dialog).
   await page.goto(eventsConsoleUrl(baseUrl, target.pbcomEid), NAV);
   const runningTab = page.getByRole("tab", { name: /running/i }).first();
   if (await runningTab.count()) await runningTab.click().catch(() => {});
   const row = page.locator("tr", { hasText: new RegExp(escapeRe(target.divisionLabel), "i") }).first();
   await row.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
-  await row.getByRole("link", { name: /bracket|scores|matches/i })
-    .or(row.getByRole("button", { name: /bracket|scores|matches/i }))
-    .first()
-    .click();
+
+  // First try a direct link in the row (some consoles expose one); fall back to Options.
+  const directLink = row.getByRole("link", { name: /enter scores?|view (bracket|scores)|bracket|scores?|matches/i })
+    .filter({ hasNotText: /official/i })
+    .first();
+  if (await directLink.count()) {
+    await directLink.click({ timeout: 10_000 });
+  } else {
+    await clickControl(row, /options/i, "options");
+    await page.waitForTimeout(500); // let the dropdown render
+    const menu = await listControls(page);
+    log.info("openDivisionBracket: Options menu opened — items for tracing", { menu });
+    const item = controlsMatching(page, /enter scores?|view (bracket|scores)|score ?card|bracket|scores?|matches/i)
+      .filter({ hasNotText: /official/i })
+      .first();
+    if ((await item.count()) === 0) {
+      throw new Error(
+        `openDivisionBracket: no score-page item in the Options menu for "${target.divisionLabel}". Menu items: ${menu}`,
+      );
+    }
+    await item.click({ timeout: STEP_TIMEOUT });
+  }
   await page.waitForLoadState("load", { timeout: STEP_TIMEOUT });
   // The score grid may be AJAX-rendered after load (the attendees grid was). Give any
   // table rows a bounded chance to appear before we parse — best-effort, never throws.
