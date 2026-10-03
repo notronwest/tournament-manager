@@ -1861,3 +1861,26 @@ a 190-candidate / 8-court speed check. typecheck + build clean; lint unchanged o
 pages; 313 vitest pass (pdf-lib / xlsx suites can't load in this sandbox).
 - NOT verified on a live court manager — Ron: on TEST, set up a 3-court event where the two
   top games block the rest and confirm all three courts get a suggestion.
+
+## 2026-10-03 — Reviewer: PR #1075 (reverse score sync, PB.com → B&E, #1076) — REQUEST CHANGES
+
+Reviewed PR #1075 (new `poll-scores` CLI command + `pbcom/results.ts` + `pull/run.ts` + `pull/sync.ts`
++ edge fn `record-pbcom-score`) against #1076's acceptance criteria and `DECISIONS.md`. Checked out
+the PR branch in a scratch worktree: `tsc --noEmit` clean, `vitest run` 155/158 green — the 3
+failures (`auto.test.ts`/`partners.test.ts`/`run.test.ts`, all "refuses to drive when not
+PBCOM-PUSH-HOST") reproduce identically on a clean `main` worktree too, so pre-existing, not from
+this PR (artifact of running the suite on a host named like the committed mini fact). Logic matches
+the issue: public-API read, `findMatchRow` reuse for last-name matching (D-0049 clean — no
+duplicate crux), B&E's-own-score idempotency, fail-closed unmatched → Discord, RR-only v1 scope.
+Blocked on the `DEPLOYMENT.md` convention: this PR adds a second mini launchd target (`poll-scores`,
+its own `state/pbcom-pull.lock`, new `PBCOM_PUBLIC_BASE_URL` env var) and a new edge function, but
+`pbcom-driver/DEPLOYMENT.md` — which already has a maintained `targets:` entry for the sibling
+`pbcom-push-poll` job — isn't touched by the diff at all. Posted `VERDICT: REQUEST CHANGES` +
+`reviewed:changes` asking for a `poll-scores` target entry (mirroring `pbcom-push-poll`'s shape) and
+a `record-pbcom-score` entry before re-review. Next: Builder adds the DEPLOYMENT.md entries and
+re-pushes; reviewer re-reviews on the next commit.
+
+Note: the previous "PR #1074 review" STATUS entry (commit d515fdd) was committed on the
+`pbcom-wizard-controls` feature branch instead of `main` and never made it here — `main` jumped
+straight from the court-suggestion entry above to this one. Not reconstructed here; flagging so it
+isn't mistaken for this session's mistake too.
