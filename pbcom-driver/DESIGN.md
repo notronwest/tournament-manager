@@ -146,3 +146,75 @@ ships the web app / edge functions to TEST and deploys **nothing** for `pbcom-dr
   the seed order is an upstream B&E concern (the #970 umbrella), not this driver's.
 - **PB.com tournament `eid`.** No column stores PB.com's event-level id; the binding
   config supplies it (by design — it is deployment data, not import data).
+
+## Reverse sync (PB.com → B&E) — poll scores every 5 min (v1)
+
+A SECOND, independent direction, added 2026-10-03 (Ron: "poll pbrackets every 5 min
+and copy the scores from pb.com to bert and erne"). The forward push drives the
+PB.com director backend as a human (Playwright, fragile OTP session). The reverse
+poll is the opposite in every way — and far more robust:
+
+- **Read = the PUBLIC results API, no login, no browser.** PB.com's public portal
+  (`pickleballtournaments.com`, a Next.js app — a DIFFERENT host from the director
+  `pickleballbrackets.com`) is backed by public GET endpoints:
+  - `…/tournaments/api/getTournamentEventsShort?tournamentId=<eid>&formatId=<F>&playerGroupId=<G>&bracketLevelId=0&date=<YYYY-MM-DD>`
+    → `{ data: [{ uuid, title }] }` (only STARTED divisions appear, on their date;
+    `formatId` 1=doubles 2=singles, `playerGroupId` 1=mens 2=womens 3=mixed 4=coed).
+  - `…/tournaments/api/getMatchInfos?eventId=<divisionUuid>&date=<YYYY-MM-DD>`
+    → per match: `matchUuid`, four player names, `matchStatus` (4=completed),
+    `winner` (1|2), `teamOne/TwoGameOne..FiveScore`, `inBracketType` ("RR"/bracket).
+  The only catch: a bare request is bot-blocked (403); a browser-like `User-Agent`
+  gets 200 (`PUBLIC_FETCH_HEADERS`). So the OTP-session problem simply does not
+  exist on the read path — the only credential the poller needs is the B&E service
+  role, for the write. `src/pbcom/results.ts` holds the thin fetch + the PURE parse.
+
+- **Match = the same last-name-set crux, reused.** `findMatchRow` locates each PB.com
+  match onto a B&E match by the two teams' normalized last-name sets, and yields the
+  A↔team-one orientation so each side's score lands correctly. PB.com gives one
+  full-name string per player; `lastNameOf` takes the final token (hyphenated
+  compounds survive; a space-compound like "Van Dyke" keeps only "Dyke" and so falls
+  to the fail-closed unmatched path — never a wrong write; WMPC rosters are almost
+  all single-token surnames). `src/pull/sync.ts`'s `planPull` is pure + unit-tested.
+
+- **Idempotency without a ledger.** The "already synced?" check is B&E's OWN current
+  score: `planPull` writes only when the B&E match is not completed or its
+  score/winner differs. Self-correcting (a hand-correction on either side reconciles
+  next tick); no reverse-ledger table.
+
+- **Write = a NEW B&E edge function `record-pbcom-score`.** Deno/TS, service-to-service
+  (the Bearer must equal the service-role key). It writes the score + winner +
+  `status='completed'` (idempotently) then runs `autoTransitionEventStatus` — the
+  SAME rules as `web/src/lib/eventStatus.ts`, ported inline (edge fns can't import the
+  web client). This keeps B&E's downstream logic server-side and in one place.
+
+- **SCOPE (v1): round-robin pool scores only.** RR matches always exist in B&E with
+  fixed teams from bracket creation, so name-matching works and there is no
+  feed-forward. Verified live 2026-10-03 against the Leaf Peeper tournament (read
+  path parses real completed doubles + singles scores correctly).
+
+- **Fail-closed.** A completed PB.com RR match that maps to NO B&E match (a roster /
+  pool divergence — e.g. the Men's 4.0 pool mismatch) is alerted to Discord and
+  NEVER written. A best-of-N result (v1 maps single-game only) is skipped + counted.
+
+- **CLI / schedule.** `tsx src/cli.ts poll-scores [<tid>] [--dry-run] [--force-host]`
+  — one tick (launchd every 5 min is the standing entry). Reuses the forward
+  singleton: the committed `PBCOM-PUSH-HOST` fact gates the host, plus a SEPARATE
+  `state/pbcom-pull.lock` (a pull and a push tick may overlap harmlessly — different
+  write targets). No PB.com login, so `poll-scores` never requires `PBCOM_USERNAME`.
+
+### Reverse — v2 follow-ups (NOT in v1)
+
+- **Playoffs.** Syncing medal-bracket scores needs two more things B&E normally does
+  itself: seeding the playoff bracket from pool standings (a B&E "Generate playoffs"
+  step, not triggered by the reverse poll), and `playoffFeedForward` to advance the
+  winner / drop a semifinal loser to bronze. The edge function writes a playoff score
+  if sent but does not yet feed it forward; `planPull` filters to RR, so v1 never
+  sends one. v2 ports `web/src/lib/playoffFeedForward.ts` (+ `playoffBracket.ts`)
+  into the edge function and teaches the poller to seed + advance the B&E bracket.
+- **Multi-game.** B&E's `matches` stores a single `team_a/b_score`; a best-of-N PB
+  result needs a games-won (or per-game) mapping before it can be written.
+- **Space-compound surnames.** If they become common, match PB full-name tokens
+  against B&E's known last-name sets instead of extracting a single final token.
+- **Event lifecycle.** The poll does not Start/complete the B&E event beyond
+  `autoTransitionEventStatus`'s safe subset; standings/results render regardless of
+  status.

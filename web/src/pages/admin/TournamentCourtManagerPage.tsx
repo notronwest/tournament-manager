@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
+import { assignSuggestions } from "../../lib/courtSuggestions";
 import MatchTimer from "../../components/MatchTimer";
 import { plannedMinutesFor } from "../../lib/matchTiming";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
@@ -390,34 +391,31 @@ export default function TournamentCourtManagerPage() {
 
   // For each court, work out the suggestion. We coordinate per event: a
   // single event's empty courts get disjoint suggestions (no shared
-  // teams). We walk courts in number order so allocation is stable.
+  // teams). assignSuggestions picks the set that fills the MOST of the
+  // event's open courts (then the fairest by rank) — the old court-by-court
+  // greedy pass could leave court 3 empty after courts 1 and 2 took games
+  // that blocked every remaining candidate.
   const suggestionByCourt = useMemo(() => {
     const map = new Map<number, Match>();
     if (!tournament) return map;
-
-    const usedTeamsByEvent = new Map<string, Set<string>>();
 
     const courts = Array.from(
       { length: tournament.locations?.court_count ?? 0 },
       (_, i) => i + 1,
     );
+    const openCourtsByEvent = new Map<string, number[]>();
     for (const cn of courts) {
       const eventId = ownerByCourt.get(cn);
       if (!eventId) continue;
       if (inProgressByCourt.has(`Court ${cn}`)) continue;
-      const ranked = rankedByEvent.get(eventId) ?? [];
-      const used = usedTeamsByEvent.get(eventId) ?? new Set<string>();
-      const next = ranked.find(
-        ({ match }) =>
-          !used.has(match.team_a_reg_id!) &&
-          !used.has(match.team_b_reg_id!),
-      );
-      if (next) {
-        map.set(cn, next.match);
-        used.add(next.match.team_a_reg_id!);
-        used.add(next.match.team_b_reg_id!);
-        usedTeamsByEvent.set(eventId, used);
-      }
+      const arr = openCourtsByEvent.get(eventId) ?? [];
+      arr.push(cn);
+      openCourtsByEvent.set(eventId, arr);
+    }
+    for (const [eventId, open] of openCourtsByEvent) {
+      const ranked = (rankedByEvent.get(eventId) ?? []).map((r) => r.match);
+      const picks = assignSuggestions(ranked, open.length);
+      picks.forEach((match, i) => map.set(open[i], match));
     }
     return map;
   }, [tournament, ownerByCourt, inProgressByCourt, rankedByEvent]);
