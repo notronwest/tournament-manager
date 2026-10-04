@@ -132,8 +132,13 @@ export default function LiveResultsPage() {
       );
       const gamesPlayed = evMatches.filter((m) => m.status === "completed").length;
       const gamesTotal = evMatches.length;
+      // Final when the playoff champion is decided (a gold medal) OR — for an RR-only
+      // division (no playoff advances) — when every game has been played. Without the
+      // RR-only branch a pool-only bracket could never leave "in progress".
+      const allGamesDone = gamesTotal > 0 && gamesPlayed === gamesTotal;
+      const rrOnly = ((event as { teams_advancing_to_playoff?: number }).teams_advancing_to_playoff ?? 0) <= 0;
       const phase: EventResult["phase"] =
-        medals.some((m) => m.place === "gold")
+        medals.some((m) => m.place === "gold") || (rrOnly && allGamesDone)
           ? "final"
           : gamesPlayed > 0 || evMatches.some((m) => m.status === "in_progress")
             ? "in_progress"
