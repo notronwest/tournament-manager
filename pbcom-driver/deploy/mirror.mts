@@ -32,7 +32,8 @@ import {
   type PbPublicMatch,
 } from "../src/pbcom/results.js";
 import { divisionKeyOf } from "../src/pull/sync.js";
-import { lastNameSetKey } from "../src/pbcom/matchMap.js";
+import { lastNameSetKey, relaxedSetMatch } from "../src/pbcom/matchMap.js";
+import type { BandeTeam } from "../src/types.js";
 import { loadBinding } from "../src/binding.js";
 import { log } from "../src/log.js";
 
@@ -123,8 +124,8 @@ async function main(): Promise<number> {
       let pos = 0;
       let completed = 0;
       for (const m of sorted) {
-        const ta = byKey.get(lastNameSetKey(m.teamOneLastNames));
-        const tb = byKey.get(lastNameSetKey(m.teamTwoLastNames));
+        const ta = resolveTeam(m.teamOneLastNames, teams, byKey);
+        const tb = resolveTeam(m.teamTwoLastNames, teams, byKey);
         if (!ta || !tb) {
           unmapped.push(`${m.teamOneLastNames.join("/")} vs ${m.teamTwoLastNames.join("/")}`);
           continue;
@@ -176,6 +177,22 @@ async function main(): Promise<number> {
     }
   }
   return 0;
+}
+
+/**
+ * Resolve a PB team's last-name set to a B&E team: exact key match first, then a
+ * relaxed match (PB truncates/varies names) that must be UNIQUE — null if none or
+ * ambiguous, so the caller fail-closes.
+ */
+function resolveTeam(
+  pbLastNames: string[],
+  teams: BandeTeam[],
+  byKey: Map<string, BandeTeam>,
+): BandeTeam | null {
+  const exact = byKey.get(lastNameSetKey(pbLastNames));
+  if (exact) return exact;
+  const hits = teams.filter((t) => relaxedSetMatch(pbLastNames, t.lastNames));
+  return hits.length === 1 ? hits[0]! : null;
 }
 
 function pairKey(m: PbPublicMatch): string {
