@@ -48,6 +48,50 @@ export function matchTeamsKey(teamA: readonly string[], teamB: readonly string[]
   return [lastNameSetKey(teamA), lastNameSetKey(teamB)].sort().join(" vs ");
 }
 
+// ── relaxed name matching (PB.com truncates some last names) ───────────────────────
+//
+// PB.com's PUBLIC results API truncates or varies some last names: "Wysolmerski" → "W",
+// "Smith" → "S", "DeRisi" → "Risi", "TalpinPhotography" → "Photography". B&E has the
+// full, correct names. So when an EXACT last-name-set match fails, we allow a relaxed
+// match where one name is a prefix OR suffix of the other — but SAFELY: a doubles team
+// must still have at least ONE name match EXACTLY (the partner anchors it), and the
+// caller must require the match be UNIQUE among candidates (fail-closed on ambiguity).
+// A single (singles) name is matched EXACTLY only — a lone truncated initial is too
+// weak to resolve.
+
+type NameMatch = "exact" | "loose" | false;
+
+/** How two normalized names relate: exact, a loose prefix/suffix, or no match. */
+export function relaxedNameMatch(a: string, b: string): NameMatch {
+  if (a === b) return "exact";
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (!short) return false;
+  return long.startsWith(short) || long.endsWith(short) ? "loose" : false;
+}
+
+/**
+ * True when two last-name SETS match under the relaxed rule: same size, a full pairing
+ * exists, and (for doubles) at least one pairing is exact. Singles require exact.
+ * Inputs are normalized sets (use lastNameSet); order-independent (tries both pairings).
+ */
+export function relaxedSetMatch(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  if (a.length === 0) return false;
+  if (a.length === 1) return a[0] === b[0];
+  if (a.length === 2) {
+    const [a0, a1] = a as [string, string];
+    const [b0, b1] = b as [string, string];
+    const pairOk = (x: string, y: string, p: string, q: string): boolean => {
+      const r0 = relaxedNameMatch(x, p);
+      const r1 = relaxedNameMatch(y, q);
+      return !!r0 && !!r1 && (r0 === "exact" || r1 === "exact");
+    };
+    return pairOk(a0, a1, b0, b1) || pairOk(a0, a1, b1, b0);
+  }
+  // 3+ members (not expected for pickleball teams): require exact set equality.
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 /** One match's teams as last-name sets, for collision detection. */
 export interface MatchSurnames {
   matchId: string;
