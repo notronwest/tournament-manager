@@ -14,10 +14,12 @@
 // seeding B&E's playoff bracket from standings are a documented follow-up; this
 // function writes a playoff score if sent, but does NOT yet feed it forward.
 //
-// AUTH: service-to-service. The caller must present the project SERVICE-ROLE key as
-// the Bearer token (the driver already holds it; no new secret to provision). The
-// gateway's JWT check plus this equality check keep anon callers out of a
-// privileged writer.
+// AUTH: service-to-service. The caller presents the project SERVICE-ROLE key as the
+// Bearer token (the driver already holds it; no new secret to provision). The gateway
+// (verify_jwt) validates the signature; we then require the token's ROLE claim to be
+// `service_role` — NOT a string-equality check against the injected key, which is
+// fragile across key formats (the injected SUPABASE_SERVICE_ROLE_KEY can differ from
+// the caller's valid service-role key). That keeps anon callers out of a privileged writer.
 //
 // Body: { tournamentId, eventId, matchId, teamAScore, teamBScore, winnerRegId,
 //         source?: { system: "pbcom", matchUuid: string } }
@@ -39,6 +41,22 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+/**
+ * True when the bearer JWT's role claim is `service_role`. The gateway has already
+ * validated the signature; we just decode the (base64url) payload to read the role.
+ */
+function isServiceRole(bearer: string): boolean {
+  try {
+    const part = bearer.split(".")[1];
+    if (!part) return false;
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(b64));
+    return payload?.role === "service_role";
+  } catch {
+    return false;
+  }
 }
 
 interface Body {
@@ -121,9 +139,9 @@ Deno.serve(async (req: Request) => {
   // @ts-expect-error Deno global
   const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  // Auth: the Bearer token must be the service-role key (service-to-service).
+  // Auth: the Bearer token must carry the service_role claim (service-to-service).
   const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
-  if (!bearer || bearer !== SERVICE_ROLE) return json({ error: "unauthorized" }, 401);
+  if (!isServiceRole(bearer)) return json({ error: "unauthorized" }, 401);
 
   let body: Body;
   try {
