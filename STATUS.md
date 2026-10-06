@@ -5,6 +5,44 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-05 — Reviewer: PR #1091 reviewed, corrected mid-review (REQUEST CHANGES — missing issue link)
+
+Reviewed PR #1091 (`[DB] player_club_affiliations` — per-org home-club membership for the
+tournament-summary ★, additive `CREATE TABLE IF NOT EXISTS` + RLS/policies, no backfill/UI in
+this PR) and first posted `VERDICT: APPROVE` — the migration itself is clean (composite PK
+`(organization_id, player_id)` matches locked decision #2's shared-`players`-table shape, reuses
+`is_org_member`/`has_org_role` exactly as the init migration does, mirrors the
+`organization_members` junction-table pattern with no soft-delete column, RLS/policy authorship
+reads as Ron's own per D-0004/`migrations.md` rather than the autonomous Builder's) — but reasoned
+the missing issue link (`closingIssuesReferences` empty, no `Closes #N`, "PR links an issue" check
+red) was the dispatcher's one tolerated cosmetic exception per ROLE.md's merge-gate wording.
+That was wrong: `wmpc-meta/conventions/backlog.md` is explicit and CI-enforced — "No issue-less
+PRs... Every PR must `Closes #N`," applying to hand-opened PRs too — and this repo's own
+precedent from earlier today (#1090, #1074) already treats exactly this as blocking. Caught it
+before any merge happened (`state: OPEN`, `mergedAt: null`), swapped the label
+`reviewed:approve` → `reviewed:changes`, and posted a second comment correcting the verdict to
+`REQUEST CHANGES` with the same fix #1090 got: open a small tracking issue (AC from the PR's own
+"## Acceptance" section), add to the board, edit the body to `Closes #<N>`. **Next:** once the
+issue-link check goes green this should re-review clean; no code/schema concern remains.
+
+## 2026-10-05 — Reviewer: PR #1090 reviewed (REQUEST CHANGES — missing issue link)
+
+Reviewed PR #1090 ("fix(summary): hours of play from first match on court (started_at / ended_at)") per
+`daemon/agents/reviewer/PROMPT.md`. Same blocking defect as PR #1074: `closingIssuesReferences` is empty,
+the body has no `Closes #N`, and the required "PR links an issue" check is red (run `37404555807`);
+`mergeable_state` is `UNSTABLE`. No issue also means the PR body's own "## Acceptance" section isn't a
+reviewable issue AC. Reviewed the code anyway: `matchWindow()` in `tournamentSummary.ts` now windows each
+match as `started_at → (ended_at ?? updated_at)`, rejecting a start that's after the finish or >3h before
+it (guards against the #1057 trigger's `started_at` surviving a later court reassignment); `TimedMatch`
+extends `Match` with the two optional columns, same pattern as `MatchTimer`'s local extension from #1057.
+Three new vitest cases cover the reassignment case, a stale start falling back to the finish, and a
+late-entry match with a start but no `ended_at` still being excluded — all correct. Label/footnote text
+changes ("On court → last score") are string-only within the existing table/card layout, so D-0049/D-0047
+don't newly apply. No migration (correct — columns shipped in #1057), no money/schema-deletion surface.
+Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes`, asking the Builder to open a small tracking issue
+(AC drawn from the PR's own "## Acceptance" section), add it to the board, and edit the PR body to
+`Closes #<N>`. **Next:** once the issue-link check goes green this should re-review clean.
+
 ## 2026-10-02 — Reviewer: PR #1074 reviewed (REQUEST CHANGES)
 
 Reviewed PR #1074 ("fix(rr): schedule round-robin into real rounds via circle method (match PB.com)") per `daemon/agents/reviewer/PROMPT.md`. Blocking finding: the PR has **no linked issue** — `closingIssuesReferences` is empty, the body has no `Closes #N` keyword, and the repo's own required check "Require an issue reference in the PR body" is failing red (run 37090128908), per `conventions/backlog.md`'s CI-enforced rule. No issue also means no `## Acceptance criteria` to review correctness against, and `mergeable_state` is `UNSTABLE` regardless of the code. Reviewed the code anyway for when it comes back: the `circleMethodRounds` / `matchGeneration.ts` reimplementation (polygon-rotation method, round-1 "fold" to match PB.com, per-pool/per-rep round numbering) looks correct, and the new unit tests cover the right invariants (fold pairing, 21-unique-pairs/7-rounds, even counts, multi-pool isolation, `play_each_team_times=2`). No UI touched, so design/phone/reuse gates don't apply beyond the issue-link defect.
@@ -1789,3 +1827,16 @@ phone-check status. Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes` askin
 mobile-audit case covering the new chip picker / standings / round-grid / podium before
 re-review. Next: Builder adds the phone-check case and re-pushes; reviewer re-reviews on the next
 commit.
+
+## 2026-10-04 — Reviewer: PR #1088 (RR-only divisions read FINAL, #1087) — APPROVE
+
+Reviewed PR #1088 against #1087's acceptance criteria. `LiveResultsPage.tsx`'s phase now goes
+`final` on `medals.some(gold) || (rrOnly && allGamesDone)`, where `rrOnly = teams_advancing_to_playoff
+<= 0` — matches the repo-wide convention used identically in `bracketTeams.ts`, `eventStatus.ts`,
+`tournamentSummary.ts`, `SchedulePage.tsx`, `EventConsolePage.tsx`. Playoff divisions are untouched
+since `rrOnly` is false for them. The diff also showed `pbcom-driver/deploy/medals.mts` as a "new"
+file; confirmed via `git diff`/`git show` that its content is byte-identical to what's already on
+`main` (merged separately via #1086, squash commit `05c0335` vs this branch's pre-squash `141abbf`)
+— a stale merge-base artifact, not scope creep, no-op on merge. No DECISIONS.md violation, no UI/
+phone-gate surface (logic-only change), no reuse concern. CI green, `MERGEABLE`/`CLEAN`, not draft.
+Posted `VERDICT: APPROVE` + `reviewed:approve`. Next: dispatcher merges to `main` (TEST) per D-0052.
