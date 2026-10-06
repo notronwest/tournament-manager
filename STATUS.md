@@ -1884,3 +1884,15 @@ Note: the previous "PR #1074 review" STATUS entry (commit d515fdd) was committed
 `pbcom-wizard-controls` feature branch instead of `main` and never made it here — `main` jumped
 straight from the court-suggestion entry above to this one. Not reconstructed here; flagging so it
 isn't mistaken for this session's mistake too.
+
+## 2026-10-06 — Summary report: Sunday vanished from a two-day tournament (late-entry window fix)
+
+Ron: "The summary shows no start/end time for Sunday." Regression from the late-entry
+clipping (#918): the wizard stores `starts_at`/`ends_at` as local MIDNIGHT of each date, so
+`ends_at` is the start of the last day, not its end — every Sunday score after 6am was
+counted as late entry and the day dropped out of days/hours of play. The rule now works on
+calendar days: a score is late only when, shifted by the 6h grace, its calendar day falls
+outside startDay..endDay (12:30am Monday still folds into Sunday; Tuesday stays late).
+`lib/tournamentSummary.ts` only; new test for the Sat–Sun / midnight-end shape (15 cases in
+the file). typecheck + build + lint clean; 314 vitest pass (pdf-lib / xlsx suites can't load
+in this sandbox). Ron: reload the summary — Sunday should show its own row and span.

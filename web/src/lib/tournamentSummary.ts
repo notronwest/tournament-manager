@@ -132,16 +132,19 @@ export type SummaryInput = {
   matches: Match[];
   // Time zone used to bucket finishes into days; defaults to the browser's.
   timeZone?: string;
-  // The tournament's scheduled window. Scores recorded well outside it
-  // (a bronze match typed in days later) are late data entry, not play:
-  // they still count toward matches / points / podiums but not toward
-  // days or hours of play.
+  // The tournament's scheduled window. Scores recorded outside its calendar
+  // days (a bronze match typed in days later) are late data entry, not
+  // play: they still count toward matches / points / podiums but not toward
+  // days or hours of play. Only the DATES matter — the wizard stores both
+  // as local midnight (the end date is the start of the last day, not the
+  // end of it), so never compare against the end timestamp itself.
   window?: { startsAt: string; endsAt: string };
 };
 
-// How far past the scheduled end (or before the start) a recorded score
-// still counts as tournament play — a final that runs late and gets
-// typed in after midnight is play; a score entered two days later isn't.
+// How far past the last day's midnight (or before the first day's) a
+// recorded score still counts as tournament play — a final that runs late
+// and gets typed in at 12:30am is play; a score entered two days later
+// isn't.
 const LATE_ENTRY_GRACE_MS = 6 * 60 * 60 * 1000;
 
 const GENDER_LABEL: Record<SummaryEvent["gender"], string> = {
@@ -411,16 +414,17 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     if (!lastResultAt || f.at > lastResultAt) lastResultAt = f.at;
     let key = dayKey(f.at, timeZone);
     if (haveWindow && startDay && endDay) {
+      // Shift by the grace before taking the calendar day: a 12:30am score
+      // reads as the previous evening (still the last day), a 10am score the
+      // next morning does not.
       const t = f.at.getTime();
-      if (
-        t < windowStart.getTime() - LATE_ENTRY_GRACE_MS ||
-        t > windowEnd.getTime() + LATE_ENTRY_GRACE_MS
-      ) {
+      const lateKey = dayKey(new Date(t - LATE_ENTRY_GRACE_MS), timeZone);
+      const earlyKey = dayKey(new Date(t + LATE_ENTRY_GRACE_MS), timeZone);
+      if (earlyKey < startDay || lateKey > endDay) {
         lateScores++;
         continue;
       }
-      // Inside the grace period but past midnight → still the last day
-      // (a final scored at 12:30am belongs to the day it was played).
+      // Inside the grace period but past midnight → still the last day.
       if (key < startDay) key = startDay;
       if (key > endDay) key = endDay;
     }
