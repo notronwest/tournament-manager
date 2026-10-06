@@ -181,7 +181,7 @@ describe("buildTournamentSummary", () => {
     expect(e2.complete).toBe(false);
   });
 
-  it("buckets finishes into days and measures first-to-last score", () => {
+  it("buckets finishes into days and measures first-to-last score (no start times)", () => {
     expect(summary.days.map((d) => [d.date, d.matches, d.spanMinutes])).toEqual([
       ["2026-06-06", 3, 120],
       ["2026-06-07", 2, 60],
@@ -308,5 +308,36 @@ describe("tournament window", () => {
     const s = buildTournamentSummary({ events, regs, players, matches: [...played, late], timeZone: TZ });
     expect(s.headline.days).toBe(2);
     expect(s.lateScores).toBe(0);
+  });
+
+  it("runs each day from the first match on court, preferring ended_at over updated_at", () => {
+    const timed = [
+      // On court 12:40, finished 13:00 — updated_at moved later (a court reassignment).
+      { ...played[0], started_at: "2026-06-06T12:40:00Z", ended_at: "2026-06-06T13:00:00Z", updated_at: "2026-06-06T21:00:00Z" },
+      played[1],
+    ];
+    const s = buildTournamentSummary({ events, regs, players, matches: timed, timeZone: TZ, window });
+    expect(s.days.map((d) => [d.date, d.firstStart.toISOString(), d.lastFinish.toISOString(), d.spanMinutes])).toEqual([
+      ["2026-06-06", "2026-06-06T12:40:00.000Z", "2026-06-06T20:00:00.000Z", 440],
+    ]);
+    expect(s.headline.playMinutes).toBe(440);
+  });
+
+  it("ignores a start that isn't a real play window", () => {
+    // Loaded on court hours before it was scored → no usable start; falls back to the finish.
+    const stale = { ...played[0], started_at: "2026-06-06T08:00:00Z", ended_at: "2026-06-06T13:00:00Z" };
+    const s = buildTournamentSummary({ events, regs, players, matches: [stale, played[1]], timeZone: TZ, window });
+    expect(s.days[0].firstStart.toISOString()).toBe("2026-06-06T13:00:00.000Z");
+    expect(s.days[0].spanMinutes).toBe(420);
+  });
+
+  it("treats a match with a start but no ended_at as finishing at updated_at (late entry still excluded)", () => {
+    const lateFinal = match({ id: "c", event_id: "e1", team_a_reg_id: "r2", team_b_reg_id: "r3", team_a_score: 2, team_b_score: 0, winner_reg_id: "r2", updated_at: "2026-06-09T16:00:00Z" });
+    const s = buildTournamentSummary({
+      events, regs, players, timeZone: TZ, window,
+      matches: [...played, { ...lateFinal, started_at: "2026-06-06T21:00:00Z", ended_at: null }],
+    });
+    expect(s.lateScores).toBe(1);
+    expect(s.days.map((d) => [d.date, d.matches, d.spanMinutes])).toEqual([["2026-06-06", 2, 420]]);
   });
 });
