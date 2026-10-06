@@ -5,6 +5,34 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-05 — Reviewer: PR #1092 reviewed (REQUEST CHANGES — missing issue link + stacked on unresolved #1090/#1091)
+
+Reviewed PR #1092 ("feat(summary): ⭐ teams that play at the host club") per
+`daemon/agents/reviewer/PROMPT.md`. Two findings, both blocking:
+
+1. **Missing issue link.** `closingIssuesReferences` is empty, the body has no `Closes #N`, and
+   the "PR links an issue" check is red — same `wmpc-meta/conventions/backlog.md` defect already
+   flagged today on #1090 and #1091.
+2. **Stacked on unresolved dependencies.** The PR body itself says #1091
+   (`[DB] player_club_affiliations`) "must merge first" and this is "stacked on #1090 ... merge
+   that first" — neither has merged, and both still carry today's unaddressed `reviewed:changes`
+   (#1090's commit `95da3fc` in this diff is byte-identical to the one already sent back). Approving
+   now would have the dispatcher land #1090's un-reworked commit out of order and ship against a
+   table (#1091) not yet on `main`. The code degrades gracefully if the table's missing (caught
+   `PostgrestError`, warns, renders without stars) — not a crash risk, but the sequencing the PR's
+   own description asked for should be honored.
+
+Reviewed the star-feature code anyway for when it comes back: `fetchHomeClubPlayerIds`'s narrow
+untyped cast matches the existing `TimedMatch`/`MatchTimer` precedent for reading ahead of
+generated types; either-partner-stars-the-team logic and the "legend only if `homeClubTeams > 0`"
+gating check out against the new tests; the PDF's `★`→`clean()`→`*` path and the
+`0x2b50`/`0x2605`/`0xfe0f` handling look right; no new component/layout (star suffix + one legend
+line in existing sections), so D-0049 has nothing to flag.
+
+Posted `VERDICT: REQUEST CHANGES` + label `reviewed:changes`. **Next:** get #1090 and #1091 clean
+and merged first (diff should shrink to just the star commit per the PR's own note), then add the
+tracking issue + `Closes #N`.
+
 ## 2026-10-05 — Reviewer: PR #1091 reviewed, corrected mid-review (REQUEST CHANGES — missing issue link)
 
 Reviewed PR #1091 (`[DB] player_club_affiliations` — per-org home-club membership for the
