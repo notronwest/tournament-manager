@@ -1896,3 +1896,14 @@ outside startDay..endDay (12:30am Monday still folds into Sunday; Tuesday stays 
 `lib/tournamentSummary.ts` only; new test for the Sat–Sun / midnight-end shape (15 cases in
 the file). typecheck + build + lint clean; 314 vitest pass (pdf-lib / xlsx suites can't load
 in this sandbox). Ron: reload the summary — Sunday should show its own row and span.
+
+## 2026-10-06 — Summary report: Sunday still missing → window widened + whole-day rule + named days
+
+Ron: "Sunday still does not show up" after #1094. Can't see his data from here; the remaining
+way Sunday gets dropped is the tournament's dates not covering it (entered as Saturday only
+while a bracket ran Sunday). Two changes in `lib/tournamentSummary.ts`: (1) the play window
+is the tournament dates widened to any event's `scheduled_start_at` day; (2) a day outside
+the dates that holds MORE than 2 scores is a day of play, not late entry (a desk types one
+or two corrections after the fact, not a whole day). Summary now also returns `lateDays` +
+`playWindow`, and the page's note names the excluded days and the window it used, with an
+Edit link to fix the dates. 3 new tests (18 in file). typecheck/lint/build clean.

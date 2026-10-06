@@ -332,3 +332,49 @@ describe("tournament window", () => {
     expect(s.lateScores).toBe(0);
   });
 });
+
+describe("tournament window — dates that don't cover the play", () => {
+  const players = [player("p1", "Ann", "Adams"), player("p2", "Bo", "Burke"), player("p3", "Cy", "Cole"), player("p4", "Di", "Dunn")];
+  const regs = [reg("r1", "e1", "p1"), reg("r2", "e1", "p2"), reg("r3", "e1", "p3"), reg("r4", "e1", "p4")];
+  // Tournament entered as Saturday only.
+  const satOnly = { startsAt: "2026-06-06T00:00:00Z", endsAt: "2026-06-06T00:00:00Z" };
+  const saturday = [
+    match({ id: "a", event_id: "e1", team_a_reg_id: "r1", team_b_reg_id: "r2", team_a_score: 11, team_b_score: 5, winner_reg_id: "r1", updated_at: "2026-06-06T14:00:00Z" }),
+    match({ id: "b", event_id: "e1", team_a_reg_id: "r3", team_b_reg_id: "r4", team_a_score: 11, team_b_score: 7, winner_reg_id: "r3", updated_at: "2026-06-06T16:00:00Z" }),
+  ];
+  const sundayAt = (id: string, hh: string) =>
+    match({ id, event_id: "e1", team_a_reg_id: "r1", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 9, winner_reg_id: "r1", updated_at: `2026-06-07T${hh}:00:00Z` });
+
+  it("counts a whole Sunday of scores as play even when the dates say Saturday only", () => {
+    const sunday = [sundayAt("c", "13"), sundayAt("d", "14"), sundayAt("e", "15")];
+    const s = buildTournamentSummary({
+      events: [event({ id: "e1", name: "Singles", format: "singles" })],
+      regs, players, matches: [...saturday, ...sunday], timeZone: TZ, window: satOnly,
+    });
+    expect(s.lateScores).toBe(0);
+    expect(s.lateDays).toEqual([]);
+    expect(s.days.map((d) => [d.date, d.matches])).toEqual([["2026-06-06", 2], ["2026-06-07", 3]]);
+    expect(s.headline.days).toBe(2);
+  });
+
+  it("still treats one or two scores on a stray day as late entry, and names the day", () => {
+    const s = buildTournamentSummary({
+      events: [event({ id: "e1", name: "Singles", format: "singles" })],
+      regs, players, matches: [...saturday, sundayAt("c", "13")], timeZone: TZ, window: satOnly,
+    });
+    expect(s.lateScores).toBe(1);
+    expect(s.lateDays).toEqual(["2026-06-07"]);
+    expect(s.playWindow).toEqual({ startDay: "2026-06-06", endDay: "2026-06-06" });
+    expect(s.headline.days).toBe(1);
+  });
+
+  it("widens the window to a bracket scheduled on Sunday, so even one Sunday score is play", () => {
+    const s = buildTournamentSummary({
+      events: [event({ id: "e1", name: "Singles", format: "singles", scheduled_start_at: "2026-06-07T13:00:00Z" })],
+      regs, players, matches: [...saturday, sundayAt("c", "13")], timeZone: TZ, window: satOnly,
+    });
+    expect(s.lateScores).toBe(0);
+    expect(s.playWindow).toEqual({ startDay: "2026-06-06", endDay: "2026-06-07" });
+    expect(s.days.map((d) => d.date)).toEqual(["2026-06-06", "2026-06-07"]);
+  });
+});
