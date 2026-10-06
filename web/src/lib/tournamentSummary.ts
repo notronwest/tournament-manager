@@ -15,11 +15,12 @@ import {
 // shaped report so the rendering (and the tests) stay simple.
 //
 // Honesty notes baked into the shape:
-//   * Matches carry no started_at / completed_at. A completed match's
-//     updated_at is the moment its score was recorded (the only later
-//     write is a score reset, which flips it back to pending), so
-//     "finished at" is real. There is no per-match duration — the play
-//     window is first score → last score.
+//   * A match's play window is started_at → ended_at (stamped when it is
+//     loaded onto a court / scored; migration 20261002120000). Matches
+//     from before timing shipped, or scored without ever being on a court,
+//     fall back to updated_at as the finish and have no start. Each day
+//     runs from its first match start (or first finish, when no match that
+//     day has a start) to its last finish.
 //   * Only spot-holding registrations become teams (mirrors the console).
 //   * Scores are one pair per match (no per-game log), so "points" means
 //     the recorded final score of each match.
@@ -83,9 +84,12 @@ export type DaySummary = {
   date: string;
   matches: number;
   points: number;
+  // First match on court that day (falls back to the first finish when no
+  // match that day recorded a start).
+  firstStart: Date;
   firstFinish: Date;
   lastFinish: Date;
-  // Minutes between the first and last recorded score that day.
+  // Minutes from firstStart to lastFinish.
   spanMinutes: number;
 };
 
@@ -100,7 +104,7 @@ export type TournamentSummary = {
     pointsScored: number;
     courtsUsed: number;
     days: number;
-    // Sum of each day's first-score → last-score span.
+    // Sum of each day's first-start → last-finish span.
     playMinutes: number;
     medalsAwarded: number;
     multiEventPlayers: number;
@@ -113,6 +117,8 @@ export type TournamentSummary = {
   // Scores recorded outside the tournament window (+ grace) and therefore
   // left out of the day-by-day / hours-of-play figures.
   lateScores: number;
+  // Set when the report marks home-club teams (drives the legend).
+  homeClub: { name: string; teams: number } | null;
 };
 
 // What the report masthead needs about the tournament itself.
@@ -125,11 +131,18 @@ export type ReportHeader = {
   venueAddress: string | null;
 };
 
+// started_at / ended_at are newer than the generated types (migration
+// 20261002120000) — same optional treatment as the court managers.
+export type TimedMatch = Match & {
+  started_at?: string | null;
+  ended_at?: string | null;
+};
+
 export type SummaryInput = {
   events: SummaryEvent[];
   regs: EventRegistration[];
   players: Player[];
-  matches: Match[];
+  matches: TimedMatch[];
   // Time zone used to bucket finishes into days; defaults to the browser's.
   timeZone?: string;
   // The tournament's scheduled window. Scores recorded well outside it
@@ -137,12 +150,21 @@ export type SummaryInput = {
   // they still count toward matches / points / podiums but not toward
   // days or hours of play.
   window?: { startsAt: string; endsAt: string };
+  // The hosting org's club: teams with at least one member get
+  // HOME_CLUB_MARK after their name everywhere a team is named.
+  homeClub?: { name: string; playerIds: ReadonlySet<string> };
 };
+
+export const HOME_CLUB_MARK = "⭐";
 
 // How far past the scheduled end (or before the start) a recorded score
 // still counts as tournament play — a final that runs late and gets
 // typed in after midnight is play; a score entered two days later isn't.
 const LATE_ENTRY_GRACE_MS = 6 * 60 * 60 * 1000;
+
+// A start more than this before its finish isn't a real play window (the
+// match sat loaded on a court, or was scored the next day).
+const MAX_MATCH_MS = 3 * 60 * 60 * 1000;
 
 const GENDER_LABEL: Record<SummaryEvent["gender"], string> = {
   men: "Men's",
@@ -222,8 +244,23 @@ function joinNames(names: string[], max = 3): string {
   return `${names.slice(0, max).join(", ")} and ${names.length - max} more`;
 }
 
+// When a scored match finished, and when it went on court if known. A start
+// later than the finish, or on another calendar day (a match loaded and then
+// scored the next morning), is not a usable start.
+function matchWindow(
+  m: TimedMatch,
+  points: number,
+): { at: Date; start: Date | null; points: number } {
+  const at = new Date(m.ended_at ?? m.updated_at);
+  const s = m.started_at ? new Date(m.started_at) : null;
+  const start =
+    s && !Number.isNaN(s.getTime()) && s <= at && at.getTime() - s.getTime() < MAX_MATCH_MS ? s : null;
+  return { at, start, points };
+}
+
 export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
-  const { events, regs, players, matches, timeZone, window } = input;
+  const { events, regs, players, matches, timeZone, window, homeClub } = input;
+  let homeClubTeams = 0;
 
   const regsByEvent = new Map<string, EventRegistration[]>();
   for (const r of regs) {
@@ -231,7 +268,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     arr.push(r);
     regsByEvent.set(r.event_id, arr);
   }
-  const matchesByEvent = new Map<string, Match[]>();
+  const matchesByEvent = new Map<string, TimedMatch[]>();
   for (const m of matches) {
     const arr = matchesByEvent.get(m.event_id) ?? [];
     arr.push(m);
@@ -259,7 +296,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
   let pointsScored = 0;
   let medalsAwarded = 0;
   const courts = new Set<string>();
-  const finishes: { at: Date; points: number }[] = [];
+  const finishes: { at: Date; start: Date | null; points: number }[] = [];
 
   // Fun-fact accumulators.
   let highestScoring: { total: number; line: string; event: string } | null = null;
@@ -273,6 +310,14 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
   const eventResults: EventResult[] = sortedEvents.map((e) => {
     const evRegs = regsByEvent.get(e.id) ?? [];
     const teams = buildTeams(evRegs, players);
+    if (homeClub) {
+      for (const t of teams) {
+        if (homeClub.playerIds.has(t.captain.id) || (t.partner && homeClub.playerIds.has(t.partner.id))) {
+          t.label = `${t.label} ${HOME_CLUB_MARK}`;
+          homeClubTeams++;
+        }
+      }
+    }
     const byReg = teamByAnyRegId(teams);
     const evMatches = matchesByEvent.get(e.id) ?? [];
     const rr = evMatches.filter((m) => m.stage === "round_robin");
@@ -299,7 +344,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
         courts.add(m.court);
         courtCounts.set(m.court, (courtCounts.get(m.court) ?? 0) + 1);
       }
-      finishes.push({ at: new Date(m.updated_at), points: total });
+      finishes.push(matchWindow(m, total));
 
       const hi = Math.max(m.team_a_score, m.team_b_score);
       const lo = Math.min(m.team_a_score, m.team_b_score);
@@ -430,6 +475,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
         date: key,
         matches: 1,
         points: f.points,
+        firstStart: f.start ?? f.at,
         firstFinish: f.at,
         lastFinish: f.at,
         spanMinutes: 0,
@@ -438,12 +484,13 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
       d.matches++;
       d.points += f.points;
       if (f.at < d.firstFinish) d.firstFinish = f.at;
+      if ((f.start ?? f.at) < d.firstStart) d.firstStart = f.start ?? f.at;
       if (f.at > d.lastFinish) d.lastFinish = f.at;
     }
   }
   const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
   for (const d of days) {
-    d.spanMinutes = Math.round((d.lastFinish.getTime() - d.firstFinish.getTime()) / 60000);
+    d.spanMinutes = Math.round((d.lastFinish.getTime() - d.firstStart.getTime()) / 60000);
   }
   const playMinutes = days.reduce((sum, d) => sum + d.spanMinutes, 0);
 
@@ -560,7 +607,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
       key: "longest-day",
       label: "Longest day",
       value: fmtMinutes(longest.spanMinutes),
-      detail: `${fmtDay(longest.date)} — ${plural(longest.matches, "match", "matches")}, first score to last`,
+      detail: `${fmtDay(longest.date)} — ${plural(longest.matches, "match", "matches")}, first match on court to last score`,
     });
   }
 
@@ -584,6 +631,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     days,
     lastResultAt,
     lateScores,
+    homeClub: homeClub && homeClubTeams > 0 ? { name: homeClub.name, teams: homeClubTeams } : null,
   };
 }
 
@@ -638,11 +686,12 @@ export function summaryAsText(header: ReportHeader, s: TournamentSummary, note: 
   );
   lines.push(`• ${h.pointsScored.toLocaleString()} points scored · ${h.medalsAwarded} medals awarded`);
   if (h.days > 0) {
-    lines.push(`• ${h.days} ${h.days === 1 ? "day" : "days"} of play, ${fmtMinutes(h.playMinutes)} first score to last`);
+    lines.push(`• ${h.days} ${h.days === 1 ? "day" : "days"} of play, ${fmtMinutes(h.playMinutes)} first match on court to last score`);
   }
   if (h.courtsUsed > 0) lines.push(`• ${h.courtsUsed} courts used`);
   lines.push("");
   lines.push("BRACKETS & WINNERS");
+  if (s.homeClub) lines.push(`${HOME_CLUB_MARK} plays at ${s.homeClub.name}`);
   for (const e of s.events) {
     lines.push(`${e.name} (${e.formatLine}) — ${e.teamCount} teams`);
     if (e.podium.length === 0) {

@@ -22,6 +22,7 @@ import {
   fmtDateRange,
   fmtDay,
   fmtMinutes,
+  HOME_CLUB_MARK,
   type Podium,
   type ReportHeader,
   type TournamentSummary,
@@ -114,6 +115,11 @@ export function TournamentSummaryReport({
       {/* ── Brackets + winners ───────────────────────────────────── */}
       <section style={{ marginBottom: 26 }} className="print-section">
         <h2 style={h2}>Brackets &amp; winners</h2>
+        {summary.homeClub && (
+          <p style={{ fontSize: 12.5, color: inkMuted, margin: "-4px 0 12px" }}>
+            {HOME_CLUB_MARK} plays at {summary.homeClub.name}
+          </p>
+        )}
         {summary.events.length === 0 ? (
           <p style={{ color: inkMuted, fontSize: 14 }}>No brackets on this tournament yet.</p>
         ) : (
@@ -185,7 +191,7 @@ export function TournamentSummaryReport({
                 <th style={th}>Day</th>
                 <th style={{ ...th, textAlign: "right" }}>Matches</th>
                 <th style={{ ...th, textAlign: "right" }}>Points</th>
-                <th style={th}>First → last score</th>
+                <th style={th}>On court → last score</th>
                 <th style={{ ...th, textAlign: "right" }}>Span</th>
               </tr>
             </thead>
@@ -196,7 +202,7 @@ export function TournamentSummaryReport({
                   <td style={{ ...td, textAlign: "right" }}>{d.matches}</td>
                   <td style={{ ...td, textAlign: "right" }}>{d.points.toLocaleString()}</td>
                   <td style={{ ...td, whiteSpace: "nowrap" }}>
-                    {fmtTime(d.firstFinish)} → {fmtTime(d.lastFinish)}
+                    {fmtTime(d.firstStart)} → {fmtTime(d.lastFinish)}
                   </td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>{fmtMinutes(d.spanMinutes)}</td>
                 </tr>
@@ -210,13 +216,13 @@ export function TournamentSummaryReport({
                 <div style={{ fontSize: 13, color: inkSoft, marginTop: 4, lineHeight: 1.5 }}>
                   {plural(d.matches, "match", "matches")} · {d.points.toLocaleString()} points
                   <br />
-                  {fmtTime(d.firstFinish)} → {fmtTime(d.lastFinish)} · {fmtMinutes(d.spanMinutes)}
+                  {fmtTime(d.firstStart)} → {fmtTime(d.lastFinish)} · {fmtMinutes(d.spanMinutes)}
                 </div>
               </div>
             ))}
           </div>
           <p style={{ fontSize: 11.5, color: inkMuted, margin: "8px 0 0", lineHeight: 1.5 }}>
-            Times are when each score was recorded at the desk, shown in this browser's time zone.
+            Each day runs from the first match going on court to the last score recorded, shown in this browser's time zone.
           </p>
         </section>
       )}
