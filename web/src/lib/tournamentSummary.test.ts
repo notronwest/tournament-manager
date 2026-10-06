@@ -303,6 +303,28 @@ describe("tournament window", () => {
     expect(s.days.map((d) => [d.date, d.matches, d.spanMinutes])).toEqual([["2026-06-06", 3, 690]]);
   });
 
+  it("keeps the last day's scores when the end date is stored as midnight (two-day tournament)", () => {
+    // The wizard stores both dates as local midnight: a Sat–Sun tournament
+    // has ends_at = Sunday 00:00. Sunday afternoon scores are play, not late.
+    const twoDay = { startsAt: "2026-06-06T00:00:00Z", endsAt: "2026-06-07T00:00:00Z" };
+    const sunday = [
+      match({ id: "c", event_id: "e1", team_a_reg_id: "r2", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 9, winner_reg_id: "r2", updated_at: "2026-06-07T15:00:00Z" }),
+      match({ id: "d", event_id: "e1", team_a_reg_id: "r1", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 4, winner_reg_id: "r1", updated_at: "2026-06-07T19:30:00Z" }),
+    ];
+    const s = buildTournamentSummary({ events, regs, players, matches: [...played, ...sunday], timeZone: TZ, window: twoDay });
+    expect(s.lateScores).toBe(0);
+    expect(s.days.map((d) => [d.date, d.matches, d.spanMinutes])).toEqual([
+      ["2026-06-06", 2, 420],
+      ["2026-06-07", 2, 270],
+    ]);
+    expect(s.headline.days).toBe(2);
+    // ...but a score typed in on Tuesday is still late.
+    const tuesday = match({ id: "e", event_id: "e1", team_a_reg_id: "r1", team_b_reg_id: "r2", team_a_score: 11, team_b_score: 7, winner_reg_id: "r1", updated_at: "2026-06-09T16:00:00Z" });
+    const s2 = buildTournamentSummary({ events, regs, players, matches: [...played, ...sunday, tuesday], timeZone: TZ, window: twoDay });
+    expect(s2.lateScores).toBe(1);
+    expect(s2.headline.days).toBe(2);
+  });
+
   it("buckets by calendar day when no window is given", () => {
     const late = match({ id: "c", event_id: "e1", team_a_reg_id: "r2", team_b_reg_id: "r3", team_a_score: 11, team_b_score: 9, winner_reg_id: "r2", updated_at: "2026-06-09T16:00:00Z" });
     const s = buildTournamentSummary({ events, regs, players, matches: [...played, late], timeZone: TZ });
