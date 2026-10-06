@@ -113,6 +113,11 @@ export type TournamentSummary = {
   // Scores recorded outside the tournament window (+ grace) and therefore
   // left out of the day-by-day / hours-of-play figures.
   lateScores: number;
+  // The calendar days (YYYY-MM-DD) those late scores fell on, oldest first.
+  lateDays: string[];
+  // The window the report actually used (tournament dates widened by any
+  // event's scheduled day), or null when none was given.
+  playWindow: { startDay: string; endDay: string } | null;
 };
 
 // What the report masthead needs about the tournament itself.
@@ -146,6 +151,12 @@ export type SummaryInput = {
 // and gets typed in at 12:30am is play; a score entered two days later
 // isn't.
 const LATE_ENTRY_GRACE_MS = 6 * 60 * 60 * 1000;
+
+// A day outside the tournament dates that still holds this many scores is
+// a day of play the organizer forgot to put in the dates (a Sunday on a
+// tournament entered as Saturday only), not late data entry — a desk types
+// in one or two corrections after the fact, not a whole day's results.
+const LATE_ENTRY_MAX_PER_DAY = 2;
 
 const GENDER_LABEL: Record<SummaryEvent["gender"], string> = {
   men: "Men's",
@@ -398,36 +409,32 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
   });
 
   // Days of play from recorded finishes, clipped to the tournament window.
+  // The window is the tournament's dates widened to cover any event's
+  // scheduled day, so a Sunday bracket on a tournament entered as Saturday
+  // only still counts.
   const windowStart = window ? new Date(window.startsAt) : null;
   const windowEnd = window ? new Date(window.endsAt) : null;
   const haveWindow =
     !!windowStart && !!windowEnd &&
     !Number.isNaN(windowStart.getTime()) && !Number.isNaN(windowEnd.getTime());
-  const startDay = haveWindow ? dayKey(windowStart, timeZone) : null;
-  const endDay = haveWindow ? dayKey(windowEnd, timeZone) : null;
+  let startDay = haveWindow ? dayKey(windowStart, timeZone) : null;
+  let endDay = haveWindow ? dayKey(windowEnd, timeZone) : null;
+  if (startDay && endDay) {
+    for (const e of events) {
+      if (!e.scheduled_start_at) continue;
+      const d = new Date(e.scheduled_start_at);
+      if (Number.isNaN(d.getTime())) continue;
+      const k = dayKey(d, timeZone);
+      if (k < startDay) startDay = k;
+      if (k > endDay) endDay = k;
+    }
+  }
 
-  let lateScores = 0;
   let lastResultAt: Date | null = null;
   const byDay = new Map<string, DaySummary>();
-  for (const f of finishes) {
-    if (Number.isNaN(f.at.getTime())) continue;
-    if (!lastResultAt || f.at > lastResultAt) lastResultAt = f.at;
-    let key = dayKey(f.at, timeZone);
-    if (haveWindow && startDay && endDay) {
-      // Shift by the grace before taking the calendar day: a 12:30am score
-      // reads as the previous evening (still the last day), a 10am score the
-      // next morning does not.
-      const t = f.at.getTime();
-      const lateKey = dayKey(new Date(t - LATE_ENTRY_GRACE_MS), timeZone);
-      const earlyKey = dayKey(new Date(t + LATE_ENTRY_GRACE_MS), timeZone);
-      if (earlyKey < startDay || lateKey > endDay) {
-        lateScores++;
-        continue;
-      }
-      // Inside the grace period but past midnight → still the last day.
-      if (key < startDay) key = startDay;
-      if (key > endDay) key = endDay;
-    }
+  // Finishes outside the window, bucketed by their own day; decided below.
+  const outside = new Map<string, { at: Date; points: number }[]>();
+  const addFinish = (key: string, f: { at: Date; points: number }) => {
     const d = byDay.get(key);
     if (!d) {
       byDay.set(key, {
@@ -443,6 +450,40 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
       d.points += f.points;
       if (f.at < d.firstFinish) d.firstFinish = f.at;
       if (f.at > d.lastFinish) d.lastFinish = f.at;
+    }
+  };
+  for (const f of finishes) {
+    if (Number.isNaN(f.at.getTime())) continue;
+    if (!lastResultAt || f.at > lastResultAt) lastResultAt = f.at;
+    let key = dayKey(f.at, timeZone);
+    if (startDay && endDay) {
+      // Shift by the grace before taking the calendar day: a 12:30am score
+      // reads as the previous evening (still the last day), a 10am score the
+      // next morning does not.
+      const t = f.at.getTime();
+      const lateKey = dayKey(new Date(t - LATE_ENTRY_GRACE_MS), timeZone);
+      const earlyKey = dayKey(new Date(t + LATE_ENTRY_GRACE_MS), timeZone);
+      if (earlyKey < startDay || lateKey > endDay) {
+        const arr = outside.get(key) ?? [];
+        arr.push(f);
+        outside.set(key, arr);
+        continue;
+      }
+      // Inside the grace period but past midnight → still the last day.
+      if (key < startDay) key = startDay;
+      if (key > endDay) key = endDay;
+    }
+    addFinish(key, f);
+  }
+  // A whole day's worth of scores outside the dates is play, not late entry.
+  let lateScores = 0;
+  const lateDays: string[] = [];
+  for (const [key, fs] of [...outside.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (fs.length > LATE_ENTRY_MAX_PER_DAY) {
+      for (const f of fs) addFinish(key, f);
+    } else {
+      lateScores += fs.length;
+      lateDays.push(key);
     }
   }
   const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
@@ -588,6 +629,8 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     days,
     lastResultAt,
     lateScores,
+    lateDays,
+    playWindow: startDay && endDay ? { startDay, endDay } : null,
   };
 }
 
