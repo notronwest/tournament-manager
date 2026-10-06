@@ -117,6 +117,8 @@ export type TournamentSummary = {
   // Scores recorded outside the tournament window (+ grace) and therefore
   // left out of the day-by-day / hours-of-play figures.
   lateScores: number;
+  // Set when the report marks home-club teams (drives the legend).
+  homeClub: { name: string; teams: number } | null;
 };
 
 // What the report masthead needs about the tournament itself.
@@ -148,7 +150,12 @@ export type SummaryInput = {
   // they still count toward matches / points / podiums but not toward
   // days or hours of play.
   window?: { startsAt: string; endsAt: string };
+  // The hosting org's club: teams with at least one member get
+  // HOME_CLUB_MARK after their name everywhere a team is named.
+  homeClub?: { name: string; playerIds: ReadonlySet<string> };
 };
+
+export const HOME_CLUB_MARK = "⭐";
 
 // How far past the scheduled end (or before the start) a recorded score
 // still counts as tournament play — a final that runs late and gets
@@ -252,7 +259,8 @@ function matchWindow(
 }
 
 export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
-  const { events, regs, players, matches, timeZone, window } = input;
+  const { events, regs, players, matches, timeZone, window, homeClub } = input;
+  let homeClubTeams = 0;
 
   const regsByEvent = new Map<string, EventRegistration[]>();
   for (const r of regs) {
@@ -302,6 +310,14 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
   const eventResults: EventResult[] = sortedEvents.map((e) => {
     const evRegs = regsByEvent.get(e.id) ?? [];
     const teams = buildTeams(evRegs, players);
+    if (homeClub) {
+      for (const t of teams) {
+        if (homeClub.playerIds.has(t.captain.id) || (t.partner && homeClub.playerIds.has(t.partner.id))) {
+          t.label = `${t.label} ${HOME_CLUB_MARK}`;
+          homeClubTeams++;
+        }
+      }
+    }
     const byReg = teamByAnyRegId(teams);
     const evMatches = matchesByEvent.get(e.id) ?? [];
     const rr = evMatches.filter((m) => m.stage === "round_robin");
@@ -615,6 +631,7 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
     days,
     lastResultAt,
     lateScores,
+    homeClub: homeClub && homeClubTeams > 0 ? { name: homeClub.name, teams: homeClubTeams } : null,
   };
 }
 
@@ -674,6 +691,7 @@ export function summaryAsText(header: ReportHeader, s: TournamentSummary, note: 
   if (h.courtsUsed > 0) lines.push(`• ${h.courtsUsed} courts used`);
   lines.push("");
   lines.push("BRACKETS & WINNERS");
+  if (s.homeClub) lines.push(`${HOME_CLUB_MARK} plays at ${s.homeClub.name}`);
   for (const e of s.events) {
     lines.push(`${e.name} (${e.formatLine}) — ${e.teamCount} teams`);
     if (e.podium.length === 0) {

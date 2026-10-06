@@ -22,6 +22,7 @@ import {
   fmtDateRange,
   fmtDay,
   fmtMinutes,
+  HOME_CLUB_MARK,
   type Podium,
   type ReportHeader,
   type TournamentSummary,
@@ -114,6 +115,11 @@ export function TournamentSummaryReport({
       {/* ── Brackets + winners ───────────────────────────────────── */}
       <section style={{ marginBottom: 26 }} className="print-section">
         <h2 style={h2}>Brackets &amp; winners</h2>
+        {summary.homeClub && (
+          <p style={{ fontSize: 12.5, color: inkMuted, margin: "-4px 0 12px" }}>
+            {HOME_CLUB_MARK} plays at {summary.homeClub.name}
+          </p>
+        )}
         {summary.events.length === 0 ? (
           <p style={{ color: inkMuted, fontSize: 14 }}>No brackets on this tournament yet.</p>
         ) : (

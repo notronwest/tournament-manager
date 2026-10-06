@@ -113,7 +113,7 @@ export async function renderSummaryPdf(input: {
   drawMasthead(sheet, header);
   if (note.trim()) drawNote(sheet, note.trim());
   drawTiles(sheet, summary);
-  drawBrackets(sheet, summary.events);
+  drawBrackets(sheet, summary.events, summary.homeClub);
   if (summary.highlights.length > 0) drawHighlights(sheet, summary.highlights);
   if (summary.days.length > 0) drawDays(sheet, summary);
   drawClosing(sheet, header, summary);
@@ -197,6 +197,11 @@ function clean(s: string): string {
       out += ch;
       continue;
     }
+    if (cp === 0x2b50 || cp === 0x2605) {
+      out += "*"; // ⭐ / ★ home-club mark — Helvetica has no star glyph
+      continue;
+    }
+    if (cp === 0xfe0f) continue; // emoji variation selector
     if (cp === 0x2192 || cp === 0x27a1) {
       out += "-"; // → (never used by our own copy, but a team name might)
       continue;
@@ -653,7 +658,7 @@ function layoutEventCard(s: Sheet, e: EventResult): Block {
   };
 }
 
-function drawBrackets(s: Sheet, events: EventResult[]): void {
+function drawBrackets(s: Sheet, events: EventResult[], homeClub: TournamentSummary["homeClub"]): void {
   const gap = 8;
   if (events.length === 0) {
     sectionTitle(s, "Brackets & winners", BODY.lh);
@@ -662,7 +667,12 @@ function drawBrackets(s: Sheet, events: EventResult[]): void {
     return;
   }
   const cards = events.map((e) => layoutEventCard(s, e));
-  sectionTitle(s, "Brackets & winners", cards[0].height);
+  const legendH = homeClub ? FINE.lh + 6 : 0;
+  sectionTitle(s, "Brackets & winners", legendH + cards[0].height);
+  if (homeClub) {
+    s.text(`★ plays at ${homeClub.name}`, MARGIN, Sheet.baseline(s.y, FINE.size, FINE.lh), FINE.size, s.fonts.regular, s.c.inkMuted);
+    s.y -= legendH;
+  }
   cards.forEach((card, i) => {
     if (i > 0) s.y -= gap;
     s.ensure(card.height);
