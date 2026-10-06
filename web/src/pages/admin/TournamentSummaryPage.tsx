@@ -7,6 +7,7 @@ import type { Database } from "../../types/supabase";
 import type { EventRegistration, Match, Player } from "../../lib/bracketTeams";
 import {
   buildTournamentSummary,
+  fmtDay,
   summaryAsText,
   type ReportHeader,
   type SummaryEvent,
@@ -305,9 +306,16 @@ export default function TournamentSummaryPage() {
 
         {summary.lateScores > 0 && (
           <div style={{ ...statusPanelStyle("info"), marginBottom: 16, fontSize: 13 }} role="status">
-            {summary.lateScores === 1 ? "One score was" : `${summary.lateScores} scores were`} recorded
-            after the tournament ended (late entry). {summary.lateScores === 1 ? "It counts" : "They count"} toward
-            matches, points and podiums but not toward days or hours of play.
+            {summary.lateScores === 1 ? "One score was" : `${summary.lateScores} scores were`} recorded on{" "}
+            {summary.lateDays.map(fmtDay).join(", ")}, outside the tournament dates
+            {summary.playWindow && (
+              <> ({fmtDay(summary.playWindow.startDay)}
+                {summary.playWindow.endDay !== summary.playWindow.startDay && <> – {fmtDay(summary.playWindow.endDay)}</>})</>
+            )}
+            . {summary.lateScores === 1 ? "It counts" : "They count"} toward matches, points and podiums but not
+            toward days or hours of play. If play really ran on{" "}
+            {summary.lateDays.length === 1 ? "that day" : "those days"}, fix the dates under{" "}
+            <Link to={`${base}/wizard`} style={{ color: "inherit" }}>Edit</Link> and this page updates on reload.
           </div>
         )}
 
