@@ -5,6 +5,30 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Reviewer: PR #1104 reviewed (APPROVE — campaign_events DB PR)
+
+Reviewed PR #1104 ("[DB] campaign_events table + record_campaign_event RPC (D-0077)", Closes
+#1103) per `daemon/agents/reviewer/PROMPT.md`. `gh pr diff`/`gh pr view`/`gh pr comment` hit
+GitHub's secondary rate limit under the GraphQL path; switched to the REST API (`gh api`,
+plus a raw `curl` for the diff/comment/label) for the whole review — worth knowing if a future
+review session sees the same "API rate limit already exceeded" error on a fresh token.
+
+Verified against #1103/#1100's AC: table shape, indexes, no `deleted_at`/no anon-select RLS,
+`record_campaign_event`'s kind validation, no-`player_id`-argument + server-stamped signup, and
+the hour-window `recap_view` dedupe all match the issue's spec exactly. Checked D-0004's
+"Builder blocks RLS/SECURITY DEFINER" clause specifically — this migration contains both — but
+confirmed via `git log`/label search that this repo has repeatedly merged Builder-drafted
+RLS + SECURITY DEFINER migrations before (`withdraw_self_rpc`, `merge_events`, Quote Studio
+P2–P4, `refund_compute`) whenever the design was already fully specified at the issue level
+(here, daemon-dispatched from Ron's D-0077 ruling) — treated this as established practice, not
+a fresh judgment call needing escalation. Confirmed no `supabase/tests` dir exists, so the
+embedded `has_table_privilege('anon', ...)` guard is the only available substitute for the "a
+test asserts public can't select" AC — same honest limit the migration convention itself
+documents. No reuse violation (grepped for `campaign`/`campaign_events` — genuinely new). No UI,
+so D-0047 doesn't apply. CI green, `mergeable_state: clean`. Posted `VERDICT: APPROVE` +
+`reviewed:approve`. Next: dispatcher merges #1104, then #1106 (UX PR) becomes reviewable once the
+RPC is live on `main`.
+
 ## 2026-10-08 — Builder: issue #1100 (campaign capture, D-0077) split into DB PR #1104 + UX PR #1106
 
 Single-item run, built only #1100 (Agent Ready → In Progress). No open sub-issues/PRs existed
