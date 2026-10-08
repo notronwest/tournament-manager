@@ -8,6 +8,7 @@ import { PartnerInviteOnboarding } from "./auth/PartnerInviteOnboarding";
 import EnvBanner from "./components/EnvBanner";
 import FeedbackWidget from "./components/FeedbackWidget";
 import ScrollToTop from "./components/ScrollToTop";
+import CampaignCapture from "./components/CampaignCapture";
 import { RouteTracker, ConsentBanner } from "./components/AnalyticsConsent";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
@@ -127,6 +128,11 @@ export default function App() {
       <EnvBanner />
       {/* Reset scroll to the top on every route change (React Router doesn't). */}
       <ScrollToTop />
+      {/* Campaign capture (D-0077): persist a `?c=<campaign>` query param
+          for the session, first-party only — no third-party script, and
+          independent of analytics consent (RouteTracker below is gated on
+          consent; this must not be). */}
+      <CampaignCapture />
       {/* Global top banner — rendered once for the whole app.
           SiteHeader hides itself on /login so the only "Sign in"
           surface there is the page itself. */}
