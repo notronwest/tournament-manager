@@ -22,7 +22,8 @@
 //
 // The amount is computed SERVER-SIDE (never trusted from the client) via
 // the compute_checkout_total RPC, then optionally reduced by a validated
-// coupon. The platform fee drives the Connect split.
+// coupon, then by any available account credit (#1102, D-0077 §2, coupon
+// first). The platform fee drives the Connect split.
 //
 // Platform fee is read from the platform_settings table (no-code,
 // editable by the site super-admin), not from an env var.
@@ -188,6 +189,32 @@ Deno.serve(async (req: Request) => {
       // the error before the user reaches Pay.
     }
 
+    // ── 3b. Account credit (issue #1102, D-0077 §2) ─────────────────
+    // Applied to the remainder AFTER the coupon, floored at zero — never
+    // more than the coupon left owing, and never more than the player
+    // actually has. The balance is read authoritatively server-side
+    // (account_credit_balance); the client names neither the org nor the
+    // amount, so it can't forge or inflate this. Not redeemed yet — that's
+    // the atomic step, done at payment success (stripe-webhook) or
+    // immediately below for a free checkout — this only lowers what Stripe
+    // (or the free-confirm path) charges.
+    let creditAppliedCents = 0;
+    if (totalCents > 0) {
+      const { data: creditBalance } = await admin.rpc("account_credit_balance", {
+        p_organization_id: tournament.organization_id,
+        p_player_id: player.id,
+      });
+      creditAppliedCents = Math.min(totalCents, Number(creditBalance ?? 0));
+      if (creditAppliedCents > 0) {
+        totalCents -= creditAppliedCents;
+        lineItems.push({
+          event_registration_id: null,
+          description: "Account credit",
+          amount_cents: -creditAppliedCents,
+        });
+      }
+    }
+
     // ── Free registration (no payment) ──────────────────────────────
     // $0 to pay — either the tournament has no fees or a coupon zeroed the
     // basket. There's no Stripe charge and therefore no webhook to flip the
@@ -207,6 +234,20 @@ Deno.serve(async (req: Request) => {
         .in("status", PAYABLE_STATUSES);
       if (flipErr) return json({ error: "free_confirm_failed" }, 500);
       if (couponId) await admin.rpc("redeem_coupon", { p_coupon_id: couponId });
+      // Redeem the credit now — a free confirm has no webhook to do it
+      // later. Idempotency here comes from the PAYABLE_STATUSES guard
+      // above: a retried call finds nothing left in regIdsToCharge and
+      // returns "nothing_to_charge" before ever reaching this line, same
+      // as the coupon redemption right above it.
+      if (creditAppliedCents > 0) {
+        await admin.rpc("redeem_account_credit", {
+          p_organization_id: tournament.organization_id,
+          p_player_id: player.id,
+          p_amount_cents: creditAppliedCents,
+          p_registration_id: regIdsToCharge[0] ?? null,
+          p_payment_intent_id: null,
+        });
+      }
       await sendFreeInvites(admin, player.id, regIdsToCharge, baseUrl);
       return json({ confirmed: true, free: true }, 200);
     }
@@ -260,6 +301,11 @@ Deno.serve(async (req: Request) => {
       player_id: player.id,
       tournament_id: tournament.id,
       coupon_id: couponId ?? "",
+      // How much account credit (issue #1102) this intent's amount already
+      // reflects — the webhook reads this to redeem the SAME amount
+      // atomically at payment success. Not a trust boundary: the amount was
+      // computed server-side above, never from the client.
+      credit_cents: String(creditAppliedCents),
       // Sanitised origin for the webhook's partner-invite links (#191).
       base_url: (baseUrl ?? "").replace(/\/+$/, "").slice(0, 200),
     };
