@@ -254,7 +254,7 @@ security definer
 set search_path = public
 stable
 as $$
-  select coalesce(sum(amount_cents), 0)::integer
+  select greatest(0, coalesce(sum(amount_cents), 0))::integer
   from public.account_credits
   where organization_id = p_organization_id
     and player_id = p_player_id
@@ -262,7 +262,7 @@ as $$
 $$;
 
 comment on function public.account_credit_balance(uuid, uuid) is
-  'Authoritative account-credit balance for one (org, player): unexpired grants net of redemptions and refund_restores. Server-only (not granted to anon/authenticated) — called from create-payment-intent with explicit params since the edge function has no user session.';
+  'Authoritative account-credit balance for one (org, player): unexpired grants net of redemptions and refund_restores, floored at zero so an expired grant can only forfeit its unspent remainder down to zero, never carry prior spend negative. Server-only (not granted to anon/authenticated) — called from create-payment-intent with explicit params since the edge function has no user session.';
 
 revoke all on function public.account_credit_balance(uuid, uuid) from public;
 
