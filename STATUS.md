@@ -5,6 +5,142 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Reviewer: PR #1110 re-review after rework — APPROVE
+
+Re-reviewed PR #1110 per `daemon/agents/reviewer/PROMPT.md` after the Builder's rework push
+(0e6e86f) that addressed the prior `REQUEST CHANGES` (see entry below). Verdict: **APPROVE** —
+both findings resolved (`recap_view` now fires via `recordRecapViewEvent()`; a mobile-audit case
+for `/t/:orgSlug/:tournamentSlug/recap` now exists in `audit.spec.ts`), AC/D-0049/D-0047 all
+checked against the actual diff (not the PR body's word). Verified independently in a worktree:
+`tsc -b --noEmit` matches the 2 pre-existing `SchedulePage.tsx` errors on a clean `origin/main`
+checkout; `npm run lint` is 32 errors on this branch vs. 34 on `origin/main` (confirmed both),
+exact match to the PR's claim; `npx vitest run` → 357/357 pass; `npm run build` succeeds. The two
+disclosed "pre-existing syntax break" fixes in `e2e/fixtures.ts`/`e2e/seed.ts` are real and predate
+this branch (checked directly against `origin/main`).
+
+Hit the same transient GitHub secondary rate limit as the #1109 review below
+(`API rate limit already exceeded for user ID 632944`, despite `gh api rate_limit` showing
+headroom) posting the verdict; retried with backoff and it landed:
+https://github.com/notronwest/tournament-manager/pull/1110#issuecomment-6063556644, with the
+`reviewed:approve` label confirmed on #1110 (`mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`).
+**Next:** the dispatcher merges on this APPROVE per D-0052 — confirm it actually merged next time
+this repo's PRs are checked.
+
+## 2026-10-08 — Builder: rework on PR #1110 (issue #1108) — addressed REQUEST CHANGES
+
+Single-item rework per `daemon/agents/builder/PROMPT.md` Phase A(b): PR #1110 (closes #1108) had
+a `VERDICT: REQUEST CHANGES` from the reviewer (see entry below) — two mechanical findings, no
+product decision needed. Fixed on the SAME branch (`feature/issue-1101-tournament-recap`), no
+second PR:
+
+1. **`recap_view` now fires.** Rebased the branch onto `origin/main` first — both #1106
+   (campaign-capture helpers) and #1109 (the `public_tournament_recap` RPC) had merged since this
+   branch was cut, so the cross-PR dependency the original PR cited for skipping this is gone.
+   Added `recordRecapViewEvent()` to `campaignCapture.ts` (mirrors `recordSignupEvent`,
+   `p_kind: "recap_view"`) and call it once on mount in `TournamentRecapPage.tsx` when `?c=` is
+   present. Two new unit tests in `campaignCapture.test.ts`.
+2. **D-0047 phone gate: added the missing mobile-audit case.** New case in
+   `e2e/mobile/audit.spec.ts` for `/t/:orgSlug/:tournamentSlug/recap`, asserting the "Create your
+   account" CTA is visible, in-viewport, and ≥44px at 390px. No `completed` tournament existed in
+   the seed to reach a real recap (vs. the "isn't available" state) — added `e2e-recap-cup` to
+   `seed.ts` + a `SEED.recap` entry to `fixtures.ts`.
+
+While touching those two e2e files, found (and fixed) two **pre-existing** syntax breaks
+unrelated to this story — an unclosed `partnerNotice` object literal in `fixtures.ts` and a
+missing closing `)` in `seed.ts`'s `e2e-reopen-future-deadline` insert — both confirmed present
+on `origin/main` before this branch touched them, and both blocking the whole file from parsing
+(so the new test couldn't even run without fixing them). Flagged in the PR for Ron in case he'd
+rather that be its own record.
+
+Verified: `typecheck`/`build` pass; `lint` is net 2 errors *better* than a clean `main` baseline
+(34→32 — the 2 fewer being the syntax fixes, nothing new introduced); full `npm test` (357 tests,
+32 files) passes. Pushed, refreshed the PR body's validation steps, posted the
+`<!-- wmpc-builder -->`-tagged "Addressed" comment, moved card #1108 back to **In Review**.
+
+**Next:** reviewer re-reviews PR #1110 on the push.
+
+## 2026-10-08 — Reviewer: PR #1110 (public tournament recap page, #1108/#1101) — REQUEST CHANGES
+
+Reviewed per `daemon/agents/reviewer/PROMPT.md`. D-0049 reuse is clean: `PublicPageLink` is a
+genuine de-duplicating extraction out of `TournamentDetailPage.tsx`, and the new page reuses
+`buildTournamentSummary`/`TournamentSummaryReport` unchanged, as #1101 required. Two blocking
+findings: (1) `recap_view` is never recorded — #1101's acceptance criteria requires it, and the
+PR's stated reason (sibling PR #1106 not yet merged) is stale — #1106 merged at 12:43:45Z, nine
+minutes before this PR's own commit, so the capture helpers (`getOrCreateVisitorId()`,
+`record_campaign_event` via the `recordSignupEvent()` pattern) are live on `main`; shipping
+without wiring this reproduces the exact data-loss scenario D-0077 §3 exists to prevent.
+(2) D-0047 phone gate: no case for the new `/recap` route in `web/e2e/mobile/audit.spec.ts`, and
+`regression.yml` doesn't run on `pull_request` — identical gap to the one REQUEST-CHANGES'd on
+PR #1067 for the Brackets tab. Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes`. Next:
+Builder adds the `recap_view` firing (~3-4 lines, per the PR's own notes) and a mobile-audit case
+for the recap page, then re-push for re-review.
+
+## 2026-10-08 — Reviewer: PR #1109 (`[DB] public_tournament_recap RPC`) — APPROVE
+
+Reviewed per `daemon/agents/reviewer/PROMPT.md`. Checked the diff against #1107's AC, D-0077
+(explicitly pre-authorizes this exact SECURITY DEFINER shape, piece 1, "touches no money"),
+D-0004 (general SECURITY DEFINER caution superseded here by D-0077's specific authorization),
+and D-0049 (deliberately modelled on `public_tournament_results` per D-0077's own instruction,
+not a diverging copy). No UI in this PR, so no design/phone-gate check applies.
+
+Verified rather than took the PR body's word for it: checked out the PR branch in a worktree,
+ran `publicTournamentRecap.test.ts` (3/3 pass), `tsc -b --noEmit` (same 2 pre-existing
+`SchedulePage.tsx` errors as a clean `origin/main` checkout, diffed side by side), and
+`npm run lint` (34 errors/4 warnings, matching the PR's claimed pre-existing count, none in the
+two new files). Cross-checked the RPC's `events`/`tournament` payload keys field-for-field
+against `SummaryEvent`/`ReportHeader` in `tournamentSummary.ts` and the `venue_address`
+`concat_ws` composition against `composeAddress()` in `TournamentSummaryPage.tsx` — confirmed
+the payload is actually shaped for `buildTournamentSummary`, not just plausibly named.
+Confirmed D-0077 §3's ordering requirement (capture ships before the recap page) is satisfied —
+issue #1100's capture (#1104 DB + #1106 UX) already merged ahead of this RPC.
+
+Hit a transient GitHub secondary rate limit (`API rate limit already exceeded for user ID
+632944`) posting the verdict, despite `gh api rate_limit` showing headroom; retried in a
+backoff loop. Verdict comment landed:
+https://github.com/notronwest/tournament-manager/pull/1109#issuecomment-6061107064, and the
+`reviewed:approve` label is on #1109. **Next:** the dispatcher merges on this APPROVE per
+D-0052 — confirm it actually merged (CI was green, not a draft, not `production` base) next
+time this repo's PRs are checked.
+
+## 2026-10-08 — Builder: issue #1101 (public recap page) split into DB PR #1109 + UX PR #1110
+
+Built issue #1101 ("Public tournament recap at /t/:org/:slug/recap", D-0077 §1) per
+`daemon/agents/builder/PROMPT.md`, single-item mode. Confirmed #1101 had no existing
+sub-issues/PRs before starting (not mis-queued). Needed a DB migration, so split per the
+schema/infra hard rule — created sub-issues #1107 `[DB]` and #1108 `[UX]` of #1101, both PRs
+targeting `main`:
+
+- **PR #1109** (closes #1107) — `public_tournament_recap` SQL RPC (migration
+  `20261008140000_public_tournament_recap_rpc.sql`), modelled on the existing
+  `public_tournament_results` RPC, gated to `status = 'completed'` only, curated payload (no
+  fee/refund/withdrawal/payout/contact field). Added `web/src/lib/publicTournamentRecap.test.ts`
+  — a static assertion on the migration's own SQL text (no live DB in this sandboxed run),
+  imported via Vite's `?raw` (same pattern as `pbImport.test.ts`'s CSV fixture) rather than
+  `node:fs`, since `src/`'s tsconfig has no Node ambient types.
+- **PR #1110** (closes #1108) — new `TournamentRecapPage.tsx` at
+  `/t/:orgSlug/:tournamentSlug/recap`, reusing `buildTournamentSummary` + `TournamentSummaryReport`
+  unchanged (D-0049) against the RPC payload, same untyped-client-cast pattern `LiveResultsPage`
+  already uses for its own hand-written RPC. Extracted a shared `PublicPageLink` component out of
+  a private duplicate in `TournamentDetailPage.tsx` (D-0049) and reused it for a new "Copy recap
+  link" action on the admin Summary page, gated to completed tournaments. Verified no horizontal
+  overflow and a tappable in-viewport CTA at 390px with a Playwright script mocking the RPC
+  response (no live Supabase project available in this sandboxed run).
+
+**Deliberately incomplete, flagged in PR #1110's Reviewer notes:** the `recap_view` campaign-event
+firing (one of #1101's 8 acceptance criteria) was left out. `record_campaign_event`'s RPC is on
+`main` (via merged #1104), but the visitor-id/campaign-capture helper it needs
+(`getOrCreateVisitorId`/`getCapturedCampaign`) only exists on sibling PR #1106, still unmerged —
+duplicating it now would create exactly the diverging second copy D-0049 forbids, and branching
+off an unrelated card's in-flight branch felt like the wrong entanglement for a single-item run.
+Recommended a small follow-up (3-4 lines) once #1106 merges.
+
+Board: #1101 → In Progress (parent; no own PR, fills when both sub-issues merge per the split
+convention), #1107 and #1108 → In Review.
+
+**Next:** Ron reviews/merges PR #1109 first (DB), then PR #1110 (UX) once the migration is live
+on the preview's Supabase project — PR #1110 explicitly can't be validated end-to-end until then.
+Separately, #1106 (campaign capture client) is still open and blocks the recap_view follow-up.
+
 ## 2026-10-08 — Reviewer: PR #1106 reviewed (APPROVE — campaign capture client PR)
 
 Reviewed PR #1106 ("feat(campaign): visitor id + ?c=<campaign> carry-through + signup event
