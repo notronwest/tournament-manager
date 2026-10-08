@@ -68,3 +68,21 @@ export async function recordRecapViewEvent(campaign: string): Promise<void> {
     // Best-effort — attribution is not worth failing the recap page over.
   }
 }
+
+// Shared link builders so every page that forwards `?c=<campaign>` (recap →
+// credit landing → login) does it the same way, rather than each page
+// re-deriving its own ternary (#1114).
+
+/** The credit landing page's own link, carrying `?c=` through hop 1. */
+export function buildCreditLandingHref(
+  orgSlug: string,
+  campaign: string | null,
+): string {
+  const base = `/t/${orgSlug}/credit`;
+  return campaign ? `${base}?c=${encodeURIComponent(campaign)}` : base;
+}
+
+/** The signup/login link, carrying `?c=` through the final hop. */
+export function buildLoginHref(campaign: string | null): string {
+  return campaign ? `/login?c=${encodeURIComponent(campaign)}` : "/login";
+}

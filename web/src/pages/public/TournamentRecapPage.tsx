@@ -11,7 +11,12 @@ import {
   type TournamentSummary,
 } from "../../lib/tournamentSummary";
 import { TournamentSummaryReport } from "../../components/TournamentSummaryReport";
-import { recordRecapViewEvent } from "../../lib/campaignCapture";
+import {
+  buildCreditLandingHref,
+  buildLoginHref,
+  recordRecapViewEvent,
+} from "../../lib/campaignCapture";
+import { CREDIT_OFFER_AMOUNT_USD, isCreditOfferEnabled } from "../../lib/featureFlags";
 import {
   bodyFontStack,
   contentColStyle,
@@ -120,7 +125,11 @@ export default function TournamentRecapPage() {
     };
   }, [payload]);
 
-  const signupHref = campaign ? `/login?c=${encodeURIComponent(campaign)}` : "/login";
+  const creditOfferEnabled = isCreditOfferEnabled();
+  const ctaHref =
+    creditOfferEnabled && orgSlug
+      ? buildCreditLandingHref(orgSlug, campaign)
+      : buildLoginHref(campaign);
 
   if (loading) {
     return (
@@ -182,10 +191,19 @@ export default function TournamentRecapPage() {
             borderRadius: 10,
           }}
         >
-          <p style={{ margin: "0 0 14px", fontSize: 15, color: inkSoft, fontFamily: bodyFontStack }}>
-            Want to see your own tournament history and sign up for the next one?
-          </p>
-          <Link to={signupHref} style={ctaPrimaryStyle}>
+          {creditOfferEnabled ? (
+            <p style={{ margin: "0 0 14px", fontSize: 15, color: inkSoft, fontFamily: bodyFontStack }}>
+              <strong>${CREDIT_OFFER_AMOUNT_USD} toward your next {header.orgName} tournament.</strong>{" "}
+              Create your account and we&rsquo;ll add a ${CREDIT_OFFER_AMOUNT_USD} credit, good on any
+              tournament {header.orgName} runs. (Our tournaments only — it isn&rsquo;t cash and
+              can&rsquo;t be used at other clubs.)
+            </p>
+          ) : (
+            <p style={{ margin: "0 0 14px", fontSize: 15, color: inkSoft, fontFamily: bodyFontStack }}>
+              Want to see your own tournament history and sign up for the next one?
+            </p>
+          )}
+          <Link to={ctaHref} style={ctaPrimaryStyle}>
             Create your account
           </Link>
         </div>

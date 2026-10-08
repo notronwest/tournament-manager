@@ -155,6 +155,15 @@ test.describe("mobile audit — screenshots", () => {
     await snap(page, ti, "tournament-details");
   });
 
+  // $20-credit landing page (#1114). The deployed test project runs with
+  // VITE_CREDIT_OFFER unset (flag OFF, the safe default), so this always
+  // renders the "isn't available" state here — a layout-assertion case for
+  // the flag-ON copy belongs on whichever environment turns the flag on.
+  test("credit landing page", async ({ page }, ti) => {
+    await page.goto(`/t/${SEED.orgSlug}/credit`);
+    await snap(page, ti, "credit-landing");
+  });
+
   // FIXME (per-project seed isolation): reuses the existing-partner registrant,
   // whose registration is CONSUMED by the chromium registration flow first (one
   // shared tm-test DB) — so on mobile this user is already registered and the

@@ -63,6 +63,7 @@ import TournamentContactPage from "./pages/public/TournamentContactPage";
 import StartTimesPage from "./pages/public/StartTimesPage";
 import LiveResultsPage from "./pages/public/LiveResultsPage";
 import TournamentRecapPage from "./pages/public/TournamentRecapPage";
+import CreditLandingPage from "./pages/public/CreditLandingPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
@@ -238,6 +239,10 @@ export default function App() {
         path="/t/:orgSlug/:tournamentSlug/recap"
         element={<TournamentRecapPage />}
       />
+      {/* $20-credit landing page the recap CTA points at (#1114). Org-scoped
+          (not tournament-scoped) since the credit is good on any of the
+          org's tournaments. */}
+      <Route path="/t/:orgSlug/credit" element={<CreditLandingPage />} />
       <Route
         path="/t/:orgSlug/:tournamentSlug/contact"
         element={<TournamentContactPage />}

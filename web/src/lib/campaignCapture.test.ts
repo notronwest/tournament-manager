@@ -7,6 +7,8 @@ vi.mock("../supabase", () => ({ supabase: { rpc } }));
 vi.mock("./visitorId", () => ({ getOrCreateVisitorId: () => "visitor-123" }));
 
 import {
+  buildCreditLandingHref,
+  buildLoginHref,
   captureCampaignParam,
   getCapturedCampaign,
   recordRecapViewEvent,
@@ -82,5 +84,29 @@ describe("campaignCapture", () => {
   it("recordRecapViewEvent swallows RPC failures (best-effort, never blocks the recap page)", async () => {
     rpc.mockRejectedValueOnce(new Error("network down"));
     await expect(recordRecapViewEvent("leaf-peeper-2026")).resolves.toBeUndefined();
+  });
+
+  describe("buildCreditLandingHref", () => {
+    it("carries the campaign tag through hop 1 (recap -> credit landing)", () => {
+      expect(buildCreditLandingHref("wmpc", "leaf-peeper-2026")).toBe(
+        "/t/wmpc/credit?c=leaf-peeper-2026",
+      );
+    });
+
+    it("omits ?c= when there is no campaign to carry", () => {
+      expect(buildCreditLandingHref("wmpc", null)).toBe("/t/wmpc/credit");
+    });
+  });
+
+  describe("buildLoginHref", () => {
+    it("carries the campaign tag through hop 2 (credit landing -> login)", () => {
+      expect(buildLoginHref("leaf-peeper-2026")).toBe(
+        "/login?c=leaf-peeper-2026",
+      );
+    });
+
+    it("omits ?c= when there is no campaign to carry", () => {
+      expect(buildLoginHref(null)).toBe("/login");
+    });
   });
 });
