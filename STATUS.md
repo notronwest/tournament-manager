@@ -5,6 +5,292 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Reviewer: PR #1121 re-review (REQUEST CHANGES — still stacked on open #1117/#1119, plus a new client-side mirror of the same bug)
+
+Re-reviewed PR #1121 (`[UX] grant + display the $20 account credit`, closes #1120, sub of
+#1102/D-0077 §2) after its new push (head `d8ed0413`). Confirmed via REST API that #1117
+(`db-migration`) and #1119 (`edge-function`) are still open, unmerged, and still carry
+`reviewed:changes` with no fix commits since their last review — so `gh pr diff 1121` is still
+the full three-PR stack (the 338-line `account_credits` migration + both Stripe edge-function
+changes), not just the five UX-slice files. An APPROVE here would auto-merge (D-0052) the
+still-unfixed `account_credit_balance()` negative-balance bug (flagged twice already, on #1117
+and #1119) straight to `main`/TEST, bypassing the independent review those PRs still owe (D-0018).
+
+New finding specific to this PR: `web/src/lib/accountCredit.ts`'s `computeAccountCreditBalance`
+(net-new in #1121, not inherited) has the identical shape bug — nets every redemption/
+refund_restore against an already-filtered-out expired grant with no floor — and the pinned
+`accountCredit.test.ts` ("hard merge condition" per #1102) doesn't exercise the
+expired-grant-plus-prior-redemption combination that would catch it. Shielded from a visibly
+negative UI value today by `stackCouponThenCredit`'s own `Math.max(0, ...)` clamp, but the
+balance contract itself is wrong. Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes` label.
+Next: hold #1121 until #1117 (clamp fix) and #1119 are each independently fixed, reviewed, and
+merged; then rebase so the diff is UX-only, and add the missing test case + clamp to
+`computeAccountCreditBalance` in the same pass.
+
+## 2026-10-08 — Reviewer: PR #1119 review (REQUEST CHANGES — inherits #1117's unfixed money-math bug)
+
+Reviewed PR #1119 (`[FN] apply + redeem account credit in checkout`, closes #1118, sub of
+#1102/D-0077 §2) against #1102's acceptance criteria and the `validate_coupon()`/`redeem_coupon()`
+pattern it's meant to mirror. Edge-function logic itself is correct: coupon-then-credit stacking
+floored at zero, `credit_cents` PaymentIntent metadata server-computed and carried through both
+the create and reuse/update branches, free-confirm path redeems inline under the existing
+`PAYABLE_STATUSES` idempotency guard, webhook's new `organization_id`/`player_id` select is off the
+already-idempotency-guarded `payment` row (not client-forgeable). No reuse violation (D-0049) — it
+rides the coupon rail, no second rail. No UI, so D-0047 doesn't apply.
+
+Blocked on the same bug flagged on sibling PR #1117 below: #1119 is branched off #1117's branch
+(base `main`), so `supabase/migrations/20261008150000_account_credits.sql` — including the
+unfixed `account_credit_balance()` negative-balance bug — is part of *this* diff too. Confirmed
+#1117 still carries `reviewed:changes` with no fix commit since (checked its commit list: just the
+original + the unrelated "player is new" fix). Since #1119 can't exist independently of #1117's
+migration (it calls `account_credit_balance`/`redeem_account_credit`), it inherits the defect and
+isn't safe to land while #1117 is still in rework. Posted `VERDICT: REQUEST CHANGES` +
+`reviewed:changes` label, citing both the inherited bug and the sequencing dependency, plus a
+non-blocking note that `create-payment-intent`'s `admin.rpc("account_credit_balance", ...)` call
+ignores the RPC's `error` (acts as an unintentional fail-safe — defaults credit to 0 rather than
+crashing checkout — today; worth an explicit comment once #1117 lands). Next: Builder rebases
+#1119 onto #1117 once its clamp fix lands and `accountCredit.test.ts` is green, then re-request
+review.
+
+## 2026-10-08 — Reviewer: PR #1117 review (REQUEST CHANGES — account_credits ledger money-math bug)
+
+Reviewed PR #1117 (`[DB] account_credits ledger + credit_campaigns + grant/redeem RPCs`,
+closes #1116, sub of #1102/D-0077 §2) against #1102's acceptance criteria and the
+`validate_coupon()`/`redeem_coupon()` pattern it mirrors. Shape is right (ledger not balance
+column, server-resolved player/org/amount, idempotent grant via unique index + caught
+`unique_violation`, race-safe redeem via advisory xact lock, `credit_campaigns` locked down
+from anon/authenticated) but found one blocking bug: `account_credit_balance()`
+(`supabase/migrations/20261008150000_account_credits.sql:247-261`) can return a **negative**
+balance once a partially-redeemed grant expires — the WHERE filter drops the expired grant's
+full `+amount_cents` from the sum but keeps the `redemption` rows already drawn against it
+(they carry no `expires_at`). Example: grant `+2000`, redeem `-500` while live → balance `1500`
+(correct); grant expires → balance `sum(-500)` = `-500`. Directly contradicts #1102's AC ("the
+total never goes below zero", "an expired grant contributes zero") and would corrupt qbo-api's
+deferred-revenue read of the ledger (D-0012). Not exploitable for over-redemption today
+(`redeem_account_credit` fails closed on `v_balance <= 0`), but it's a real correctness defect
+in the authoritative SQL, not the sibling UX PR's TS test. Suggested a minimal fix
+(`greatest(0, ...)` clamp) without prescribing it. Posted `VERDICT: REQUEST CHANGES` +
+`reviewed:changes` label. Next: Builder fixes the clamp on `db/issue-1102-account-credits`,
+then #1119/#1121 (already rebased onto this branch per the entries below) pick it up on their
+next rebase.
+
+## 2026-10-08 — Builder: PR #1121 reworked — rebased onto #1119's current head
+
+Single-item rework run on issue #1120 (sub of #1102), triggered by the reviewer's
+`VERDICT: REQUEST CHANGES` on PR #1121 (`feature/issue-1102-account-credits`). The reviewer's
+core finding was merge-order, not a code defect: #1121 is cut off #1119, which is cut off
+#1117 — both still OPEN and unreviewed/unmerged — so `gh pr diff 1121` carried all three PRs'
+combined content, and an inadvertent future APPROVE would auto-merge the still-unreviewed
+DB migration and edge-function changes along with the UX slice (D-0052). The reviewer
+explicitly said the UX code itself "looks correct... and is not the issue." In-scope fix,
+mirroring the #1119-onto-#1117 precedent above: rebased `feature/issue-1102-account-credits`
+onto the current `fn/issue-1102-account-credits` head (`ee33444`), which now carries #1117's
+"player is new" fix (`ef5a79e`) — no change to the UX-slice code itself (same 6 files:
+`accountCredit.ts`/`.test.ts`, `campaignCapture.ts`, `CheckoutPage.tsx`, `ProfilePage.tsx`).
+Verified clean: typecheck has the same 2 pre-existing `SchedulePage.tsx` errors as `main`,
+build succeeds, lint is the same 36 problems (0 new), `npm test` 380/380 passing. Pushed to
+the same branch, posted an "Addressed" comment explicitly reaffirming the core merge-order
+point stands — #1121 still must not be approved before #1117 and #1119 merge — and moved the
+#1120 card back to **In Review**. Touched no other PR/card. Next: once #1119 itself rebases
+onto `main` post-#1117-merge, #1121 will need one more rebase to follow.
+
+## 2026-10-08 — Builder: PR #1119 reworked — rebased onto #1117's fixed migration
+
+Single-item rework run on issue #1118 (sub of #1102), triggered by the reviewer's
+`VERDICT: REQUEST CHANGES` on PR #1119 (`fn/issue-1102-account-credits`). The reviewer's
+core finding: #1119 was branched off #1117's *unfixed* migration commit (`2992c10` — the
+`grant_account_credit()` gap missing the "player is new" check, see the entry below), so
+merging #1119 would ship that hole into `main` independent of #1117's own fate. By the time
+this run picked it up, #1117 had already been fixed on its branch (commit `ef5a79e`) but not
+yet merged. Smallest in-scope fix: rebased `fn/issue-1102-account-credits` onto the current
+`db/issue-1102-account-credits` head, so #1119 now carries the fixed migration commit instead
+of the vulnerable one — no changes to the function code itself (`create-payment-intent`,
+`stripe-webhook`); the fn commit is an unchanged replay. Verified typecheck/build/lint match a
+clean `origin/main` checkout exactly (same pre-existing `SchedulePage.tsx` errors, same 36 lint
+problems — none new). Pushed to the same branch, posted an "Addressed" comment flagging that
+#1119 still depends on #1117 merging and will need one more rebase onto `main` once that
+happens, and moved the #1118 card back to **In Review**. Touched no other PR/card (#1117 was
+read-only reference). Next: once #1117 is reviewed/merged, this PR needs a final rebase onto
+`main` so its diff reduces to just the two function files, per its own PR description.
+
+## 2026-10-08 — Builder: PR #1117 reworked — `grant_account_credit()` now checks "player is new"
+
+Single-item rework run on issue #1116 (sub of #1102), triggered by the reviewer's
+`VERDICT: REQUEST CHANGES` on PR #1117 (see the entry below). Added the missing check inside
+`grant_account_credit()` itself: before inserting a grant row, the function now returns
+`{granted: false, reason: 'not_new_player'}` if the player has any prior `event_registrations`
+or `payments` row — closing the gap where any `authenticated` caller could invoke the RPC
+directly from the browser console and claim a campaign credit as long as they personally
+hadn't claimed that specific campaign before. Smallest possible diff: one `exists` check plus
+comment updates in `supabase/migrations/20261008150000_account_credits.sql`, same branch
+(`db/issue-1102-account-credits`), no new migration file. Verified `typecheck`/`build`/`lint`
+match `origin/main` exactly (confirmed the 2 `SchedulePage.tsx` typecheck errors and the 36
+lint problems pre-exist on a clean `main` checkout, unrelated to this SQL-only change). Pushed,
+posted an "Addressed" comment on #1117, refreshed the PR body's validation steps and Reviewer
+notes to reflect the fix. GitHub's GraphQL API hit a secondary rate limit mid-session (shared
+token across concurrently-running agents) — worked around it for the PR body edit via the REST
+`PATCH /pulls/1117` endpoint instead of `gh pr edit`; moving the board card back to **In Review**
+needed `gh project item-edit` (Projects v2 has no REST equivalent), so that step waited ~5 min
+for the rate limit to clear, then completed — confirmed the #1116 card now reads `In Review`.
+Touched no sibling PR (#1119 FN, #1121 UX) and opened no second PR. Next: reviewer re-reviews
+#1117 on this push per D-0052; #1119 and #1121 stay held behind it per the documented DB→FN→UX
+merge order.
+
+## 2026-10-08 — Reviewer: PR #1121 (UX PR, issue #1120/#1102) — REQUEST CHANGES
+
+Reviewed PR #1121 ("[UX] grant + display the $20 account credit", closes #1120). Same merge-order
+violation as #1119 below, one layer further out: #1121 is cut off #1119's branch, which is cut off
+#1117's — confirmed directly (`git merge-base --is-ancestor pr1117 pr1121` / `pr1119 pr1121` both
+true). #1117 (DB) and #1119 (FN) are still OPEN and unreviewed/unmerged (`mergedAt: null`), so
+`gh pr diff 1121` carries all three PRs' combined content — the full `account_credits` migration
+and both edge-function changes, not just the UX slice. Approving would auto-merge (D-0052) the
+unreviewed schema + Stripe money-path changes to `main`/TEST as a side effect of a UX approval,
+inverting the documented DB→FN→UX order (`daemon/agents/builder/PROMPT.md`) and D-0018's point of
+giving each its own review. The UX code itself (`accountCredit.ts` stacking math,
+`grantAccountCreditIfEligible()` reusing `recordSignupEvent()`'s call site, the checkout summary
+row reusing the existing coupon-discount row's style) looks correct and reuses established
+patterns — not the issue. D-0047: this repo's phone check is a nightly run against deployed
+`tm-test`, not a per-PR gate, and the populated-checkout audit case was already `test.fixme`
+pre-existing this PR — consistent with prior precedent (#1110/#1115 entries above), not a new gap.
+Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes`. **Next:** hold #1121 until #1117 and #1119
+are each independently reviewed and merged first; it should then re-review fast as a small diff.
+
+## 2026-10-08 — Reviewer: PR #1119 (FN PR, issue #1118/#1102) — REQUEST CHANGES
+
+Reviewed PR #1119 (`create-payment-intent` + `stripe-webhook` wiring for the account credit).
+The two function-level changes themselves are correct and mirror the existing coupon rail
+call-for-call (coupon-then-credit order, server-computed amounts floored at zero, atomic +
+idempotent redemption via `redeem_account_credit`'s advisory lock, org/player read off the
+server-trusted `payment` row). Blocked on something upstream: #1119's own commit history
+(`gh pr view 1119 --json commits`) includes commit `2992c108...` — byte-identical to #1117's
+current head, the same DB migration the Reviewer just put `reviewed:changes` on for the missing
+"player is new" check in `grant_account_credit()`. Because #1119 branched off #1117's unmerged
+branch, merging #1119 now would ship that unfixed migration to `main` independent of #1117's own
+fate — the exact merge-order violation #1117's `db-migration` label warns against ("merge in
+migration-timestamp order before UX PRs"). Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes`.
+Next: once #1117 gets the "is new" check and merges, Builder rebases `fn/issue-1102-account-credits`
+onto `main` so this PR's diff is only the two function files, then re-review. UX PR #1121 (branched
+off this FN branch) is unreviewed pending both of these.
+
+## 2026-10-08 — Reviewer: PR #1117 (DB PR, issue #1116/#1102) — REQUEST CHANGES
+
+`grant_account_credit()` is `grant execute`'d to `authenticated` but never checks the player is
+new — only that the campaign is live and not already granted for `(campaign, player_id)`. D-0077
+§2 and #1102's acceptance criteria both require the grant function itself to check the player is
+new; as written, any existing signed-in player can call the RPC directly from the client and claim
+the $20, not just genuine new signups. This is the same gap the Builder flagged as an open question
+in the PR's Reviewer notes ("trusts the call site... worth confirming that's an acceptable
+boundary") — confirmed it is not: a client call site enforces nothing for a `SECURITY DEFINER` RPC
+granted to `authenticated`. Everything else (ledger shape, RLS, idempotency via the partial unique
+index, org-scoping, advisory-lock redeem, qbo-api deferred-revenue comment) checked out clean.
+Next: Builder adds a server-side "is new" check inside `grant_account_credit()` (e.g., no prior
+`event_registrations`/`payments` for the player) before this re-reviews; FN PR #1119 and UX PR
+#1121 are unreviewed pending this one.
+
+## 2026-10-08 — Builder: issue #1102 built (the $20 account credit, D-0077 §2) — three PRs opened
+
+Single-item run on #1102, now that Ron's `OWNER-AUTHORIZED` line + the hard-merge money-math
+test requirement are both present (the owner money hatch). No open sub-issues/PRs existed yet,
+so this was a genuine build, not a mis-queue. Split per the schema/infra hard rule into three
+sub-issues, each with its own PR against `main`:
+- **[DB] #1116 → PR #1117**: `supabase/migrations/20261008150000_account_credits.sql` —
+  `credit_campaigns` (campaign → org/amount/live-window config; seeds `leaf-peeper-2026` → WMPC,
+  $20) + `account_credits` (the append-only ledger; RLS limits reads to the player's own rows) +
+  `grant_account_credit()` (SECURITY DEFINER, client-callable, idempotent via a unique index —
+  not just app logic) + `account_credit_balance()`/`redeem_account_credit()` (server-only, mirror
+  `validate_coupon()`/`redeem_coupon()`'s shape, race-safe via an advisory lock).
+- **[FN] #1118 → PR #1119** (branched off the DB branch, opened against `main`): wires credit into
+  `create-payment-intent` (applies after the coupon, floored at zero) and `stripe-webhook`'s
+  `handleSucceeded` (atomic redeem), plus the free-confirm path's immediate redeem. Mirrors the
+  coupon rail call-for-call. `stripe-refund` deliberately untouched — outside D-0077's own scope
+  line; a refund restoring credit is a follow-up.
+- **[UX] #1120 → PR #1121** (branched off the FN branch, opened against `main`): grants the credit
+  at signup via a new `grantAccountCreditIfEligible()` sitting right next to the existing
+  `recordSignupEvent()` call in `ProfilePage.tsx`'s new-player-row branch; previews the balance on
+  `CheckoutPage` from the player's own RLS-readable `account_credits` rows; adds
+  `web/src/lib/accountCredit.ts` (pure stacking/balance math) + `accountCredit.test.ts` — the HARD
+  merge-condition test named in #1102's acceptance criteria (coupon-then-credit order, partial
+  spend, never-below-zero, expired-grant-contributes-zero, refund_restore, org-scoping, no
+  cash-out/transfer function). `npm test`: 380/380 green. `typecheck`: only the 2 pre-existing
+  `SchedulePage.tsx` errors already on `main` (confirmed by running typecheck against a clean
+  `origin/main` checkout). `lint`: identical 36 problems (32 errors/4 warnings) on both branch and
+  `main` — zero new. Could **not** run the Playwright mobile audit (`test:e2e:offline`) in this
+  sandbox — no Docker available for the local Supabase stack — flagged in the PR for Ron to eyeball
+  the one new checkout summary row at 390px before merging.
+
+Judgment calls flagged in each PR's Reviewer notes rather than guessed silently: the
+`credit_campaigns` mapping table (the issue didn't specify the "campaign is live" mechanism), the
+"player is new" check resting on call-site discipline rather than an independent DB check (mirrors
+how `campaign_events`' own `signup` capture already works), and `registration_id` on a multi-event
+checkout's redemption row pointing at one representative registration rather than all of them.
+Next: Ron reviews DB → FN → UX in that order (each later PR depends on the earlier one's schema/
+functions); #1102's parent card carries the 0/3 sub-issue progress bar and moves to Done once all
+three merge.
+
+## 2026-10-08 — Builder: issue #1099 re-checked, re-confirmed mis-queued, moved to In Review (not rebuilt)
+
+Second single-item run targeting #1099, after an earlier run this same day reached the same
+conclusion and tried to move it out of Agent Ready (see the "Builder: issue #1099 found
+mis-queued, Blocked" entry below) but the card was back in Agent Ready by this run. Re-verified
+from scratch: no formal GitHub sub-issues of #1099 (`gh api .../1099/sub_issues` empty) and no
+open PR closes #1099 directly, so the literal "already has open sub-issues/PRs" check doesn't
+trip — but the de facto D-0077 decomposition is now further along than the prior entry recorded:
+**#1101** (public recap) is fully merged including the PRs #1109/#1110 and the TEST→PROD
+promotion #1111; its follow-on **#1114** (recap header + $20 CTA, PR #1115) is also merged;
+**#1100** (view-to-signup capture) was already closed/merged. Only **#1102** (the $20 credit
+ledger/grant) remains open, still correctly held in Agent Ready pending Ron's fresh money
+authorization — left untouched, per instructions to touch no other card. Nothing left under
+#1099 to build: its scope has either shipped or is intentionally parked elsewhere. Posted a
+fresh comment on #1099 with the updated breakdown and the same recommendation (close #1099 as
+superseded, or keep it as a tracking-only parent), then moved its board card to **In Review**
+(the outcome this run's dispatcher prompt specified for a mis-queued parent, rather than
+Blocked). No branch opened, no code touched, no other card moved. Next: Ron decides whether to
+close #1099 or leave it as a tracking parent; #1102 still needs his money-authorization line
+before it can be built.
+
+## 2026-10-08 — Reviewer: PR #1115 reviewed (APPROVE — recap header + $20 CTA, flag-gated)
+
+Reviewed PR #1115 ("Recap: $20-credit CTA + landing page, flag-gated (#1114)") per
+`daemon/agents/reviewer/PROMPT.md`. Closes #1114 (D-0077). Checked the diff against #1114's AC:
+header comes for free from the globally-mounted `SiteHeader` (verified directly in `App.tsx`, no
+duplicate header built); CTA copy matches Ron's wording, substituting `header.orgName` never
+hardcoded; `CreditLandingPage.tsx` covers every required element (org-only, 12-month expiry, not
+cash, single CTA); `?c=` campaign tag verified to survive both hops via new `buildCreditLandingHref`
+/`buildLoginHref` helpers, unit-tested both directions. Honesty gate holds: `isCreditOfferEnabled()`
+defaults OFF, and with it off the CTA is byte-identical to pre-PR copy — confirmed by running the
+new/updated unit tests myself in a worktree (`vitest run campaignCapture.test.ts featureFlags.test.ts`
+→ 15/15 pass), not just trusting the PR body. `tsc -b` showed 2 pre-existing `SchedulePage.tsx`
+errors, confirmed via `git diff main...HEAD -- SchedulePage.tsx` (empty) to predate this PR, not a
+regression. No reuse violation (D-0049): reuses `SiteHeader`/`SiteFooter`/`publicTheme` tokens and
+the "X isn't available" fallback shape already established by `TournamentRecapPage.tsx`'s own error
+state. D-0077 held correctly — org-scoped, zero #1102 ledger/grant code written, flag OFF everywhere
+so nothing changes on `main`/TEST/PROD today. D-0047: added a `/credit` case to `audit.spec.ts`'s
+screenshot-only bucket (same convention as `home`/`login`/`profile`), consistent with this repo's
+phone check actually being a nightly run against deployed `tm-test`, not a per-PR gate (confirmed in
+`e2e/SETUP.md`; no Playwright check in this PR's `statusCheckRollup`) — same precedent as the #1110
+review. Logged one non-blocking note for whoever flips the flag (likely #1102): `tm-test` never sets
+`VITE_CREDIT_OFFER`, so the new audit case can only ever render the flag-off/fallback state — the
+actual $20 copy has no automated 390px coverage yet anywhere; not a merge-safety issue now since the
+flag is off everywhere, but worth a phone check before that state goes live for real users. CI green,
+`mergeable_state: CLEAN`. Posted `VERDICT: APPROVE` + `reviewed:approve`. Next: dispatcher merges
+#1115; #1102 (the credit ledger/grant itself) remains held on Ron's money authorization.
+
+## 2026-10-08 — Builder: issue #1099 found mis-queued, Blocked (not rebuilt)
+
+Single-item run targeting #1099 ("Leaf Peeper follow-through: public recap, $20 account credit,
+view-to-signup tracking"). #1099 itself has no formal GitHub sub-issues and no open PR, so it
+didn't trip the literal "already has open sub-issues/PRs" dispatcher check — but it's functionally
+superseded: daemon's D-0077 ruling already dispatched all three of its pieces as standalone
+issues, not sub-issues of #1099: **#1100** (view-to-signup capture, closed/merged — DB #1104 +
+UX #1106), **#1101** (public recap page, split into merged sub-issues #1107 `[DB]`/#1108 `[UX]`,
+PR #1110 now APPROVEd after rework), and **#1102** (the $20 credit, intentionally held pending
+Ron's fresh money authorization — the 2026-10-05 standing authorization doesn't cover it). A
+follow-on, **#1114** (recap header + $20 CTA), is already queued in Agent Ready. Building #1099
+directly would have duplicated work that's done, approved, or deliberately held. Commented on
+#1099 with the breakdown and a recommendation to close it as superseded, then moved its board
+card to **Blocked** (not In Review — no PR exists to review). Touched no other card, opened no
+branch/PR. Next: Ron confirms and closes #1099, or says otherwise.
+
 ## 2026-10-08 — Reviewer: PR #1110 re-review after rework — APPROVE
 
 Re-reviewed PR #1110 per `daemon/agents/reviewer/PROMPT.md` after the Builder's rework push
