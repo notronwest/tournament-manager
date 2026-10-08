@@ -5,6 +5,22 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Builder: PR #1119 rework (rebased onto #1117's clamp fix)
+
+Single-item rework of issue #1118 / PR #1119 (`[FN] apply + redeem account credit in checkout`,
+sub of #1102/D-0077 §2) per its latest `REQUEST CHANGES`, which said to rebase onto #1117 once
+its negative-balance clamp fix landed. #1117's branch (`db/issue-1102-account-credits`) had since
+gained `7ec54fe` (`greatest(0, ...)` floor on `account_credit_balance()`). Rebased
+`fn/issue-1102-account-credits` onto that tip in an isolated worktree — clean, no conflicts; the
+fn commit itself (`fe2f720`, ex-`ee33444`) replays byte-identical, confirmed via
+`git diff ee33444 fe2f720 --stat` touching only the carried-forward `STATUS.md`/migration files,
+not the function source. Re-verified `typecheck` (same 2 pre-existing `SchedulePage.tsx` errors),
+`build` (passes), `lint` (32 errors vs. main's 34 — no new ones). Force-pushed the same branch,
+commented on #1119, moved card #1118 back to In Review. #1119 still depends on #1117, which is
+itself pending re-review on the clamp fix (not yet merged) — #1119 will need one more rebase onto
+`main` once #1117 lands so its diff reduces to just the two function files. Next: Ron/reviewer
+re-review #1117's clamp fix, then #1119's rebase, then #1121's UX slice per the note below.
+
 ## 2026-10-08 — Reviewer: PR #1121 re-review (REQUEST CHANGES — still stacked on open #1117/#1119, plus a new client-side mirror of the same bug)
 
 Re-reviewed PR #1121 (`[UX] grant + display the $20 account credit`, closes #1120, sub of
