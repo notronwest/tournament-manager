@@ -5,6 +5,79 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Builder: PR #1119 rework (picked up #1117's grant-attribution fix)
+
+Reworked PR #1119 (`[FN] apply + redeem account credit in checkout`, closes #1118, sub of
+#1102/D-0077 §2) on its existing `fn/issue-1102-account-credits` branch. The Reviewer's latest
+`REQUEST CHANGES` on #1119 carried forward #1117's cross-grant balance-leakage defect (see the
+entry below this one) because #1119 is branched off #1117's branch — not a bug in the fn code
+itself. Since #1117 has since landed a fix for that exact defect (the `grant_id`-attributed
+redemption logic) but isn't merged yet, the fix was: rebase `fn/issue-1102-account-credits` onto
+the latest `db/issue-1102-account-credits` head (`1063181`) to pick up that fix. Confirmed via
+`git diff` that the fn commit itself is a byte-identical replay (same two files,
+`create-payment-intent`/`stripe-webhook`, same line counts) — no code changes to the functions.
+Re-verified `typecheck` (2 pre-existing `SchedulePage.tsx` errors, matching `origin/main`
+baseline), `build` (clean), `lint` (32 errors, no new ones). Pushed, commented, moved #1118 back
+to **In Review**. Still depends on #1117 actually merging (not just landing the fix on its
+branch) — one more rebase onto `main` needed once that happens, same as the entries below.
+
+## 2026-10-08 — Builder: PR #1117 rework (cross-grant balance attribution)
+
+Reworked PR #1117 (`[DB] account_credits ledger + credit_campaigns + grant/redeem RPCs`, closes
+#1116, sub of #1102/D-0077 §2) on its existing `db/issue-1102-account-credits` branch, addressing
+the Reviewer's third `REQUEST CHANGES` (cross-grant balance leakage: a flat `greatest(0, sum(...))`
+over the whole ledger let an expired grant's own legitimate past spend bleed into and understate a
+different, still-live grant's balance once two campaigns were concurrently live for the same
+player). Fix: added a nullable `grant_id` self-FK on `account_credits`; `redeem_account_credit` now
+draws from each unexpired grant soonest-expiring first and writes one redemption row per grant it
+actually drew from; `account_credit_balance` now sums each grant's own remainder (its `amount_cents`
+plus whatever's attributed to it via `grant_id`), floored at zero *per grant*, instead of one flat
+ledger-wide sum. Verified by hand against the Reviewer's own concrete scenario (two $20 grants 90
+days apart, a $25 redemption spanning both, first grant expiring at month 12) — balance now comes
+out to the correct $15 instead of $0. `typecheck`/`build` match `origin/main` baseline (SQL-only
+diff, no DB push run). Pushed, commented, moved #1116 back to **In Review**. Next: Reviewer
+re-review of #1117; its finding was already known to be blocking sibling #1119 (rebased onto
+#1117) and #1121 (stacked on both) per the entries below — once #1117 lands this fix and merges,
+both siblings need to pick it up on their next rebase.
+
+## 2026-10-08 — Reviewer: PR #1121 re-review (REQUEST CHANGES — merge-order unchanged, plus a stale rebase)
+
+Re-reviewed PR #1121 (`[UX] grant + display the $20 account credit`, closes #1120, sub of
+#1102/D-0077 §2) after the Builder's rework at head `fdfec46` (the client-side balance floor).
+Two blocking findings, both carried forward: (1) merge-order — confirmed via REST API that #1117
+(DB) and #1119 (FN) are still open, unmerged, and still labeled `reviewed:changes`; `git
+merge-base --is-ancestor` confirms #1121 still contains their commits, so an APPROVE here would
+auto-merge the full DB+FN+UX stack to `main`/TEST in one shot before either sibling has passed its
+own review (D-0018/D-0052). (2) newly confirmed staleness — #1117 already landed a fix for the
+negative-balance bug (`account_credit_balance()` floors at zero) on its own branch, but #1121 was
+last rebased onto a prior head and hasn't picked that commit up: `git show
+pr1121:supabase/migrations/20261008150000_account_credits.sql` still shows the unfloored function
+verbatim, so the defect still ships if this PR merges as-is. Resolved since the last review:
+finding 3 from the prior round (the client-side `computeAccountCreditBalance` floor + its pinned
+test) is confirmed landed and correct. Posted `VERDICT: REQUEST CHANGES`, labeled
+`reviewed:changes`. Next: once #1117 and #1119 are independently fixed/reviewed/merged, #1121
+needs a further rebase onto their merged state (picking up the floor fix) before its diff reduces
+to just the UX-slice files for a clean re-review — note the sibling #1119 re-review logged just
+below surfaced a *third*, still-open #1117 finding (cross-grant balance leakage) since this read,
+so #1121 will need to pick that up too on its next rebase.
+
+## 2026-10-08 — Reviewer: PR #1119 re-review (REQUEST CHANGES — still carries #1117's open cross-grant leakage bug)
+
+Re-reviewed PR #1119 (`[FN] apply + redeem account credit in checkout`, closes #1118, sub of
+#1102/D-0077 §2) after the Builder's rebase onto #1117's `7ec54fe2` (the single-grant clamp fix).
+Finding: #1119 is branched off #1117's branch with base `main`, so `account_credits.sql` is part
+of *this* PR's diff too — and that migration's `account_credit_balance()` is the exact version
+the Reviewer's own latest #1117 pass (same session, 21:25:42Z) just flagged for cross-grant
+balance leakage (two concurrently-live campaigns; one grant's expiry can zero out the other's
+still-live balance). Merging #1119 now would ship that unresolved defect to `main`/TEST
+regardless of #1117's own fate — the same sequencing problem flagged on this PR twice already
+(player-is-new, then the single-grant negative-balance bug), now recurring with #1117's third
+open finding. The function changes themselves (`create-payment-intent`, `stripe-webhook`) remain
+correct and need no rework — only the inherited migration + sequencing block this. Posted
+`VERDICT: REQUEST CHANGES`, labeled `reviewed:changes`. Next: #1117's cross-grant leakage fix
+(likely a `grant_id` FK on `account_credits`, FIFO-consumed by expiry) is the long pole; #1119
+rebases onto `main` once #1117 merges, reducing its own diff to just the two function files.
+
 ## 2026-10-08 — Builder: PR #1121 rework (floored the client-side balance mirror)
 
 Single-item rework of issue #1120 / PR #1121 (`[UX] grant + display the $20 account credit`,
