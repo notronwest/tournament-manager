@@ -14,8 +14,12 @@
 --   account_credits    — the ledger itself. One row per grant/redemption/
 --                        refund_restore. Append-only: no update/delete
 --                        policy for anyone but service_role, no deleted_at.
---                        Balance = sum(amount_cents) over unexpired grants
---                        net of redemptions, per (organization_id, player_id).
+--                        Balance = sum, over each unexpired grant, of that
+--                        grant's own amount plus the redemptions/
+--                        refund_restores attributed to it via grant_id,
+--                        floored at zero per grant — see
+--                        account_credit_balance()'s comment for why it's
+--                        per-grant and not one flat ledger sum.
 --
 -- Three functions:
 --   grant_account_credit(campaign)            — client-callable (signup).
@@ -77,6 +81,7 @@ create table public.account_credits (
   kind              text not null check (kind in ('grant', 'redemption', 'refund_restore')),
   campaign          text,
   expires_at        timestamptz,
+  grant_id          uuid references public.account_credits(id),
   registration_id   uuid references public.event_registrations(id),
   payment_intent_id text,
   note              text,
@@ -89,10 +94,16 @@ create table public.account_credits (
 );
 
 comment on table public.account_credits is
-  'Append-only ledger for org-scoped account credit (issue #1102, D-0077 §2): one row per grant/redemption/refund_restore, never a mutable balance column. Balance = sum(amount_cents) over unexpired grants net of redemptions, per (organization_id, player_id). qbo-api reads this as deferred revenue (D-0012) — a grant is a liability until redeemed or expired. Never cash: no code path here withdraws, transfers between players, or refunds a grant to a card.';
+  'Append-only ledger for org-scoped account credit (issue #1102, D-0077 §2): one row per grant/redemption/refund_restore, never a mutable balance column. A redemption/refund_restore row carries grant_id, attributing it to the specific grant row it drew from/restores to — this is what lets an expired grant forfeit only its OWN unspent remainder (account_credit_balance) instead of a flat ledger sum bleeding one grant''s spend into another, still-live grant''s balance. qbo-api reads this as deferred revenue (D-0012) — a grant is a liability until redeemed or expired. Never cash: no code path here withdraws, transfers between players, or refunds a grant to a card.';
 
 create index account_credits_org_player_idx
   on public.account_credits (organization_id, player_id);
+
+-- Backs the per-grant attribution join in account_credit_balance /
+-- redeem_account_credit (how much of THIS grant has been drawn down).
+create index account_credits_grant_id_idx
+  on public.account_credits (grant_id)
+  where grant_id is not null;
 
 -- Enforces the grant's idempotency at the DB level (same campaign + player →
 -- one row), not just in the function body — so a genuine race (e.g. a
@@ -243,6 +254,15 @@ grant execute on function public.grant_account_credit(text) to authenticated;
 -- intent. Explicit org + player params because the caller is the
 -- edge function's service-role admin client, which has no user session
 -- for current_player_id() to resolve.
+--
+-- Computed PER GRANT, not as one flat ledger sum: each unexpired grant's
+-- remaining balance is its own amount_cents plus every redemption/
+-- refund_restore ever attributed to it via grant_id, floored at zero, and
+-- the player's total balance is the sum of those per-grant remainders.
+-- This is what keeps an expired grant's own (legitimate) prior spend from
+-- bleeding into and understating a different, still-live grant's balance
+-- once two campaigns are live concurrently for the same player — a flat
+-- sum over the whole ledger can't tell those cases apart.
 
 create or replace function public.account_credit_balance(
   p_organization_id uuid,
@@ -254,15 +274,21 @@ security definer
 set search_path = public
 stable
 as $$
-  select greatest(0, coalesce(sum(amount_cents), 0))::integer
-  from public.account_credits
-  where organization_id = p_organization_id
-    and player_id = p_player_id
-    and (kind <> 'grant' or expires_at is null or expires_at > now());
+  select coalesce(sum(greatest(0, per_grant.remaining)), 0)::integer
+  from (
+    select g.id, g.amount_cents + coalesce(sum(c.amount_cents), 0) as remaining
+    from public.account_credits g
+    left join public.account_credits c on c.grant_id = g.id
+    where g.organization_id = p_organization_id
+      and g.player_id = p_player_id
+      and g.kind = 'grant'
+      and (g.expires_at is null or g.expires_at > now())
+    group by g.id, g.amount_cents
+  ) per_grant;
 $$;
 
 comment on function public.account_credit_balance(uuid, uuid) is
-  'Authoritative account-credit balance for one (org, player): unexpired grants net of redemptions and refund_restores, floored at zero so an expired grant can only forfeit its unspent remainder down to zero, never carry prior spend negative. Server-only (not granted to anon/authenticated) — called from create-payment-intent with explicit params since the edge function has no user session.';
+  'Authoritative account-credit balance for one (org, player): the sum, over every unexpired grant, of that grant''s own amount_cents plus every redemption/refund_restore attributed to it via grant_id, each floored at zero. An expired grant forfeits only its own unspent remainder — it never subtracts from a different, still-live grant''s balance. Server-only (not granted to anon/authenticated) — called from create-payment-intent with explicit params since the edge function has no user session.';
 
 revoke all on function public.account_credit_balance(uuid, uuid) from public;
 
@@ -287,6 +313,14 @@ revoke all on function public.account_credit_balance(uuid, uuid) from public;
 -- zero, and it redeems AT MOST p_amount_cents (the remainder after any
 -- coupon), never more. Returns the amount actually redeemed (cents),
 -- which may be less than requested if the balance was smaller.
+--
+-- Draws from each unexpired grant in turn, soonest-expiring first
+-- (nulls last), writing one redemption row PER GRANT drawn from,
+-- attributed via grant_id. This is what account_credit_balance relies
+-- on to keep an expired grant's forfeiture from touching a different,
+-- still-live grant's balance (see that function's comment) — if a
+-- redemption spans two grants, each grant only ever sees the slice it
+-- actually funded.
 
 create or replace function public.redeem_account_credit(
   p_organization_id   uuid,
@@ -301,8 +335,10 @@ security definer
 set search_path = public
 as $$
 declare
-  v_balance   integer;
-  v_to_redeem integer;
+  v_remaining integer;
+  v_redeemed  integer := 0;
+  v_grant     record;
+  v_draw      integer;
 begin
   if p_amount_cents is null or p_amount_cents <= 0 then
     return 0;
@@ -317,22 +353,38 @@ begin
     return 0; -- already redeemed for this payment intent (re-delivered webhook)
   end if;
 
-  v_balance := public.account_credit_balance(p_organization_id, p_player_id);
-  v_to_redeem := least(p_amount_cents, v_balance);
-  if v_to_redeem <= 0 then
-    return 0;
-  end if;
+  v_remaining := p_amount_cents;
 
-  insert into public.account_credits
-    (organization_id, player_id, amount_cents, kind, registration_id, payment_intent_id)
-  values
-    (p_organization_id, p_player_id, -v_to_redeem, 'redemption', p_registration_id, p_payment_intent_id);
+  for v_grant in
+    select g.id, g.amount_cents + coalesce(sum(c.amount_cents), 0) as remaining
+    from public.account_credits g
+    left join public.account_credits c on c.grant_id = g.id
+    where g.organization_id = p_organization_id
+      and g.player_id = p_player_id
+      and g.kind = 'grant'
+      and (g.expires_at is null or g.expires_at > now())
+    group by g.id, g.amount_cents, g.expires_at, g.created_at
+    having g.amount_cents + coalesce(sum(c.amount_cents), 0) > 0
+    order by g.expires_at nulls last, g.created_at
+  loop
+    exit when v_remaining <= 0;
 
-  return v_to_redeem;
+    v_draw := least(v_remaining, v_grant.remaining);
+
+    insert into public.account_credits
+      (organization_id, player_id, amount_cents, kind, grant_id, registration_id, payment_intent_id)
+    values
+      (p_organization_id, p_player_id, -v_draw, 'redemption', v_grant.id, p_registration_id, p_payment_intent_id);
+
+    v_remaining := v_remaining - v_draw;
+    v_redeemed := v_redeemed + v_draw;
+  end loop;
+
+  return v_redeemed;
 end;
 $$;
 
 comment on function public.redeem_account_credit(uuid, uuid, integer, uuid, text) is
-  'Atomically redeem up to p_amount_cents of account credit (clamped to the available balance; race-safe via an advisory lock). Server-only. Idempotent per payment_intent_id. Call at payment success (stripe-webhook) or immediately for a $0 free checkout (create-payment-intent) — never from the client.';
+  'Atomically redeem up to p_amount_cents of account credit (clamped to the available balance; race-safe via an advisory lock). Draws from each unexpired grant soonest-expiring first, writing one redemption row per grant drawn from (grant_id) so account_credit_balance can attribute forfeiture correctly across concurrently-live grants. Server-only. Idempotent per payment_intent_id. Call at payment success (stripe-webhook) or immediately for a $0 free checkout (create-payment-intent) — never from the client.';
 
 revoke all on function public.redeem_account_credit(uuid, uuid, integer, uuid, text) from public;
