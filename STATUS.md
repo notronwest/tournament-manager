@@ -5,6 +5,90 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Builder: issue #1100 (campaign capture, D-0077) split into DB PR #1104 + UX PR #1106
+
+Single-item run, built only #1100 (Agent Ready → In Progress). No open sub-issues/PRs existed
+under it yet, so this was a build, not rework. Per the schema/infra hard rule (the issue bundles
+a migration + client code that calls the new RPC), split into two PRs under new sub-issues of
+#1100, both based on `main`:
+
+- **[DB] #1104** (closes sub-issue #1103) — `supabase/migrations/20261008130000_campaign_events.sql`:
+  append-only `campaign_events` table (no `deleted_at`, no public `select`) + the
+  `record_campaign_event` SECURITY DEFINER RPC (validates `kind`, dedupes `recap_view` by
+  `(campaign, visitor_id)` per hour, stamps `player_id` from `auth.uid()` — no such parameter
+  exists, so a client can't forge it). No `supabase login` available in this sandbox, so
+  `src/types/supabase.ts` wasn't regenerated (same situation as #1091) — flagged in the PR for
+  after merge. Verified for real against a throwaway local Postgres (no Docker here, so spun up
+  `initdb`/`pg_ctl` directly with a minimal harness emulating `auth.uid()` / `is_org_member` /
+  `current_player_id`): confirmed `anon` gets `permission denied` on select, invalid `kind` is
+  rejected, dedupe holds, `signup` stamps the right `player_id`, and org-admin vs. non-member
+  read visibility is correct. The migration also carries a `has_table_privilege('anon', ...)`
+  assertion that fails the apply itself if `anon` is ever granted select — this is how "a test
+  asserts the public role cannot select" is satisfied with no staging DB to run a separate suite
+  against.
+- **[UX] #1106** (closes sub-issue #1105, branched off the DB branch, opened with base `main`) —
+  `lib/visitorId.ts` (first-party id, localStorage), `lib/campaignCapture.ts` (`?c=<campaign>`
+  capture into sessionStorage, survives the login/magic-link/OAuth redirect, plus the best-effort
+  one-shot `recordSignupEvent()` call), `components/CampaignCapture.tsx` (mounted in `App.tsx`
+  next to `ScrollToTop`, deliberately NOT gated on analytics consent unlike `RouteTracker`), and
+  the one call site in `ProfilePage.tsx`'s new-row insert branch. 7 new vitest cases (this repo's
+  vitest has no jsdom, so both test files stub `localStorage`/`sessionStorage` directly). No
+  visible UI, so the D-0047 phone gate doesn't apply.
+
+Both sub-issue cards moved to In Review; parent #1100 left In Progress (its sub-issues progress
+bar will read 2/2 once both merge — that's the Done signal for the parent). Confirmed typecheck's
+2 pre-existing `SchedulePage.tsx` errors and lint's 34 pre-existing errors are present on `main`
+too (ran both on the DB branch as a baseline) — nothing new introduced. Sibling issue #1101
+(public recap page) was explicitly left untouched per the run's scope. Next: Ron merges #1104
+first (DB PR, migration-timestamp order), then #1106 once the RPC is live.
+
+## 2026-10-07 — Reviewer: PR #965 reviewed (REQUEST CHANGES — CONFLICTING with main, content otherwise clean)
+
+Reviewed PR #965 ("test(e2e): regression spec for #64 (global partner-selection
+notification)", Closes #964) per `daemon/agents/reviewer/PROMPT.md`. Content
+checked out: all 5 of #64's AC covered 1:1 in the new
+`issue-64-global-partner-notice.spec.ts`, selectors verified directly against
+live source (`PartnerInvitesBanner.tsx` / `PartnerInvitesContext.tsx` /
+`PartnerAcceptPage.tsx`) rather than taking the PR body's claims on faith; the
+new `seed.ts` §11 fixture matches the established "Invite-accept" pattern; no
+D-0049 duplicate (`self-service.spec.ts` covers the separate `/invites` list
+page, not this global-banner surface); `eslint` clean and `playwright test
+--list` → 74/14 confirmed in a local worktree checkout of the PR head.
+
+Blocking finding: the branch is **CONFLICTING with `main`** — confirmed
+locally via `git merge-tree`, a genuine `STATUS.md` text conflict between this
+branch's stale entry and `main`'s newer ones. The dispatcher had already left
+a "needs rebase" note on 2026-10-02 and the branch hasn't moved since (same
+head sha). Posted ✏️ REQUEST CHANGES + `reviewed:changes` — rebase is the only
+blocker; should be a fast re-approve once that lands.
+
+**Note:** GitHub's write API (comments/labels) was returning 500s on every
+mutation during this review while reads worked fine (confirmed not request-
+specific — even a trivial 1-word comment body 500'd). Posting the verdict
+comment + label via a backgrounded retry loop rather than blocking the
+session on it. **Next:** confirm the comment/label actually landed on #965
+(retry loop may still be in flight); if GitHub's API was still down when this
+session ended, post it manually.
+
+## 2026-10-06 — Builder: Blocked #970 (PB.com bridge epic — needs breakdown)
+
+Single-item run on #970 ("Bert & Erne ⇄ PickleballBrackets.com bridge — pull
+registrations + push live event (D-0045)"). Checked first for mis-queuing (no
+open sub-issues or PRs reference it — it's genuinely unstarted, not a stranded
+split). Did not build: the issue is an epic — two independent halves, a
+3-step build order, and step 1 (a live PB.com director-session trace to map
+XHR-replay-vs-UI-automation per action) requires interactive browser access to
+a third-party site, which the Builder (sandboxed, code/git/gh only) can't do.
+Steps 2–3 depend on that trace's findings, and the issue itself flags a ToS/
+product-risk tradeoff that's Ron's call, not a default-into-building one.
+
+Posted a breakdown proposal on the issue (trace investigation /
+`cr-admin`-style — CSV registration import, independently buildable now —
+push-driver + reconciliation, scoped after the trace) and moved the card to
+**Blocked**. **Next:** Ron scopes the CSV-import piece as its own Agent Ready
+card with acceptance criteria; Builder can take that immediately. The trace
+and driver sub-issues need sequencing/sign-off from Ron first.
+
 ## 2026-10-05 — Reviewer: PR #1092 reviewed (REQUEST CHANGES — missing issue link + stacked on unresolved #1090/#1091)
 
 Reviewed PR #1092 ("feat(summary): ⭐ teams that play at the host club") per
