@@ -5,8 +5,12 @@ name: PR links an issue
 # actually LINKS the issue (Part of / Refs are plain mentions GitHub does NOT
 # link, so they don't count). Prerequisite/partial work gets its OWN small
 # tracking issue and Closes that (add `Part of #<feature>` for context).
-# No secrets, no checkout — reads the PR body from the event. Always enforced;
-# re-runs on body edits, so adding the keyword clears it without a new commit.
+# No secrets, no checkout — reads the PR body from the event. Re-runs on body
+# edits, so adding the keyword clears it without a new commit.
+#
+# ONE exemption: a PROMOTION PR (base `production`, head `main`) closes nothing —
+# its issues closed when they merged to main — so it is skipped by shape, never by
+# a throwaway tracking issue (Ron, 2026-10-08).
 #
 # Canonical copy: wmpc-meta/templates/pr-linked-issue.yml (new repos get it via
 # scripts/claude-bootstrap.sh). See wmpc-meta/conventions/backlog.md.
@@ -25,7 +29,17 @@ jobs:
       - name: Require an issue reference in the PR body
         env:
           BODY: ${{ github.event.pull_request.body }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
+          # A PROMOTION (main → production) closes nothing by definition: it ships
+          # work whose issues were already closed when they merged to main. The gate
+          # used to block it, so a human had to mint a throwaway tracking issue to
+          # promote (third-shot-academy #667, 2026-10-08). Exempt it by shape.
+          if [ "$BASE_REF" = "production" ] && [ "$HEAD_REF" = "main" ]; then
+            echo "✓ promotion PR (main → production) — exempt from the closes-an-issue rule."
+            exit 0
+          fi
           if printf '%s' "$BODY" | grep -iqE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+'; then
             echo "✓ PR closes a board issue."
           else
