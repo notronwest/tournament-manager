@@ -5,6 +5,44 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Builder: PR #1121 rework (floored the client-side balance mirror)
+
+Single-item rework of issue #1120 / PR #1121 (`[UX] grant + display the $20 account credit`,
+sub of #1102/D-0077 §2) per its latest `REQUEST CHANGES` (head `d8ed0413`), which raised three
+findings. Classified each: (1) merge-order — #1121 is still stacked on open, unmerged #1117/#1119;
+unchanged, not resolvable from this branch, left as-is. (2) the inherited DB migration's
+negative-balance bug (`account_credit_balance()`) — that file is owned by #1117, not #1120/#1121;
+left for #1117's own rework per the entries above, not touched here. (3) **new in this PR** — the
+client-side mirror, `computeAccountCreditBalance()` in `web/src/lib/accountCredit.ts`, had the same
+unfloored-balance shape: it excluded an expired grant's `+amount_cents` but still netted any
+`redemption`/`refund_restore` row against it unconditionally, so an expired grant with a prior
+partial redemption drove the balance negative — and the pinned test suite's "expired grant" case
+never combined it with a prior redemption, so it passed anyway. Fixed by wrapping the result in
+`Math.max(0, ...)` (`fdfec46`) and added a test for exactly that combination. Re-verified: typecheck
+(same 2 pre-existing `SchedulePage.tsx` errors), build clean, lint (36 problems, zero new), `npm
+test` 381/381 (380 + the new case). Pushed to the same branch, commented on #1121 classifying all
+three findings. Board-card move to In Review is pending — hit a shared GitHub GraphQL rate limit
+(`gh project` calls) mid-run; retrying. Next: Ron/reviewer re-review #1121's push; #1117's re-review
+(multi-grant attribution finding, above) is still the long pole the whole stack depends on.
+
+## 2026-10-08 — Reviewer: PR #1117 re-review (REQUEST CHANGES — clamp fix is incomplete across two live grants)
+
+Re-reviewed PR #1117 (`[DB] account_credits ledger + credit_campaigns + grant/redeem RPCs`,
+closes #1116, sub of #1102/D-0077 §2) after the `greatest(0, ...)` floor fix (`7ec54fe`) landed
+for the prior round's negative-balance finding. The floor fixes the single-grant case but not the
+general one: `credit_campaigns` is a multi-row config table and `grant_account_credit` only blocks
+a *new* grant once the player has a registration/payment, so a player can hold grants from two
+concurrently-live campaigns before their first purchase. Ledger rows have no `grant_id`, so once
+one of those grants expires, `account_credit_balance()` drops its `+amount_cents` from the sum but
+still counts the *full* redemption drawn against it — bleeding into and understating the other,
+still-live grant's balance (walked a concrete scenario: correct balance $15, computed $0). Posted
+`VERDICT: REQUEST CHANGES` with the file:line and the scenario, labeled `reviewed:changes`. Not
+otherwise faulted — idempotent grant, server-side "player is new" check, advisory-lock redemption,
+RLS posture, and scope vs. #1116 all checked out. Next: Builder attributes each
+redemption/refund_restore to the grant(s) it drew from (e.g. a nullable `grant_id` FK, FIFO by
+grant expiry) so expiry only ever forfeits that grant's own unspent remainder; #1119/#1121 remain
+stacked on this PR per the entries above/below.
+
 ## 2026-10-08 — Builder: PR #1119 rework (rebased onto #1117's clamp fix)
 
 Single-item rework of issue #1118 / PR #1119 (`[FN] apply + redeem account credit in checkout`,
