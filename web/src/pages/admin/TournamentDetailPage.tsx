@@ -9,6 +9,7 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import { ConfirmModal } from "../../components/ConfirmModal";
+import { PublicPageLink } from "../../components/PublicPageLink";
 import { eligibilityChips } from "../../lib/eligibility";
 import { estimateEvent } from "../../lib/estimator";
 import { teamCountFor, SPOT_HOLDING_STATUSES } from "../../lib/registrationStatus";
@@ -677,7 +678,7 @@ export default function TournamentDetailPage() {
           {(t.status === "published" ||
             t.status === "closed" ||
             t.status === "completed") && (
-            <PublicPageLink orgSlug={org.slug} tournamentSlug={t.slug} />
+            <PublicPageLink path={`/t/${org.slug}/${t.slug}`} />
           )}
           {/* Schedule view — time estimates for every event based on
               registered teams + format. Useful during planning AND
@@ -1810,74 +1811,6 @@ function ErrorBox({ message }: { message: string }) {
       }}
     >
       {message}
-    </div>
-  );
-}
-
-// Two-button group for the public tournament page: an "Open" link
-// (opens in a new tab so the admin keeps their workspace) and a
-// "Copy link" button that puts the full URL on the clipboard for
-// pasting into emails / texts / social.
-function PublicPageLink({
-  orgSlug,
-  tournamentSlug,
-}: {
-  orgSlug: string;
-  tournamentSlug: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const relativePath = `/t/${orgSlug}/${tournamentSlug}`;
-  const fullUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}${relativePath}`
-      : relativePath;
-
-  const onCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(fullUrl);
-      setCopied(true);
-      // Brief flash, then revert so the button label doesn't lie.
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard API can fail in non-secure contexts / iframes;
-      // fall back to a select-and-copy hint via the title attr.
-      window.prompt("Copy this URL:", fullUrl);
-    }
-  };
-
-  return (
-    <div style={{ display: "flex", gap: 4 }}>
-      <a
-        href={relativePath}
-        target="_blank"
-        rel="noreferrer"
-        title={`Open ${fullUrl}`}
-        style={{
-          ...secondaryLinkBtn,
-          display: "inline-block",
-          whiteSpace: "nowrap",
-        }}
-      >
-        Public page ↗
-      </a>
-      <button
-        onClick={onCopy}
-        title={`Copy ${fullUrl}`}
-        style={{
-          padding: "8px 12px",
-          background: copied ? successBg : bg,
-          color: copied ? successFg : inkSoft,
-          border: `1px solid ${copied ? successFg : rule}`,
-          borderRadius: 6,
-          fontSize: 13,
-          fontWeight: 500,
-          cursor: "pointer",
-          fontFamily: bodyFontStack,
-          whiteSpace: "nowrap",
-        }}
-      >
-        {copied ? "Copied!" : "Copy link"}
-      </button>
     </div>
   );
 }

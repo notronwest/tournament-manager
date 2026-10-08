@@ -15,6 +15,7 @@ import {
 } from "../../lib/tournamentSummary";
 import { TournamentSummaryReport } from "../../components/TournamentSummaryReport";
 import { SummaryEmailModal } from "../../components/SummaryEmailModal";
+import { PublicPageLink } from "../../components/PublicPageLink";
 import { renderSummaryPdf, summaryPdfFilename } from "../../lib/summaryPdf";
 import { displayHeading, fieldLabel } from "./contactsUi";
 import {
@@ -352,6 +353,13 @@ export default function TournamentSummaryPage() {
           <button type="button" onClick={copyText} style={ctaSecondaryStyle}>
             Copy as text
           </button>
+          {tournament.status === "completed" && (
+            <PublicPageLink
+              path={`/t/${org.slug}/${tournament.slug}/recap`}
+              label="Recap page ↗"
+              copyLabel="Copy recap link"
+            />
+          )}
           <span style={{ fontSize: 12.5, color: inkSoft }}>
             {copied ?? "Attendees get the same PDF as the download, attached to a short email."}
           </span>

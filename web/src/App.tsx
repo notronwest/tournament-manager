@@ -61,6 +61,7 @@ import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import TournamentContactPage from "./pages/public/TournamentContactPage";
 import StartTimesPage from "./pages/public/StartTimesPage";
 import LiveResultsPage from "./pages/public/LiveResultsPage";
+import TournamentRecapPage from "./pages/public/TournamentRecapPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
@@ -225,6 +226,11 @@ export default function App() {
       <Route
         path="/t/:orgSlug/:tournamentSlug/results"
         element={<LiveResultsPage />}
+      />
+      {/* Public recap — anonymous-readable, completed tournaments only (#1101). */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/recap"
+        element={<TournamentRecapPage />}
       />
       <Route
         path="/t/:orgSlug/:tournamentSlug/contact"
