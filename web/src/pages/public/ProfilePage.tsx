@@ -10,6 +10,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
+import { recordSignupEvent } from "../../lib/campaignCapture";
 import type { Database } from "../../types/supabase";
 import { RatingPicker } from "../../components/RatingPicker";
 import {
@@ -353,6 +354,10 @@ export default function ProfilePage() {
         return;
       }
       saved = data;
+      // Brand-new player row — the one signal that an account was just
+      // created, not just signed into. Fires at most once per signup;
+      // best-effort and a no-op when no campaign was captured (D-0077).
+      void recordSignupEvent();
     }
 
     setBusy(false);
