@@ -11,6 +11,7 @@ import {
   buildLoginHref,
   captureCampaignParam,
   getCapturedCampaign,
+  grantAccountCreditIfEligible,
   recordRecapViewEvent,
   recordSignupEvent,
 } from "./campaignCapture";
@@ -70,6 +71,25 @@ describe("campaignCapture", () => {
     rpc.mockRejectedValueOnce(new Error("network down"));
     captureCampaignParam("?c=leaf-peeper-2026");
     await expect(recordSignupEvent()).resolves.toBeUndefined();
+  });
+
+  it("grantAccountCreditIfEligible is a no-op when no campaign was ever captured", async () => {
+    await grantAccountCreditIfEligible();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("grantAccountCreditIfEligible fires grant_account_credit once a campaign is captured", async () => {
+    captureCampaignParam("?c=leaf-peeper-2026");
+    await grantAccountCreditIfEligible();
+    expect(rpc).toHaveBeenCalledWith("grant_account_credit", {
+      p_campaign: "leaf-peeper-2026",
+    });
+  });
+
+  it("grantAccountCreditIfEligible swallows RPC failures (best-effort, never blocks signup)", async () => {
+    rpc.mockRejectedValueOnce(new Error("network down"));
+    captureCampaignParam("?c=leaf-peeper-2026");
+    await expect(grantAccountCreditIfEligible()).resolves.toBeUndefined();
   });
 
   it("recordRecapViewEvent fires record_campaign_event with kind=recap_view for the given campaign", async () => {

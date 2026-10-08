@@ -51,6 +51,23 @@ export async function recordSignupEvent(): Promise<void> {
   }
 }
 
+// Grants the one-shot account credit (#1102, D-0077 §2) for a brand-new
+// player row — same call site and the same "no-op without a captured
+// campaign" shape as recordSignupEvent() right above. Whether the
+// campaign is actually live, whether it's already been granted, and how
+// much/which org are all decided server-side by grant_account_credit();
+// this is just "don't bother calling when we never captured one". Best-
+// effort: a failure here must never block account creation.
+export async function grantAccountCreditIfEligible(): Promise<void> {
+  const campaign = getCapturedCampaign();
+  if (!campaign) return;
+  try {
+    await untyped.rpc("grant_account_credit", { p_campaign: campaign });
+  } catch {
+    // Best-effort — a missed credit grant is not worth failing signup over.
+  }
+}
+
 // Fires the one-shot `recap_view` event when a recap page is opened with a
 // `?c=<campaign>` param (#1101's own acceptance criterion). Takes the
 // campaign directly rather than reading getCapturedCampaign() — a recap view
