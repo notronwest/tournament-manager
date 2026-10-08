@@ -533,6 +533,7 @@ async function main() {
       .select("id")
       .single(),
     "tournament e2e-reopen-future-deadline",
+  );
   // 10. Pricing-preview fixtures (#12) — organizer-facing "override" copy on
   //     the event-fee field + the tournament wizard's "Preview math" box.
   //     Own tournament with a real (non-$0) pricing tier so the preview shows
@@ -560,6 +561,25 @@ async function main() {
       .single(),
     "pricing-preview tier insert",
   );
+
+  // 11. Public recap fixture (#1108) — a COMPLETED tournament so the public
+  //     recap page (/t/:org/:slug/recap) has something real to render: the
+  //     mobile-audit case for it, and the admin Summary page's "Copy recap
+  //     link" action, both need a tournament that's actually completed (no
+  //     other seeded tournament is). One event with no matches is enough for
+  //     buildTournamentSummary to render a populated (if score-free) report.
+  await mkTournament("e2e-recap-cup", "E2E Recap Cup");
+  const recapTournament = ok(
+    await db
+      .from("tournaments")
+      .update({ status: "completed" })
+      .eq("organization_id", org.id)
+      .eq("slug", "e2e-recap-cup")
+      .select("id")
+      .single(),
+    "tournament e2e-recap-cup status update",
+  ) as { id: string };
+  await doublesEvent(recapTournament.id, "E2E Recap Doubles");
 
   console.log("seed: e2e-test fixture ready");
 }

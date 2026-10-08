@@ -50,3 +50,21 @@ export async function recordSignupEvent(): Promise<void> {
     // Best-effort — attribution is not worth failing signup over.
   }
 }
+
+// Fires the one-shot `recap_view` event when a recap page is opened with a
+// `?c=<campaign>` param (#1101's own acceptance criterion). Takes the
+// campaign directly rather than reading getCapturedCampaign() — a recap view
+// is attributed to the link's OWN `?c=`, not whatever an earlier page in this
+// session happened to set. Best-effort: a failure here must never block the
+// recap page from rendering.
+export async function recordRecapViewEvent(campaign: string): Promise<void> {
+  try {
+    await untyped.rpc("record_campaign_event", {
+      p_campaign: campaign,
+      p_kind: "recap_view",
+      p_visitor_id: getOrCreateVisitorId(),
+    });
+  } catch {
+    // Best-effort — attribution is not worth failing the recap page over.
+  }
+}

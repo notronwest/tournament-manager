@@ -9,6 +9,7 @@ vi.mock("./visitorId", () => ({ getOrCreateVisitorId: () => "visitor-123" }));
 import {
   captureCampaignParam,
   getCapturedCampaign,
+  recordRecapViewEvent,
   recordSignupEvent,
 } from "./campaignCapture";
 
@@ -67,5 +68,19 @@ describe("campaignCapture", () => {
     rpc.mockRejectedValueOnce(new Error("network down"));
     captureCampaignParam("?c=leaf-peeper-2026");
     await expect(recordSignupEvent()).resolves.toBeUndefined();
+  });
+
+  it("recordRecapViewEvent fires record_campaign_event with kind=recap_view for the given campaign", async () => {
+    await recordRecapViewEvent("leaf-peeper-2026");
+    expect(rpc).toHaveBeenCalledWith("record_campaign_event", {
+      p_campaign: "leaf-peeper-2026",
+      p_kind: "recap_view",
+      p_visitor_id: "visitor-123",
+    });
+  });
+
+  it("recordRecapViewEvent swallows RPC failures (best-effort, never blocks the recap page)", async () => {
+    rpc.mockRejectedValueOnce(new Error("network down"));
+    await expect(recordRecapViewEvent("leaf-peeper-2026")).resolves.toBeUndefined();
   });
 });
