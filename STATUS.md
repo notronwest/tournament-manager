@@ -5,6 +5,22 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Builder: PR #1121 rework (picked up #1117's zero-floor fix)
+
+Reworked PR #1121 (`[UX] grant + display the $20 account credit`, closes #1120, sub of
+#1102/D-0077 §2) on its existing `feature/issue-1102-account-credits` branch, addressing the
+Reviewer's latest `REQUEST CHANGES` (head `fdfec46`) finding 2 — the branch was stale relative to
+its own dependency chain and still shipped the pre-fix `account_credit_balance()` (no zero floor).
+Fix: rebased onto `fn/issue-1102-account-credits`'s current head (`9c2a064`), which already carries
+`db/issue-1102-account-credits`'s floor fix (`7ec54fe`) plus its grant-attribution follow-up
+(`1063181`, see the entries below). Clean rebase, no conflicts; none of the 5 UX-slice files changed
+— same diff on top, just a different base. Confirmed `supabase/migrations/20261008150000_account_credits.sql`
+now reads `greatest(0, per_grant.remaining)` on this branch. Re-verified `typecheck` (2 pre-existing
+`SchedulePage.tsx` errors matching `main`), `build` (clean), `lint` (36 problems, zero new), `npm test`
+(381/381 passing). Force-pushed (with lease), commented on #1121, moved #1120 back to **In Review**.
+Finding 1 (merge order — #1121 still stacked on open, unmerged #1117/#1119) is untouched and not
+resolvable from this branch; holding for those two to merge first, same as the sibling entries below.
+
 ## 2026-10-08 — Builder: PR #1119 rework (picked up #1117's grant-attribution fix)
 
 Reworked PR #1119 (`[FN] apply + redeem account credit in checkout`, closes #1118, sub of
