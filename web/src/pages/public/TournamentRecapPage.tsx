@@ -11,6 +11,7 @@ import {
   type TournamentSummary,
 } from "../../lib/tournamentSummary";
 import { TournamentSummaryReport } from "../../components/TournamentSummaryReport";
+import { recordRecapViewEvent } from "../../lib/campaignCapture";
 import {
   bodyFontStack,
   contentColStyle,
@@ -32,14 +33,6 @@ import {
 // TournamentSummaryReport so the public sheet can't disagree with the
 // console (D-0049). No publish toggle — reaching 'completed' is what makes
 // it public.
-//
-// recap_view campaign-funnel tracking (record_campaign_event RPC, merged in
-// #1104) is deliberately NOT wired up here: the shared visitor-id / campaign
-// capture helper this would need to call it without a second, diverging
-// implementation is still mid-flight on the sibling PR #1106
-// (feature/issue-1100-campaign-events) and isn't on main yet. The CTA below
-// still forwards ?c= into the signup URL so whichever capture mechanism is
-// live by the time this merges sees it. See the PR's Reviewer notes.
 
 const untyped = supabase as unknown as SupabaseClient;
 
@@ -91,6 +84,17 @@ export default function TournamentRecapPage() {
       cancelled = true;
     };
   }, [orgSlug, tournamentSlug]);
+
+  // recap_view campaign-funnel attribution (#1101's own acceptance
+  // criterion): fired once per mount whenever the recap link carries
+  // `?c=<campaign>`, independent of whether the recap itself loads. Deps
+  // intentionally omit `campaign` — this fires once for this page's own
+  // ?c=, not on every searchParams identity change.
+  useEffect(() => {
+    if (!campaign) return;
+    void recordRecapViewEvent(campaign);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const summary = useMemo<TournamentSummary | null>(() => {
     if (!payload) return null;
