@@ -5,6 +5,34 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Reviewer: PR #1106 reviewed (APPROVE — campaign capture client PR)
+
+Reviewed PR #1106 ("feat(campaign): visitor id + ?c=<campaign> carry-through + signup event
+(D-0077)", Closes #1105, the UX half of #1100's split) per `daemon/agents/reviewer/PROMPT.md`.
+
+Checked out the PR branch into a worktree and actually ran the new tests (`visitorId.test.ts` +
+`campaignCapture.test.ts`: 7/7 pass), `tsc -b --noEmit`, and `eslint` against the touched files
+rather than trusting the PR body's claims. Typecheck surfaced 2 pre-existing errors in
+`SchedulePage.tsx` — confirmed via the same command on `main` that they predate this PR, not a
+regression it introduced. Read `ProfilePage.tsx`'s three save branches directly to confirm
+`recordSignupEvent()` fires only on the branch that truly `insert`s a brand-new `players` row,
+not the two branches that `update` an existing/claimed row — the correct "account just created"
+signal. Confirmed first-party-only capture (D-0077 §3, no third-party script in the diff) and
+verified the "didn't touch `RouteTracker`" reuse claim (D-0049) by reading `AnalyticsConsent.tsx`
+directly: `RouteTracker` gates a third-party GA/PostHog script on cookie consent, a genuinely
+different concern from this consent-independent first-party capture, so the new small component
+is warranted, not a copy. `recap_view` correctly left out of scope (belongs to the not-yet-built
+recap page, sibling #1101).
+
+One non-blocking oddity worth logging: the diff shows `supabase/migrations/20261008130000_
+campaign_events.sql` as a "new file" even though it's already on `main` via the merged #1104 —
+confirmed byte-identical content between branches, so just a stale branch base (PR was cut before
+#1104 merged), not drift; GitHub reports `mergeable: MERGEABLE` / `mergeStateStatus: CLEAN`. CI
+green. Posted `VERDICT: APPROVE` + `reviewed:approve`. Next: dispatcher merges #1106 — that
+closes out the #1100 split (both DB #1104 and UX #1106 now reviewed/approved). The recap page
+itself (#1101) and the $20 credit (held per D-0077 Authorization, needs Ron's fresh sign-off)
+remain open.
+
 ## 2026-10-08 — Reviewer: PR #1104 reviewed (APPROVE — campaign_events DB PR)
 
 Reviewed PR #1104 ("[DB] campaign_events table + record_campaign_event RPC (D-0077)", Closes
