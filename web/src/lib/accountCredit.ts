@@ -34,12 +34,13 @@ export function computeAccountCreditBalance(
   organizationId: string,
   now: Date = new Date(),
 ): number {
-  return rows
+  const balance = rows
     .filter((r) => r.organization_id === organizationId)
     .filter(
       (r) => r.kind !== "grant" || !r.expires_at || new Date(r.expires_at) > now,
     )
     .reduce((sum, r) => sum + r.amount_cents, 0);
+  return Math.max(0, balance);
 }
 
 export type CreditStackResult = {

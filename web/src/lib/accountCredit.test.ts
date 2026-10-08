@@ -58,6 +58,11 @@ describe("computeAccountCreditBalance", () => {
     expect(computeAccountCreditBalance(rows, ORG_A, now)).toBe(2000);
     expect(computeAccountCreditBalance(rows, ORG_B, now)).toBe(5000);
   });
+
+  it("an expired grant with a prior redemption against it never goes below zero", () => {
+    const rows = [grant(2000, "2026-01-01T00:00:00Z"), redemption(-1500)];
+    expect(computeAccountCreditBalance(rows, ORG_A, now)).toBe(0);
+  });
 });
 
 describe("stackCouponThenCredit", () => {
