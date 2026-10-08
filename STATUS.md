@@ -5,6 +5,23 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Builder: PR #1117 rework (fixed the negative-balance bug the reviewer flagged)
+
+Reworked PR #1117 (`[DB] account_credits ledger + credit_campaigns + grant/redeem RPCs`, closes
+#1116, sub of #1102/D-0077 §2) on this branch per the reviewer's second `VERDICT: REQUEST
+CHANGES`: `account_credit_balance()` could return a negative balance once a partially-redeemed
+grant expired, because the sum excluded an expired grant's `+amount_cents` but kept every
+`redemption` row drawn against it. Fix: floor the summed balance with `greatest(0, …)` so expiry
+forfeits only the unspent remainder, never drives the total negative. `typecheck`/`build`/`lint`
+unchanged vs. the prior push (SQL-only diff). Pushed, commented, moved card #1116 back to **In
+Review** for re-review.
+
+Next: the reviewer separately flagged (on sibling PR #1121) the identical unfloored-balance shape
+bug freshly introduced client-side in `web/src/lib/accountCredit.ts`'s
+`computeAccountCreditBalance` — that's a different file/PR (#1121, closes #1120) and is NOT fixed
+by this push. #1119 also still owes its own independent fix/review. Once #1117 (this fix), #1119,
+and #1121's own client-side clamp are each green, #1121 rebases down to a UX-only diff for merge.
+
 ## 2026-10-02 — Builder: rebased PR #1065 after reviewer "needs rebase" (#1064)
 
 Single-item rework for issue #1064, already closed by open PR #1065 (the STATUS.md-only tracking PR for #1052's mis-queue note). The reviewer gate had flagged it `CONFLICTING` and left a "needs rebase — `main` has moved" comment (D-0052) rather than a findings list.
