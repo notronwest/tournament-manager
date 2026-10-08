@@ -395,6 +395,148 @@ DEPLOYMENT.md" or any doc in place of the steps. A command with a comment, a pro
 ellipsis or a value to edit by hand. Several form values in one copy box. A secret written into
 a command or a reply.
 
+### D-0075 — A decision is not done until its artifacts are on main; daemon's own repo is daemon's lane, and dispatch is claimed by a label, not a title
+
+*2026-10-08 · scope: `decisions/**, agents/**, infrastructure/daemon-dispatch/**, infrastructure/builder-dispatch/**, docs/ai-agents.md` · source: daemon#257 (routed from cos_approvals 5436f929) — the owner approved the Builder money hatch 2026-10-05, daemon#195 closed COMPLETED 2026-10-06 carrying the decided text, daemon#233 held the edit, and seven consecutive sweeps re-found the file unedited because nothing owned it*
+
+**Decision.** Three rules, so a ruling can never again be "complete" while the thing it
+decided is unshipped.
+
+1. **A ruling-only close is forbidden when the ruling implies an artifact.** A daemon issue
+   closes `COMPLETED` only when every artifact its ruling names is either (a) merged to
+   `main`, or (b) carried by a dispatched issue that is **on the WMPC Roadmap in Agent Ready
+   with a lane that claims it** (D-0043). "A spec exists in another issue" is not (b) — an
+   unclaimed issue is not a delivery. If neither holds, the daemon issue stays **open** with
+   the artifact named in its body. Closing is an assertion about reality, not about effort.
+
+2. **Dispatch is claimed by a label, not by a title.** Every issue daemon opens in
+   `notronwest/daemon` carries the label **`daemon-dispatch`** at creation. The daemon drain
+   enumerates `is:open label:daemon-dispatch` **union** `is:open` with a title beginning
+   `architecture`/`Architecture`, oldest first. Title matching stays as a legacy net; it is
+   never the only net. A title is prose and drifts — `daemon#233`'s title was correct English
+   and still fell through every selector for two days.
+
+3. **`notronwest/daemon` is daemon's lane, and the Builder does not get one there.** The
+   Builder's lanes are product repos. It never edits `agents/**`, `decisions/**`,
+   `infrastructure/*-dispatch/**` or `docs/ai-agents.md` — an agent rewriting the prompt that
+   governs it is a self-modification we do not want reviewed by itself. Those paths are
+   daemon's to edit, under D-0005 (worktree) and the ordinary review gate. The gap that
+   stalled #233 was not a missing Builder repo; it was an architect's edit filed as if
+   somebody else would do it.
+
+4. **Detection carries a repair rail.** A sweep, drain or reviewer that can name a specific
+   decided-but-unapplied edit does not report it — it **routes** it: label the carrying issue
+   `daemon-dispatch` and file a `cos_requests` row on the `daemon` channel in the same run.
+   The **second** sighting of the same unapplied artifact is escalated as a rail failure, not
+   re-reported as a finding. Seven identical findings cost more than the edit did.
+
+**Why.** D-0028 says approved work always executes; D-0052 says approved work merges itself.
+Both assumed the work had an owner. A decision whose artifact lands in an unlabelled issue in
+a repo with no lane has no owner, and every mechanism downstream reads it as done: the ruling
+closed, the register said `active`, `STATUS.md` said shipped, and
+`grep -i OWNER-AUTHORIZED agents/builder/` returned nothing for three days while
+`tournament-manager#378` and `courtreserve-api#261` sat unbuildable. The failure was not
+anyone's diligence — the sweep caught it seven times. It was that *finding* and *fixing* were
+wired to different things. Rule 1 makes the close honest, rule 2 makes the work findable,
+rule 3 names the hands, and rule 4 makes a repeat sighting an alarm instead of a habit.
+
+**Forbids.** Closing a daemon architecture issue `COMPLETED` while an artifact it decided is
+neither on `main` nor in Agent Ready under a claiming lane. Opening an issue in
+`notronwest/daemon` without the `daemon-dispatch` label. A drain selector that matches only on
+issue title. The Builder opening a PR that touches `agents/**`, `decisions/**`,
+`infrastructure/*-dispatch/**` or `docs/ai-agents.md`. Reporting the same unapplied decided
+edit twice without raising it as a routing failure.
+
+### D-0077 — A tournament recap is public on completion through a curated reader; an account credit is an org-scoped append-only ledger redeemed on the coupon rail, never cash; campaign capture ships before the page it measures
+
+*2026-10-08 · scope: `supabase/migrations/**, supabase/functions/create-payment-intent/**, supabase/functions/stripe-webhook/**, web/src/pages/public/**, web/src/lib/tournamentSummary.ts, web/src/components/TournamentSummaryReport.tsx` · source: cos_approvals d7df0378, authorized by Ron 2026-10-08 — the 2nd Annual Leaf Peeper thank-you email he sends himself from PickleballBrackets; "once they register say - a $20 credit for an upcoming tournament has been added to your account" and "make sure that we can track conversions for this - people viewed the recap and did or didn't create an account"*
+
+**Decision.** Three pieces, three rules.
+
+### 1. The recap is public on completion, through a curated reader
+
+`/t/:orgSlug/:tournamentSlug/recap`, served by a `public_tournament_recap(p_org_slug,
+p_tournament_slug)` `SECURITY DEFINER` function that copies the shape of
+`public_tournament_results` (migration `20261001130000`) exactly: gated to the tournament's
+own public statuses — **recap requires `completed`** — returning a *curated* payload with no
+money, no contact information and no withdrawal/fee fields, and the client reusing
+`tournamentSummary.ts` + `TournamentSummaryReport.tsx` so the public sheet and the admin sheet
+can never disagree (D-0049).
+
+**Public by default on `completed`, with no publish toggle.** The live results page is already
+public on the same statuses; a toggle is one more thing to forget on the morning of a send,
+and forgetting it breaks the only link in the email. It shows podiums, headline counts, the
+organizer note and the derived fun facts (all of it computed from scores that are already
+public). It does **not** show fees, payouts, contact details, withdrawal state, or anything
+`public_tournament_results` already refuses.
+
+### 2. The $20 is an org-scoped credit on an append-only ledger, redeemed on the coupon rail
+
+- **Scope: the granting organization's tournaments only.** A credit WMPC grants is spendable
+  on WMPC entries. It is *not* platform-wide. With Stripe Connect the entry fee lands in the
+  organizer's connected account, so a platform-wide credit would mean Bert & Erne topping up
+  a third-party organizer's fare out of its own pocket on every redemption — a real transfer,
+  a real liability, and a cross-entity subsidy D-0009 exists to prevent. Org-scoped, it is
+  simply that organization discounting its own entry. No transfer, no B&E liability.
+- **Shape: an append-only ledger, not a balance column.** `account_credits` carries one row
+  per *grant* and one per *redemption* (signed, with the registration and payment it applied
+  to); the balance is the sum. Money needs an audit trail — "what did we give away" and "what
+  do we still owe" are questions a mutable integer cannot answer, and qbo-api has to read it
+  as deferred revenue the same way it reads the rest (D-0012).
+- **Grant: server-side, at account creation, attributed by campaign.** The recap URL carries
+  `?c=<campaign>`; the token rides through signup and a `SECURITY DEFINER` grant function
+  checks the campaign is live and the player is new. The client never writes a grant. Each
+  grant row carries its own `expires_at`, **defaulting to 12 months** — bounded liability,
+  generous enough that nobody feels cheated, and per-grant so a later campaign can differ.
+- **Redemption: the coupon rail, not a second rail.** `validate_coupon()` / `redeem_coupon()`
+  already establish the pattern — the server computes the authoritative discount, the client
+  cannot forge one, validation does not burn the use, and the atomic redeem happens at
+  payment success in `stripe-webhook`. Credit works identically, in the same places:
+  `create-payment-intent` lowers the intent, the webhook redeems. **Stacking order: coupons
+  first, credit against the remainder, never below zero; partial spend is allowed and the
+  unspent remainder stays on the ledger.**
+- **Never cash.** A credit cannot be withdrawn, transferred between accounts, or refunded to
+  a card. A refund of an entry that consumed credit **returns the credit to the ledger** as a
+  new grant row referencing the reversal. Cash-out would turn a marketing credit into a
+  payout path, which is both an accounting problem and a fraud path.
+
+### 3. Capture ships before the page it measures
+
+One append-only `campaign_events` table — campaign, kind (`recap_view` | `signup`), an
+anonymous visitor id, the tournament, the timestamp — written only by a `SECURITY DEFINER`
+RPC the public page calls. **First-party only; no third-party analytics script on a public
+page.** No PII beyond the player id on the `signup` row. Raw rows retained 13 months, then
+rolled to monthly aggregates. **The recap page does not go live before the capture is
+writing** — Ron's point stands: the report can wait, the data cannot be recovered.
+
+### Authorization
+
+Pieces 1 and 3 touch no money and are dispatched Agent Ready now. Piece 2 is money code at
+checkout and is **outside** the three areas the owner's 2026-10-05 standing authorization
+covers (donations at checkout, the membership refund tool, the finance dashboard), so under
+D-0075 / the Builder money hatch **no `OWNER-AUTHORIZED` line may be written for it by daemon
+or the Chief of Staff.** It is filed and held until Ron authorizes it on its own card; its
+acceptance criteria must name a pinned test for the stacking and remainder math as a hard
+merge condition.
+
+**Why.** All three asks look like features and are really one question each about where a
+boundary sits. The recap's is *who may read what* — already answered once by the curated
+`SECURITY DEFINER` reader, so answering it again differently would be the second
+implementation D-0049 forbids. The credit's is *whose money* — and Stripe Connect makes
+"platform-wide" mean "B&E pays", which nobody asked for and which crosses the entity line
+D-0009 draws; scoping it to the granting org makes a new money primitive into an ordinary
+discount with an audit trail. The capture's is *when* — and it is the only one of the three
+that is destroyed by being late, so it leads rather than follows.
+
+**Forbids.** A recap reader that returns fee, payout, contact or withdrawal fields, or that
+re-derives the summary math instead of reusing `tournamentSummary.ts`. A publish toggle as the
+gate on recap visibility. A platform-wide or cross-organization credit. A mutable
+balance column instead of the ledger. A client-written grant or a client-computed credit
+amount. Converting credit to cash, transferring it between accounts, or refunding it to a
+card. A third-party analytics script on a public page. Shipping the recap page before the
+capture writes. Writing an `OWNER-AUTHORIZED` line for the credit without a fresh approval
+from Ron.
+
 ## Proposed (not binding yet)
 
 _None._
