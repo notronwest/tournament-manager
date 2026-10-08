@@ -142,11 +142,19 @@ end $$;
 -- organization both come from credit_campaigns, never from the client,
 -- so a client can never name how much or which org.
 --
+-- "Player is new" is enforced here, not trusted from the call site: any
+-- signed-in player can call this RPC directly (it's granted to
+-- authenticated), so the function itself checks the player has no prior
+-- event_registrations or payments rows before granting — an existing
+-- player can't claim a fresh campaign just because they hadn't used it
+-- before.
+--
 -- Idempotent per (campaign, player_id): a second call for the same pair
 -- is a no-op (covers a retried/duplicate client call). Best-effort by
 -- design at the call site — a failure here must never block signup —
 -- but this function itself raises no exceptions for the ordinary "not
--- live" / "already granted" cases; it just reports why nothing happened.
+-- live" / "already granted" / "not new" cases; it just reports why
+-- nothing happened.
 
 create or replace function public.grant_account_credit(p_campaign text)
 returns jsonb
@@ -185,6 +193,18 @@ begin
     return jsonb_build_object('granted', false, 'reason', 'already_granted');
   end if;
 
+  -- "Player is new" (D-0077 §2 / issue #1102) — enforced here, server-side,
+  -- not trusted from the call site: a player with any prior registration or
+  -- payment has history, campaign or not, so this is an objective check
+  -- rather than a time window on created_at (which a delayed call could miss).
+  if exists (
+    select 1 from public.event_registrations where player_id = v_player_id
+  ) or exists (
+    select 1 from public.payments where player_id = v_player_id
+  ) then
+    return jsonb_build_object('granted', false, 'reason', 'not_new_player');
+  end if;
+
   begin
     insert into public.account_credits
       (organization_id, player_id, amount_cents, kind, campaign, expires_at)
@@ -208,7 +228,7 @@ end;
 $$;
 
 comment on function public.grant_account_credit(text) is
-  'Server-side grant of account credit for a live campaign, called once right after a brand-new player row is created (issue #1102). player_id comes from current_player_id(), never a client argument. Idempotent per (campaign, player_id). Best-effort by design: never raises for the ordinary not-live/already-granted cases.';
+  'Server-side grant of account credit for a live campaign, called once right after a brand-new player row is created (issue #1102). player_id comes from current_player_id(), never a client argument. Checks the player is new (no prior event_registrations/payments) before granting — not trusted from the call site. Idempotent per (campaign, player_id). Best-effort by design: never raises for the ordinary not-live/already-granted/not-new cases.';
 
 revoke all on function public.grant_account_credit(text) from public;
 grant execute on function public.grant_account_credit(text) to authenticated;
