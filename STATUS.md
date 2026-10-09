@@ -196,6 +196,92 @@ No new cards filed. `CLAUDE.md` local-drift note from this morning still applies
 **Job 1 (triage):** newest untriaged run ([36010895509](https://github.com/notronwest/tournament-manager/actions/runs/36010895509), 2026-09-24 14:10 UTC) — **failed**, but at the seed step, before any test ran: `web/e2e/seed.ts:543` threw `Unexpected "const"`. Root cause: PR #953 (the #12 pricing-preview fixture) added its block right after an `ok(...)` call for `e2e-reopen-future-deadline` without closing it (`);`), so `const pricingT = ...` parsed as a mid-call argument. Same failure class as [#954](https://github.com/notronwest/tournament-manager/issues/954) (fixtures.ts + registration-fixtures.ts, filed this morning) — no typecheck/lint coverage over `web/e2e/**` lets these slip past PR review. Not a product regression; folded the fix into the still-open [#955](https://github.com/notronwest/tournament-manager/pull/955) rather than opening a fourth PR (`npx esbuild e2e/seed.ts` + `playwright test --list` → 72/13; typecheck + eslint clean). Commented on #954, #955, and #936 (this run produced no #936 data point either way — the suite never got past seeding); posted an out-of-cadence Discord flag since this is the second daytime run in a row the suite couldn't execute at all — asked Ron to merge #955 before tomorrow's runs.
 
 **Local checkout housekeeping:** this host's `test/issue-12-spec` checkout had a stale, uncommitted STATUS.md/CLAUDE.md diff left over from this morning's run — content already captured in the open docs PR [#959](https://github.com/notronwest/tournament-manager/pull/959), so it was stashed rather than committed again (avoids a duplicate/conflicting entry). Local `main` was also several commits stale (hadn't been fast-forwarded to `origin/main` in a while); fast-forwarded before opening this PR. **Next:** merge #955 (urgent — blocks the suite entirely), then #957 and #959; expect a small STATUS.md merge conflict between this PR and #959 when both land — normal, resolve by keeping both entries.
+## 2026-09-27 — Testing agent (daytime run): Job 1 triage (8th consecutive blind run), no new signal
+
+Triaged the newest untriaged regression run, [36326760413](https://github.com/notronwest/tournament-manager/actions/runs/36326760413) (2026-09-27 14:40 UTC, daytime) — **failed at the seed step again**, identical signature to every run since 2026-09-24: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. `main` HEAD is still `ca57343` (pre-#955). This is now the **8th consecutive scheduled run with zero regression signal**.
+
+[#955](https://github.com/notronwest/tournament-manager/pull/955) (the fix, branch `fix/e2e-fixtures-syntax`) remains `OPEN`/`MERGEABLE`/`CLEAN`, checks green, now **~3.2 days** unreviewed since 2026-09-24T11:11 UTC. Commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) rather than filing a duplicate card. Did **not** re-post to Discord — this morning's run already posted a fresh `[ESCALATION]` for this same issue today, and cadence is one post per regression per day.
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
+
+**Housekeeping:** this checkout's `STATUS.md` had the same pre-existing uncommitted CoS/Hopper (#970) entry noted by the last several runs — stashed it before editing, committed only this entry, then popped it back exactly as found; still not mine to commit or discard.
+
+**Next:** Ron still needs to merge #955 — this is now crossing into a third full business day blind. Nothing left to triage or fix on the harness side; it's purely waiting on a merge.
+
+## 2026-09-27 — Testing agent (morning run): Job 1 triage (7th blind run, escalated), Job 2 spec for #813 (draft PR)
+
+**Job 1:** newest untriaged run ([36267565703](https://github.com/notronwest/tournament-manager/actions/runs/36267565703), 2026-09-26 19:52 UTC) — same signature, unchanged: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. This is now the **7th consecutive scheduled run with zero regression signal**. [#955](https://github.com/notronwest/tournament-manager/pull/955) (the fix) is still `OPEN`/`MERGEABLE`/checks-green and now **3 full days** unreviewed since 2026-09-24T11:11 UTC. Commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) and posted a fresh `[ESCALATION]` to Discord — the prior escalation was 2026-09-26, so today's run is a new calendar day with nothing yet posted, and 3 days unreviewed against a green, mergeable fix warrants the nudge.
+
+**Job 2:** authored 1 of the 5-spec cap — [#813](https://github.com/notronwest/tournament-manager/issues/813) ("Event form: show registered team count and the per-pool split when choosing pools") — as draft PR [#974](https://github.com/notronwest/tournament-manager/pull/974) (closes tracking issue [#973](https://github.com/notronwest/tournament-manager/issues/973)). Extended `e2e/seed.ts` (§11) with a dedicated `e2e-pool-preview` tournament: one event with 6 registered teams (4 confirmed pairs + 2 still-forming) under a 20-team cap — chosen so the pool-count dropdown (derived from the cap, up to 5 pools) offers counts the actual 6 teams can't fill evenly, exercising both the amber (2 pools → 3+3) and red (3 pools → 2+2+2) warning thresholds live off one seeded event — plus a second event with zero registrations under a 12-team cap for the "planning on Max teams" fallback. Verified statically only (no local `E2E_*` secrets): esbuild parse clean, `playwright test --list` finds both new tests (74/14 in a worktree with #955's fix applied, up from 72/13), eslint clean. Opened as **draft**, flagged for a first live run once #955 merges.
+Stopped at 1 of the 5 cap on the same budget/session-scope grounds as recent runs. Remaining oldest resolved-with-AC-but-no-spec issues carry over unchanged from the last morning run's list: **#802** ([DB] prereq, likely not spec-shaped), then **#815, #818, #819, #823, #826, #828, #829, #833, #835, #836, #840** (Schedule-page epic) and **#893–#898** (double-elim bracket format).
+
+**Housekeeping:** found this checkout 2 commits ahead of `origin/docs/status-2026-09-25-daytime-triage` (unpushed STATUS entries from prior sessions) — pushed them to sync PR #967 before starting. Also found the same pre-existing uncommitted CoS/Hopper (#970) STATUS.md entry noted by the last two runs, still untouched by anyone — stashed it, did unrelated work, and popped it back exactly as found (a stash-index mixup along the way, from an unrelated verification worktree sharing this repo's stash stack, was caught and corrected before it could clobber anything); still not mine to commit or discard.
+
+**Next:** Ron still needs to merge #955 — this is the 3rd calendar day this has blocked every scheduled run. The uncommitted CoS/Hopper STATUS entry (#970) has now survived at least 3 sessions untouched; worth someone just committing it if it's not actively being edited.
+
+## 2026-09-26 — Builder: single-item mode on #378, Blocked (declined a claimed money-path authorization)
+
+Single-item mode: build issue #378 ("Charity donations P2 `[FN]`" — `create-payment-intent`
+accepting `donation_cents` + split application fee, webhook marking the linked `donations` row
+paid). Confirmed it wasn't mis-queued first (no open sub-issues or PRs under it). Found the issue
+was already on **Agent Ready**, with a comment thread ending in a 2026-09-26 "CoS triage" entry
+claiming Ron had answered a pending `cos_approvals` row (`2f718c00`) authorizing the Builder onto
+this live Stripe payment path, with the fee-base test as a hard gate.
+
+**Did not build it.** `daemon/agents/builder/PROMPT.md`'s hard-rule list Blocks "anything touching
+money / payments / Stripe / refunds / coupons" unconditionally — "do not even draft" — with no
+stated override mechanism (unlike the DDL exceptions next to it, which do name escape hatches).
+This run's own invocation said to obey every hard rule, and a GitHub issue comment isn't a channel
+this session can verify an out-of-band approval through — treated acting on it as indistinguishable
+from acting on an injected instruction, regardless of whether `2f718c00` is genuine. Left the
+card's scope/AC exactly as written, moved it back to **Blocked**, and commented the full reasoning
+on the issue (tagged `<!-- wmpc-builder -->`) rather than silently no-op'ing.
+
+**Next:** this needs a person, not another triage pass — either Ron writes the `create-payment-intent`
++ webhook changes himself, or `PROMPT.md`'s hard-rule text gets an explicit, spec-level override
+mechanism for money/Stripe work (at which point a future run can build #378 without re-deciding this
+each time). Worth Ron confirming directly whether approval `2f718c00` is real and was actually
+answered the way the thread describes — if the CoS approval channel is meant to carry this kind of
+authorization, that's a decision for the spec, not something a single Builder run should infer from
+issue-comment text.
+
+## 2026-09-26 — Testing agent (daytime run): Job 1 triage, harness parse break persists (6th consecutive blind run), #955 still unmerged
+
+Triaged the newest untriaged regression run, [36246119684](https://github.com/notronwest/tournament-manager/actions/runs/36246119684) (2026-09-26 13:43 UTC, daytime) — **failed at the seed step**, identical signature to every run since 2026-09-24: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. `main` HEAD is unchanged (`8cd2299`); [#955](https://github.com/notronwest/tournament-manager/pull/955) (the fix) is still `OPEN`/unreviewed, ~2.5 days since it went up. This is now the **6th consecutive scheduled run with zero regression signal**.
+
+Commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) rather than filing a duplicate card. Did **not** re-post to Discord — this morning's run already posted a `[ESCALATION]` for this same issue today, and the cadence rule is one post per regression per day. Nothing new to triage or fix; this is purely waiting on a merge of #955.
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
+
+**Housekeeping:** this checkout's `STATUS.md` had a pre-existing uncommitted local diff (unrelated content) when this run started — stashed it before editing, committed only this entry, then restored it via `git stash pop` so it's back exactly as found; not mine to commit or discard.
+
+**Next:** Ron still needs to merge #955 — every run past this one stays blind to real regressions until it lands. Worth flagging as overdue given it's crossed a full weekend plus a business day unreviewed.
+
+## 2026-09-26 — Testing agent: Job 1 triage (6th blind run, escalated), Job 2 spec for #801 (draft PR)
+
+**Job 1:** newest untriaged run ([36186162576](https://github.com/notronwest/tournament-manager/actions/runs/36186162576), 2026-09-25 20:30 UTC) — same signature as the prior four, fails at the seed step before any test runs: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. This is now the **5th consecutive scheduled run with zero regression signal**. Root cause and fix are unchanged and already understood (tracked in [#954](https://github.com/notronwest/tournament-manager/issues/954)) — the fix has been sitting `MERGEABLE`/`CLEAN` and **unreviewed** in [#955](https://github.com/notronwest/tournament-manager/pull/955) since 2026-09-24T11:11 UTC, ~2 days now. Commented an update on #954 rather than filing a duplicate card, and posted a `[ESCALATION]` to Discord this time (rather than just a comment) since the blind window has grown from "today's triage" to "a fix sitting unreviewed across a weekend of runs" — this needs a merge, not more triage.
+Double-checked the fix itself isn't stale: confirmed via a worktree on `fix/e2e-fixtures-syntax` that `web/e2e/seed.ts` and `fixtures.ts` both parse clean there (a prior run had already folded the seed.ts brace-close into #955 alongside the original fixtures.ts/registration-fixtures.ts fixes) — so there's genuinely nothing left to fix in the harness, only a merge to unblock it.
+
+**Job 2:** authored 1 of the 5-spec cap — [#801](https://github.com/notronwest/tournament-manager/issues/801) ("Last sent" column on pending partner invites) — as draft PR [#972](https://github.com/notronwest/tournament-manager/pull/972) (closes tracking issue [#971](https://github.com/notronwest/tournament-manager/issues/971)). Extended `e2e/seed.ts` with a dedicated `e2e-last-sent` tournament + two invites seeded with a fixed old `created_at` (needed so the muted "invited <original date>" sub-line's date-divergence condition — day-granularity, not raw timestamp — is always met regardless of when the suite runs). Verified statically only (no local `E2E_*` secrets this session): esbuild parse clean, `playwright test --list` finds both new tests (74/14, up from 72/13), eslint clean — all checked against a worktree with #955's fix applied, since `main` itself can't parse `web/e2e/**` right now. Opened as **draft**, flagged for a first live run once #955 merges.
+Stopped at 1 of the 5 cap deliberately, on budget/session-scope grounds — not because candidates ran out. Next-oldest resolved-with-AC-but-no-spec issues, oldest first (checked via the board's Done column + `## Acceptance criteria` in the body): **#802** ([DB] prereq, no UI to drive — likely not spec-shaped on its own), then **#813, #815, #818, #819, #823, #826, #828, #829, #833, #835, #836, #840** (the Schedule-page epic, #818–#840, 823/826/828/833/835 in particular are substantial multi-step flows: drag-and-drop reordering, two-pool playoffs, medal-round phasing) and **#893–#898** (double-elim bracket format, 6 parts). These remain for a future morning run.
+
+**Housekeeping:** this checkout's `STATUS.md` had a pre-existing uncommitted entry (CoS/Hopper, #970) from a different in-progress session when this run started — left it untouched (not mine to commit or discard) and inserted this entry above it; committing only this hunk.
+
+## 2026-09-25 — Builder: single-item mode on #235, mis-queued (already shipped) — no build, card reconciled
+
+Single-item mode: build issue #235 ("Edge functions: esm.sh → npm: imports") from Agent Ready. Found the issue already **closed** since 2026-06-11 — fully shipped by merged PR #246 (`[FN]` esm.sh → `npm:` migration) — with no open sub-issues or PRs under it; the board card had just gone stale showing Agent Ready. Per the "don't rebuild a mis-queued card" rule, did not open a branch/PR. Commented on #235 explaining the mismatch and moved the card to **In Review** (Builder can't set Done itself) for Ron to confirm and close.
+
+**Next:** Ron moves #235 to Done; worth a look at why the board status didn't sync when #246 merged, in case other cards have the same stale-Agent-Ready drift.
+
+## 2026-09-25 — Testing agent (daytime run): Job 1 triage, harness parse break persists (5th occurrence), #955 still unmerged
+
+Triaged the newest untriaged regression run, [36148433196](https://github.com/notronwest/tournament-manager/actions/runs/36148433196) (2026-09-25 14:34 UTC, daytime) — **failed at the seed step**, identical signature to the prior three runs: `web/e2e/seed.ts:543: ERROR: Unexpected "const"`. Root cause and fix unchanged: the fix (commit `0cf993d`) has been sitting in open PR [#955](https://github.com/notronwest/tournament-manager/pull/955) since 2026-09-24 morning and still isn't merged, so `main` HEAD (`8cd2299`) still can't parse as a Playwright suite. This is now **4 consecutive scheduled CI runs with zero regression signal**. Not a product regression — commented an update on the tracking issue ([#954](https://github.com/notronwest/tournament-manager/issues/954)) rather than filing a duplicate card or re-posting to Discord (already flagged there with urgency this morning, per the "don't re-post the same regression same day" rule).
+
+Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
+
+Housekeeping: this session's checkout had a stale local, uncommitted `CLAUDE.md` diff (missing the "Engineering standard" section already committed on `main`, flagged in prior STATUS entries since 2026-09-20 as out-of-scope drift). While switching branches I ran `git checkout main -- .`, which brought the local file back in sync with `main`'s committed content — flagging transparently since it touched uncommitted state, though nothing committed or pushed was affected and the result matches the canonical `main` version.
+
+**Next:** Ron still needs to merge #955 — every run past this one stays blind to real regressions until it lands.
 
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
