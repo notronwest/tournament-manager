@@ -180,33 +180,70 @@ export default function TournamentRecapPage() {
           </Link>
         </div>
 
-        <TournamentSummaryReport header={header} summary={summary} note="" />
-
+        {/* THE OFFER GOES FIRST. It shipped below the fold, under the footer
+            rule, in grey — Ron, 2026-10-09: "Move the CTA to the top and add
+            some color -- make it noticeable." A player opens this link for the
+            results; the offer only works if it is the first thing they see.
+            courtRed is the brand accent, used nowhere else on this page. */}
         <div
           style={{
-            marginTop: 28,
-            padding: "24px 20px",
-            textAlign: "center",
-            border: `1px solid ${rule}`,
-            borderRadius: 10,
+            margin: "0 0 26px",
+            padding: "20px 22px",
+            borderRadius: 12,
+            background: cream,
+            border: `2px solid ${courtRed}`,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 16,
+            justifyContent: "space-between",
           }}
         >
-          {creditOfferEnabled ? (
-            <p style={{ margin: "0 0 14px", fontSize: 15, color: inkSoft, fontFamily: bodyFontStack }}>
-              <strong>${CREDIT_OFFER_AMOUNT_USD} toward your next {header.orgName} tournament.</strong>{" "}
-              Create your account and we&rsquo;ll add a ${CREDIT_OFFER_AMOUNT_USD} credit, good on any
-              tournament {header.orgName} runs. (Our tournaments only — it isn&rsquo;t cash and
-              can&rsquo;t be used at other clubs.)
-            </p>
-          ) : (
-            <p style={{ margin: "0 0 14px", fontSize: 15, color: inkSoft, fontFamily: bodyFontStack }}>
-              Want to see your own tournament history and sign up for the next one?
-            </p>
-          )}
-          <Link to={ctaHref} style={ctaPrimaryStyle}>
-            Create your account
+          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+            {creditOfferEnabled ? (
+              <>
+                <p
+                  style={{
+                    margin: "0 0 6px",
+                    fontFamily: displayFontStack,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.02em",
+                    lineHeight: 1.1,
+                    fontSize: 26,
+                    color: courtRed,
+                  }}
+                >
+                  ${CREDIT_OFFER_AMOUNT_USD} toward your next {header.orgName} tournament
+                </p>
+                <p style={{ margin: 0, fontSize: 14, color: inkSoft, fontFamily: bodyFontStack, lineHeight: 1.45 }}>
+                  Create your account and we&rsquo;ll add a ${CREDIT_OFFER_AMOUNT_USD} credit, good on any
+                  tournament {header.orgName} runs. Our tournaments only — it isn&rsquo;t cash and
+                  can&rsquo;t be used at other clubs.
+                </p>
+              </>
+            ) : (
+              <p style={{ margin: 0, fontSize: 15, color: inkSoft, fontFamily: bodyFontStack }}>
+                Want to see your own tournament history and sign up for the next one?
+              </p>
+            )}
+          </div>
+          <Link
+            to={ctaHref}
+            style={{
+              ...ctaPrimaryStyle,
+              flex: "none",
+              background: courtRed,
+              color: cream,
+              fontSize: 15,
+              padding: "13px 24px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Learn More →
           </Link>
         </div>
+
+        <TournamentSummaryReport header={header} summary={summary} note="" />
       </div>
       <SiteFooter />
     </main>
