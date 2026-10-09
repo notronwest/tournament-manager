@@ -5,6 +5,26 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-09 — Builder: single-item run on #11 → mis-queued again, already Done
+
+Dispatched a third time in single-item mode to build issue #11 ("Partner
+accepting an invite enters their own checkout flow"), same as the 2026-10-08
+entry below. Confirmed nothing has changed: issue #11 is still `state: CLOSED`
+(`closedAt: 2026-06-07T02:55:36Z`), still fully implemented by merged **PR #60**,
+labels still just `story` (no stray `agent-ready`), no sub-issues, no open PR.
+The board card's Status is still **Done**, correctly — this run's dispatch
+target was simply wrong again. Per the hard rule I took no build action:
+posted a `<!-- wmpc-builder -->` comment on #11 pointing at both prior
+investigations (this entry and PR #1123) and left the board alone.
+
+This is now the **third** time #11 has been queued for a build despite being
+done since June and investigated twice already (2026-10-08 STATUS entry below,
+and the merged PR #1123 that logged it). The mis-dispatch mechanism is still
+unidentified — it isn't the stray `agent-ready` label pattern that explained
+#12's repeat re-queue, since #11 has never carried that label. Flagging for
+daemon/dispatcher-side investigation: something keeps re-adding a closed,
+already-Done issue back into a Builder run's single-item target.
+
 ## 2026-10-08 — Builder: single-item run on #11 → mis-queued, already Done
 
 Dispatched in single-item mode to build issue #11 ("Partner accepting an invite
