@@ -5,6 +5,26 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-09 — Builder: single-item run on #12 → mis-queued a third time, already Done
+
+Dispatched in single-item mode to build issue #12 ("Pricing model misconfiguration
+is easy to make — clarify in admin form"). Confirmed nothing has changed since the
+2026-10-08 investigation (PR #1122): #12 is still `state: CLOSED`, still fully
+implemented by merged **PR #73** ("Clarify event fee override model in EventFormPage
+(#12)", merged 2026-06-13T02:10:50Z), with a regression-test sub-issue (#952, PR #953)
+already covering its acceptance criteria. No sub-issues or open PRs exist under it.
+The board card's Status is already **Done**, correctly — this run's dispatch target
+was simply wrong again. Per the hard rule I took no build action: posted a
+`<!-- wmpc-builder -->` comment on #12 pointing at the two prior comments (2026-10-08
+mis-queue report and its #271→#73 correction) and left the board alone.
+
+This is the same standing dispatcher defect already called out for issue #11 (now
+four occurrences there, see the entries above and below) — a closed, already-Done
+issue keeps getting handed back as a single-item build target. Logging this as a
+second data point on #12 rather than spending another Builder run re-confirming it;
+this reinforces that the fix belongs on the dispatcher/daemon side, not in another
+per-issue investigation.
+
 ## 2026-10-09 — Builder: single-item run on #11 → mis-queued a fourth time, already Done
 
 Dispatched a fourth time in single-item mode to build issue #11 ("Partner
