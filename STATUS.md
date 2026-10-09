@@ -5,26 +5,35 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
-## 2026-10-08 — Builder: single-item run on #12 → mis-queued, not rebuilt; board-move pending on a shared rate limit
+## 2026-10-08 — Builder: single-item run on #12 → mis-queued, label removed; corrected the #271→#73 citation
 
-Dispatched in single-item mode to build issue #12 ("Pricing model misconfiguration
-is easy to make — clarify in admin form"). It was already **closed** on 2026-06-13,
-fully implemented by merged PR #271 (override-language helper text + 1/2-event
-pricing preview reusing `web/src/lib/pricing.ts`, no math change), with a regression
-test landing later in PR #953 — `sub_issues_summary.total: 0`, no open PR against it.
-This was a stale re-queue onto Agent Ready, not a split parent with open sub-issues,
-so per the hard rule did not rebuild. A matching `<!-- wmpc-builder -->` comment was
-already on the issue from an earlier attempt today that hit the same blocker before
-finishing; left it as-is rather than duplicating.
+Dispatched a second time in single-item mode to build issue #12 ("Pricing model
+misconfiguration is easy to make — clarify in admin form"). It was already
+**closed** on 2026-06-13, fully implemented by merged **PR #73** ("Clarify event
+fee override model in EventFormPage (#12)", merged `2026-06-13T02:10:50Z` —
+matching the issue's `closed_at` to the second), with a regression test landing
+later in PR #953 — `sub_issues_summary.total: 0`, no open PR against it. This was
+a stale re-queue, not a split parent with open sub-issues, so per the hard rule
+did not rebuild.
 
-The board move itself (off Agent Ready) is blocked on a shared, environment-wide
-GraphQL rate limit distinct from GitHub's real quota (`gh api rate_limit` showed
-4488/5000 remaining on this token) — every `gh project`/`gh issue view` GraphQL call
-returned `API rate limit already exceeded for user ID 632944` or `unknown owner
-type`. Reset is ~2026-10-08 20:48 ET. Started a tracked background job
-(`/tmp/move_card_12.sh`) that waits for the reset and then moves card #12 to
-In Review via `gh project item-edit`. Next: confirm that job completed the move;
-if it errored, finish the move by hand once the GraphQL limit is clearly clear.
+**Correcting this PR's own earlier entry (below is now stale, left for history):**
+it cited **PR #271** as the fix — the Reviewer caught this (`VERDICT: REQUEST
+CHANGES` on this branch): #271 is the same feature/era but was closed **without
+merging** (`merged: false`, `merge_commit_sha: null`), a duplicate/superseded
+attempt. #73 is the real fix. Also posted a follow-up correction comment on issue
+#12 itself, since the original `<!-- wmpc-builder -->` comment there carried the
+same #271 mix-up.
+
+**Root cause, fixed:** the board's Status field for card #12 was already **Done**
+(correct — set when #73 merged) — there was never an "Agent Ready" board-column
+state to move it out of. What actually re-queued it twice was a stray GitHub
+**`agent-ready` label** left on the closed issue; the dispatcher appears to scan
+that label as well as board Status. Removed the `agent-ready` label from issue
+#12 so it stops re-triggering. (The prior entry's background rate-limit-wait job
+to move the board card is now moot — nothing needed moving — and it had a script
+bug besides: it never resolved the project's own node id, only the Status field
+id, so it errored out even once the shared GraphQL rate limit cleared. No retry
+needed.)
 
 ## 2026-10-08 — Builder: PR #1117 rework (fixed the negative-balance bug the reviewer flagged)
 
