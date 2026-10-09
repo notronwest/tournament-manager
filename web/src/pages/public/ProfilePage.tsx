@@ -10,7 +10,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
-import { recordSignupEvent } from "../../lib/campaignCapture";
+import { recordSignupEvent, grantAccountCreditIfEligible } from "../../lib/campaignCapture";
 import type { Database } from "../../types/supabase";
 import { RatingPicker } from "../../components/RatingPicker";
 import {
@@ -358,6 +358,9 @@ export default function ProfilePage() {
       // created, not just signed into. Fires at most once per signup;
       // best-effort and a no-op when no campaign was captured (D-0077).
       void recordSignupEvent();
+      // Grants the $20 account credit (#1102) for a live campaign, same
+      // call site, same best-effort/no-op-without-a-campaign shape.
+      void grantAccountCreditIfEligible();
     }
 
     setBusy(false);
