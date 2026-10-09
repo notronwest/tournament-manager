@@ -101,12 +101,14 @@ export default function CreditLandingPage() {
           on any tournament {orgName} runs. Here is why we are doing it.
         </p>
 
-        {/* THE ARGUMENT. Every figure below comes from Ron's own Pickleball.com
-            receipts (invoice ids 1963202 and 2080708), eleven weeks apart, as a
-            PLAYER. Deliberately the narrow, defensible pair: three different
-            organizers set three different base prices, so the RATE comparison is
-            the honest one. No claim is made about a published fee schedule, an
-            official rate change, or an effective date, because none was found. */}
+        {/* THE ARGUMENT, now from the platform's OWN PUBLISHED SCHEDULE rather
+            than inferred from receipts: pickleballtournaments.com/pricing states
+            "$5 plus 7.99% of the total registration checkout", effective for
+            tournaments opening for registration on 2026-08-03 or later. Verified
+            against Ron's own invoice 2080708 — $80 checkout, $11.39 fee, which is
+            $5 + 7.99% to the cent — and it reproduces both of their own worked
+            examples. The comparison figure ($5.00 on a $50 checkout) is what he
+            actually paid on 2026-07-20 under the legacy plan, invoice 1963202. */}
         <div
           style={{
             background: cream,
@@ -127,38 +129,49 @@ export default function CreditLandingPage() {
               margin: "0 0 12px",
             }}
           >
-            The fees on tournament entries are climbing fast
+            The big platform now takes $5 + 7.99% of every entry
           </p>
           <p style={{ color: ink, fontSize: 15.5, lineHeight: 1.65, fontFamily: bodyFontStack, margin: "0 0 14px" }}>
-            Two entries on the same national platform, eleven weeks apart:
+            That is their published rate, and it applies to any tournament that opened for
+            registration on or after <strong>August 3, 2026</strong>. It is charged on your{" "}
+            <em>whole</em> checkout — the entry fee plus every event you add.
           </p>
           <table style={{ width: "100%", borderCollapse: "collapse", margin: "0 0 14px", fontFamily: bodyFontStack }}>
             <tbody>
               <tr>
                 <td style={{ padding: "7px 0", fontSize: 15, color: inkSoft, borderBottom: `1px solid ${rule}` }}>
-                  July&nbsp;20 — $50 entry
+                  A $50 entry, last July
                 </td>
                 <td style={{ padding: "7px 0", fontSize: 15, color: ink, fontWeight: 700, textAlign: "right", borderBottom: `1px solid ${rule}`, whiteSpace: "nowrap" }}>
-                  $5.00 service fee
+                  $5.00 fee
                 </td>
               </tr>
               <tr>
-                <td style={{ padding: "7px 0", fontSize: 15, color: inkSoft }}>October&nbsp;6 — $80 entry</td>
+                <td style={{ padding: "7px 0", fontSize: 15, color: inkSoft, borderBottom: `1px solid ${rule}` }}>
+                  The same $50 entry, now
+                </td>
+                <td style={{ padding: "7px 0", fontSize: 15, color: courtRed, fontWeight: 800, textAlign: "right", borderBottom: `1px solid ${rule}`, whiteSpace: "nowrap" }}>
+                  $9.00 fee
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: "7px 0", fontSize: 15, color: inkSoft }}>
+                  An $80 entry — two events
+                </td>
                 <td style={{ padding: "7px 0", fontSize: 15, color: courtRed, fontWeight: 800, textAlign: "right", whiteSpace: "nowrap" }}>
-                  $11.39 service fee
+                  $11.39 fee
                 </td>
               </tr>
             </tbody>
           </table>
           <p style={{ color: ink, fontSize: 15.5, lineHeight: 1.65, fontFamily: bodyFontStack, margin: "0 0 12px" }}>
-            That is <strong>2.3&times; in eleven weeks</strong> — the platform&rsquo;s cut went from
-            10% of the entry to 14%. In July a second event was included in the registration. By
-            October a second event was a separate $10 charge.
+            Our last tournament had <strong>116 players</strong>. At $11.39 each, roughly{" "}
+            <strong>$1,300 leaves this valley in platform fees</strong> on a single weekend — before
+            the club pays for courts, refs, medals or balls.
           </p>
           <p style={{ color: ink, fontSize: 15.5, lineHeight: 1.65, fontFamily: bodyFontStack, margin: 0 }}>
-            Our last tournament had <strong>116 players</strong>. At that rate, roughly{" "}
-            <strong>$1,300 leaves this valley in platform fees</strong> on a single weekend — before
-            a club pays for courts, refs, medals or balls.
+            And if a club comps a player, or takes cash at the desk, their own terms say{" "}
+            <strong>the club owes that fee instead</strong>.
           </p>
         </div>
 
@@ -167,10 +180,11 @@ export default function CreditLandingPage() {
         </h2>
         <p style={{ color: inkSoft, fontSize: 15.5, lineHeight: 1.7, fontFamily: bodyFontStack, margin: "0 0 14px" }}>
           A tournament is one of the few days a small club actually makes money. The margin is thin
-          and it is made of entry fees. Every dollar the platform adds on top is a dollar the player
-          has already spent before they get to yours — so the club is not choosing between keeping
-          the fee or giving it up. It is choosing between raising its own price and watching players
-          enter fewer events.
+          and it is made of entry fees. Because the fee is a percentage of your <em>whole</em>
+          checkout, every event a club adds and every dollar it charges raises the platform&rsquo;s
+          cut too — and the player has already spent that money before they reach the club&rsquo;s
+          price. So the choice is not whether to keep the fee. It is whether to raise your own price
+          or watch people enter fewer events.
         </p>
         <p style={{ color: inkSoft, fontSize: 15.5, lineHeight: 1.7, fontFamily: bodyFontStack, margin: "0 0 28px" }}>
           We built our own tournament software because we are one of those clubs, and we would
@@ -181,8 +195,8 @@ export default function CreditLandingPage() {
           So the ${CREDIT_OFFER_AMOUNT_USD} is the point, not a coupon
         </h2>
         <p style={{ color: inkSoft, fontSize: 15.5, lineHeight: 1.7, fontFamily: bodyFontStack, margin: "0 0 14px" }}>
-          It is roughly what a national platform would have taken out of your last two entries.
-          We are handing it back to you instead, to spend on playing here again.
+          It is about what the big platform now takes out of two entries. We are handing it back to
+          you instead, to spend on playing here again.
         </p>
         <ul
           style={{
