@@ -3,6 +3,7 @@ import {
   parsePbBuffer,
   parseAttendees,
   parseDivisionLabel,
+  parseFeeCents,
   resolveColumns,
   unmappedColumns,
   divisionKey,
@@ -140,5 +141,22 @@ describe("waitlist exclusion + empty divisions (Ron 2026-10-01)", () => {
     const divs = new Set(res.attendees.flatMap((a) => a.entries.map((e) => e.divisionLabel)));
     expect([...divs].some((d) => /4\.0 And Above/i.test(d))).toBe(false); // only (WAIT) → gone
     expect([...divs].some((d) => /Womens Doubles/i.test(d))).toBe(false); // only (WAIT) → gone
+  });
+});
+
+describe("parseFeeCents", () => {
+  it("parses a plain dollar string", () => {
+    expect(parseFeeCents("65.00")).toBe(6500);
+  });
+  it("strips a currency symbol and thousands separators", () => {
+    expect(parseFeeCents("$1,234.50")).toBe(123450);
+  });
+  it("treats blank or non-numeric as zero", () => {
+    expect(parseFeeCents("")).toBe(0);
+    expect(parseFeeCents("n/a")).toBe(0);
+  });
+  it("treats a negative or zero fee as zero (never subtracts from the total)", () => {
+    expect(parseFeeCents("-10.00")).toBe(0);
+    expect(parseFeeCents("0")).toBe(0);
   });
 });
