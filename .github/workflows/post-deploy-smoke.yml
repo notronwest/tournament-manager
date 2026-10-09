@@ -1,0 +1,62 @@
+# Does the thing we just shipped actually RENDER?
+#
+# 2026-10-09: a promotion put a public recap page on PROD that threw on every
+# load and rendered nothing. Migrations green, edge functions green, deploy
+# green — all three honestly reporting their own step, over a blank page. Ron
+# found it by opening it, hours later.
+#
+# Every check we had asked "did my step finish?". This asks "is it there?"
+# (D-0083: a self-report must be derived from the OUTCOME).
+name: Post-deploy smoke (production)
+
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cloudflare Pages builds asynchronously and we hold no API token, so we
+      # cannot ask "is the deploy done?". We can ask the page: wait until the
+      # JS bundle hash is no longer the one that was live when this run began.
+      # Timing out here FAILS the job — a deploy that never arrives is exactly
+      # as bad as one that arrives broken, and must not pass quietly.
+      - name: Wait for the new bundle to be serving
+        run: |
+          url="https://bertanderne.com"
+          before="$(curl -fsS --max-time 20 "$url" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
+          echo "bundle before: ${before:-unknown}"
+          for i in $(seq 1 60); do
+            now="$(curl -fsS --max-time 20 "$url" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
+            if [ -n "$now" ] && [ "$now" != "$before" ]; then
+              echo "bundle now: $now — deploy is live after $((i*15))s"; exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::the new bundle never started serving within 15 minutes — the deploy did not land"
+          exit 1
+
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+
+      - name: Smoke the public pages
+        working-directory: web
+        env:
+          E2E_BASE_URL: https://bertanderne.com
+        run: npx playwright test e2e/smoke-public.spec.ts --project=chromium --reporter=line
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-failure
+          path: web/test-results/
+          retention-days: 7
