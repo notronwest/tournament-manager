@@ -21,13 +21,13 @@ import {
   bodyFontStack,
   contentColStyle,
   courtRed,
+  cream,
   ctaPrimaryStyle,
   displayFontStack,
   ink,
   inkMuted,
   inkSoft,
   pageWrapStyle,
-  rule,
 } from "../../lib/publicTheme";
 
 // Public RECAP page (#1101, D-0077 §1): a COMPLETED tournament's end-of-event
