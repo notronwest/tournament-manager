@@ -37,6 +37,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 // @ts-expect-error remote import resolved at runtime by Deno
 import Stripe from "npm:stripe@14.21.0";
+import { computeChargeCents, computePlatformFeeCents } from "../_shared/platformFee.ts";
+
+// At-checkout donation add-on (#378). Same bounds as the standalone
+// create-donation-intent flow, for the same reason: a sane floor against
+// $0/negative and a sanity ceiling for a single card charge.
+const MIN_DONATION_CENTS = 100;
+const MAX_DONATION_CENTS = 100_000_00;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,6 +67,10 @@ type Body = {
   // context — can build partner-invite accept links pointing back at
   // wherever the player checked out (localhost vs. prod). See #191.
   baseUrl?: string;
+  // Optional at-checkout donation add-on (#378). Adds to the charged total
+  // on top of the required fees; never reduces it, and never affects the
+  // platform application_fee (computed on the registration subtotal only).
+  donationCents?: number;
 };
 
 // @ts-expect-error Deno global in edge runtime
@@ -91,8 +102,22 @@ Deno.serve(async (req: Request) => {
     }
     const authUserId = userData.user.id;
 
-    const { orgSlug, tournamentSlug, couponCode, baseUrl } =
+    const { orgSlug, tournamentSlug, couponCode, baseUrl, donationCents: rawDonationCents } =
       (await req.json()) as Body;
+
+    // ── Validate the optional donation add-on (#378) ─────────────────
+    // Absent/0 must be byte-identical to today, so only a present, nonzero
+    // value is validated/charged at all.
+    let donationCents = 0;
+    if (rawDonationCents !== undefined && rawDonationCents !== null && rawDonationCents !== 0) {
+      if (!Number.isInteger(rawDonationCents)) {
+        return json({ error: "invalid_donation_amount" }, 400);
+      }
+      if (rawDonationCents < MIN_DONATION_CENTS || rawDonationCents > MAX_DONATION_CENTS) {
+        return json({ error: "donation_amount_out_of_bounds" }, 400);
+      }
+      donationCents = rawDonationCents;
+    }
 
     // Resolve org → tournament. (Pricing is tier-based; tournaments has
     // no entry_fee_cents — the total comes from compute_checkout_total.)
@@ -121,7 +146,7 @@ Deno.serve(async (req: Request) => {
     // Map auth user → player id.
     const { data: player } = await admin
       .from("players")
-      .select("id")
+      .select("id, first_name, last_name, email")
       .eq("auth_user_id", authUserId)
       .single();
     if (!player) return json({ error: "player_not_found" }, 404);
@@ -215,15 +240,24 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── Amount actually charged (#378) ───────────────────────────────
+    // The donation rides on top of the registration subtotal. Keep
+    // totalCents (the fee base) and chargeCents (what Stripe collects)
+    // separate from here on — the platform fee below is computed from
+    // totalCents ONLY, so a donation never changes it.
+    const chargeCents = computeChargeCents(totalCents, donationCents);
+
     // ── Free registration (no payment) ──────────────────────────────
     // $0 to pay — either the tournament has no fees or a coupon zeroed the
-    // basket. There's no Stripe charge and therefore no webhook to flip the
-    // regs, so we confirm right here: mark the player's pending regs paid,
-    // redeem any coupon, and fire the deferred partner invites — mirroring
+    // basket, AND there's no donation riding along (a donation alone still
+    // requires a real Stripe charge, handled by the paid path below). There's
+    // no Stripe charge and therefore no webhook to flip the regs, so we
+    // confirm right here: mark the player's pending regs paid, redeem any
+    // coupon, and fire the deferred partner invites — mirroring
     // stripe-webhook's handleSucceeded for the paid path. The total is
     // computed server-side (compute_checkout_total) above, so a client can't
     // forge a free checkout for a paid event.
-    if (totalCents <= 0) {
+    if (chargeCents <= 0) {
       if (regIdsToCharge.length === 0) {
         return json({ error: "nothing_to_charge" }, 400);
       }
@@ -259,6 +293,14 @@ Deno.serve(async (req: Request) => {
       return json({ error: "org_stripe_not_active" }, 409);
     }
 
+    if (donationCents > 0) {
+      lineItems.push({
+        event_registration_id: null,
+        description: "Donation",
+        amount_cents: donationCents,
+      });
+    }
+
     // ── 4. Platform fee (Connect direct charge) ─────────────────────
     // Per-tournament override wins when set (both columns non-null);
     // otherwise fall back to the platform_settings global default. Both
@@ -281,7 +323,9 @@ Deno.serve(async (req: Request) => {
       feeBps = settings?.platform_fee_bps ?? 0;
       feeFixed = settings?.platform_fee_fixed_cents ?? 0;
     }
-    const platformFeeCents = Math.round((totalCents * feeBps) / 10000) + feeFixed;
+    // Computed on totalCents (registration subtotal) ONLY — never on
+    // chargeCents, so an at-checkout donation (#378) is always fee-free.
+    const platformFeeCents = computePlatformFeeCents(totalCents, feeBps, feeFixed);
 
     // ── 5. Create or reuse the PaymentIntent ────────────────────────
     // A player can return to checkout with the same pending regs after a
@@ -306,6 +350,10 @@ Deno.serve(async (req: Request) => {
       // atomically at payment success. Not a trust boundary: the amount was
       // computed server-side above, never from the client.
       credit_cents: String(creditAppliedCents),
+      // At-checkout donation amount riding this same intent (#378).
+      // Informational only — the webhook identifies the linked `donations`
+      // row by stripe_payment_intent_id, not by this field.
+      donation_cents: String(donationCents),
       // Sanitised origin for the webhook's partner-invite links (#191).
       base_url: (baseUrl ?? "").replace(/\/+$/, "").slice(0, 200),
     };
@@ -349,12 +397,12 @@ Deno.serve(async (req: Request) => {
           // Resync amount/fee in case the basket or coupon changed since the
           // intent was first created, then reuse its client_secret.
           intent =
-            existing.amount !== totalCents ||
+            existing.amount !== chargeCents ||
             existing.application_fee_amount !== platformFeeCents
               ? await stripe.paymentIntents.update(
                   existing.id,
                   {
-                    amount: totalCents,
+                    amount: chargeCents,
                     application_fee_amount: platformFeeCents,
                     metadata,
                   },
@@ -370,7 +418,7 @@ Deno.serve(async (req: Request) => {
     if (!intent) {
       intent = await stripe.paymentIntents.create(
         {
-          amount: totalCents,
+          amount: chargeCents,
           currency: "usd",
           automatic_payment_methods: { enabled: true },
           application_fee_amount: platformFeeCents,
@@ -391,7 +439,7 @@ Deno.serve(async (req: Request) => {
           player_id: player.id,
           stripe_payment_intent_id: intent.id,
           stripe_connected_account_id: org.stripe_account_id,
-          amount_cents: totalCents,
+          amount_cents: chargeCents,
           platform_fee_cents: platformFeeCents,
           status: "pending",
         },
@@ -412,6 +460,33 @@ Deno.serve(async (req: Request) => {
           amount_cents: li.amount_cents,
         })),
       );
+    }
+
+    // ── At-checkout donation (#378) ───────────────────────────────────
+    // Mirrors the line-items wipe-and-reinsert above: drop whatever a prior
+    // attempt at this payment wrote, then reinsert only if a donation is
+    // still present — so lowering it to $0 on a retry removes the stale row
+    // instead of leaving it dangling. The webhook flips this to 'succeeded'
+    // (or 'failed') by stripe_payment_intent_id, same as a standalone
+    // donation (#377) — riding the registration's own intent here instead
+    // of a dedicated one.
+    await admin.from("donations").delete().eq("payment_id", payment.id);
+    if (donationCents > 0) {
+      const { error: donationErr } = await admin.from("donations").upsert(
+        {
+          organization_id: tournament.organization_id,
+          tournament_id: tournament.id,
+          payment_id: payment.id,
+          stripe_payment_intent_id: intent.id,
+          stripe_connected_account_id: org.stripe_account_id,
+          donor_name: `${player.first_name} ${player.last_name}`.trim(),
+          donor_email: player.email ?? "",
+          amount_cents: donationCents,
+          status: "pending",
+        },
+        { onConflict: "stripe_payment_intent_id" },
+      );
+      if (donationErr) return json({ error: "donation_record_failed" }, 500);
     }
 
     // connectedAccountId lets the browser init Stripe.js scoped to the org's

@@ -81,12 +81,18 @@ Deno.serve(async (req: Request) => {
           await handleDonationSucceeded(pi);
         } else {
           await handleSucceeded(pi);
+          // An at-checkout donation (#378) rides the SAME intent as the
+          // registration payment (no metadata.type), so flip it in the same
+          // transition. No-op (donation is null) when none was added —
+          // handleDonationSucceeded already guards on that.
+          await handleDonationSucceeded(pi);
         }
         break;
       }
       case "payment_intent.payment_failed": {
         const pi = event.data.object;
-        const table = pi.metadata?.type === "donation" ? "donations" : "payments";
+        const isDonationIntent = pi.metadata?.type === "donation";
+        const table = isDonationIntent ? "donations" : "payments";
         await admin
           .from(table)
           .update({
@@ -96,6 +102,20 @@ Deno.serve(async (req: Request) => {
           })
           .eq("stripe_payment_intent_id", pi.id)
           .neq("status", "succeeded"); // never downgrade a succeeded payment
+        // A failed registration payment must leave any at-checkout donation
+        // riding the same intent unmarked-paid too (#378) — neither side
+        // flips to paid on a failed charge.
+        if (!isDonationIntent) {
+          await admin
+            .from("donations")
+            .update({
+              status: "failed",
+              failure_message: pi.last_payment_error?.message ?? "payment failed",
+              raw: pi,
+            })
+            .eq("stripe_payment_intent_id", pi.id)
+            .neq("status", "succeeded");
+        }
         break;
       }
       case "charge.refunded": {
