@@ -541,17 +541,6 @@ export default function SchedulePage() {
   // Optimistic local-state updates keep the UI snappy without a full
   // reload of all the joined data each click.
 
-  const updateLocalEventScheduled = (
-    eventId: string,
-    iso: string | null,
-  ) => {
-    setEvents((prev) =>
-      prev.map((e) =>
-        e.id === eventId ? { ...e, scheduled_start_at: iso } : e,
-      ),
-    );
-  };
-
   // Auto-schedule: walk events in the organizer's order and give each the
   // earliest start where the courts it actually needs fit alongside what's
   // already running (and no player is double-booked). Writes the start
@@ -820,7 +809,7 @@ export default function SchedulePage() {
     // to the fixed set so the cascade routes around it instead of moving it.
     later.forEach((r) => {
       if (r.event.scheduled_pinned && r.scheduledStart) {
-        fixed.push(placementFor(r.event, r.scheduledStart.getTime()));
+        fixed.push(placementFor(r, r.scheduledStart.getTime()));
         fixedPlayers.set(r.event.id, playersByEvent.get(r.event.id) ?? new Set<string>());
       }
     });
