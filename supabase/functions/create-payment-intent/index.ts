@@ -123,7 +123,7 @@ Deno.serve(async (req: Request) => {
     // no entry_fee_cents — the total comes from compute_checkout_total.)
     const { data: tournament, error: tErr } = await admin
       .from("tournaments")
-      .select("id, organization_id, status, platform_fee_bps, platform_fee_fixed_cents, organizations!inner(slug, stripe_account_id, stripe_account_status)")
+      .select("id, organization_id, status, accepts_donations, platform_fee_bps, platform_fee_fixed_cents, organizations!inner(slug, stripe_account_id, stripe_account_status)")
       .eq("slug", tournamentSlug)
       .single();
     if (tErr || !tournament) return json({ error: "tournament_not_found" }, 404);
@@ -135,6 +135,14 @@ Deno.serve(async (req: Request) => {
     // for it. Draft / completed / cancelled never take money.
     if (tournament.status !== "published" && tournament.status !== "closed") {
       return json({ error: "tournament_not_accepting_payment" }, 409);
+    }
+
+    // The organizer's accepts_donations opt-in is the trust boundary, not
+    // the checkout UI (#946 only hides the field client-side). Mirrors
+    // create-donation-intent's same check — a tournament with donations
+    // turned off must reject a donation here even if a client posts one.
+    if (donationCents > 0 && !tournament.accepts_donations) {
+      return json({ error: "donations_not_enabled" }, 409);
     }
 
     // @ts-expect-error to-one join shape

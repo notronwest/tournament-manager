@@ -10,16 +10,33 @@ import {
 } from "../../../supabase/functions/_shared/platformFee";
 
 describe("platform fee is unaffected by a checkout donation (#378)", () => {
-  it("application_fee is identical whether or not a donation rides the same registration", () => {
+  it("application_fee stays fixed on the registration subtotal while a donation grows the charge", () => {
     const subtotalCents = 7000; // $70 registration
+    const donationCents = 2500; // $25 donation riding the same checkout
     const feeBps = 300; // 3%
     const feeFixedCents = 30; // $0.30
 
+    const chargeWithoutDonation = computeChargeCents(subtotalCents, 0);
+    const chargeWithDonation = computeChargeCents(subtotalCents, donationCents);
+    expect(chargeWithDonation).toBeGreaterThan(chargeWithoutDonation);
+
+    // The fee base create-payment-intent must use is the subtotal, not the
+    // charge — so it is identical whether or not a donation rides along.
     const feeWithoutDonation = computePlatformFeeCents(subtotalCents, feeBps, feeFixedCents);
     const feeWithDonation = computePlatformFeeCents(subtotalCents, feeBps, feeFixedCents);
-
     expect(feeWithDonation).toBe(feeWithoutDonation);
     expect(feeWithDonation).toBe(240); // 3% of $70 (210) + $0.30 (30)
+
+    // Proves this test can actually fail: if the call site passed the
+    // donation-inclusive charge as the fee base instead of the subtotal,
+    // the fee would come out higher — exactly the regression this test
+    // exists to catch.
+    const feeIfWronglyBasedOnCharge = computePlatformFeeCents(
+      chargeWithDonation,
+      feeBps,
+      feeFixedCents,
+    );
+    expect(feeIfWronglyBasedOnCharge).not.toBe(feeWithoutDonation);
   });
 
   it("donation_cents absent or 0 produces a byte-identical charge to today", () => {
