@@ -5,6 +5,23 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-08 — Builder: single-item run on #11 → mis-queued, already Done
+
+Dispatched in single-item mode to build issue #11 ("Partner accepting an invite
+enters their own checkout flow"). It was already **closed** on 2026-06-07, fully
+implemented by merged **PR #60** ("Partner accept inserts pending_payment reg,
+not paid (#11)", merged `2026-06-07T02:55:35Z`, `Closes #11`). No sub-issues
+exist under it and no open PR references it — the board card's Status is
+already **Done**, correctly. Per the hard rule (don't rebuild already-shipped
+work) I took no build action: posted a `<!-- wmpc-builder -->` comment on #11
+explaining this, and left the board alone since there was nothing to move.
+
+Checked for the stray `agent-ready` **label** that caused #12's repeat
+re-queue (see entry below) — #11 carries only the `story` label, no
+`agent-ready` label, so that isn't the mechanism here. Root cause of this
+particular mis-dispatch wasn't investigated further (no stray label to clean
+up); noting it in case the same batch re-queues #11 again.
+
 ## 2026-10-08 — Builder: single-item run on #12 → mis-queued, label removed; corrected the #271→#73 citation
 
 Dispatched a second time in single-item mode to build issue #12 ("Pricing model
