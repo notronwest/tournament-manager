@@ -2178,3 +2178,20 @@ the dates that holds MORE than 2 scores is a day of play, not late entry (a desk
 or two corrections after the fact, not a whole day). Summary now also returns `lateDays` +
 `playWindow`, and the page's note names the excluded days and the window it used, with an
 Edit link to fix the dates. 3 new tests (18 in file). typecheck/lint/build clean.
+
+## 2026-10-09 — Builder: #378 [FN] checkout donation add-on built (PR open)
+
+Single-item run on #378 (Charity donations P2, FN half — owner-authorized 2026-10-05,
+gate cleared 2026-10-08). The UX half (#946) already merged a donationCents-carrying
+"Add a donation" field; this PR teaches create-payment-intent to actually charge it:
+subtotal + donation on the Stripe PaymentIntent, a linked `donations` row, and the
+webhook flips it paid/failed alongside the registration in the same transition. Platform
+application_fee stays computed on the registration subtotal only — pulled into a shared
+pure helper (`supabase/functions/_shared/platformFee.ts`) so the required fee-math test
+(`web/src/lib/platformFee.test.ts`, imports that same module) actually guards the code
+path, not a reimplementation. typecheck/build clean (two pre-existing SchedulePage.tsx
+typecheck errors confirmed present on `origin/main` too, unrelated to this diff); lint
+adds no new errors (32 pre-existing, none in touched files); 384 vitest pass. No new
+secret — reuses STRIPE_SECRET_KEY etc. Edge-function change: deploys on merge, no
+preview. Next: Ron reviews/merges; no sub-issue split needed since #946 already shipped
+the UX half separately.
