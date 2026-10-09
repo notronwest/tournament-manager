@@ -123,6 +123,56 @@ test.describe("mobile audit — layout assertions", () => {
     await assertCtaUsable(page, register, "event Register CTA");
   });
 
+  // ── PB.com import preview (#1127 AC #4 gap, closed by PR #1129): the new
+  //    "Fees paid (PB.com)" stat tile + its caption must render fully on a
+  //    390px phone — no page-wide horizontal overflow, and the tile/caption
+  //    not clipped off the right edge of the auto-fit stats grid.
+  test("PB.com import preview — Fees paid stat usable", async ({ page }, ti) => {
+    await loginAs(page, SEED.organizerEmail);
+    await page.goto(
+      `/admin/${SEED.orgSlug}/tournaments/${SEED.tournamentSlug}/import-pb`,
+    );
+
+    const csv = [
+      "LastName,FirstName,Email,AttendeeHeaderID,ActivityID,TeamID,Event 1,ServiceFee_Total",
+      "Rivera,Alex,mobile-audit-alex@example.com,mobile-audit-header-1,mobile-audit-act-1,,Mens Doubles Skill: (3.0 To 3.49),65.00",
+    ].join("\n");
+    await page.locator('input[type="file"]').setInputFiles({
+      name: "pb-mobile-audit.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv, "utf-8"),
+    });
+
+    const feesValue = page.getByText("$65.00", { exact: true });
+    await expect(feesValue).toBeVisible();
+    await snap(page, ti, "pb-import-preview");
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(
+      overflow,
+      "PB.com import preview must not overflow horizontally at 390px",
+    ).toBeLessThanOrEqual(0);
+
+    const vw = page.viewportSize()!.width;
+    const feesLabel = page.getByText("Fees paid (PB.com)", { exact: true });
+    const caption = page.getByText(/informational only/i);
+    for (const [label, locator] of [
+      ["Fees paid label", feesLabel],
+      ["Fees paid value", feesValue],
+      ["Fees paid caption", caption],
+    ] as const) {
+      await expect(locator, `${label}: visible`).toBeVisible();
+      const box = await locator.boundingBox();
+      expect(box, `${label}: has a bounding box`).not.toBeNull();
+      expect(
+        Math.round(box!.x + box!.width),
+        `${label}: right edge must be within the ${vw}px viewport`,
+      ).toBeLessThanOrEqual(vw + 1);
+    }
+  });
+
   // ── Public recap page (#1108), signed out: the summary report must render
   //    (not the "isn't available" empty state) and the "Create your account"
   //    CTA at the foot of the page must be reachable and tappable — this is
@@ -153,6 +203,15 @@ test.describe("mobile audit — screenshots", () => {
   test("tournament — details tab", async ({ page }, ti) => {
     await page.goto(`/t/${SEED.orgSlug}/${SEED.tournamentSlug}`);
     await snap(page, ti, "tournament-details");
+  });
+
+  // $20-credit landing page (#1114). The deployed test project runs with
+  // VITE_CREDIT_OFFER unset (flag OFF, the safe default), so this always
+  // renders the "isn't available" state here — a layout-assertion case for
+  // the flag-ON copy belongs on whichever environment turns the flag on.
+  test("credit landing page", async ({ page }, ti) => {
+    await page.goto(`/t/${SEED.orgSlug}/credit`);
+    await snap(page, ti, "credit-landing");
   });
 
   // FIXME (per-project seed isolation): reuses the existing-partner registrant,

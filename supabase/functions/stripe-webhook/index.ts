@@ -5,7 +5,7 @@
 //
 // Stripe's source-of-truth callback. On payment_intent.succeeded it
 // confirms the payment, flips the linked pending_payment registrations
-// to paid, redeems any coupon, and fires the deferred partner-invite
+// to paid, redeems any coupon and any account credit, and fires the deferred partner-invite
 // emails. On payment_intent.payment_failed it records the failure and
 // leaves the regs pending so the player can retry.
 //
@@ -81,12 +81,18 @@ Deno.serve(async (req: Request) => {
           await handleDonationSucceeded(pi);
         } else {
           await handleSucceeded(pi);
+          // An at-checkout donation (#378) rides the SAME intent as the
+          // registration payment (no metadata.type), so flip it in the same
+          // transition. No-op (donation is null) when none was added —
+          // handleDonationSucceeded already guards on that.
+          await handleDonationSucceeded(pi);
         }
         break;
       }
       case "payment_intent.payment_failed": {
         const pi = event.data.object;
-        const table = pi.metadata?.type === "donation" ? "donations" : "payments";
+        const isDonationIntent = pi.metadata?.type === "donation";
+        const table = isDonationIntent ? "donations" : "payments";
         await admin
           .from(table)
           .update({
@@ -96,6 +102,20 @@ Deno.serve(async (req: Request) => {
           })
           .eq("stripe_payment_intent_id", pi.id)
           .neq("status", "succeeded"); // never downgrade a succeeded payment
+        // A failed registration payment must leave any at-checkout donation
+        // riding the same intent unmarked-paid too (#378) — neither side
+        // flips to paid on a failed charge.
+        if (!isDonationIntent) {
+          await admin
+            .from("donations")
+            .update({
+              status: "failed",
+              failure_message: pi.last_payment_error?.message ?? "payment failed",
+              raw: pi,
+            })
+            .eq("stripe_payment_intent_id", pi.id)
+            .neq("status", "succeeded");
+        }
         break;
       }
       case "charge.refunded": {
@@ -149,7 +169,7 @@ async function handleSucceeded(pi: any) {
   // ── Idempotency guard: only act if not already succeeded ──────────
   const { data: payment } = await admin
     .from("payments")
-    .select("id, status")
+    .select("id, status, organization_id, player_id")
     .eq("stripe_payment_intent_id", pi.id)
     .single();
   if (!payment) return; // intent we didn't create — ignore.
@@ -189,6 +209,23 @@ async function handleSucceeded(pi: any) {
   const couponId = pi.metadata?.coupon_id;
   if (couponId) {
     await admin.rpc("redeem_coupon", { p_coupon_id: couponId });
+  }
+
+  // ── Redeem account credit (atomic; service_role) ───────────────────
+  // issue #1102, D-0077 §2. credit_cents is the amount create-payment-intent
+  // already subtracted from this intent's charged amount — redeem_account_credit
+  // re-clamps to the live balance and is idempotent per payment_intent_id, so
+  // a re-delivered webhook (which never reaches here anyway, thanks to the
+  // payment.status guard above) still couldn't double-redeem.
+  const creditCents = Number(pi.metadata?.credit_cents ?? 0);
+  if (creditCents > 0) {
+    await admin.rpc("redeem_account_credit", {
+      p_organization_id: payment.organization_id,
+      p_player_id: payment.player_id,
+      p_amount_cents: creditCents,
+      p_registration_id: regIds[0] ?? null,
+      p_payment_intent_id: pi.id,
+    });
   }
 
   // ── Deferred partner-invite emails (#191) ─────────────────────────

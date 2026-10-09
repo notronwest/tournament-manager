@@ -7,8 +7,11 @@ vi.mock("../supabase", () => ({ supabase: { rpc } }));
 vi.mock("./visitorId", () => ({ getOrCreateVisitorId: () => "visitor-123" }));
 
 import {
+  buildCreditLandingHref,
+  buildLoginHref,
   captureCampaignParam,
   getCapturedCampaign,
+  grantAccountCreditIfEligible,
   recordRecapViewEvent,
   recordSignupEvent,
 } from "./campaignCapture";
@@ -70,6 +73,25 @@ describe("campaignCapture", () => {
     await expect(recordSignupEvent()).resolves.toBeUndefined();
   });
 
+  it("grantAccountCreditIfEligible is a no-op when no campaign was ever captured", async () => {
+    await grantAccountCreditIfEligible();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("grantAccountCreditIfEligible fires grant_account_credit once a campaign is captured", async () => {
+    captureCampaignParam("?c=leaf-peeper-2026");
+    await grantAccountCreditIfEligible();
+    expect(rpc).toHaveBeenCalledWith("grant_account_credit", {
+      p_campaign: "leaf-peeper-2026",
+    });
+  });
+
+  it("grantAccountCreditIfEligible swallows RPC failures (best-effort, never blocks signup)", async () => {
+    rpc.mockRejectedValueOnce(new Error("network down"));
+    captureCampaignParam("?c=leaf-peeper-2026");
+    await expect(grantAccountCreditIfEligible()).resolves.toBeUndefined();
+  });
+
   it("recordRecapViewEvent fires record_campaign_event with kind=recap_view for the given campaign", async () => {
     await recordRecapViewEvent("leaf-peeper-2026");
     expect(rpc).toHaveBeenCalledWith("record_campaign_event", {
@@ -82,5 +104,29 @@ describe("campaignCapture", () => {
   it("recordRecapViewEvent swallows RPC failures (best-effort, never blocks the recap page)", async () => {
     rpc.mockRejectedValueOnce(new Error("network down"));
     await expect(recordRecapViewEvent("leaf-peeper-2026")).resolves.toBeUndefined();
+  });
+
+  describe("buildCreditLandingHref", () => {
+    it("carries the campaign tag through hop 1 (recap -> credit landing)", () => {
+      expect(buildCreditLandingHref("wmpc", "leaf-peeper-2026")).toBe(
+        "/t/wmpc/credit?c=leaf-peeper-2026",
+      );
+    });
+
+    it("omits ?c= when there is no campaign to carry", () => {
+      expect(buildCreditLandingHref("wmpc", null)).toBe("/t/wmpc/credit");
+    });
+  });
+
+  describe("buildLoginHref", () => {
+    it("carries the campaign tag through hop 2 (credit landing -> login)", () => {
+      expect(buildLoginHref("leaf-peeper-2026")).toBe(
+        "/login?c=leaf-peeper-2026",
+      );
+    });
+
+    it("omits ?c= when there is no campaign to carry", () => {
+      expect(buildLoginHref(null)).toBe("/login");
+    });
   });
 });

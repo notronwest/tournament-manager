@@ -51,8 +51,18 @@ import { getStripeForAccount, stripeConfigured } from "../../lib/stripe";
 import { trackEvent } from "../../lib/analytics";
 import DonationAmountPicker from "../../components/DonationAmountPicker";
 import type { Database } from "../../types/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  computeAccountCreditBalance,
+  stackCouponThenCredit,
+  type AccountCreditRow,
+} from "../../lib/accountCredit";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"];
+
+// account_credits isn't in the generated types yet (it ships in a separate
+// migration PR, #1117) — same untyped-client pattern as campaignCapture.ts.
+const untyped = supabase as unknown as SupabaseClient;
 
 // Donation add-on at checkout (#946 — UX-only half of #378). Shares
 // DonationAmountPicker with the standalone DonatePage's preset chips. The
@@ -166,6 +176,13 @@ export default function CheckoutPage() {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [couponChecking, setCouponChecking] = useState(false);
 
+  // Account credit (#1102, D-0077 §2) — a live preview computed client-side
+  // from the player's own account_credits rows (RLS already limits reads to
+  // the signed-in player; see reload() below). This number is UX only:
+  // create-payment-intent reads the ledger itself and applies the
+  // authoritative amount, the same way the coupon discount above works.
+  const [creditBalanceCents, setCreditBalanceCents] = useState(0);
+
   // Optional donation add-on (#946). A selected preset takes precedence
   // unless the player is using the custom field. Both are UI-only inputs —
   // effectiveDonationCents below is the single source of truth and is always
@@ -228,6 +245,18 @@ export default function CheckoutPage() {
       return;
     }
     setTournament(t);
+
+    // Account credit preview (#1102) — RLS limits this to the signed-in
+    // player's own rows, so no explicit player_id filter is needed. A
+    // missing/empty result just means a zero preview; never block checkout
+    // over it.
+    const { data: creditRows } = await untyped
+      .from("account_credits")
+      .select("organization_id, amount_cents, kind, expires_at")
+      .eq("organization_id", org.id);
+    setCreditBalanceCents(
+      computeAccountCreditBalance((creditRows ?? []) as AccountCreditRow[], org.id),
+    );
 
     // Load pricing tiers alongside the tournament. computeLineItems
     // below reads the active tier's first-event + additional-event
@@ -436,7 +465,16 @@ export default function CheckoutPage() {
   const discountCents = appliedCoupon
     ? Math.min(appliedCoupon.discountCents, totalCents)
     : 0;
-  const payableCents = Math.max(0, totalCents - discountCents);
+  // Account credit stacks AFTER the coupon (#1102, D-0077 §2) — same order
+  // create-payment-intent applies server-side. payableCents is what's
+  // actually owed once both have been applied; a balance that fully covers
+  // it collapses the rest of this page to the same free-registration path
+  // a $0 coupon already takes.
+  const { creditAppliedCents, dueCents: payableCents } = stackCouponThenCredit(
+    totalCents,
+    discountCents,
+    creditBalanceCents,
+  );
 
   // Effective donation amount. Custom entry wins when active; any
   // non-numeric, empty, or non-positive value collapses to 0 rather than
@@ -975,6 +1013,12 @@ export default function CheckoutPage() {
             <div style={{ ...summaryRow, color: courtGreen, marginTop: 8 }}>
               <span>Discount ({appliedCoupon.code})</span>
               <span>−{formatUsd(discountCents)}</span>
+            </div>
+          )}
+          {creditAppliedCents > 0 && (
+            <div style={{ ...summaryRow, color: courtGreen, marginTop: 8 }}>
+              <span>Account credit</span>
+              <span>−{formatUsd(creditAppliedCents)}</span>
             </div>
           )}
           {donationCents > 0 && (
