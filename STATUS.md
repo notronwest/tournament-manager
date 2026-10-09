@@ -302,6 +302,28 @@ Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
 Housekeeping: this session's checkout had a stale local, uncommitted `CLAUDE.md` diff (missing the "Engineering standard" section already committed on `main`, flagged in prior STATUS entries since 2026-09-20 as out-of-scope drift). While switching branches I ran `git checkout main -- .`, which brought the local file back in sync with `main`'s committed content — flagging transparently since it touched uncommitted state, though nothing committed or pushed was affected and the result matches the canonical `main` version.
 
 **Next:** Ron still needs to merge #955 — every run past this one stays blind to real regressions until it lands.
+## 2026-09-25 — Builder: single-item, #23 Blocked as already-shipped by #64/#68
+
+Single-item mode: build issue #23 ("Pending invite count on the homepage").
+Checked first for open sub-issues/PRs under it (none — not a mis-queued split
+parent), then read the story: a homepage indicator of pending partner
+invites, driven by the same `invitee_player_id = me` query the tournament
+page uses.
+
+That's already live. PR #68 (closing #64, "Global partner-selection
+notification on login", merged 2026-06-07) shipped exactly this as a
+site-wide banner — `PartnerInvitesContext.tsx` + `PartnerInvitesBanner.tsx`,
+wired into `App.tsx` between `SiteHeader` and `Routes` — so it renders on
+every route including `/`, with an explicit pending-invite count. Building a
+second homepage-only chip against the same data would just duplicate it.
+
+Commented the findings on #23 and moved the card to **Blocked** rather than
+shipping a redundant PR — Ron's call whether to close #23 as duplicate/
+already-satisfied, or describe something narrower than the existing global
+banner if that's actually what's wanted. No branch/PR opened; `main`
+untouched.
+
+**Next:** Ron resolves #23 (close, or clarify scope for a follow-up).
 
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
