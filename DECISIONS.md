@@ -537,6 +537,59 @@ card. A third-party analytics script on a public page. Shipping the recap page b
 capture writes. Writing an `OWNER-AUTHORIZED` line for the credit without a fresh approval
 from Ron.
 
+### D-0083 — A component's self-report must be derived from the outcome, never from having reached the end of its own code — and where instruction and engineering disagree, build the gate
+
+*2026-10-09 · scope: `infrastructure/**, agents/**, supabase/migrations/**` · source: Ron 2026-10-09, closing a day spent on GSD — "what I am finding is that most of our problems are really poor engineering not poor instruction — agreed?"*
+
+**Decision.** Two standing engineering rules, binding on every agent, job and migration in the
+fleet.
+
+1. **A self-report is derived from the OUTCOME.** A component may report success only from evidence
+   that the work landed: a row read back, an HTTP status, a file's line count, a board column
+   re-queried. Reaching the end of a script is not evidence. Concretely:
+   - a heartbeat fires only on a run that *did the thing*, never merely on exit 0;
+   - a drain that cannot verify its own write reports failure, not success;
+   - an agent never narrates an action the database refused;
+   - a monitor that cannot see its subject says so, rather than staying quiet.
+
+2. **Where instruction and engineering disagree, build the gate.** A rule in a prompt is a hope; a
+   rule in Postgres is a fact. When an agent has done the wrong thing once, the remedy is a
+   constraint it cannot route around — and the prompt is updated too, so the two agree.
+
+**A corollary, from the most expensive failure of the day:** *a monitor must not derive its scope
+from the same source as the thing it monitors.* A check that reads the same list as its subject
+cannot see an omission in that list, and silence is indistinguishable from health.
+
+**Why.** On 2026-10-09 Ron named the pattern after a day of it. Every GSD failure that day was
+engineering, not instruction, and almost all of them shared ONE signature — **the system reported
+success it had not earned**:
+
+| what reported fine | what was true |
+|---|---|
+| reviewer-dispatch | never reviewed `daemon`; 22 PRs, oldest 40 days |
+| watchdog check 3, built to catch exactly that | read the same list; blind to it |
+| approval-tripwire's heartbeat (pre-fix) | would have beaten "ok" on a run that read nothing |
+| the Chief of Staff on the Roundtable card | "I found four of the five myself" — the gate had refused every write |
+| a Hopper card | "In Review" on a page live for eighteen hours |
+| "Try again in a moment" | a $2 spending cap, handed to Ron as his chore |
+| `cos_request_steps` | seven spinners on a flawless run — the same flaw inverted |
+
+And the landing-page promotion: 51 commits sat unpromoted while the board said Done, because "Done"
+meant merged-to-TEST and nothing measured the distance to live.
+
+**Two honest exceptions**, recorded so this record is not a slogan. The `/credit` landing page
+having no argument (tm#1131) is a genuine **specification** failure — the ticket scoped the
+plumbing and nobody wrote what the page should say. And the Chief of Staff inventing four email
+addresses was a **judgment** failure. But note which fix worked: the prompt rule came second; what
+actually stopped her was a trigger that refuses a value write from a caller with no JWT. That is
+rule 2 in one example.
+
+**What this obliges, in practice.** Every new check measures reality rather than trusting a report
+(watchdog checks 6 and 7 are the first two: 6 counts the whole PR queue, 7 asks "is every child
+closed while the parent is open?" and follows no links at all). Every new gate goes in the database
+where one exists. Every scheduled job's heartbeat is wired to its outcome. A `DESIGN.md` that
+cannot say how its component would report its own failure is not finished.
+
 ## Proposed (not binding yet)
 
 _None._
