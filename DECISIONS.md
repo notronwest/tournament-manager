@@ -681,6 +681,99 @@ it is twice a day, and when it fails it fails quietly.
 - Adding this as a line in a prompt and calling it done — per D-0083 it is a gate or it
   is nothing, and per D-0084 the gate names the signal that says it stopped working.
 
+### D-0093 — A credential never reaches a tracked file — enforced by a scanner in every repo, not by a rule; and one central map says how every repo ships
+
+*2026-10-09 · scope: `wmpc-meta/conventions/SECRETS.md, wmpc-meta/conventions/FLEET-MAP.md, wmpc-meta/scripts/scan-secrets.sh, wmpc-meta/conventions/claude-bootstrap.sh` · source: Ron 2026-10-09 — "build a centrally located repo deployment doc… make it something I can read as well as something every other repo knows about" and, after the second leak in a week, "This can NEVER happen again"*
+
+**Decision.** Two central pages, and a gate that makes one of them true.
+
+1. **`conventions/SECRETS.md` — a credential never appears in a tracked file.** Not in code, a
+   doc, a comment, a script default, or an agent's prompt. A Discord webhook URL **is** a
+   credential (the token is in the path); a Supabase **anon** key is not. Code resolves a secret at
+   runtime and **fails loudly when it is unset** — never a default.
+2. **The rule is ENFORCED, not advised.** `scripts/scan-secrets.sh` is published into every repo by
+   `claude-bootstrap`, wired as a **pre-commit hook**, and scans **every tracked file** against
+   nine patterns. **Findings are printed with the value REDACTED** — a scanner that echoes a secret
+   into a CI log has leaked it a second time.
+3. **`conventions/FLEET-MAP.md` — one page for how the fleet ships.** Fourteen repos: what merging
+   to `main` actually does, how it reaches PROD, where it is served, which database it touches,
+   and where settings live per shape. It leads with **merging is not shipping**, because only four
+   repos deploy themselves.
+4. **Rotation is the remedy for an exposed secret, and it belongs to whoever finds it.** Removing a
+   literal from `HEAD` does not unleak it. Daemon rotates it rather than handing the owner a chore
+   (D-0068): on 2026-10-09 two live Discord webhooks were revoked, a replacement created and stored
+   only in machine-local env, and five agent files changed to read it from the environment.
+
+**Why a gate and not a rule.** There already *was* a rule, and it was even tested:
+`daemon/infrastructure/record-watchdog/tests/` asserts
+`assertNotIn("discord.com/api/webhooks", src)`. The leak happened anyway, because **the test
+covered one file.** Two live webhook URLs sat in `builder-dispatch.sh`, `doc-freshness/check.sh`,
+`hopper-invariants/run.sh` and five agent prompt/channel docs.
+
+*A test that does not cover the surface is a belief, not a guarantee.* That is the generalisable
+line, and it is why the scanner walks `git ls-files` rather than a hand-written list — the same
+failure shape as D-0081, where a monitor could not see a repo missing from the list it read.
+
+**Verified before shipping, both directions** (D-0084: a check nobody has watched fire is a guess):
+the exact webhook literal committed that day is **refused**, as are an Anthropic key, a GitHub
+token, a Postgres URL with a password, a private-key header and a `service_role` claim; a Supabase
+**anon** key, a project URL and empty env-var names **pass**. A rule that cries wolf gets disabled,
+and a disabled rule protects nothing.
+
+**Why FLEET-MAP belongs beside it.** Both pages answer a question that previously required opening
+fourteen files, and both failures this week came from the same place: *nobody could see the whole
+surface at once.* Each repo keeps its own `DEPLOYMENT.md` as the detailed, machine-readable truth;
+the map is the index, and both must be updated in the same change as anything that alters how a
+repo ships.
+
+### D-0095 — A brand's assets are published on that brand's own domain — one asset service, three hostnames, and the brand is a publishing rule not an access boundary
+
+*2026-10-09 · scope: `worker/**, web/src/lib/assets.ts, web/src/views/assets/**, supabase/functions/_shared/email-layout.ts, web/public/email/**` · source: Ron 2026-10-09 — "we need a place to manage all of our assets", then "why can't we have the URL be something more permanent", then "would it make more sense to serve assets from our entities". Built and deployed in club-dashboard #438; STATUS 2026-10-09 (Assets / Assets, domains).*
+
+**Decision.** Logos and email images are served by **one** asset service — the
+`wmpc-image-upload` Worker in `club-dashboard/worker/` over the R2 bucket
+`wmpc-email-images` — and published on **three hostnames, one per brand** (D-0009):
+
+| entity | hostname |
+|---|---|
+| `wmpc` | `assets.whitemountainpickleball.com` |
+| `bert-erne` | `assets.bertanderne.com` |
+| `tsa` | `assets.thirdshotacademy.com` |
+
+Four rules follow.
+
+1. **The brand is a publishing rule, not an access boundary.** Every host serves every
+   object, because it is one bucket. The entity on an asset decides which URL the library
+   hands out. Nothing may be designed as though a host restricts what it can serve.
+2. **A URL a template points at is `/n/<slug>`, and it is permanent.** Named assets are
+   cached five minutes so the *file* under the URL can be replaced from Dashboard → Assets
+   with no code change and no deploy. One-off images stay `/i/<uuid>`, immutable for a year.
+3. **No `*.workers.dev` URL is ever published.** It is pinned off in `wrangler.jsonc`.
+4. **A new asset hostname is two edits, always together:** `routes` in `wrangler.jsonc` and
+   `ENTITY_HOSTS` in `worker/src/index.ts`. Either alone publishes a URL that resolves to
+   nothing, or serves a host the library never names.
+
+**Why.** Every logo the fleet sent was a file committed to a product repo's `public/`, so
+changing one was a pull request and a deploy and no screen showed the set. The service to
+fix that already existed and had never been switched on. Given it was being finished, the
+hostname was the one choice that is expensive to revisit: a URL pasted into a template keeps
+the origin it was given, and some of those sit in mail already sent, which cannot be edited.
+Zero URLs had been handed out, so the cost of getting it right was one deploy.
+
+Per-brand rather than one host because the tournament mail is Bert & Erne: the domains a
+message references are something mail filters weigh, and a `*.workers.dev` address is a
+shared free domain treated as a tracker. `whitemountainpickleball.com/assets` was considered
+and is **impossible** — the club site's own JS and CSS are served from `/assets/` (Vite
+writes every build there), so a route on that path would shadow the bundle and take the site
+down. That is a property of the build tool, not a setting; do not revisit it.
+
+**Forbids.** Publishing an asset URL on `*.workers.dev`, or on a host not in `ENTITY_HOSTS`.
+Routing a Worker at `/assets/*` on any zone whose site is a Vite build. Treating the
+per-brand split as a permission model. Adding a second asset service, bucket or upload
+endpoint — extend this one. Lengthening the named-asset cache, or making named assets
+immutable, which silently breaks the swap that is the whole point. Committing a new logo to
+a repo's `public/` as the way to change it, once that logo is in the library.
+
 ## Proposed (not binding yet)
 
 _None._
