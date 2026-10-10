@@ -839,6 +839,55 @@ caught. It now matches any file under a component directory, at any depth.
 - A guard without a typed, deliberate override — the override is what distinguishes a chosen
   retirement from an accident in the reflog.
 
+### D-0098 — A promotion merges with a merge commit, and union resolves only append-only logs
+
+*2026-10-10 · scope: `DEPLOYMENT.md, supabase/migrations/**, .gitattributes, docs/change-discipline.md` · source: club-dashboard #456 opened CONFLICTING on four files neither branch had changed differently; repaired by #457 (zero content change), tracked as #458. Table of four voices 2026-10-10 — tournament-manager and third-shot-academy NO OBJECTION (both already do this), club-dashboard and wmpc-web CONCERN, both folded in. Merged as 6d477da under D-0096 on Ron's "Merge".*
+
+**Decision.** A promotion — a `main` → `production` pull request in a branch-routed repo — is
+merged **with a merge commit**. Never squashed, never rebased. Feature PRs into `main` are
+untouched and may still squash.
+
+**The health test is structural, and it is not "the head has one parent".** `production` is
+healthy when **either**:
+
+1. `production` is an ancestor of `main` (`git merge-base --is-ancestor origin/production
+   origin/main`) — promotions fast-forward; or
+2. `production`'s head is a merge whose **main-side parent is on `main`**
+   (`git merge-base --is-ancestor origin/production^2 origin/main`) — promotions are merge
+   commits.
+
+Neither holding is the squash signature. Measured 2026-10-10: club-dashboard (2), wmpc-web (1),
+tournament-manager (2), third-shot-academy (2) — all four healthy, three of them because they
+already worked this way.
+
+**Union is for append-only logs, and nothing else.** Resolve a conflict hunk by taking both sides
+only where the file is an append-only log — `STATUS.md`, `NOW.md`, `CHANGES.md`, `DECISIONS.md`,
+which `.gitattributes` already sets `merge=union` in at least tournament-manager. Everywhere else,
+read both sides and resolve deliberately: where both sides hold the **same** block, "take both"
+duplicates it silently. **Hardest case: `supabase/migrations/**`.** There is one live Supabase
+project and migrations are forward-only, so a duplicated SQL block has no test to catch it and
+lands on real data — unlike the UI, where this failure was caught.
+
+**Why.** A squashed promotion leaves `production` with a commit whose *content* matches `main` but
+whose *history* does not, so the branches stop sharing a base. Git then re-diffs files that are
+already identical and the next promotion opens `CONFLICTING` on changes neither branch touched
+differently, compounding each time. On 2026-10-10 club-dashboard #456 opened conflicted on four
+files; #457 restored the base with **zero content change** and #456 then opened clean.
+
+The rule is written down because three repos already followed it and one silently stopped — there
+was nothing to point at. Both CONCERNs sharpened it: the first "single parent means squashed" test
+would have condemned wmpc-web, which is healthy by fast-forward, and the union carve-out came from
+club-dashboard's point that its migrations have no Playwright behind them.
+
+Promotion *authority* is not this record's business: **D-0096** governs who may press the button.
+Note for a later session: D-0096 names only club-dashboard, wmpc-web and daemon, so
+tournament-manager and third-shot-academy promote while seeing only D-0052 §2 in their slice.
+
+**Forbids.** Squashing or rebasing a `main`→`production` promotion PR. Diagnosing squash
+divergence from the parent count alone. Resolving a conflict by union in any file that is not an
+append-only log — above all in `supabase/migrations/**`. Repairing a branch pair that passes the
+test above.
+
 ## Proposed (not binding yet)
 
 _None._
