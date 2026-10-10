@@ -16,7 +16,18 @@
 //     ctaUrl: acceptUrl,
 //   });
 
-const LOGO_URL = "https://bertanderne.com/email/logo@2x.png";
+// The MANAGED asset URL (daemon D-0095). The file under this address is replaced from
+// Dashboard -> Assets, so a logo change is an upload, not a pull request and a deploy.
+// Cached 5 minutes, so a swap reaches NEW sends within minutes; mail already delivered may
+// keep showing the old file from the recipient's image proxy.
+//
+// The bytes are the same image that web/public/email/logo@2x.png still holds. That file
+// stays committed on purpose: emails already in inboxes point at the old address and
+// re-fetch it every time they are opened.
+//
+// The ".png" is cosmetic and ignored by the service -- it is here because some tools and
+// humans expect an image URL to end in an image extension.
+const LOGO_URL = "https://assets.bertanderne.com/n/email-logo-bert-erne.png";
 const SITE_URL = "https://bertanderne.com";
 
 export type EmailLayoutParams = {
