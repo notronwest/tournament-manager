@@ -14,7 +14,9 @@ import { TournamentSummaryReport } from "../../components/TournamentSummaryRepor
 import {
   buildCreditLandingHref,
   buildLoginHref,
+  captureCampaign,
   recordRecapViewEvent,
+  resolveTournamentCampaign,
 } from "../../lib/campaignCapture";
 import { CREDIT_OFFER_AMOUNT_USD, isCreditOfferEnabled } from "../../lib/featureFlags";
 import {
@@ -61,7 +63,10 @@ type RecapPayload = {
 export default function TournamentRecapPage() {
   const { orgSlug, tournamentSlug } = useParams<{ orgSlug: string; tournamentSlug: string }>();
   const [searchParams] = useSearchParams();
-  const campaign = searchParams.get("c");
+  const taggedCampaign = searchParams.get("c");
+  // The campaign resolved from the server when the link carried no `?c=`.
+  const [fallbackCampaign, setFallbackCampaign] = useState<string | null>(null);
+  const campaign = taggedCampaign ?? fallbackCampaign;
   const [payload, setPayload] = useState<RecapPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,15 +96,38 @@ export default function TournamentRecapPage() {
   }, [orgSlug, tournamentSlug]);
 
   // recap_view campaign-funnel attribution (#1101's own acceptance
-  // criterion): fired once per mount whenever the recap link carries
-  // `?c=<campaign>`, independent of whether the recap itself loads. Deps
-  // intentionally omit `campaign` — this fires once for this page's own
-  // ?c=, not on every searchParams identity change.
+  // criterion): fired once per mount, independent of whether the recap
+  // itself loads.
+  //
+  // The link's own `?c=` wins. When it carries none we ask the server which
+  // campaign is live for this tournament and use that — because the
+  // 2026-10-09 Leaf Peeper send went out with an untagged link, which
+  // recorded no views at all and left every reader unable to receive the $20
+  // the email promised them. The client never picks the campaign itself
+  // (D-0077 forbids a client-decided grant); it only uses what the server
+  // names. Also stamps the tournament on the row: without it,
+  // campaign_events' RLS hides the row from every org admin.
   useEffect(() => {
-    if (!campaign) return;
-    void recordRecapViewEvent(campaign);
+    if (!orgSlug || !tournamentSlug) return;
+    let cancelled = false;
+    (async () => {
+      const resolved =
+        taggedCampaign ??
+        (await resolveTournamentCampaign(orgSlug, tournamentSlug));
+      if (cancelled || !resolved) return;
+      if (!taggedCampaign) setFallbackCampaign(resolved);
+      // Persist for the credit → login → signup hops, with the tournament
+      // it was captured on so the later `signup` row can name it too.
+      captureCampaign(resolved, tournamentSlug);
+      void recordRecapViewEvent(resolved, tournamentSlug);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Deps pinned to the route, not `taggedCampaign` — this fires once for
+    // this page's own link, not on every searchParams identity change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [orgSlug, tournamentSlug]);
 
   const summary = useMemo<TournamentSummary | null>(() => {
     if (!payload) return null;
