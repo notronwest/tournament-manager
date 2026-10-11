@@ -9,11 +9,14 @@ vi.mock("./visitorId", () => ({ getOrCreateVisitorId: () => "visitor-123" }));
 import {
   buildCreditLandingHref,
   buildLoginHref,
+  captureCampaign,
   captureCampaignParam,
   getCapturedCampaign,
+  getCapturedTournamentSlug,
   grantAccountCreditIfEligible,
   recordRecapViewEvent,
   recordSignupEvent,
+  resolveTournamentCampaign,
 } from "./campaignCapture";
 
 // No jsdom in this project's vitest setup — stub just enough of Storage.
@@ -64,6 +67,7 @@ describe("campaignCapture", () => {
       p_campaign: "leaf-peeper-2026",
       p_kind: "signup",
       p_visitor_id: "visitor-123",
+      p_tournament_slug: null,
     });
   });
 
@@ -98,12 +102,80 @@ describe("campaignCapture", () => {
       p_campaign: "leaf-peeper-2026",
       p_kind: "recap_view",
       p_visitor_id: "visitor-123",
+      p_tournament_slug: null,
+    });
+  });
+
+  // A recap_view row with a NULL tournament_id is readable by service_role
+  // ALONE — campaign_events' RLS requires `tournament_id is not null`. The
+  // first PROD view row landed that way, so this is pinned.
+  it("recordRecapViewEvent stamps the tournament so the row is visible to org admins", async () => {
+    await recordRecapViewEvent("leaf-peeper-2026", "2nd-annual-leaf-peeper-tournament");
+    expect(rpc).toHaveBeenCalledWith("record_campaign_event", {
+      p_campaign: "leaf-peeper-2026",
+      p_kind: "recap_view",
+      p_visitor_id: "visitor-123",
+      p_tournament_slug: "2nd-annual-leaf-peeper-tournament",
+    });
+  });
+
+  it("recordSignupEvent carries the tournament the campaign was captured on", async () => {
+    captureCampaign("leaf-peeper-2026", "2nd-annual-leaf-peeper-tournament");
+    await recordSignupEvent();
+    expect(rpc).toHaveBeenCalledWith("record_campaign_event", {
+      p_campaign: "leaf-peeper-2026",
+      p_kind: "signup",
+      p_visitor_id: "visitor-123",
+      p_tournament_slug: "2nd-annual-leaf-peeper-tournament",
     });
   });
 
   it("recordRecapViewEvent swallows RPC failures (best-effort, never blocks the recap page)", async () => {
     rpc.mockRejectedValueOnce(new Error("network down"));
     await expect(recordRecapViewEvent("leaf-peeper-2026")).resolves.toBeUndefined();
+  });
+
+  // The 2026-10-09 Leaf Peeper send went out with an UNTAGGED recap link, so
+  // nothing was measured and nobody could receive the $20. These pin the
+  // fallback that recovers it.
+  describe("the untagged-link fallback", () => {
+    it("captureCampaign persists a campaign that never came from a ?c= param", () => {
+      captureCampaign("leaf-peeper-2026", "2nd-annual-leaf-peeper-tournament");
+      expect(getCapturedCampaign()).toBe("leaf-peeper-2026");
+      expect(getCapturedTournamentSlug()).toBe("2nd-annual-leaf-peeper-tournament");
+    });
+
+    it("captureCampaign leaves the tournament unset when it isn't known", () => {
+      captureCampaign("leaf-peeper-2026");
+      expect(getCapturedCampaign()).toBe("leaf-peeper-2026");
+      expect(getCapturedTournamentSlug()).toBeNull();
+    });
+
+    it("resolveTournamentCampaign asks the server which campaign is live", async () => {
+      rpc.mockResolvedValueOnce({ data: "leaf-peeper-2026", error: null });
+      await expect(
+        resolveTournamentCampaign("wmpc", "2nd-annual-leaf-peeper-tournament"),
+      ).resolves.toBe("leaf-peeper-2026");
+      expect(rpc).toHaveBeenCalledWith("public_tournament_campaign", {
+        p_org_slug: "wmpc",
+        p_tournament_slug: "2nd-annual-leaf-peeper-tournament",
+      });
+    });
+
+    it("resolveTournamentCampaign returns null when no campaign is live", async () => {
+      rpc.mockResolvedValueOnce({ data: null, error: null });
+      await expect(resolveTournamentCampaign("wmpc", "some-old-event")).resolves.toBeNull();
+    });
+
+    it("resolveTournamentCampaign returns null on an RPC error rather than throwing", async () => {
+      rpc.mockResolvedValueOnce({ data: null, error: { message: "nope" } });
+      await expect(resolveTournamentCampaign("wmpc", "x")).resolves.toBeNull();
+    });
+
+    it("resolveTournamentCampaign returns null when the RPC rejects", async () => {
+      rpc.mockRejectedValueOnce(new Error("network down"));
+      await expect(resolveTournamentCampaign("wmpc", "x")).resolves.toBeNull();
+    });
   });
 
   describe("buildCreditLandingHref", () => {

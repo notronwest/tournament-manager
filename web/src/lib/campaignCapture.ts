@@ -10,6 +10,7 @@ import { getOrCreateVisitorId } from "./visitorId";
 const untyped = supabase as unknown as SupabaseClient;
 
 const CAMPAIGN_KEY = "tm:campaign";
+const TOURNAMENT_KEY = "tm:campaign-tournament";
 
 // Reads `?c=<campaign>` off the current URL and persists it for the rest
 // of the browser session, so it survives the redirect through login /
@@ -19,8 +20,22 @@ const CAMPAIGN_KEY = "tm:campaign";
 export function captureCampaignParam(search: string): void {
   const campaign = new URLSearchParams(search).get("c");
   if (!campaign) return;
+  captureCampaign(campaign);
+}
+
+// Persists a campaign that did NOT come from a `?c=` param — the recap
+// page's server-resolved fallback (see resolveTournamentCampaign below).
+// Optionally records which tournament it was captured on, so the `signup`
+// event fired later from the profile page can still name it; without that,
+// the row lands with a NULL tournament_id and campaign_events' own RLS makes
+// it invisible to every org admin.
+export function captureCampaign(
+  campaign: string,
+  tournamentSlug?: string,
+): void {
   try {
     sessionStorage.setItem(CAMPAIGN_KEY, campaign);
+    if (tournamentSlug) sessionStorage.setItem(TOURNAMENT_KEY, tournamentSlug);
   } catch {
     // Storage blocked — attribution just won't survive this visit.
   }
@@ -29,6 +44,36 @@ export function captureCampaignParam(search: string): void {
 export function getCapturedCampaign(): string | null {
   try {
     return sessionStorage.getItem(CAMPAIGN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function getCapturedTournamentSlug(): string | null {
+  try {
+    return sessionStorage.getItem(TOURNAMENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Asks the server which campaign is live for this tournament's organization,
+// for a recap link that arrived with NO `?c=` tag — which is exactly what the
+// 2026-10-09 Leaf Peeper send did, costing every reader their $20 and us the
+// whole funnel. The client never invents a campaign (D-0077 forbids a
+// client-decided grant): this returns whatever public_tournament_campaign
+// says, or null. Best-effort — a failure just means no fallback.
+export async function resolveTournamentCampaign(
+  orgSlug: string,
+  tournamentSlug: string,
+): Promise<string | null> {
+  try {
+    const { data, error } = await untyped.rpc("public_tournament_campaign", {
+      p_org_slug: orgSlug,
+      p_tournament_slug: tournamentSlug,
+    });
+    if (error) return null;
+    return typeof data === "string" && data.length > 0 ? data : null;
   } catch {
     return null;
   }
@@ -45,6 +90,9 @@ export async function recordSignupEvent(): Promise<void> {
       p_campaign: campaign,
       p_kind: "signup",
       p_visitor_id: getOrCreateVisitorId(),
+      // The tournament the campaign was captured on, when we know it — a
+      // row without it is readable by service_role alone.
+      p_tournament_slug: getCapturedTournamentSlug(),
     });
   } catch {
     // Best-effort — attribution is not worth failing signup over.
@@ -74,12 +122,22 @@ export async function grantAccountCreditIfEligible(): Promise<void> {
 // is attributed to the link's OWN `?c=`, not whatever an earlier page in this
 // session happened to set. Best-effort: a failure here must never block the
 // recap page from rendering.
-export async function recordRecapViewEvent(campaign: string): Promise<void> {
+//
+// `tournamentSlug` is passed so the row carries a tournament_id. It is not
+// cosmetic: campaign_events' RLS reads `tournament_id is not null and
+// is_org_member(...)`, so a view row without it is invisible to every org
+// admin and readable only by service_role. The first PROD recap_view, written
+// 2026-10-10, landed exactly that way.
+export async function recordRecapViewEvent(
+  campaign: string,
+  tournamentSlug?: string,
+): Promise<void> {
   try {
     await untyped.rpc("record_campaign_event", {
       p_campaign: campaign,
       p_kind: "recap_view",
       p_visitor_id: getOrCreateVisitorId(),
+      p_tournament_slug: tournamentSlug ?? null,
     });
   } catch {
     // Best-effort — attribution is not worth failing the recap page over.
