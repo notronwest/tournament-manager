@@ -2968,3 +2968,18 @@ registration in the same transition). Valid under the per-issue owner money hatc
 (`OWNER-AUTHORIZED: 2026-10-05` in #378's body + the named hard-merge-condition test, green) —
 this is D-0075's own cited example of that hatch. Posted `VERDICT: APPROVE`, labeled
 `reviewed:approve`. Next: dispatcher merges to `main` (TEST) per D-0052.
+
+## 2026-10-13 — Reviewer: PR #1090 re-reviewed (#1158 rework) — APPROVE
+
+Re-reviewed after the Builder's rebase + design-gate rework (STATUS.md's own 2026-10-13 Builder
+entry above). Independently verified rather than trusting the PR body: pulled the PR head
+(`7718fae`) into an isolated worktree, ran `tournamentSummary.test.ts` (21/21, including the 3
+new started_at/ended_at cases) and `tsc -b --noEmit` (clean) directly against it, and confirmed
+`MAX_MATCH_MS` (this branch) and `LATE_ENTRY_MAX_PER_DAY` (main) coexist without collision after
+the merge. Recomputed the D-0065 UI-diff hash on the PR head myself (`303eada207204862`) and
+matched it to the committed `.design/verdicts/303eada207204862.md` (`verdict: PASS`). D-0049/
+D-0047 don't apply — string-only swap inside the existing responsive table/card layout, no new
+component or breakpoint, consistent with this repo's phone check being a nightly job against
+deployed TEST rather than a per-PR gate (same read as this PR's own first-pass review and
+several prior PRs logged above). `mergeable_state: clean`, CI green. Posted `VERDICT: APPROVE`,
+labeled `reviewed:approve`. Next: dispatcher merges to `main` (TEST) per D-0052.
