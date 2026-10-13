@@ -2647,3 +2647,21 @@ adds no new errors (32 pre-existing, none in touched files); 384 vitest pass. No
 secret — reuses STRIPE_SECRET_KEY etc. Edge-function change: deploys on merge, no
 preview. Next: Ron reviews/merges; no sub-issue split needed since #946 already shipped
 the UX half separately.
+
+## 2026-10-13 — Builder: PR #1090 rework (#1158) — rebased + design gate, back to In Review
+
+Single-item rework: PR #1090 had gone `CONFLICTING`/`DIRTY` against `main` (the "no linked
+issue" finding from the earlier verdict was already resolved — the body already led with
+`Closes #1158`). Merged `origin/main` into `summary-real-match-times`; one real conflict in
+`tournamentSummary.ts` where this branch's `MAX_MATCH_MS` and main's independently-added
+`LATE_ENTRY_MAX_PER_DAY` landed side by side — kept both, both still used. The merge also
+exposed a type gap: `addFinish`'s inline parameter/map types (added by main's late-entry
+work) didn't carry the `start` field this branch added to the same record shape; widened
+both annotations to fix. Ran the D-0065 design-gate critic (fresh-context subagent) on the
+one UI file touched, `TournamentSummaryReport.tsx` — a same-slot text swap (column header /
+cell / mobile-card line / footnote, no new layout) — **PASS**, verdict committed at
+`.design/verdicts/303eada207204862.md`. Re-verified on the rebased tip: typecheck clean (0
+errors), build ✅, 399/399 vitest, lint identical to `origin/main` baseline (35
+problems/31 errors/4 warnings, none in touched files). Pushed to the same branch, commented
+on the PR, moved card back to **In Review**. Next: reviewer re-review; PR is `MERGEABLE`
+with the required "PR links an issue" check green.
