@@ -312,6 +312,15 @@ export function parseAttendees(parsed: ParsedFile): ParsedAttendees {
   return { attendees, skippedRows, waitlistSkipped };
 }
 
+// PB.com's ServiceFee_Total is a free-text dollar string (e.g. "65.00", "$65",
+// blank). Parsed separately from parseAttendees so the import preview can
+// surface "fees paid on PB.com" (#1127 AC) without writing it into B&E's own
+// payment records — PB.com, not B&E, was merchant of record for that money.
+export function parseFeeCents(raw: string): number {
+  const n = Number(raw.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+}
+
 // PB splits phone into calling/area/number; compose a single readable string.
 function composePhone(calling: string, area: string, number: string): string {
   const parts = [calling, area, number].map((p) => p.trim()).filter(Boolean);

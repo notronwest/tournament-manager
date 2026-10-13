@@ -430,73 +430,6 @@ Pillar: `daemon/docs/change-discipline.md`.
 <!-- wmpc-block:deployment:v1 END -->
 
 
-<!-- wmpc-block:engineering-standard:v4 START -->
-## Engineering standard
-
-Operate as a **senior full-stack engineer**, not a code generator. This is the
-posture for all code work in this repo (interactive sessions and the Builder):
-
-- **Production-minded.** Handle errors, edge cases, and loading / empty /
-  failure states — not just the happy path.
-- **Verify before "done."** Typecheck, build, and lint; run the test where one
-  exists. Report the real output — never claim success you didn't check.
-- **Delegate to sub-agents to protect your context — by default, not as a last
-  resort.** For well-scoped, context-heavy work, spin up a sub-agent (the
-  Task/Agent tool) and keep only its *result* in your main thread. Reach for it
-  whenever it applies: broad multi-file searches and codebase exploration (use
-  the **Explore** agent — you want the conclusion, not the file dumps);
-  **mechanical sweeps** with clear rules ("convert all ~20 loading states to
-  `<Loading>`"); research questions; and independent parallel workstreams (launch
-  them in one message so they run concurrently). **You stay the owner:** the main
-  session *verifies* (typecheck/build/lint), *reviews the diff*, and *ships the
-  single PR* — the sub-agent does the legwork, you keep the judgment and the
-  context window. **Don't** delegate trivial quick edits (the round-trip costs
-  more than it saves), work needing tight back-and-forth with Ron, or **parallel
-  edits to the same files** (they clobber each other — serialize, or give each
-  agent its own worktree). A budget-capped headless run (the Builder) weighs the
-  extra token cost before fanning out; an interactive session should lean in,
-  since context is the scarce resource.
-- **Match the codebase, and reuse before you build (D-0049 — a gate).** Follow
-  existing patterns, naming, and structure; read neighboring code first. **Before
-  writing any component, section, hook, or util, search for one that already does
-  the job** — if it exists, reuse it; if it almost fits, extend it or extract a
-  shared version (one implementation, mounted many ways via a prop), **never a
-  second copy that diverges.** A duplicate of an existing surface is a defect the
-  reviewer rejects, not a shortcut. Name the reuse choice in the PR. (UI specifics
-  in the UI-work block.)
-- **Mockups are the real page, running and interactive — never an inline
-  widget.** When asked to "do a mockup," the deliverable is the **actual page
-  rendered end-to-end with the proposed change inline**, served in a **real,
-  clickable browser preview**: start the app's dev server and open the real
-  route, or — only if that's genuinely impractical — write a full standalone
-  HTML page that duplicates the real page and open *that* in the preview.
-  Duplicate the real page/component being changed (its true layout, markup,
-  styles, and design tokens) and modify *that* in context; never an abstract,
-  from-scratch, or "clean-room" stand-in. **Do NOT** deliver a mockup as a
-  chat-inline visualization/widget (e.g. a `show_widget` / visualize call, or an
-  SVG/HTML blob embedded in the reply) — the whole point is to **feel the real
-  UX by interacting with it before we build**, which a static inline widget
-  can't do. If the target page doesn't exist yet, build the new page full-size
-  and interactive in a real preview all the same. Fall back to a static image or
-  snippet only when explicitly asked for one.
-- **Right-size it.** The simplest thing that fully solves the task — no
-  speculative abstraction, no gold-plating a small change.
-- **Security + data aware.** No secrets in code, validate inputs, respect
-  auth / tenancy boundaries.
-- **Surface tradeoffs.** Flag risks, migrations, and breaking changes; ask
-  before large refactors or irreversible actions.
-- **Give the Chief of Staff a surface.** Anything this repo builds that holds
-  club data or does club work must be usable by the CoS **unattended**, in the
-  same change — not only by Ron in a UI. That means: a documented entry point
-  she can run on the mini (CLI / module, under the repo's host guard if it
-  writes); for claude.ai / Cowork scheduled runs, a `wmpc-mcp` tool with
-  read-only annotations so the client auto-approves it; and, when it acts, the
-  `cos_whitelist` key that governs it. Intake question 11 in
-  `daemon/infrastructure/INFRA-INTAKE.md`.
-
-This raises the floor; it does not override this repo's specific conventions
-above (branch/PR discipline, mobile-first, design tokens, docs-in-the-same-change).
-<!-- wmpc-block:engineering-standard:v4 END -->
 
 <!-- wmpc-block:ui-work:v3 START -->
 ## UI work — required before any visual change
@@ -548,3 +481,154 @@ Before ANY change to visual/UI code (a page, component, layout, nav, or style)
   whole domain model just to make one choice, it needs redesigning — flag it, don't
   ship it.
 <!-- wmpc-block:ui-work:v3 END -->
+
+<!-- wmpc-block:ron-instructions:v1 START -->
+## Giving Ron instructions (D-0068)
+
+These four rules apply whenever a step might land on Ron. They bind every agent and session,
+including Rachel. Ron, 2026-10-07: "I need to GSD and the more confusing this is or the more I
+go back and forth with you the more time and money it costs."
+
+1. **Do it yourself, but ask first.** If you can do a step with your own access (merge, run a
+   command, edit a file, call an API, post a comment), do not hand it to Ron. Ask in one line:
+   "Shall I merge it?" Steps on the whitelist need no ask: `agents/WHITELIST.md` in the
+   daemon repo for sessions, her autonomy settings for Rachel. When Ron says "yes, and from
+   now on", add the step to that list in the same change.
+2. **When only Ron can do it, give the steps here, in the reply.** Do not point him to a
+   DEPLOYMENT.md, a README or a doc. Number the steps and give one action each. Name where:
+   the app, site or machine ("Terminal on the mini"), and the page and button. Say what he
+   should see and what to tell you when done. End with what you do next.
+3. **Paste-safe for his zsh terminal.** Each command goes in its own copy box, exactly as it
+   runs: no `#` comments (zsh treats `#` as a literal, so a commented line fails), no `$ `
+   prompt, no `…`, no `<placeholder>` to edit by hand. Use full paths and keep a sequence on
+   one line with `&&`. A secret is read with a hidden prompt, so it never sits in the
+   command, the chat or the shell history:
+   `read -rs "s?Signing secret: " && echo "NAME=$s" >> /full/path/.env && echo saved`.
+   Commands handed to Ron may use variables. The no-variables rule is about agents' own
+   commands and the allowlist, not his.
+4. **One copy box per field.** When a form has separate inputs, give each value its own box,
+   labelled with the field name as the screen shows it ("**Endpoint URL** field:"). Never
+   stack several values in one box, because a multi-line paste doesn't split into fields.
+   Checkboxes and dropdowns are stated in words, not boxes.
+<!-- wmpc-block:ron-instructions:v1 END -->
+
+<!-- wmpc:secrets v1 -->
+<!-- wmpc-block:engineering-standard:v5 START -->
+## Engineering standard
+
+Operate as a **senior full-stack engineer**, not a code generator. This is the
+posture for all code work in this repo (interactive sessions and the Builder):
+
+- **Production-minded.** Handle errors, edge cases, and loading / empty /
+  failure states — not just the happy path.
+- **Verify before "done."** Typecheck, build, and lint; run the test where one
+  exists. Report the real output — never claim success you didn't check.
+- **Delegate to sub-agents to protect your context — by default, not as a last
+  resort.** For well-scoped, context-heavy work, spin up a sub-agent (the
+  Task/Agent tool) and keep only its *result* in your main thread. Reach for it
+  whenever it applies: broad multi-file searches and codebase exploration (use
+  the **Explore** agent — you want the conclusion, not the file dumps);
+  **mechanical sweeps** with clear rules ("convert all ~20 loading states to
+  `<Loading>`"); research questions; and independent parallel workstreams (launch
+  them in one message so they run concurrently). **You stay the owner:** the main
+  session *verifies* (typecheck/build/lint), *reviews the diff*, and *ships the
+  single PR* — the sub-agent does the legwork, you keep the judgment and the
+  context window. **Don't** delegate trivial quick edits (the round-trip costs
+  more than it saves), work needing tight back-and-forth with Ron, or **parallel
+  edits to the same files** (they clobber each other — serialize, or give each
+  agent its own worktree). A budget-capped headless run (the Builder) weighs the
+  extra token cost before fanning out; an interactive session should lean in,
+  since context is the scarce resource.
+- **Match the codebase, and reuse before you build (D-0049 — a gate).** Follow
+  existing patterns, naming, and structure; read neighboring code first. **Before
+  writing any component, section, hook, or util, search for one that already does
+  the job** — if it exists, reuse it; if it almost fits, extend it or extract a
+  shared version (one implementation, mounted many ways via a prop), **never a
+  second copy that diverges.** A duplicate of an existing surface is a defect the
+  reviewer rejects, not a shortcut. Name the reuse choice in the PR. (UI specifics
+  in the UI-work block.)
+- **Retrieval takes the highest tier it can reach (D-0147 — a gate).** When a
+  feature answers from a corpus, pick the highest of three and say in the PR why
+  the tier below does not reach. **Deterministic:** a key (an id, a date, a
+  foreign key, a scope glob) selects the slice — exact, auditable, reproducible,
+  and how most of this fleet already works. **Agentic:** no key exists, so the
+  model searches with the tools it has (SQL, grep, an MCP read) and refines
+  across turns — nothing to index or keep current. This being the default
+  obliges no service to grow a free-text search surface it does not have; that
+  is its own ticket and its own privacy review. **Embedded:** similarity over
+  chunks, which needs **its own decision record** — the Claude API exposes no
+  embeddings endpoint, so the real cost is a second AI vendor, not the index.
+  **An index, cache or embedding is a derived view, never the system of
+  record** — rebuild it from its source rather than trust it against that
+  source. **And state only the provenance your evidence carries (D-0097):** a
+  citation on retrieved *text*, an `as_of` and a source on a structured tool
+  result, and neither invented where the tool supplies none — report the value,
+  do not imply it is current. Never build a retrieval index over Court Reserve
+  bookings, occurrences, rosters, occupancy, payments or QuickBooks data
+  (D-0060, D-0103, and D-0120's money gate: `null` plus "needs money access",
+  never a confident `$0`), and never over `.claude/history/`, which is
+  gitignored because it can hold secrets quoted mid-session (D-0093). A corpus
+  small enough to sit behind a prompt-cache breakpoint belongs there, not in a
+  retrieval system — caching is cheaper, and it retrieves perfectly.
+- **Mockups are the real page, running and interactive — never an inline
+  widget.** When asked to "do a mockup," the deliverable is the **actual page
+  rendered end-to-end with the proposed change inline**, served in a **real,
+  clickable browser preview**: start the app's dev server and open the real
+  route, or — only if that's genuinely impractical — write a full standalone
+  HTML page that duplicates the real page and open *that* in the preview.
+  Duplicate the real page/component being changed (its true layout, markup,
+  styles, and design tokens) and modify *that* in context; never an abstract,
+  from-scratch, or "clean-room" stand-in. **Do NOT** deliver a mockup as a
+  chat-inline visualization/widget (e.g. a `show_widget` / visualize call, or an
+  SVG/HTML blob embedded in the reply) — the whole point is to **feel the real
+  UX by interacting with it before we build**, which a static inline widget
+  can't do. If the target page doesn't exist yet, build the new page full-size
+  and interactive in a real preview all the same. Fall back to a static image or
+  snippet only when explicitly asked for one.
+- **Right-size it.** The simplest thing that fully solves the task — no
+  speculative abstraction, no gold-plating a small change.
+- **Security + data aware.** No secrets in code, validate inputs, respect
+  auth / tenancy boundaries.
+- **Surface tradeoffs.** Flag risks, migrations, and breaking changes; ask
+  before large refactors or irreversible actions.
+- **Give the Chief of Staff a surface.** Anything this repo builds that holds
+  club data or does club work must be usable by the CoS **unattended**, in the
+  same change — not only by Ron in a UI. That means: a documented entry point
+  she can run on the mini (CLI / module, under the repo's host guard if it
+  writes); for claude.ai / Cowork scheduled runs, a `wmpc-mcp` tool with
+  read-only annotations so the client auto-approves it; and, when it acts, the
+  `cos_whitelist` key that governs it. Intake question 11 in
+  `daemon/infrastructure/INFRA-INTAKE.md`.
+
+This raises the floor; it does not override this repo's specific conventions
+above (branch/PR discipline, mobile-first, design tokens, docs-in-the-same-change).
+<!-- wmpc-block:engineering-standard:v5 END -->
+
+<!-- wmpc:secrets v1 -->
+
+<!-- wmpc:secrets v1 -->
+
+<!-- wmpc:secrets v1 -->
+## Secrets — never in a tracked file (enforced)
+
+A credential never appears in a tracked file. Not in code, not in a doc, not in a comment, not as a
+"default" in a script, not in an agent's prompt. Not even a value you mean to replace later — git
+keeps it forever.
+
+**This is enforced, not advised.** `scripts/scan-secrets.sh` runs as a pre-commit hook and in CI on
+every PR; a commit or PR containing a credential is refused, with the value redacted.
+
+- **Secret:** Discord webhook URLs (the token is in the path), Anthropic / OpenAI / Resend / Stripe
+  live / GitHub tokens, the Supabase **service-role** key, any Postgres URL with a password,
+  private keys, the Court Reserve password.
+- **Not secret:** a Supabase **anon** key, a project ref or URL, a public bucket name.
+- **Where they go instead:** Pages → Variables & Secrets (**PRODUCTION and PREVIEW separately**);
+  Workers → `wrangler secret put`; mini services → a gitignored `.env` on the mini; agents →
+  `~/.config/wmpc*/*.env`. Code **resolves at runtime and fails loudly when unset** — never a
+  default.
+- **Inspecting an env file:** `grep -o '^[A-Z_]*=' .env` lists the names. Never print values.
+- **If one was ever pushed, ROTATE it.** Removing it from HEAD does not unleak it — it is in the
+  history and in every clone.
+
+Full reference, including the fleet's leak history: `wmpc-meta/conventions/SECRETS.md`.
+Where every repo ships and what it touches: `wmpc-meta/conventions/FLEET-MAP.md`.

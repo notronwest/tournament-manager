@@ -8,6 +8,7 @@ import { PartnerInviteOnboarding } from "./auth/PartnerInviteOnboarding";
 import EnvBanner from "./components/EnvBanner";
 import FeedbackWidget from "./components/FeedbackWidget";
 import ScrollToTop from "./components/ScrollToTop";
+import CampaignCapture from "./components/CampaignCapture";
 import { RouteTracker, ConsentBanner } from "./components/AnalyticsConsent";
 import PartnerInvitesBanner from "./components/PartnerInvitesBanner";
 import { PartnerInvitesProvider } from "./components/PartnerInvitesContext";
@@ -61,6 +62,8 @@ import PublicTournamentPage from "./pages/public/PublicTournamentPage";
 import TournamentContactPage from "./pages/public/TournamentContactPage";
 import StartTimesPage from "./pages/public/StartTimesPage";
 import LiveResultsPage from "./pages/public/LiveResultsPage";
+import TournamentRecapPage from "./pages/public/TournamentRecapPage";
+import CreditLandingPage from "./pages/public/CreditLandingPage";
 import MyTournamentsPage from "./pages/public/MyTournamentsPage";
 import PartnerInvitesPage from "./pages/public/PartnerInvitesPage";
 import RegisterPage from "./pages/public/RegisterPage";
@@ -127,6 +130,11 @@ export default function App() {
       <EnvBanner />
       {/* Reset scroll to the top on every route change (React Router doesn't). */}
       <ScrollToTop />
+      {/* Campaign capture (D-0077): persist a `?c=<campaign>` query param
+          for the session, first-party only — no third-party script, and
+          independent of analytics consent (RouteTracker below is gated on
+          consent; this must not be). */}
+      <CampaignCapture />
       {/* Global top banner — rendered once for the whole app.
           SiteHeader hides itself on /login so the only "Sign in"
           surface there is the page itself. */}
@@ -226,6 +234,15 @@ export default function App() {
         path="/t/:orgSlug/:tournamentSlug/results"
         element={<LiveResultsPage />}
       />
+      {/* Public recap — anonymous-readable, completed tournaments only (#1101). */}
+      <Route
+        path="/t/:orgSlug/:tournamentSlug/recap"
+        element={<TournamentRecapPage />}
+      />
+      {/* $20-credit landing page the recap CTA points at (#1114). Org-scoped
+          (not tournament-scoped) since the credit is good on any of the
+          org's tournaments. */}
+      <Route path="/t/:orgSlug/credit" element={<CreditLandingPage />} />
       <Route
         path="/t/:orgSlug/:tournamentSlug/contact"
         element={<TournamentContactPage />}

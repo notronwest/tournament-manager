@@ -5,6 +5,7 @@ import { useCurrentOrg } from "../../hooks/useCurrentOrg";
 import {
   parsePbFile,
   parseAttendees,
+  parseFeeCents,
   resolveColumns,
   unmappedColumns,
   type ParsedFile,
@@ -16,6 +17,7 @@ import {
   runPbImport,
   type PbImportSummary,
 } from "../../lib/pbRegistrationImport";
+import { formatUsd } from "../../lib/pricing";
 import {
   ink,
   inkSoft,
@@ -129,6 +131,10 @@ export default function PbImportPage() {
     ).length;
     return { withDupr, total: plan.players.length };
   }, [plan]);
+  const feesTotalCents = useMemo(() => {
+    if (!attendees) return 0;
+    return attendees.attendees.reduce((sum, a) => sum + parseFeeCents(a.serviceFeeTotal), 0);
+  }, [attendees]);
 
   if (!org) return null;
 
@@ -194,7 +200,12 @@ export default function PbImportPage() {
               value={`${duprCoverage.withDupr}/${duprCoverage.total}`}
             />
             <Stat label="Flagged drops" value={totals.drop} accent={totals.drop ? courtRed : undefined} />
+            <Stat label="Fees paid (PB.com)" value={formatUsd(feesTotalCents)} />
           </div>
+          <p style={{ fontSize: 12, color: inkMuted, margin: "-4px 0 12px" }}>
+            Fees paid is informational only — PB.com collected this money, so it is
+            not written to Bert &amp; Erne&apos;s payment records.
+          </p>
 
           {/* Divisions detected */}
           <Section title={`Divisions (${totals.divisions})`}>
