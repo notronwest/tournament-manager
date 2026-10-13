@@ -587,38 +587,25 @@ async function openDivisionBracket(page: Page, target: ResolvedDivisionTarget, b
     await page.goto(divisionBracketUrl(baseUrl, target.pbcomDivisionId), NAV);
     return;
   }
-  // Reach it from the Live Console the SAME way startMatches does — the row's Options
-  // menu — since that path is proven for a Running division. The exact menu item that
-  // opens the score page isn't traced yet, so DUMP the menu items, then click the best
-  // score/bracket match. NEVER "Official" (it prints a paper sheet + blocks on a dialog).
+  // Reach the bracket from the Live Console. TRACED LIVE (2026-10-03): the division's
+  // row carries a link to its pool-play page (ptspp.aspx / ptSRR.aspx) whose `plid` IS
+  // the pool id; the round-robin score page is ptSRR.aspx?plid=<plid>. The row's
+  // "Options" menu is event-level only (Lock/Unverify/Zero/Swap) — it has NO score
+  // entry. So scrape the plid from the row and go straight to the score page.
   await page.goto(eventsConsoleUrl(baseUrl, target.pbcomEid), NAV);
   const runningTab = page.getByRole("tab", { name: /running/i }).first();
   if (await runningTab.count()) await runningTab.click().catch(() => {});
   const row = page.locator("tr", { hasText: new RegExp(escapeRe(target.divisionLabel), "i") }).first();
   await row.waitFor({ state: "visible", timeout: STEP_TIMEOUT });
-
-  // First try a direct link in the row (some consoles expose one); fall back to Options.
-  const directLink = row.getByRole("link", { name: /enter scores?|view (bracket|scores)|bracket|scores?|matches/i })
-    .filter({ hasNotText: /official/i })
-    .first();
-  if (await directLink.count()) {
-    await directLink.click({ timeout: 10_000 });
-  } else {
-    await clickControl(row, /options/i, "options");
-    await page.waitForTimeout(500); // let the dropdown render
-    const menu = await listControls(page);
-    log.info("openDivisionBracket: Options menu opened — items for tracing", { menu });
-    const item = controlsMatching(page, /enter scores?|view (bracket|scores)|score ?card|bracket|scores?|matches/i)
-      .filter({ hasNotText: /official/i })
-      .first();
-    if ((await item.count()) === 0) {
-      throw new Error(
-        `openDivisionBracket: no score-page item in the Options menu for "${target.divisionLabel}". Menu items: ${menu}`,
-      );
-    }
-    await item.click({ timeout: STEP_TIMEOUT });
+  const href = await row.locator('a[href*="plid="]').first().getAttribute("href").catch(() => null);
+  const plid = href?.match(/plid=([0-9a-f-]+)/i)?.[1];
+  if (!plid) {
+    throw new Error(
+      `openDivisionBracket: no bracket (plid) link in the console row for "${target.divisionLabel}". ` +
+        `Page: ${await dumpBracketPage(page)}`,
+    );
   }
-  await page.waitForLoadState("load", { timeout: STEP_TIMEOUT });
+  await page.goto(divisionBracketUrl(baseUrl, plid), NAV);
   // The score grid may be AJAX-rendered after load (the attendees grid was). Give any
   // table rows a bounded chance to appear before we parse — best-effort, never throws.
   await page.locator("table tr").first().waitFor({ state: "visible", timeout: 5_000 }).catch(() => {});
