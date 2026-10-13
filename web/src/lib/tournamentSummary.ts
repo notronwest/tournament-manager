@@ -478,8 +478,8 @@ export function buildTournamentSummary(input: SummaryInput): TournamentSummary {
   let lastResultAt: Date | null = null;
   const byDay = new Map<string, DaySummary>();
   // Finishes outside the window, bucketed by their own day; decided below.
-  const outside = new Map<string, { at: Date; points: number }[]>();
-  const addFinish = (key: string, f: { at: Date; points: number }) => {
+  const outside = new Map<string, { at: Date; start: Date | null; points: number }[]>();
+  const addFinish = (key: string, f: { at: Date; start: Date | null; points: number }) => {
     const d = byDay.get(key);
     if (!d) {
       byDay.set(key, {
