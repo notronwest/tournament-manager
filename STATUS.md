@@ -5,6 +5,36 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-13 — Builder: issue #1157 / PR #1074 rework — no code change needed, review blockers already resolved
+
+Rework card #1157 was queued in Agent Ready for PR #1074
+(`fix(rr): schedule round-robin into real rounds via circle method`, a fix opened
+by an interactive session with no linked issue). The reviewer's `REQUEST CHANGES`
+verdict (2026-10-03) had two points: (1) no linked issue / failing "PR links an
+issue" required check, (2) no acceptance criteria to review against. By the time
+this card was picked up, both were already resolved out-of-band: Ron had opened
+#1157 as the tracking issue and edited the PR body to lead with `Closes #1157`
+(head commit unchanged at `4ec84f6`), and the required check was green.
+
+Re-verified on the existing branch in an isolated worktree rather than trusting
+that at face value: `npm run typecheck` (same 2 pre-existing `SchedulePage.tsx`
+errors as `main`, untouched by this diff), `npm run build` (clean), `npm run lint`
+(no new errors vs `main`), `npx vitest run` (349/349 passing). `mergeable:
+MERGEABLE`, `mergeStateStatus: CLEAN`. Posted a comment on PR #1074 documenting
+this and moved #1157 back to **In Review**. No new PR opened, no other card/PR
+touched.
+
+**Next:** Ron/reviewer re-review PR #1074 for merge.
+
+**Aside — found, not fixed:** this checkout's working tree had ~380 lines of
+pre-existing uncommitted STATUS.md entries (Reviewer-agent log entries dated
+2026-10-08 through 2026-10-10, e.g. PR #1147/#963/#980/#1129) sitting dirty on
+this branch — the same never-committed-entries drift that origin/main's
+2026-10-11 "RECOVERED" banner already describes happening fleet-wide (D-0118
+rule 5 / `daemon/infrastructure/sync-heal/`). Out of scope for this single-item
+rework card, so left untouched (stashed aside during this edit, then restored) —
+flagging for whoever owns that remediation rather than merging it into this PR.
+
 ## 2026-10-08 — Builder: PR #1121 rework (picked up #1117's zero-floor fix)
 
 Reworked PR #1121 (`[UX] grant + display the $20 account credit`, closes #1120, sub of
