@@ -5,6 +5,28 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-13 — Builder: PR #965 rework (rebase, clear CONFLICTING)
+
+Reviewer gate had put PR #965 (issue #964 — regression spec for #64, global
+partner-selection notification) back in `Agent Ready` with "needs rebase —
+`main` has moved" (branch stuck at `2850f5e` since 2026-10-02, `main` since
+moved to `a10c6bb`). Rebased `test/issue-64-spec` onto current `origin/main`
+in an isolated worktree. Only real conflict: `seed.ts`'s fixture-numbering
+comments — `main` had independently landed its own "11. Public recap fixture
+(#1108)" at the same insertion point this branch's "11. Global
+partner-selection notification" used. Kept both fixtures, renumbered this
+PR's to **12** (no other file references the old number — `fixtures.ts`'s
+`globalNotice` key is untouched). Re-verified: `eslint` clean on the 4
+touched e2e files, `playwright test --list` → 83 tests/15 files (clean
+parse — counts shifted from the original 74/14 since `main` has gained
+specs), `typecheck` + `build` clean. Force-pushed; PR is now `MERGEABLE`.
+Still stacked on open PR #955 (`fix/e2e-fixtures-syntax`) as before — that's
+unchanged by this rework, already explained in the PR body. Card moved back
+to **In Review**.
+
+**Next:** Ron re-reviews PR #965; once #955 merges this PR's diff shrinks to
+just the new spec.
+
 ## 2026-10-11 — RECOVERED: 24 entries that were written but never committed
 
 Written into this checkout's `STATUS.md` between 2026-09-25 and
