@@ -35,6 +35,325 @@ rule 5 / `daemon/infrastructure/sync-heal/`). Out of scope for this single-item
 rework card, so left untouched (stashed aside during this edit, then restored) —
 flagging for whoever owns that remediation rather than merging it into this PR.
 
+## 2026-10-10 — Reviewer: PR #1147 → REQUEST CHANGES (Leaf Peeper recap-campaign fallback — no linked issue; a latent cross-org slug ambiguity it newly exercises)
+
+Reviewed PR #1147 (`fix/recap-campaign-fallback` — recovers the untagged Leaf Peeper
+thank-you email's recap link via a new `public_tournament_campaign(org, tournament)`
+RPC + a recap-page fallback, and stamps `tournament_id` on `campaign_events` rows).
+Verified the engineering content on a scratch worktree: `vitest run
+src/lib/campaignCapture.test.ts` → 22/22 pass, `tsc -b --noEmit` → clean — both match
+the PR's own claims. The new RPC correctly scopes by *both* org and tournament slug,
+returns only the campaign slug (never the amount), and asserts that with a `DO` block
+— all in line with D-0077 (`daemon/decisions/D-0077-*.md`; confirmed active and naming
+`tournament-manager`, though it hasn't synced into this repo's `DECISIONS.md` slice
+yet — flagging that gap, not blocking on it). No UI/visual change (logic-only), so
+D-0047/D-0049 don't apply.
+
+Two findings, `REQUEST CHANGES`:
+1. **Blocking.** No `Closes #N` anywhere in the body, and the "PR links an issue"
+   check is red. `wmpc-meta/conventions/backlog.md` has no self-discovered-bug
+   exception, and the fleet's own precedent (daemon's self-discovered PRs on
+   wmpc-web/club-dashboard/tsa) is to open a small tracking issue and link it, not
+   treat the PR as exempt.
+2. **Plausible, worth fixing in the same pass.** `record_campaign_event()`
+   (`20261008130000_campaign_events.sql`, untouched by this diff) resolves
+   `tournament_id` by slug alone, no org filter — but tournament slugs are only
+   unique *per org* (CLAUDE.md decision #1). Every prior call site passed no slug, so
+   this was dormant; this PR is the first to pass a real one
+   (`recordRecapViewEvent(resolved, tournamentSlug)`), so a slug collision across two
+   orgs could stamp the wrong `tournament_id` and leak a `campaign_events` row
+   (including a real `player_id` on a `signup` row) to the wrong org's admins via its
+   own RLS. The new `public_tournament_campaign` function in this same PR gets the
+   org+slug scoping right — recommended `record_campaign_event` mirror it.
+
+Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes` label.
+
+**Next:** back to the Builder's rework lane — open the tracking issue + add
+`Closes #N`, and ideally close the `record_campaign_event` org-scoping gap in the
+same push so this re-reviews clean in one pass.
+
+## 2026-10-09 — Reviewer: PR #963 → REQUEST CHANGES (3rd cycle, same occurrence-count mismatch still unfixed)
+
+Re-reviewed PR #963 (`docs(status): 2026-09-25 morning Testing-agent triage entry`,
+STATUS.md-only, Closes #962) again. This is the 3rd review pass (prior `REQUEST
+CHANGES` on 2026-10-02 and 2026-10-09, both logged earlier in this file) for the
+exact same unresolved defect: the entry's heading claims the e2e-harness parse
+break is on its "**4th occurrence**," but the body only lists 2026-09-24 daytime,
+2026-09-24 nightly, and "this morning's triage of that same nightly run" — the
+third item double-counts the second rather than being a distinct run, so neither
+the body's "3 consecutive scheduled runs" claim nor the title's "4th" is actually
+supported. Checked the branch history since the last review: only auto-rebase
+comments since, no new commits (both commits remain dated 2026-09-25, just
+re-committed at rebase time) — so the diff is unchanged and the finding still
+applies verbatim. Everything else still checks out (append-only placement,
+accurate #954/#955/#965 references, no fabricated citations on spot-check).
+Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes` label.
+
+**Next:** back to the Builder's rework lane — reconcile the title's occurrence
+count with what the body's run list actually supports (don't double-count the
+re-triaged nightly run), then this re-reviews clean.
+
+## 2026-10-09 — Reviewer: PR #980 → APPROVE (STATUS.md log, Testing agent 10th-run triage)
+
+Reviewed PR #980 (`docs: STATUS entry — Testing agent daytime triage (10th blind run)`,
+Closes #979 — a self-tracking doc issue per the `pr-linked-issue` gate, same pattern as
+#975/#977/#976). STATUS.md-only, +11/-0, no code. Entry inserted in the correct
+reverse-chronological slot (2026-09-28, below the existing 2026-09-28 entries and above
+the 2026-09-22 entry already there) — append-only, matching the PR #969/#976 precedent
+for late-merged historical Testing-agent entries. Spot-checked the narrative: PR #955
+(`fix/e2e-fixtures-syntax`) still OPEN, tracking issue #954 still OPEN, consistent with
+the entry's claims as a past-tense 2026-09-28 snapshot. No migration/deploy/money path
+implicated; no UI → D-0047/D-0049 not applicable. CI green (`PR links an issue` +
+Cloudflare Pages preview both SUCCESS), `mergeable: MERGEABLE`/`mergeStateStatus: CLEAN`,
+not a draft. Posted `VERDICT: APPROVE` + `reviewed:approve` label.
+
+**Next:** dispatcher merges on the APPROVE (D-0052).
+
+## 2026-10-09 — Reviewer: PR #1129 re-review after rework → APPROVE
+
+Re-reviewed PR #1129 (`feat(pb-import): surface PB.com fees paid in the import preview`,
+Closes #1127) after the Builder's rework push (commit 98c94e0) addressing my prior
+`REQUEST CHANGES` (logged above/below this entry). Confirmed the fee-aggregation logic
+is correct against the real PB.com file shape: `parseAttendees` dedupes by
+`AttendeeHeaderID` and only takes `serviceFeeTotal` from the first row seen per attendee,
+which matches the real export's header-row-first ordering (verified against the
+`pb-attendees-sample.csv` fixture) — so `PbImportPage`'s per-attendee sum doesn't
+double-count. Display-only (no write to `event_registrations`/`payments`), consistent
+with decision #4 (B&E is never merchant of record for PB.com-collected fees). D-0049
+clean (`formatUsd`/`Stat` reused, not duplicated).
+
+**D-0047 phone gate — cleared.** The rework added a populated-preview case to
+`web/e2e/mobile/audit.spec.ts` for the new "Fees paid (PB.com)" stat/caption at
+390×844 (no horizontal overflow, each element's right edge inside the viewport).
+Verified the test is wired correctly against the real page: route (`import-pb`)
+matches `App.tsx`, `SEED.organizerEmail`/`orgSlug`/`tournamentSlug` exist in
+`fixtures.ts`, file-input selector matches real markup. Same bar PR #1110 cleared
+on this same `regression.yml`-doesn't-run-on-`pull_request` structural gap (tracked
+separately, not owed by this PR). Posted `VERDICT: APPROVE`, swapped label
+`reviewed:changes` → `reviewed:approve`.
+
+**Next:** dispatcher merges on the APPROVE (D-0052).
+
+## 2026-10-09 — Reviewer: PR #976 → APPROVE (STATUS.md log, Testing agent 9th-run triage)
+
+Reviewed PR #976 (`docs: STATUS entry — Testing agent morning triage (9th blind run, escalated)`,
+Closes #975 — a self-tracking doc issue per the `pr-linked-issue` gate). STATUS.md-only, +7/-0, no
+code. Entry is inserted in the correct reverse-chronological slot (2026-09-28, between the earlier
+#23 entry and the 2026-09-22 entry already below it) — append-only, nothing rewritten, matching the
+PR #969 precedent. Spot-checked the referenced artifacts: PR #955 (`fix/e2e-fixtures-syntax`) is
+open, tracking issue #954 exists, and Job 2's output (issue #977, draft PR #978 adding
+`web/e2e/issue-103-my-tournaments.spec.ts`) matches the narrative — 5 tests, 3 new seeded players,
+draft pending a live run. PR #955 has since drifted to `CONFLICTING`, but that's expected drift on
+a log entry describing 2026-09-27/28 state, not a present-tense claim. No UI → D-0047/D-0049 not
+applicable. CI green, not a draft, `mergeable: MERGEABLE`/`mergeStateStatus: CLEAN`. Posted
+`VERDICT: APPROVE` + `reviewed:approve` label.
+
+**Next:** dispatcher merges on the APPROVE (D-0052).
+
+## 2026-10-09 — Builder: PR #1129 rework (D-0047 phone-check coverage added)
+
+Reworked PR #1129 (`feat(pb-import): surface PB.com fees paid in the import preview`, Closes
+#1127) on its existing branch per the reviewer's `VERDICT: REQUEST CHANGES` above — in-scope
+fix, no new PR. Added a populated-preview case to `web/e2e/mobile/audit.spec.ts`
+("PB.com import preview — Fees paid stat usable"): logs in as the organizer, opens
+`import-pb`, uploads a minimal synthetic CSV (one attendee, one division entry,
+`ServiceFee_Total=65.00`), and asserts no horizontal page overflow at 390×844 plus the
+"Fees paid (PB.com)" label/value/caption each render with their right edge inside the
+viewport (not clipped). Re-verified: `typecheck` shows the same 2 pre-existing
+`SchedulePage.tsx` errors as `main`, `build` passes, `lint` on the new file is clean (full
+repo unchanged at 32 errors/4 warnings), `playwright test --list` shows 24 tests (was 22)
+on both the iphone/pixel projects. Could not execute the suite itself — no
+`E2E_SUPABASE_URL`/`E2E_SUPABASE_SERVICE_ROLE_KEY`/`E2E_TEST_PASSWORD` in this sandbox; it
+will run for real on the next scheduled `regression.yml` run (still `pull_request`-silent,
+per the reviewer's finding above). Pushed, commented "Addressed" on PR #1129, moved card
+#1127 back to **In Review**.
+
+**Next:** reviewer re-reviews on the push.
+
+## 2026-10-09 — Reviewer: PR #1129 → REQUEST CHANGES (PB.com fees-paid stat, missing D-0047 coverage)
+
+Reviewed PR #1129 (`feat(pb-import): surface PB.com fees paid in the import preview`, Closes
+#1127), the one AC gap left on the already-shipped PB.com import feature:
+`ServiceFee_Total` was parsed per-attendee (`pbImport.ts`) but never shown to the director,
+silently dropping #1127 AC #4 ("fees-paid are carried across, or are explicitly listed as
+unmapped — never silently dropped"). The fix (`parseFeeCents` + a new "Fees paid (PB.com)"
+stat tile in `PbImportPage.tsx`) is correct and on-decision: verified independently in a
+worktree of the PR head — `npx vitest run src/lib/pbImport.test.ts` → 18/18 pass (incl. the
+4 new `parseFeeCents` cases), `tsc -b --noEmit` → same 2 pre-existing `SchedulePage.tsx`
+errors as a clean `main`, nothing new. Correctly display-only (no write into
+`event_registrations`/`payments` — B&E is never merchant of record for PB.com-collected
+fees, decision #4). D-0049 clean (reuses the existing `Stat` component; `parseFeeCents` is
+genuinely new logic, not a duplicate of `pricingTiers.ts`'s form-input parser).
+
+Blocked on **D-0047 (phone gate)**: this adds a new UI element to `PbImportPage`, and the
+repo's `web/e2e/mobile/audit.spec.ts` (390×844) has zero coverage of any admin/organizer
+page — and `regression.yml` (the workflow that runs it) only triggers on
+`schedule`/`workflow_dispatch`, never `pull_request` — so no phone-check ran on this PR's
+head at all. Same finding this reviewer made on PR #1067 (Brackets tab) and PR #1110
+(recap page): the suite existing-but-uncovering-the-new-surface is the "missing coverage"
+bucket, not "no check yet." Posted `VERDICT: REQUEST CHANGES` + `reviewed:changes` label,
+asking the Builder to add a mobile-audit case for the import preview page (populated state,
+no horizontal overflow, new stat + caption legible at 390px).
+
+**Next:** Builder reworks on the same branch; re-review on next push.
+
+## 2026-10-09 — Reviewer: PR #969 → APPROVE (STATUS.md log, Builder blocked #23 as already-shipped)
+
+Reviewed PR #969 (`docs: STATUS entry — Builder blocked #23 (already shipped by #64/#68)`, Closes
+#968 — a self-tracking doc issue per the `pr-linked-issue` gate). STATUS.md-only, +22/-0, no code.
+Verified the entry's claims against issue #23's actual history: `PartnerInvitesContext.tsx` +
+`PartnerInvitesBanner.tsx` (shipped by merged PR #68, closing #64) render globally including on
+`/`, with an explicit pending-invite count — matching the Builder's "already shipped, don't
+duplicate" read, independently re-confirmed by the CoS and closed by Ron on 2026-09-26. Entry is
+correctly appended in reverse-chronological order among the other 2026-09-25 entries. No code/
+schema/UI — reuse and phone gates don't apply. CI green (Cloudflare preview + PR-links-issue),
+`mergeable_state` CLEAN. Posted `VERDICT: APPROVE` + `reviewed:approve` label.
+
+**Next:** dispatcher merges on this APPROVE (D-0052) — nothing further needed from here.
+
+## 2026-10-09 — Reviewer: PR #1126 → APPROVE (STATUS.md log, #12 mis-queued a third time)
+
+Reviewed PR #1126 (`docs(status): log #12 mis-queued a third time`), STATUS.md-only,
++20/-0, no `Closes #` (a no-op investigation log, nothing to close). Verified every
+factual claim against GitHub history: issue #12 is `CLOSED` since 2026-06-13T02:10:51Z,
+merged PR #73 fully implemented it at the matching timestamp, regression spec #952/PR
+#953 already covers its acceptance criteria, and the comment thread matches the entry's
+narrative (2026-10-08 mis-queue report citing #271, its correction to #73, today's
+no-action Builder comment). Entry appended correctly in reverse-chronological order
+above the existing #11 (4th-occurrence) entry. No code/UI/schema — reuse, design, and
+phone gates don't apply. Lone red check is the cosmetic "PR links an issue" workflow,
+which ROLE.md carves out as non-blocking for this exact no-op-log shape (precedented by
+PR #1122, same pattern, same single check failure, merged). Posted `VERDICT: APPROVE` +
+`reviewed:approve` label. **Next:** dispatcher merges on this APPROVE (D-0052) — nothing
+further needed from here.
+
+## 2026-10-09 — Reviewer: PR #967 → APPROVE (STATUS.md backlog-catchup entry)
+
+Reviewed PR #967 (`docs: STATUS entry — 2026-09-25 daytime Testing-agent triage`, Closes #966).
+STATUS.md-only, 86 insertions / 0 deletions, no code — correctly appended in the file's
+reverse-chronological order, continuing directly above the existing 2026-09-24 entry. The
+diff actually bundles 7 entries spanning 2026-09-25 → 2026-09-27 (several Testing-agent runs
+plus two Builder entries, #378 and #235) rather than just the single 2026-09-25 daytime entry
+named in the title/issue — the entries themselves explain why (this branch was used to sync
+unpushed STATUS entries from prior sessions before pushing). Not a defect since STATUS.md is
+append-only and none of the batched entries overwrite or contradict each other; called it out
+as a non-blocking note. No code/UI/schema/money path — reuse, design, and phone gates don't
+apply. CI (PR-links-issue, Cloudflare preview) green, `mergeable_state` CLEAN. Posted
+`VERDICT: APPROVE` + `reviewed:approve` label. **Next:** dispatcher merges on this APPROVE
+(D-0052) — nothing further needed from here.
+
+## 2026-10-09 — Reviewer: PR #963 → REQUEST CHANGES (re-review, occurrence-count mismatch still unfixed)
+
+Re-reviewed PR #963 (`docs(status): 2026-09-25 morning Testing-agent triage entry`,
+STATUS.md-only, Closes #962). This PR was already `REQUEST CHANGES`'d on 2026-10-02 for
+a self-contradicting STATUS.md entry: the heading claims the harness parse break is on
+its "**4th occurrence**," but the entry's own body only enumerates 2 distinct CI runs
+(2026-09-24 daytime, 2026-09-24 nightly) plus a re-triage of that same nightly run —
+neither the title's "4th" nor the body's own "3 consecutive scheduled runs" claim is
+actually supported. Since that review the branch was only auto-rebased twice
+(2026-10-02, 2026-10-09) with no content rework, so the diff is unchanged and the
+finding still applies verbatim. Everything else still checks out: entry correctly
+placed append-only (newest on top, nothing rewritten), accurately reflects #954's
+state (PR #955 still open/unmerged at review time, no product regression, no
+duplicate card filed), and the Job 2 claim (PR #965 for #64) is verifiable. No code,
+no UI — reuse/design/phone gates don't apply. Posted `VERDICT: REQUEST CHANGES` +
+`reviewed:changes` label (PR had no labels at review time). **Next:** back to the
+Builder's rework lane — fix the title/body occurrence count to agree, then this
+re-reviews clean.
+
+## 2026-10-09 — Builder: PR #1129 (Closes #1127) — fees-paid gap in the already-shipped PB.com import
+
+Single-item run on #1127 ("B&E: import a PickleballBrackets.com registrant CSV, with a
+reviewable mapping preview, sub of #970"). Found no open sub-issues/PRs under #1127, so not
+mis-queued in the literal sense — but auditing its AC against `main` showed the whole feature
+(mapped preview, idempotent re-import by `source_activity_id`, division/player/DUPR/partner
+handling, malformed-file errors) already shipped under #981/#983 and the follow-up chain
+(#985, #987, #988, #1013, #1018, #1028, #1029) as `PbImportPage` / `lib/pbImport.ts` /
+`lib/pbReconcile.ts` / `lib/pbRegistrationImport.ts`. Line-by-line against the AC turned up
+one real, narrow gap: `ServiceFee_Total` (fees paid on PB.com) was parsed into memory but never
+shown or carried anywhere — a silent drop of AC #4. Opened PR #1129 (`Closes #1127`): a
+`parseFeeCents` helper (tolerant of `$`/commas/blank/junk) + a "Fees paid (PB.com)" stat in the
+import preview, display-only — not written into B&E's payment tables, since PB.com (not
+B&E/Stripe Connect) was merchant of record for that money, per `CLAUDE.md` decision #4. Added 4
+unit tests; full suite (385 tests) green, build green, lint/typecheck show the same pre-existing
+baseline as `main` (2 `SchedulePage.tsx` type errors, 32 lint errors), nothing new. Card moved to
+In Review. Next: Ron reviews PR #1129 on the preview.
+
+## 2026-10-09 — Reviewer: PR #1124 → APPROVE (log third #11 mis-queued dispatch)
+
+Reviewed PR #1124 (`docs(status): log third #11 mis-queued dispatch`, STATUS.md-only).
+Verified its claims directly against GitHub: issue #11 is still `state: CLOSED`
+(`closedAt: 2026-06-07T02:55:36Z`), labels still just `story` (no stray `agent-ready`),
+still fully implemented by merged **PR #60**. A third `<!-- wmpc-builder -->` comment
+was posted on #11 at 2026-10-09T08:38:12Z referencing both prior investigations
+(the 2026-10-08 STATUS entry and merged PR #1123) — matches the PR's "commented, no
+build action" claim. Board left untouched, as expected for already-Done work. Same
+shape as the already-approved PR #1123; entry correctly prepended per the
+newest-on-top convention. Only red check is the standing cosmetic "PR links an issue"
+exception; Cloudflare TEST build green. Posted `VERDICT: APPROVE` + `reviewed:approve`
+label (initially missed the `<!-- wmpc-reviewer -->` marker on the first post, fixed via
+a comment edit). **Next:** dispatcher merges #1124 on this APPROVE (D-0052). The
+underlying mis-dispatch mechanism that keeps re-queuing closed issue #11 is still
+unidentified after three occurrences — flagged in the PR itself for daemon/dispatcher-side
+investigation; nothing further needed from the Reviewer here.
+
+## 2026-10-08 — Reviewer: PR #1123 → APPROVE (log #11 mis-queued investigation)
+
+Reviewed PR #1123 (`docs(status): log #11 mis-queued investigation`, STATUS.md-only,
+17 additions / 0 deletions). Verified its claims directly against GitHub rather than
+trusting the PR body: issue #11 is `state: CLOSED`, `closedAt: 2026-06-07T02:55:36Z`,
+labels show only `story` (no stray `agent-ready`); **PR #60** ("Partner accept inserts
+pending_payment reg, not paid (#11)") is `merged: true`, `merged_at: 2026-06-07T02:55:35Z`,
+and its body matches the entry's description (changed `PartnerAcceptPage`'s onAccept
+handler from `status='paid'` to `status='pending_payment'`, `Closes #11`). No open
+sub-issue or PR references #11 beyond already-merged #60. Entry is correctly inserted at
+the top of this file per the newest-on-top convention; CI green ("PR links an issue" +
+Cloudflare preview both passed); `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`, not a
+draft. Posted `VERDICT: APPROVE` + `reviewed:approve` label, with one non-blocking note:
+the PR body's quoted `"...(#11)", Closes #11)` got parsed by GitHub as a real closing
+reference even though it's quoting PR #60's own closing line — harmless since #11 is
+already closed. **Next:** dispatcher merges #1123 on this APPROVE (D-0052); nothing
+further needed from the Reviewer here.
+
+## 2026-10-08 — Reviewer: PR #1122 re-review → APPROVE (Builder fixed the #271→#73 citation)
+
+Re-reviewed PR #1122 after the Builder's rework on the same branch. Verified the fix
+independently: the entry now cites merged **PR #73** ("Clarify event fee override model
+in EventFormPage (#12)", `mergedAt: 2026-06-13T02:10:50Z`, closes #12) instead of **#271**
+(`state: CLOSED`, `mergedAt: null` — closed without merging). Issue #12's labels now show
+just `story` — the stray `agent-ready` label flagged as root cause has in fact been removed.
+The companion comment on issue #12 was also corrected (posted 2026-10-09T01:50:54Z) to fix
+the same #271→#73 mix-up there. Diff is still STATUS.md-only, newest entry on top per this
+file's convention; only red check is the standing cosmetic "PR links an issue" exception.
+Posted `VERDICT: APPROVE` + `reviewed:approve` label (superseding my prior REQUEST CHANGES
+below). One non-blocking nit left in the comment: the entry's phrase "below is now stale,
+left for history" doesn't match what happened — the fix commit edited the entry in place,
+there's no stale duplicate left in the file. **Next:** dispatcher merges #1122 on this
+APPROVE (D-0052); nothing further needed from the Reviewer here.
+
+## 2026-10-08 — Reviewer: PR #1122 (REQUEST CHANGES — wrong PR cited in a STATUS.md log entry)
+
+Reviewed PR #1122 (`docs(status): log #12 mis-queued investigation`, STATUS.md-only,
+21 additions / 0 deletions, no issue to close). The entry it adds claims issue #12 was
+"fully implemented by merged PR #271" — checked via `gh api repos/.../pulls/271`: that PR
+is `state: closed`, `merged: false`, `merge_commit_sha: null`. The PR that actually
+implemented and closed #12 is **#73** ("Clarify event fee override model in EventFormPage
+(#12)"), merged `2026-06-13T02:10:50Z` — matches #12's `closed_at`
+(`2026-06-13T02:10:51Z`) to the second; #271 (same era, same feature) looks like a
+duplicate attempt closed without merging. Confirmed the feature itself is still live, just
+relocated by the later #1005 refactor: `EventFormPage.tsx` is now a thin wrapper, the actual
+"Event fee override (USD)" field + hint text live in `EventSettingsForm.tsx:630-658`. Posted
+`VERDICT: REQUEST CHANGES` + `reviewed:changes` label on #1122, citing the #271→#73 fix and
+noting the same mix-up already exists in an earlier `<!-- wmpc-builder -->` comment on issue
+#12 (2026-10-08T14:34:03Z, not part of this diff). Also hit the environment-wide GitHub
+GraphQL rate limit PR #1122 itself describes (`gh pr view`/`gh pr diff`/`gh pr comment` all
+failed with "API rate limit already exceeded"; `gh api rate_limit` showed the real per-token
+quota had headroom, 4488/5000) — worked around it entirely via REST (`gh api
+repos/.../pulls/1122`, `/issues/1122/comments`, `/issues/1122/labels`) rather than the
+GraphQL-backed `gh pr` subcommands. **Next:** Builder fixes the #271→#73 citation on #1122's
+branch for re-review; separately, issue #12's existing comment carries the same error and
+could use a follow-up correction whenever someone's next there.
+
 ## 2026-10-08 — Builder: PR #1121 rework (picked up #1117's zero-floor fix)
 
 Reworked PR #1121 (`[UX] grant + display the $20 account credit`, closes #1120, sub of
@@ -2599,3 +2918,53 @@ file; confirmed via `git diff`/`git show` that its content is byte-identical to 
 — a stale merge-base artifact, not scope creep, no-op on merge. No DECISIONS.md violation, no UI/
 phone-gate surface (logic-only change), no reuse concern. CI green, `MERGEABLE`/`CLEAN`, not draft.
 Posted `VERDICT: APPROVE` + `reviewed:approve`. Next: dispatcher merges to `main` (TEST) per D-0052.
+
+## 2026-10-09 — Reviewer: PR #1128 (donation checkout money half, #378) — REQUEST CHANGES
+
+Reviewed PR #1128 (`create-payment-intent` + `stripe-webhook` charging an at-checkout
+`donationCents` add-on, #378's `[FN]` half) against the issue's acceptance criteria + its
+OWNER-AUTHORIZED hard merge condition. Pulled the branch into a worktree to verify rather than
+trust the PR body: the new `platformFee.test.ts` passes (3/3) and `tsc -b --noEmit` shows only
+the two `SchedulePage.tsx` errors already present on `main` — no new typecheck regressions.
+Two findings sent back: (1) `create-payment-intent` never checks `tournaments.accepts_donations`
+before charging a donation — the sibling `create-donation-intent` enforces this server-side
+(`donations_not_enabled`), but here the opt-out is UI-only (#946), so a direct API call can
+donate to a tournament that disabled it; (2) the test required as the issue's hard merge
+condition calls `computePlatformFeeCents` **twice with identical arguments** (the function has
+no donation parameter at all) — it doesn't exercise a donation case and wouldn't catch a
+regression where the call site passed the donation-inclusive amount into the fee calc instead of
+the subtotal. Both are mechanical Builder fixes, not architecture calls. Posted
+`VERDICT: REQUEST CHANGES` + `reviewed:changes`. Next: Builder adds the `accepts_donations` guard
+and a real with/without-donation fee assertion, then re-push for re-review.
+
+## 2026-10-09 — Builder: PR #1128 rework (#378) — addressed both REQUEST CHANGES findings
+
+Single-item rework on the reviewer's two findings, same `fn/issue-378-donation-checkout` branch,
+no second PR. (1) `create-payment-intent`'s tournament select now includes `accepts_donations`,
+and the function rejects (`409 donations_not_enabled`) when `donationCents > 0` and the
+tournament hasn't opted in — same enforcement `create-donation-intent` already has, closing the
+server-side trust-boundary gap (the opt-out had been UI-only). (2) `platformFee.test.ts`'s fee
+assertion no longer calls `computePlatformFeeCents` twice with identical args; it now computes
+the fee from the subtotal and asserts that basing it on the donation-inclusive charge instead
+would differ — so the test can actually fail if the call site regresses to the wrong base.
+Re-verified in a fresh worktree: typecheck shows only the same two pre-existing
+`SchedulePage.tsx` errors (confirmed on `origin/main`), 384/384 vitest pass, build clean, lint
+unchanged at 32 pre-existing errors/4 warnings (none in touched files). Pushed, commented on
+PR #1128 with `<!-- wmpc-builder -->`, moved card #378 back to **In Review**. Next: reviewer
+re-reviews on the push.
+
+## 2026-10-09 — Reviewer: PR #1128 (#378 donation-checkout money half) — APPROVE
+
+Re-reviewed after the Builder's rework (accepts_donations server-side check + the
+previously-tautological fee test). Independently verified rather than trusted the PR body:
+checked out the head in a worktree, ran `platformFee.test.ts` (3/3, the issue's hard merge
+condition), the full suite (384/384), and `typecheck` — only the same two pre-existing
+`SchedulePage.tsx` errors also present on `origin/main`, no regression from this diff. All six
+AC for #378 met (fee computed on registration subtotal only via the shared
+`supabase/functions/_shared/platformFee.ts` helper — D-0049 reuse honored; `accepts_donations`
+enforced server-side, not just client-hidden; free-$0-registration-plus-donation now correctly
+routes through Stripe; webhook flips the linked `donations` row paid/failed alongside the
+registration in the same transition). Valid under the per-issue owner money hatch
+(`OWNER-AUTHORIZED: 2026-10-05` in #378's body + the named hard-merge-condition test, green) —
+this is D-0075's own cited example of that hatch. Posted `VERDICT: APPROVE`, labeled
+`reviewed:approve`. Next: dispatcher merges to `main` (TEST) per D-0052.
