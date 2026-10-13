@@ -193,6 +193,22 @@ green can also mean *inert*, so confirm the target's secrets exist with
 - **organizer-custom-domains** — remove the Pages custom domain or delete the
   `custom_domains` row.
 
+## Runtime dependency this repo cannot deploy, verify or roll back
+
+Every transactional and auth email loads its logo from
+**`https://assets.bertanderne.com/n/email-logo-bert-erne.png`** — a Cloudflare Worker over
+an R2 bucket that lives in **`club-dashboard`** (`worker/`), not here. daemon **D-0095**.
+
+- **Nothing in this repo deploys it, and `wrangler rollback` there does not restore an R2
+  object.** If email logos break, the fault is almost certainly in that repo or that
+  bucket, and the fix is not here.
+- The file under that URL is replaced from **Dashboard → Assets**, with no PR and no
+  deploy, and reaches new sends in about five minutes. A logo change is therefore
+  invisible in this repo's history.
+- `web/public/email/logo@2x.png` is **still committed and still served** from
+  `bertanderne.com`. Mail already delivered points at that old address and re-fetches it
+  whenever it is opened. **Do not delete it.**
+
 ## Does NOT deploy from here
 
 - **Supabase dashboard config** — Auth redirect URLs, the Google OAuth provider,

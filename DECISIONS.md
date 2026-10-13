@@ -105,25 +105,6 @@ wmpc-mcp tools were auto-declined in a scheduled run because nothing marked them
 
 **Forbids.** "Ron can do it from the dashboard" as the only surface.
 
-### D-0016 — daemon is the architect of record; decisions live in a register and each repo carries its slice
-
-*2026-09-16 · scope: `decisions/**, DECISIONS.md, NOW.md, .claude/hooks/session-start.sh, infrastructure/decision-register/**` · source: this change; Ron 2026-09-16 ("All decisions come through you. You're the architect.")*
-
-**Decision.** Architectural decisions are records in `daemon/decisions/`, one file each, with an
-ID, a status, the repos and paths they govern, the decision, the why, and what they forbid. A
-decision is never deleted; a reversal is a new record that supersedes the old one. daemon holds
-the full register. Every other repo carries `DECISIONS.md`, a generated slice of the records
-that name it, published by daemon. `NOW.md` in daemon is the front door a session reads first;
-`STATUS.md` stays the append-only log underneath it. A SessionStart hook prints the front door
-and the index into every session's context, local or remote.
-
-**Why.** STATUS.md had grown to eleven thousand lines. Decisions buried in it were invisible to
-a fresh session, which could re-open something already settled. Repos need to see what binds
-them without reading daemon. daemon needs to see everything.
-
-**Forbids.** Recording a decision only in STATUS.md. Editing a superseded record instead of
-adding a new one. Hand-editing a repo's `DECISIONS.md`.
-
 ### D-0018 — Issues and PRs pass through written-standard gates, not Ron; a separate review agent enforces them
 
 *2026-09-18 · scope: `agents/chief-of-staff/**, agents/builder/**, agents/reviewer/**` · source: Ron 2026-09-18 ("I can no longer be the bottleneck for issues that need review"); builds on D-0015*
@@ -354,11 +335,2342 @@ Done, REQUEST CHANGES / CONFLICTING → rework lane; (3) Builder: rework lane (r
 (4) the watchdog's board checks. Each ships as its own PR; the first live auto-merge is announced in the
 standup.
 
+### D-0065 — Design is a gate, not a review — every UI change is graded by a separate critic against the written principles before it can be pushed, enforced by hooks
+
+*2026-09-30 · scope: `infrastructure/design-gate/**, infrastructure/git-guards/**, agents/reviewer/**, agents/builder/**, docs/design-system.md, .design/**, web/src/**, src/**` · source: Ron 2026-09-30, from his phone — "you do stupid design things and I need you to get better … better than me. Rn I'm better than you." Asked how: "Hooks." Intake answers: fresh-context critic, hard block at push, principles written first.*
+
+**Decision.** Design quality is enforced by **hooks**, at three points, against a **written
+standard** — not by Ron's eye on a preview and not by the post-hoc Reviewer alone:
+
+1. **In context at edit time.** A global `PostToolUse` hook (`infrastructure/design-gate/
+   design-context.sh`) injects the numbered checklist (`CHECKLIST.md`, the condensed form of
+   Pillar 5 → "What good looks like") into the session the first time it edits a UI file.
+   The constraint is in front of the model while it builds, once per session.
+2. **Graded before the session ends.** A global `Stop` hook (`design-verdict-reminder.sh`)
+   blocks once when the branch changes UI files with no PASS verdict for exactly that change,
+   and tells the session to spawn a **fresh-context critic** (`CRITIC.md`: load the standard,
+   render at 390 and 1280 on populated state where the repo can run, cite by checklist number,
+   PASS/FAIL). The builder never grades its own homework (D-0018). The critic writes
+   `.design/verdicts/<hash>.md`, where `<hash>` = sha256 of the branch's UI diff vs
+   `origin/main` (`ui-diff-hash.sh`), so any later UI edit invalidates the verdict.
+3. **Refused at push.** The `pre-push` guard (`infrastructure/git-guards/`, in every repo)
+   refuses any branch whose range changes UI files unless the tip commits a `verdict: PASS`
+   file for that hash. Override `WMPC_ALLOW_UNREVIEWED_DESIGN=1` is deliberate and visible.
+   The Reviewer gains the same check: a UI PR with no matching PASS verdict → REQUEST CHANGES.
+
+The standard itself moves first: Pillar 5 gains "What good looks like" (hierarchy, one primary
+action, every state designed, disclosure, spacing scale, words, thumb reach, modals, feedback,
+consistency, data, dead ends, phone, accessibility floor). The critic grades against it plus
+`wmpc-meta/design-system/DESIGN_SYSTEM.md`; a finding that cites no principle is taste and
+does not count — if the standard is silent, the standard gets written (D-0018).
+
+**Why.** The only design signal in the system was Ron noticing on a preview, which caps
+quality at what he catches and makes him the reviewer he said he can no longer be (D-0018).
+Sessions produce good UX when the constraint is in front of them and poor UX when it is a
+sentence in a doc they should remember: "verify at 390px" failed three times as a reminder
+before D-0047 made it a check; "reuse before you build" failed the same way before D-0049.
+Same fleet rule, applied to design as a whole: **enforce in code, not by memory** (D-0002).
+Hooks were Ron's word for the mechanism; the three layers are one gate seen from edit, stop
+and push, each cheap where the previous one already passed.
+
+**Forbids.** No UI change pushes without a PASS verdict for its exact diff. No session grades
+its own UI (the critic is a separate context). No verdict is edited to flip it — a new UI
+hash is a new file. No finding without a checklist number blocks a PR (no taste gates). The
+override is for a change Ron has already seen, never a habit; the Reviewer treats an
+overridden push like a missing verdict.
+
+**Binds.** Pillar 5 (`docs/design-system.md`), Pillar 4 (the hook + guard travel by
+`reconcile.sh`), Pillar 2 (the guard), `agents/reviewer`, `agents/builder`. Extends D-0018,
+D-0047, D-0049. **Execute:** (1) the three scripts + installer + `reconcile.sh` line; (2) the
+pre-push design gate; (3) Pillar 5 principles + `CHECKLIST.md`; (4) Reviewer + Builder prompt
+lines; (5) mirror the principles into `wmpc-meta/design-system/DESIGN_SYSTEM.md` (owed,
+separate PR).
+
+### D-0068 — Instructions to Ron: offer to do it first; when he must, the exact steps in the reply, paste-safe, one copy box per field
+
+*2026-10-07 · scope: `CLAUDE.md, agents/**, **/*PROMPT*.md, **/DEPLOYMENT.md` · source: Ron 2026-10-07 — "Update all agents directives as it pertains to giving me instructions (this is a big global change that needs to happen here and for Rachel in the dashboard) … I need to GSD and the more confusing this is or the more I go back and forth with you the more time and money it costs"*
+
+**Decision.** Every agent and session follows four rules whenever a step might land on Ron.
+Daemon, the Builder, the Reviewer, every repo session and Rachel are all bound.
+
+1. **Do it yourself, but ask first.** If you can do a step with your own access, do not hand
+   it to Ron. Ask in one line: "Shall I merge it?" Steps on the whitelist need no ask. For
+   sessions that is `agents/WHITELIST.md`; for Rachel it is her autonomy settings. When Ron
+   says "yes, and from now on", add the step to the whitelist in the same change.
+2. **When only Ron can do it, give the steps in the reply.** Do not point him to a doc, a
+   README or a deployment file. Number the steps and give one action each. Name the app or
+   machine and the page or button. Say what he should see and what to tell you when done.
+   End with what you do next.
+3. **Paste-safe for his zsh terminal.** Each command goes in its own copy box, exactly as it
+   runs: no `#` comments, no `$ ` prompt, no `…`, no placeholder to edit by hand. Use full
+   paths and name the machine. Use `&&` to keep a sequence on one line. A secret is read
+   with a hidden prompt, `read -rs "s?Label: "`, so it never sits in the command, the chat
+   or the shell history. Commands handed to Ron may use variables. The no-variables rule in
+   CLAUDE.md is about agents' own commands and the allowlist, not his.
+4. **One copy box per field.** When a form has separate inputs, give each value its own box,
+   labelled with the field name as the screen shows it. Never stack several values in one
+   box. Checkboxes and dropdowns are stated in words, not boxes.
+
+**Rachel's cards.** The plain-language guard (D-0054) stays on everything Ron reads in words.
+Exact values he must paste (a command, a URL, a key name) go in a separate copy-step slot,
+which the guard checks for secrets but not for paths. Until the dashboard has that slot,
+Rachel does not paraphrase a command into prose. She makes it rule 1 ("Shall I have daemon do
+it?") or hands it to daemon, which gives the steps in chat.
+
+**Why.** Ron's time is the constraint. Steps buried in docs, commands that break in zsh,
+values pasted into the wrong field and tasks an agent could have done itself each cost a
+round trip, and a round trip costs time and money. zsh treats `#` as a literal, not a
+comment, unless `interactivecomments` is set, so a commented command fails.
+
+**Forbids.** Handing Ron a task an agent could do, without first asking to do it. "See
+DEPLOYMENT.md" or any doc in place of the steps. A command with a comment, a prompt sign, an
+ellipsis or a value to edit by hand. Several form values in one copy box. A secret written into
+a command or a reply.
+
+### D-0070 — Communication is gated by hooks — a session's work is not done until it has left the machine, and every ask of Ron is a tracked line, not prose
+
+*2026-10-07 · scope: `infrastructure/push-gate/**, infrastructure/session-continuity/**, infrastructure/daemon-sync/reconcile.sh, STATUS.md, NOW.md, docs/continuity.md` · source: Ron 2026-09-30 — "It's all about gates that are deployed via hooks. Use hooks to fix lack of communication." Gates chosen with Ron 2026-10-07: pings via the existing Discord webhook (CoS strategy-review channel); presence same-machine in v1. Principle recorded as D-0071.*
+
+**Decision.** Lack of communication between sessions, agents and Ron is fixed the way every
+other recurring failure in this fleet is fixed: with **gates deployed as hooks**, not with
+reminders. All four gates ship with this record, each as a hook, so none is re-debated:
+
+1. **Push gate.** A global `Stop` hook (`infrastructure/push-gate/push-reminder.sh`)
+   blocks a session once while `STATUS.md`/`NOW.md` have uncommitted edits or the branch is
+   ahead of its upstream (or has none and is ahead of `origin/main`). The block carries the
+   exact push; if a push is impossible, the required fallback is **one committed line in
+   STATUS.md naming what is unpushed and why**. A committed-but-unpushed change is a silent
+   no-op, and the continuity hook alone cannot tell the difference.
+2. **Ask-Ron ledger.** Every ask of Ron lives in one structured "Waiting on Ron" list
+   in `NOW.md` — one checkbox line per ask with date, repo and link — linted by a hook on each
+   `NOW.md` edit; the Stop hook refuses a wrap that leaves an ask only in prose; SessionStart
+   prints the list first. An ask buried in a paragraph is not an ask.
+3. **Ping.** When a session asks Ron a question, opens a PR, or ends with a new ledger
+   line, a hook posts one Discord line (session, ask, link) through the webhook plumbing the
+   Builder and CoS already use. Ron's phone, not a terminal he is not looking at.
+4. **Presence.** SessionStart registers the live session (repo, branch, task) in a
+   same-machine state file and Stop refreshes it, so concurrent sessions see each other before
+   they thrash a checkout or take the same decision number.
+
+**Why.** The log is a list of communication failures that no reminder fixed: a day of
+STATUS.md appends nobody could read because none were pushed (2026-09-26); two sessions
+taking the same decision id (D-0028, and again D-0050 → D-0065 on this very branch); asks of
+Ron buried as trailing prose in a resolved card (2026-09-27); work "invisible to Ron" called
+out as a UX gap (2026-09-26). Each is the same shape as D-0002, D-0047, D-0049, D-0065: a
+convention that lived in a doc, and failed. The fleet rule is enforce in code; hooks are how
+a session-level rule is enforced in code, and they already travel to every machine
+(`reconcile.sh`).
+
+**Forbids.** No session ends with unpushed commits or dirty continuity files without a
+committed line saying so. No ask of Ron recorded only in prose once the ledger exists. No
+new communication convention added as a CLAUDE.md sentence without the hook that enforces it.
+
+**Binds.** Pillar 1 (`docs/continuity.md`), Pillar 4 (hook propagation), the continuity hook.
+Extends D-0018 (gates, not Ron) and D-0052 (gates have heartbeats). **Execute:** all four gates
+ship together in daemon #191 (Ron, 2026-10-07: "It's all about gates that are deployed via
+hooks" — said twice, so built, not queued); each has its `DESIGN.md` intake answers and `test.sh`.
+
+### D-0071 — A convention is a gate deployed via a hook — every active decision names what enforces it, and a convention with no enforcement is proposed, not active
+
+*2026-10-07 · scope: `decisions/**, infrastructure/decision-register/**, infrastructure/*/install-global-hook.sh, docs/**, CLAUDE.md` · source: Ron 2026-09-30 and again 2026-10-07, verbatim both times — "It's all about gates that are deployed via hooks." Said twice; the second time is the decision.*
+
+**Decision.** The fleet's rule for making anything stick is now stated once, as its own record,
+and enforced on the register itself:
+
+1. **A convention is a gate.** A rule that lives only in a doc, a CLAUDE.md sentence, a prompt
+   line or a person's memory is a reminder. Reminders fail — this register's own history proves
+   it (D-0002 singletons, D-0047 phone width, D-0049 reuse, D-0065 design, D-0070 pushing). So a
+   rule becomes a convention only when something in code refuses the violation: a Claude Code
+   **hook** (the default for session-level rules — they already travel to every machine via
+   `reconcile.sh`), a git **guard**, a **CI check**, or a dispatcher **gate**.
+2. **Hooks are the deployment vehicle.** Session behaviour is enforced by global hooks whose
+   logic lives once in daemon and is installed per machine by an idempotent
+   `install-global-hook.sh` run from `reconcile.sh` (the Option-3 shape). A new session-level
+   rule ships as a hook in the same PR, or it is not a rule yet.
+3. **Every decision names its enforcement.** Records carry `enforced-by:` — the hook, guard,
+   check or gate that refuses the violation, or `none — <why a reminder is acceptable here>`
+   stated honestly. `render.sh check` fails a record from D-0070 onward without it. An active
+   decision that cannot name its enforcement is **`proposed`** until it can.
+
+**Why.** Ron said it twice in a week, after watching the same failure shape repeat: good design
+in one place and "stupid design things" in the next, 22 STATUS appends nobody could read, a
+decision id taken twice, asks of him buried in prose. Each had a convention; none had a gate.
+The individual records (D-0047, D-0049, D-0065, D-0070) each re-derive the principle in their
+**Why**; this record states it once so future records cite it instead of re-arguing it, and
+turns the principle on the register so it cannot itself quietly lapse.
+
+**Forbids.** No new convention recorded as prose alone. No `active` record without
+`enforced-by` from D-0070 on. No hook installed by hand on one machine as the mechanism — the
+installer in `reconcile.sh`'s loop is the mechanism. No "we'll remember to".
+
+**Binds.** `decisions/README.md` (record format), `infrastructure/decision-register/`
+(`new.sh`, `render.sh check`), every `infrastructure/*/install-global-hook.sh`, Pillars 1–5.
+Extends D-0016 (the register), D-0018 (gates, not Ron), D-0052 (gates have heartbeats).
+
+### D-0075 — A decision is not done until its artifacts are on main; daemon's own repo is daemon's lane, and dispatch is claimed by a label, not a title
+
+*2026-10-08 · scope: `decisions/**, agents/**, infrastructure/daemon-dispatch/**, infrastructure/builder-dispatch/**, docs/ai-agents.md` · source: daemon#257 (routed from cos_approvals 5436f929) — the owner approved the Builder money hatch 2026-10-05, daemon#195 closed COMPLETED 2026-10-06 carrying the decided text, daemon#233 held the edit, and seven consecutive sweeps re-found the file unedited because nothing owned it*
+
+**Decision.** Three rules, so a ruling can never again be "complete" while the thing it
+decided is unshipped.
+
+1. **A ruling-only close is forbidden when the ruling implies an artifact.** A daemon issue
+   closes `COMPLETED` only when every artifact its ruling names is either (a) merged to
+   `main`, or (b) carried by a dispatched issue that is **on the WMPC Roadmap in Agent Ready
+   with a lane that claims it** (D-0043). "A spec exists in another issue" is not (b) — an
+   unclaimed issue is not a delivery. If neither holds, the daemon issue stays **open** with
+   the artifact named in its body. Closing is an assertion about reality, not about effort.
+
+2. **Dispatch is claimed by a label, not by a title.** ⚠️ **The selector in this rule is RETIRED —
+   amended by [D-0117](D-0117-the-ruling-queue-drains-on-decisions-made-never-on-deliverie.md) rule 2
+   and [D-0148](D-0148-an-instruction-is-changed-in-every-clock-that-fires-it-and-a.md) rules 1–2.**
+   The drain enumerates **`daemon-ruling`**, never `daemon-dispatch`; the first sentence below (the
+   stamp on every issue) stands unchanged, the selector sentence does not. Reading this rule as live
+   is how two clocks came to fire on the retired net for 34 hours (D-0148). Every issue daemon opens in
+   `notronwest/daemon` carries the label **`daemon-dispatch`** at creation. ~~The daemon drain
+   enumerates `is:open label:daemon-dispatch`~~ **union** `is:open` with a title beginning
+   `architecture`/`Architecture`, oldest first. Title matching stays as a legacy net; it is
+   never the only net. A title is prose and drifts — `daemon#233`'s title was correct English
+   and still fell through every selector for two days.
+
+3. **`notronwest/daemon` is daemon's lane, and the Builder does not get one there.** The
+   Builder's lanes are product repos. It never edits `agents/**`, `decisions/**`,
+   `infrastructure/*-dispatch/**` or `docs/ai-agents.md` — an agent rewriting the prompt that
+   governs it is a self-modification we do not want reviewed by itself. Those paths are
+   daemon's to edit, under D-0005 (worktree) and the ordinary review gate. The gap that
+   stalled #233 was not a missing Builder repo; it was an architect's edit filed as if
+   somebody else would do it.
+
+4. **Detection carries a repair rail.** A sweep, drain or reviewer that can name a specific
+   decided-but-unapplied edit does not report it — it **routes** it: label the carrying issue
+   `daemon-dispatch` and file a `cos_requests` row on the `daemon` channel in the same run.
+   The **second** sighting of the same unapplied artifact is escalated as a rail failure, not
+   re-reported as a finding. Seven identical findings cost more than the edit did.
+
+**Why.** D-0028 says approved work always executes; D-0052 says approved work merges itself.
+Both assumed the work had an owner. A decision whose artifact lands in an unlabelled issue in
+a repo with no lane has no owner, and every mechanism downstream reads it as done: the ruling
+closed, the register said `active`, `STATUS.md` said shipped, and
+`grep -i OWNER-AUTHORIZED agents/builder/` returned nothing for three days while
+`tournament-manager#378` and `courtreserve-api#261` sat unbuildable. The failure was not
+anyone's diligence — the sweep caught it seven times. It was that *finding* and *fixing* were
+wired to different things. Rule 1 makes the close honest, rule 2 makes the work findable,
+rule 3 names the hands, and rule 4 makes a repeat sighting an alarm instead of a habit.
+
+**Forbids.** Closing a daemon architecture issue `COMPLETED` while an artifact it decided is
+neither on `main` nor in Agent Ready under a claiming lane. Opening an issue in
+`notronwest/daemon` without the `daemon-dispatch` label. A drain selector that matches only on
+issue title. The Builder opening a PR that touches `agents/**`, `decisions/**`,
+`infrastructure/*-dispatch/**` or `docs/ai-agents.md`. Reporting the same unapplied decided
+edit twice without raising it as a routing failure.
+
+### D-0077 — A tournament recap is public on completion through a curated reader; an account credit is an org-scoped append-only ledger redeemed on the coupon rail, never cash; campaign capture ships before the page it measures
+
+*2026-10-08 · scope: `supabase/migrations/**, supabase/functions/create-payment-intent/**, supabase/functions/stripe-webhook/**, web/src/pages/public/**, web/src/lib/tournamentSummary.ts, web/src/components/TournamentSummaryReport.tsx` · source: cos_approvals d7df0378, authorized by Ron 2026-10-08 — the 2nd Annual Leaf Peeper thank-you email he sends himself from PickleballBrackets; "once they register say - a $20 credit for an upcoming tournament has been added to your account" and "make sure that we can track conversions for this - people viewed the recap and did or didn't create an account"*
+
+**Decision.** Three pieces, three rules.
+
+### 1. The recap is public on completion, through a curated reader
+
+`/t/:orgSlug/:tournamentSlug/recap`, served by a `public_tournament_recap(p_org_slug,
+p_tournament_slug)` `SECURITY DEFINER` function that copies the shape of
+`public_tournament_results` (migration `20261001130000`) exactly: gated to the tournament's
+own public statuses — **recap requires `completed`** — returning a *curated* payload with no
+money, no contact information and no withdrawal/fee fields, and the client reusing
+`tournamentSummary.ts` + `TournamentSummaryReport.tsx` so the public sheet and the admin sheet
+can never disagree (D-0049).
+
+**Public by default on `completed`, with no publish toggle.** The live results page is already
+public on the same statuses; a toggle is one more thing to forget on the morning of a send,
+and forgetting it breaks the only link in the email. It shows podiums, headline counts, the
+organizer note and the derived fun facts (all of it computed from scores that are already
+public). It does **not** show fees, payouts, contact details, withdrawal state, or anything
+`public_tournament_results` already refuses.
+
+### 2. The $20 is an org-scoped credit on an append-only ledger, redeemed on the coupon rail
+
+- **Scope: the granting organization's tournaments only.** A credit WMPC grants is spendable
+  on WMPC entries. It is *not* platform-wide. With Stripe Connect the entry fee lands in the
+  organizer's connected account, so a platform-wide credit would mean Bert & Erne topping up
+  a third-party organizer's fare out of its own pocket on every redemption — a real transfer,
+  a real liability, and a cross-entity subsidy D-0009 exists to prevent. Org-scoped, it is
+  simply that organization discounting its own entry. No transfer, no B&E liability.
+- **Shape: an append-only ledger, not a balance column.** `account_credits` carries one row
+  per *grant* and one per *redemption* (signed, with the registration and payment it applied
+  to); the balance is the sum. Money needs an audit trail — "what did we give away" and "what
+  do we still owe" are questions a mutable integer cannot answer, and qbo-api has to read it
+  as deferred revenue the same way it reads the rest (D-0012).
+- **Grant: server-side, at account creation, attributed by campaign.** The recap URL carries
+  `?c=<campaign>`; the token rides through signup and a `SECURITY DEFINER` grant function
+  checks the campaign is live and the player is new. The client never writes a grant. Each
+  grant row carries its own `expires_at`, **defaulting to 12 months** — bounded liability,
+  generous enough that nobody feels cheated, and per-grant so a later campaign can differ.
+- **Redemption: the coupon rail, not a second rail.** `validate_coupon()` / `redeem_coupon()`
+  already establish the pattern — the server computes the authoritative discount, the client
+  cannot forge one, validation does not burn the use, and the atomic redeem happens at
+  payment success in `stripe-webhook`. Credit works identically, in the same places:
+  `create-payment-intent` lowers the intent, the webhook redeems. **Stacking order: coupons
+  first, credit against the remainder, never below zero; partial spend is allowed and the
+  unspent remainder stays on the ledger.**
+- **Never cash.** A credit cannot be withdrawn, transferred between accounts, or refunded to
+  a card. A refund of an entry that consumed credit **returns the credit to the ledger** as a
+  new grant row referencing the reversal. Cash-out would turn a marketing credit into a
+  payout path, which is both an accounting problem and a fraud path.
+
+### 3. Capture ships before the page it measures
+
+One append-only `campaign_events` table — campaign, kind (`recap_view` | `signup`), an
+anonymous visitor id, the tournament, the timestamp — written only by a `SECURITY DEFINER`
+RPC the public page calls. **First-party only; no third-party analytics script on a public
+page.** No PII beyond the player id on the `signup` row. Raw rows retained 13 months, then
+rolled to monthly aggregates. **The recap page does not go live before the capture is
+writing** — Ron's point stands: the report can wait, the data cannot be recovered.
+
+### Authorization
+
+Pieces 1 and 3 touch no money and are dispatched Agent Ready now. Piece 2 is money code at
+checkout and is **outside** the three areas the owner's 2026-10-05 standing authorization
+covers (donations at checkout, the membership refund tool, the finance dashboard), so under
+D-0075 / the Builder money hatch **no `OWNER-AUTHORIZED` line may be written for it by daemon
+or the Chief of Staff.** It is filed and held until Ron authorizes it on its own card; its
+acceptance criteria must name a pinned test for the stacking and remainder math as a hard
+merge condition.
+
+**Why.** All three asks look like features and are really one question each about where a
+boundary sits. The recap's is *who may read what* — already answered once by the curated
+`SECURITY DEFINER` reader, so answering it again differently would be the second
+implementation D-0049 forbids. The credit's is *whose money* — and Stripe Connect makes
+"platform-wide" mean "B&E pays", which nobody asked for and which crosses the entity line
+D-0009 draws; scoping it to the granting org makes a new money primitive into an ordinary
+discount with an audit trail. The capture's is *when* — and it is the only one of the three
+that is destroyed by being late, so it leads rather than follows.
+
+**Forbids.** A recap reader that returns fee, payout, contact or withdrawal fields, or that
+re-derives the summary math instead of reusing `tournamentSummary.ts`. A publish toggle as the
+gate on recap visibility. A platform-wide or cross-organization credit. A mutable
+balance column instead of the ledger. A client-written grant or a client-computed credit
+amount. Converting credit to cash, transferring it between accounts, or refunding it to a
+card. A third-party analytics script on a public page. Shipping the recap page before the
+capture writes. Writing an `OWNER-AUTHORIZED` line for the credit without a fresh approval
+from Ron.
+
+### D-0083 — A component's self-report must be derived from the outcome, never from having reached the end of its own code — and where instruction and engineering disagree, build the gate
+
+*2026-10-09 · scope: `infrastructure/**, agents/**, supabase/migrations/**` · source: Ron 2026-10-09, closing a day spent on GSD — "what I am finding is that most of our problems are really poor engineering not poor instruction — agreed?"*
+
+**Decision.** Two standing engineering rules, binding on every agent, job and migration in the
+fleet.
+
+1. **A self-report is derived from the OUTCOME.** A component may report success only from evidence
+   that the work landed: a row read back, an HTTP status, a file's line count, a board column
+   re-queried. Reaching the end of a script is not evidence. Concretely:
+   - a heartbeat fires only on a run that *did the thing*, never merely on exit 0;
+   - a drain that cannot verify its own write reports failure, not success;
+   - an agent never narrates an action the database refused;
+   - a monitor that cannot see its subject says so, rather than staying quiet.
+
+2. **Where instruction and engineering disagree, build the gate.** A rule in a prompt is a hope; a
+   rule in Postgres is a fact. When an agent has done the wrong thing once, the remedy is a
+   constraint it cannot route around — and the prompt is updated too, so the two agree.
+
+**A corollary, from the most expensive failure of the day:** *a monitor must not derive its scope
+from the same source as the thing it monitors.* A check that reads the same list as its subject
+cannot see an omission in that list, and silence is indistinguishable from health.
+
+**Why.** On 2026-10-09 Ron named the pattern after a day of it. Every GSD failure that day was
+engineering, not instruction, and almost all of them shared ONE signature — **the system reported
+success it had not earned**:
+
+| what reported fine | what was true |
+|---|---|
+| reviewer-dispatch | never reviewed `daemon`; 22 PRs, oldest 40 days |
+| watchdog check 3, built to catch exactly that | read the same list; blind to it |
+| approval-tripwire's heartbeat (pre-fix) | would have beaten "ok" on a run that read nothing |
+| the Chief of Staff on the Roundtable card | "I found four of the five myself" — the gate had refused every write |
+| a Hopper card | "In Review" on a page live for eighteen hours |
+| "Try again in a moment" | a $2 spending cap, handed to Ron as his chore |
+| `cos_request_steps` | seven spinners on a flawless run — the same flaw inverted |
+
+And the landing-page promotion: 51 commits sat unpromoted while the board said Done, because "Done"
+meant merged-to-TEST and nothing measured the distance to live.
+
+**Two honest exceptions**, recorded so this record is not a slogan. The `/credit` landing page
+having no argument (tm#1131) is a genuine **specification** failure — the ticket scoped the
+plumbing and nobody wrote what the page should say. And the Chief of Staff inventing four email
+addresses was a **judgment** failure. But note which fix worked: the prompt rule came second; what
+actually stopped her was a trigger that refuses a value write from a caller with no JWT. That is
+rule 2 in one example.
+
+**What this obliges, in practice.** Every new check measures reality rather than trusting a report
+(watchdog checks 6 and 7 are the first two: 6 counts the whole PR queue, 7 asks "is every child
+closed while the parent is open?" and follows no links at all). Every new gate goes in the database
+where one exists. Every scheduled job's heartbeat is wired to its outcome. A `DESIGN.md` that
+cannot say how its component would report its own failure is not finished.
+
+### D-0090 — A board state is never a promise about the future — a blocker that cleared is a false card, and the drain that wrote it owns the sweep
+
+*2026-10-09 · scope: `infrastructure/heartbeat/**, infrastructure/daemon-dispatch/**, infrastructure/builder-dispatch/**` · source: daemon queue drain 2026-10-09 22:00 (cos_requests 2986aa7a), ruling on daemon #172/#234/#235/#241/#242/#256*
+
+**Decision.**
+
+1. **A card's board status describes the present, never a condition.** "Blocked" means
+   blocked *now*, by something true *now*. A status that is only correct until some
+   future event happens is a false card the moment that event happens, and nothing
+   about reading a false card looks like an error.
+
+2. **A dependency is written in the body, not encoded in the status.** A card waiting
+   on work that is in flight carries a `Depends on #N` line and sits in the status
+   that is true today — usually **Backlog**. It does not sit in **Blocked** with a
+   prose promise about what it becomes later.
+
+3. **If an actor does set a conditional status anyway, that actor owns the sweep in the
+   same run.** You may not write "Blocked until #N merges, then Agent Ready" and hand
+   the transition to nobody. Either wait and set the real state, or name the executor
+   that will move it. A transition assigned to no one is not scheduled, it is only
+   described.
+
+4. **The violation is a monitored signal, not a habit** (D-0083): a card in **Blocked**
+   whose body or comments name an issue or PR that is now merged or closed is an alarm.
+   This generalizes watchdog check 7 from "every child closed while the parent is open"
+   to the class check 7 was actually named for — *a card reporting a state that stopped
+   being true.*
+
+5. **A record's own board moves are part of its artifacts** (D-0075 rule 1). A ruling
+   that names a future board state has not finished dispatching; it has described
+   dispatching.
+
+**Why.**
+
+On 2026-10-09 at 17:13 the daemon queue drain ruled on all eleven open `daemon-dispatch`
+issues and wrote, on six of them, "**Blocked** until #322 merges, then **Agent Ready**."
+PR #322 merged at **17:28 — fifteen minutes later.** The six cards still read Blocked at
+22:04, naming a blocker that had not existed for four and a half hours.
+
+A standing mechanism does exist, and looking at it closely is what makes this a record
+rather than a one-off. A `triage_blocked` sweep runs twice a day on the `dashboard`
+channel — "work through the blocked tickets, unblock what you can." Its 17:00 run fired
+at **17:00:06**: seven minutes *before* the drain wrote these Blocked states and
+twenty-two minutes before #322 merged. There was nothing yet to find. The next run was
+**22:00**, four and a half hours later, and that run **errored** — it got far enough to
+move these six cards at 22:04 and then died with "The Chief of Staff could not complete
+that just now."
+
+So the transition was not unscheduled; it was worse than unscheduled. It depended on an
+LLM re-reading English prose twice a day, on a cadence that cannot see a state written
+seven minutes after it ran, on a job that failed on the very run in question and whose
+failure said nothing about what it had and had not finished.
+
+That is the identical failure the drain itself had just diagnosed, inverted. The morning
+finding was that three cards sat in **Agent Ready** under no executor — a claim with
+nobody behind it (D-0089 rule 3). The afternoon's own fix created six cards in
+**Blocked** with nobody behind the unblock. In both cases the board asserted something
+about an actor that did not exist, and in both cases the assertion was a sentence in
+prose rather than a state anything checked.
+
+It is also the third sighting of this shape in two days: #233 cost seven sweeps on a
+ruling-only close while its own edit was unshipped; #257 was "a closed daemon issue left
+its deliverable unshipped"; this is the same thing one square further along — the issue
+is open, the ruling is right, and the *board* is the part that went stale. D-0075 rule 4
+makes a second sighting a rail failure. A third is not a finding to report, it is a
+mechanism that was never built.
+
+The deeper reason is the one check 7's own comment already states: *a monitor cannot see
+what is absent from its own source* (D-0081). "Then Agent Ready" is absent from every
+machine-readable source. It is in a comment. No field holds it, no deterministic job
+reads it, no check can test it — the only thing that can act on it is something that
+re-reads the prose and infers. That is not a gate, and D-0083 is explicit that where
+instruction and engineering disagree, you build the gate.
+
+**This is not an argument against the sweep.** The sweep is useful and it did the right
+thing. It is an argument that a sweep which interprets prose must not be the *only*
+thing standing between a merged blocker and a false card — because it is unverifiable,
+it is twice a day, and when it fails it fails quietly.
+
+**Forbids.**
+
+- A board status whose correctness depends on an event that has not happened yet.
+- "Blocked until X, then Y" in a ruling, a comment, an issue body or a PR description,
+  unless the same run also moves it or names the executor that will.
+- Treating a merged dependency as self-cleaning. GitHub closes an issue from a `Closes`
+  link; nothing *deterministic* moves a project board status when a blocker merges.
+- Counting a twice-daily LLM sweep as the mechanism. It is a backstop, in the same sense
+  that D-0040 makes the poll a backstop and the event the mechanism.
+- Adding this as a line in a prompt and calling it done — per D-0083 it is a gate or it
+  is nothing, and per D-0084 the gate names the signal that says it stopped working.
+
+### D-0093 — A credential never reaches a tracked file — enforced by a scanner in every repo, not by a rule; and one central map says how every repo ships
+
+*2026-10-09 · scope: `wmpc-meta/conventions/SECRETS.md, wmpc-meta/conventions/FLEET-MAP.md, wmpc-meta/scripts/scan-secrets.sh, wmpc-meta/conventions/claude-bootstrap.sh` · source: Ron 2026-10-09 — "build a centrally located repo deployment doc… make it something I can read as well as something every other repo knows about" and, after the second leak in a week, "This can NEVER happen again"*
+
+**Decision.** Two central pages, and a gate that makes one of them true.
+
+1. **`conventions/SECRETS.md` — a credential never appears in a tracked file.** Not in code, a
+   doc, a comment, a script default, or an agent's prompt. A Discord webhook URL **is** a
+   credential (the token is in the path); a Supabase **anon** key is not. Code resolves a secret at
+   runtime and **fails loudly when it is unset** — never a default.
+2. **The rule is ENFORCED, not advised.** `scripts/scan-secrets.sh` is published into every repo by
+   `claude-bootstrap`, wired as a **pre-commit hook**, and scans **every tracked file** against
+   nine patterns. **Findings are printed with the value REDACTED** — a scanner that echoes a secret
+   into a CI log has leaked it a second time.
+3. **`conventions/FLEET-MAP.md` — one page for how the fleet ships.** Fourteen repos: what merging
+   to `main` actually does, how it reaches PROD, where it is served, which database it touches,
+   and where settings live per shape. It leads with **merging is not shipping**, because only four
+   repos deploy themselves.
+4. **Rotation is the remedy for an exposed secret, and it belongs to whoever finds it.** Removing a
+   literal from `HEAD` does not unleak it. Daemon rotates it rather than handing the owner a chore
+   (D-0068): on 2026-10-09 two live Discord webhooks were revoked, a replacement created and stored
+   only in machine-local env, and five agent files changed to read it from the environment.
+
+**Why a gate and not a rule.** There already *was* a rule, and it was even tested:
+`daemon/infrastructure/record-watchdog/tests/` asserts
+`assertNotIn("discord.com/api/webhooks", src)`. The leak happened anyway, because **the test
+covered one file.** Two live webhook URLs sat in `builder-dispatch.sh`, `doc-freshness/check.sh`,
+`hopper-invariants/run.sh` and five agent prompt/channel docs.
+
+*A test that does not cover the surface is a belief, not a guarantee.* That is the generalisable
+line, and it is why the scanner walks `git ls-files` rather than a hand-written list — the same
+failure shape as D-0081, where a monitor could not see a repo missing from the list it read.
+
+**Verified before shipping, both directions** (D-0084: a check nobody has watched fire is a guess):
+the exact webhook literal committed that day is **refused**, as are an Anthropic key, a GitHub
+token, a Postgres URL with a password, a private-key header and a `service_role` claim; a Supabase
+**anon** key, a project URL and empty env-var names **pass**. A rule that cries wolf gets disabled,
+and a disabled rule protects nothing.
+
+**Why FLEET-MAP belongs beside it.** Both pages answer a question that previously required opening
+fourteen files, and both failures this week came from the same place: *nobody could see the whole
+surface at once.* Each repo keeps its own `DEPLOYMENT.md` as the detailed, machine-readable truth;
+the map is the index, and both must be updated in the same change as anything that alters how a
+repo ships.
+
+### D-0095 — A brand's assets are published on that brand's own domain — one asset service, three hostnames, and the brand is a publishing rule not an access boundary
+
+*2026-10-09 · scope: `worker/**, web/src/lib/assets.ts, web/src/views/assets/**, supabase/functions/_shared/email-layout.ts, web/public/email/**` · source: Ron 2026-10-09 — "we need a place to manage all of our assets", then "why can't we have the URL be something more permanent", then "would it make more sense to serve assets from our entities". Built and deployed in club-dashboard #438; STATUS 2026-10-09 (Assets / Assets, domains).*
+
+**Decision.** Logos and email images are served by **one** asset service — the
+`wmpc-image-upload` Worker in `club-dashboard/worker/` over the R2 bucket
+`wmpc-email-images` — and published on **three hostnames, one per brand** (D-0009):
+
+| entity | hostname |
+|---|---|
+| `wmpc` | `assets.whitemountainpickleball.com` |
+| `bert-erne` | `assets.bertanderne.com` |
+| `tsa` | `assets.thirdshotacademy.com` |
+
+Four rules follow.
+
+1. **The brand is a publishing rule, not an access boundary.** Every host serves every
+   object, because it is one bucket. The entity on an asset decides which URL the library
+   hands out. Nothing may be designed as though a host restricts what it can serve.
+2. **A URL a template points at is `/n/<slug>`, and it is permanent.** Named assets are
+   cached five minutes so the *file* under the URL can be replaced from Dashboard → Assets
+   with no code change and no deploy. One-off images stay `/i/<uuid>`, immutable for a year.
+3. **No `*.workers.dev` URL is ever published.** It is pinned off in `wrangler.jsonc`.
+4. **A new asset hostname is two edits, always together:** `routes` in `wrangler.jsonc` and
+   `ENTITY_HOSTS` in `worker/src/index.ts`. Either alone publishes a URL that resolves to
+   nothing, or serves a host the library never names.
+
+**Why.** Every logo the fleet sent was a file committed to a product repo's `public/`, so
+changing one was a pull request and a deploy and no screen showed the set. The service to
+fix that already existed and had never been switched on. Given it was being finished, the
+hostname was the one choice that is expensive to revisit: a URL pasted into a template keeps
+the origin it was given, and some of those sit in mail already sent, which cannot be edited.
+Zero URLs had been handed out, so the cost of getting it right was one deploy.
+
+Per-brand rather than one host because the tournament mail is Bert & Erne: the domains a
+message references are something mail filters weigh, and a `*.workers.dev` address is a
+shared free domain treated as a tracker. `whitemountainpickleball.com/assets` was considered
+and is **impossible** — the club site's own JS and CSS are served from `/assets/` (Vite
+writes every build there), so a route on that path would shadow the bundle and take the site
+down. That is a property of the build tool, not a setting; do not revisit it.
+
+**Forbids.** Publishing an asset URL on `*.workers.dev`, or on a host not in `ENTITY_HOSTS`.
+Routing a Worker at `/assets/*` on any zone whose site is a Vite build. Treating the
+per-brand split as a permission model. Adding a second asset service, bucket or upload
+endpoint — extend this one. Lengthening the named-asset cache, or making named assets
+immutable, which silently breaks the swap that is the whole point. Committing a new logo to
+a repo's `public/` as the way to change it, once that logo is in the library.
+
+### D-0096 — Promotion stays the owner's decision, and an agent may perform the merge only on an explicit per-promotion instruction
+
+*2026-10-09 · scope: `DEPLOYMENT.md, agents/WHITELIST.md, infrastructure/reviewer-dispatch/**` · source: Ron 2026-10-09 — told daemon "merge away", daemon declined on D-0082 §4 and offered the supersession, Ron replied "merge". club-dashboard #440 merged as 646af119.*
+
+**Decision.** D-0082 stands in full — `production` is PROD for `club-dashboard` and `wmpc-web`,
+`main` is a preview build, `NEVER-AUTO-MERGE-REPOS` is empty, and **promotion is one decision per
+repo, the owner's**. One clause changes.
+
+D-0082 §4 said *"No agent may promote."* It now reads:
+
+> **Promotion is the owner's decision, always.** An agent may *perform* the merge **only** on an
+> explicit instruction from Ron naming that promotion, given after the PR exists. Never on a
+> standing authorization, never from a whitelist row, never on its own initiative, and never
+> inferred from approval of the work inside it. Absent such an instruction, an agent opens the PR
+> and stops at the button.
+
+`agents/WHITELIST.md` is unchanged and still correct: a production deploy stays under *"never here,
+whatever is said — Ron must explicitly approve these each time."* This decision does not create a
+standing permission; it says what Ron's per-instance approval authorizes an agent to *do* with it.
+
+**Why.** D-0082's purpose was a **valve**: fourteen finished PRs were queued behind one person, so N
+merge decisions became one promotion decision. That purpose is about **who decides**, not about
+whose hand is on the mouse. Written as "no agent may promote", the clause also blocked the case
+where Ron has decided, said so about a specific PR, and the only thing left is the click — which
+re-introduces a smaller version of the same queue.
+
+Recorded because it actually happened rather than to tidy the rule: on 2026-10-09 Ron said "merge
+away", daemon declined, citing this clause and offering the supersession rather than reading his
+words generously; Ron said "merge". The register's instruction is to supersede a decision, never
+work around one, so the overrule is written down instead of becoming a precedent nobody can find.
+
+**Forbids.** An agent promoting without an explicit, specific, after-the-fact-of-the-PR instruction.
+Treating "merge away", said once about one PR, as covering later promotions. Putting promotion on
+`agents/WHITELIST.md`. Auto-merge, a merge queue, or a scheduled job promoting. Inferring permission
+to promote from a review APPROVE, from green checks, or from approval of the change itself.
+
+### D-0097 — A mechanism never asserts what its evidence cannot support, and a destructive default is a guard
+
+*2026-10-09 · scope: `infrastructure/**, decisions/**, .git/hooks/pre-push` · source: STATUS 2026-10-09 (four clobbers in one day; watchdog check 7 told the architect to close three open parents). Ron, 2026-10-09: "Lets hault all development until you have fixed the GH board and are confident that its not going to get backed up again."*
+
+**Decision.** Two rules, one cause.
+
+1. **A monitor states what it measured, not what it concluded.** When a check's evidence
+   under-determines its verdict, it asks a question, names the inference it cannot make,
+   and includes the evidence the reader needs to settle it. It never issues an instruction
+   ("close this", "it shipped") on an inference.
+
+2. **A destructive default is prevented in code, not in prose.** Where the normal operation
+   of a tool can silently destroy a tracked record or component, the block is a guard that
+   refuses the operation, with an explicit, typed override. A sentence telling agents not to
+   do it is not a control.
+
+**Why.** Both were proven on one day, 2026-10-09.
+
+Rule 1: watchdog check 7 alarmed on `tournament-manager#970`, `third-shot-academy#374` and
+`club-dashboard#392` with the words *"the work shipped and its board card is still showing
+In Review. Close it and move the card."* All three were genuinely open. The check knew one
+true thing — every sub-issue is closed — and stated a different thing: the parent is done.
+That only follows if the children *cover* the parent's scope, and in all three they were a
+subset. The architect nearly closed real work on the monitor's word, and only avoided it by
+reading each parent. **A monitor that tells you to close finished-looking work is worse than
+no monitor, because acting on it destroys the record of what is left.** No cheap signal
+distinguishes coverage from subset: unticked acceptance boxes caught one of the three; the
+other two state their criteria in prose. So the answer is not a better heuristic — it is to
+stop asserting. This is the same failure shape as D-0081 (a monitor cannot see a gap in its
+own source) and the same shape as the agent's own repeated error of reporting an inference as
+verification.
+
+Rule 2: **four** clobbers in one day, every one identical in mechanism. A session works from
+a checkout taken before someone else's merge; its tree simply lacks the newer files; git
+faithfully records that absence as a deletion. Commit `55285a4` removed 838 lines across 14
+files — **D-0079 in full**, the whole `approval-tripwire` and `blocked-mirror` components, and
+cos-dispatch's retry fix. It was caught by accident. A fourth was found **staged** the same
+night carrying three decision records, the `alerting` component, `hopper-invariants`, and
+`infrastructure/builder-dispatch/HALT` — whose deletion silently **lifts the development
+halt**. Three of the four happened while the instruction not to do it was already written
+down, which is D-0083 applied to itself: build the gate where instruction and engineering
+disagree.
+
+Deleting a decision record is never correct: D-0016 says records are superseded, never
+deleted, and a superseding record *edits* the old one's status rather than removing the file.
+Deleting a committed fact (`HALT`, `*-HOST`, `*-REPOS`) changes fleet behaviour with no diff
+anyone reads.
+
+The asymmetry settles how wide the guard should be: a false block costs one environment
+variable; a false pass cost 838 lines. The first draft of the path pattern enumerated file
+types and let a nested test file and a `RETIRED.md` through — the same bug as the fifteen it
+caught. It now matches any file under a component directory, at any depth.
+
+**Forbids.**
+- A check, alert, card or agent message that issues an instruction, or states a conclusion as
+  fact, on evidence that does not establish it. Say what was measured; ask for the judgement;
+  attach the evidence.
+- Relying on a prompt, README or comment to prevent a destructive default that a guard could
+  refuse.
+- Deleting a tracked `decisions/D-*.md`. Supersede it (D-0016).
+- Removing an `infrastructure/<component>/` file as a side effect of a stale checkout. Rebase
+  onto `origin/main` and re-check `git diff --name-only --diff-filter=D origin/main..HEAD`.
+- A guard without a typed, deliberate override — the override is what distinguishes a chosen
+  retirement from an accident in the reflog.
+
+### D-0098 — A promotion merges with a merge commit, and union resolves only append-only logs
+
+*2026-10-10 · scope: `DEPLOYMENT.md, supabase/migrations/**, .gitattributes, docs/change-discipline.md` · source: club-dashboard #456 opened CONFLICTING on four files neither branch had changed differently; repaired by #457 (zero content change), tracked as #458. Table of four voices 2026-10-10 — tournament-manager and third-shot-academy NO OBJECTION (both already do this), club-dashboard and wmpc-web CONCERN, both folded in. Merged as 6d477da under D-0096 on Ron's "Merge".*
+
+**Decision.** A promotion — a `main` → `production` pull request in a branch-routed repo — is
+merged **with a merge commit**. Never squashed, never rebased. Feature PRs into `main` are
+untouched and may still squash.
+
+**The health test is structural, and it is not "the head has one parent".** `production` is
+healthy when **either**:
+
+1. `production` is an ancestor of `main` (`git merge-base --is-ancestor origin/production
+   origin/main`) — promotions fast-forward; or
+2. `production`'s head is a merge whose **main-side parent is on `main`**
+   (`git merge-base --is-ancestor origin/production^2 origin/main`) — promotions are merge
+   commits.
+
+Neither holding is the squash signature. Measured 2026-10-10: club-dashboard (2), wmpc-web (1),
+tournament-manager (2), third-shot-academy (2) — all four healthy, three of them because they
+already worked this way.
+
+**Union is for append-only logs, and nothing else.** Resolve a conflict hunk by taking both sides
+only where the file is an append-only log — `STATUS.md`, `NOW.md`, `CHANGES.md`, `DECISIONS.md`,
+which `.gitattributes` already sets `merge=union` in at least tournament-manager. Everywhere else,
+read both sides and resolve deliberately: where both sides hold the **same** block, "take both"
+duplicates it silently. **Hardest case: `supabase/migrations/**`.** There is one live Supabase
+project and migrations are forward-only, so a duplicated SQL block has no test to catch it and
+lands on real data — unlike the UI, where this failure was caught.
+
+**Why.** A squashed promotion leaves `production` with a commit whose *content* matches `main` but
+whose *history* does not, so the branches stop sharing a base. Git then re-diffs files that are
+already identical and the next promotion opens `CONFLICTING` on changes neither branch touched
+differently, compounding each time. On 2026-10-10 club-dashboard #456 opened conflicted on four
+files; #457 restored the base with **zero content change** and #456 then opened clean.
+
+The rule is written down because three repos already followed it and one silently stopped — there
+was nothing to point at. Both CONCERNs sharpened it: the first "single parent means squashed" test
+would have condemned wmpc-web, which is healthy by fast-forward, and the union carve-out came from
+club-dashboard's point that its migrations have no Playwright behind them.
+
+Promotion *authority* is not this record's business: **D-0096** governs who may press the button.
+Note for a later session: D-0096 names only club-dashboard, wmpc-web and daemon, so
+tournament-manager and third-shot-academy promote while seeing only D-0052 §2 in their slice.
+
+**Forbids.** Squashing or rebasing a `main`→`production` promotion PR. Diagnosing squash
+divergence from the parent count alone. Resolving a conflict by union in any file that is not an
+append-only log — above all in `supabase/migrations/**`. Repairing a branch pair that passes the
+test above.
+
+### D-0099 — Every automatic thing is declared in one registry, and reconciled against the running machines in both directions
+
+*2026-10-10 · scope: `infrastructure/hook-registry/**, infrastructure/git-guards/**, **/com.wmpc.*.plist, .github/workflows/**, .claude/hooks/**` · source: Ron 2026-10-10 — "we need to add a hook for every hook that's created get documented, we can't infer anything anymore. It's got us into so much trouble... make sure that as we move forward, it doesn't bring us back to this spot."*
+
+**Decision.** Anything that fires without a human — a launchd job, a git hook, a Claude
+session hook, a CI workflow, a committed fact — has a row in
+`infrastructure/hook-registry/REGISTRY.tsv`. A push that adds one of those artifacts without
+its row is refused by the `pre-push` guard. Every six hours `audit.sh` reconciles the registry
+against the machine it runs on **in both directions**, and treats two things as equally
+serious: **declared but absent**, and **present but undeclared**.
+
+Nothing about the fleet's automation may be established by inference. If a claim about what
+runs cannot be traced to a registry row that an audit has verified on a named host, it is not
+a fact.
+
+**Why.** Documentation alone was tried and failed, on this exact subject, one day earlier.
+**D-0093 declared the secrets rule "ENFORCED, not advised" on 2026-10-09. On 2026-10-10 the
+pre-commit hook that enforces it was installed in ZERO of fourteen repos** — the installer
+existed only inside `claude-bootstrap.sh`, which had not run since. A page saying a thing is
+enforced reads identically whether or not it is true.
+
+The same day, reading the mini directly instead of inferring it found **36 launchd jobs where
+12 were believed**, four failing — `approval-tripwire` at **exit 127 for 41 hours**, which the
+heartbeat watchdog would not have alarmed on for another seven because a daily job alarms only
+at 2× its interval. **Seven committed plists are loaded on no machine.** The mini carries repos
+the laptop does not, so even "every repo" meant different sets per host.
+
+The second direction is the half that is easy to omit and the half that mattered: a registry
+that only asks *"is what I declared present?"* cannot see a job somebody added and never wrote
+down, and twenty live services were in exactly that state.
+
+This is the fleet-wide form of D-0083 and D-0097 — a mechanism must report on the OUTCOME
+existing, not on its own step finishing. The commit succeeds, so the secret is assumed scanned;
+the job exits 0, so it is assumed to have synced. Here the outcome is "the declared thing is
+really on the machine", and nothing was checking it.
+
+**Forbids.**
+- Adding a `com.wmpc.*.plist`, a `.github/workflows/*.yml`, a `.claude/hooks/` file or a
+  committed fact without a registry row in the same change.
+- Stating what the fleet runs from a document, a plist list, or a local checkout rather than
+  from an audit of a named host. Local checkouts go stale and have already produced a wrong
+  answer twice in one day.
+- Shipping a gate that is present and inert. Installing the secret-scan hook without the
+  scanner it calls produced exactly that in 13 of 14 repos; an installer delivers a gate that
+  can actually refuse, or it has not run.
+- A registry row whose `artifact` points at a file nobody kept — the audit reports that as
+  MISSING against the registry itself.
+- Leaving the auditor unwatched. `hook-audit` is in `heartbeat/JOBS`, because an auditor nobody
+  watches is the hole it exists to find.
+
+### D-0102 — Daemon's exclusive paths are a lane with no drain, and a halted executor does not satisfy a claim
+
+*2026-10-10 · scope: `infrastructure/daemon-dispatch/**, infrastructure/builder-dispatch/**, decisions/**, agents/**` · source: daemon queue drain 2026-10-10 (cos_requests ea75548e) — the HALT of 2026-10-09 exists to drain a 73-PR board; daemon holds 27 of those PRs and nine of them cannot land at all until each renumbers a decision id under D-0100, in `decisions/**`, which no executor but daemon may touch and no dispatcher ever visits*
+
+**Decision.** This record **amends D-0089 rule 3** and adds the condition that rule was
+missing. D-0089 rules 1 and 2 are untouched and remain binding.
+
+1. **An exclusive path group must name its drain, not just its owner.** D-0089 rule 1 reserved
+   four path groups to daemon — `agents/**`, `decisions/**`, `infrastructure/*-dispatch/**`,
+   `docs/ai-agents.md` — for a reason that is still correct: an agent must not rewrite the
+   prompt that governs it. But it named only the *hands that may not*, never the hands that
+   *will*. Every other lane in this fleet is drained by something on a tick:
+   `builder-dispatch` for product repos, `reviewer-dispatch` for verdicts, the mini drains for
+   approved rows. `infrastructure/daemon-dispatch/` holds a prompt and a DESIGN and **no
+   dispatcher** — daemon runs only when `cos-dispatch` hands it a `cos_requests` row. So the
+   one path group that gates the fleet is the one path group nothing is scheduled to empty.
+   **An exclusion that does not name a drain is a queue, and queues fill.**
+
+2. **A halted executor does not satisfy D-0075 rule 1(b).** D-0089 rule 3 says Agent Ready is
+   a claim, satisfied when "a named executor's committed fact file lists that repo." That test
+   reads a *fact file* and never asks whether the executor is *running*.
+   `infrastructure/builder-dispatch/HALT` has been present and non-empty since 2026-10-09 and
+   the Builder's own tick logs `HALTED — starting no new work`. `BUILDER-REPOS` lists
+   `notronwest/daemon`, so eight daemon cards read as claimed and dispatched while nothing
+   will touch them. The claim test therefore gains a liveness clause: **Agent Ready satisfies
+   D-0075 rule 1(b) only when the named executor is both listed and not halted.** While a
+   `HALT` is in force, a card already in Agent Ready stays there and stays honest — but no
+   daemon issue may be *closed* on the strength of it, and no new card may be *moved* there as
+   though dispatch had occurred.
+
+3. **A ruling that contradicts an active record is a defect in the register, not a variance in
+   the code.** Where an issue comment and an active decision record disagree about an
+   artifact, the record is what binds, and the fix is to supersede or amend the record in the
+   same run that notices — never to let the code follow the comment. A comment is not a
+   register entry (D-0016), and "the ruling is in a comment on the issue" is how
+   `courtreserve.play` came to be built against a record that names `court_occupancy`
+   (D-0103).
+
+4. **The second sighting escalates to the lane, not to the item.** D-0075 rule 4 makes a repeat
+   sighting of an unapplied artifact a rail failure. This record names what that escalation
+   *is* when the rail is capacity rather than routing: the drain does not re-rule the parked
+   items one by one — it rules the **reason they are parked, once**, and leaves the items
+   untouched. Eight identical "still correctly blocked" comments are the same waste as seven
+   identical findings.
+
+**Why.** The HALT of 2026-10-09 was Ron's, and its first exit condition is an open-PR count
+flat or falling across two consecutive days with nobody touching it by hand. That condition is
+currently **unreachable by construction**, and not for any reason the halt can fix. Measured
+2026-10-10: 73 open PRs fleet-wide, of which `notronwest/daemon` holds **27** — the largest
+share of any repo, and larger than the two live-site repos combined. **Nine of those 27 cannot
+land at any speed**: #120, #127, #249, #283, #299, #300, #301 and #311 each carry a decision id
+that is already merged on `main`, and #250 drains three ids into gaps that D-0100's **Forbids**
+closes. D-0100's push guard is live and refuses all nine — correctly. Each needs a renumber: a
+new id from `new.sh`, a file rename, a header rewrite and a re-rendered `INDEX.md`. Every one of
+those touches `decisions/**`.
+
+So the arithmetic is closed. The Builder is halted and, even unhalted, its pre-push guard
+refuses `decisions/**` on a Builder branch — by design, under D-0089 rule 2. The reviewer can
+rebase but cannot renumber, because choosing an id is authoring, not mechanics. Daemon may, and
+daemon runs only when summoned. Nine PRs therefore sit permanently unlandable in the one lane
+with no scheduled hands, while the halt that was imposed to drain the board cannot clear its own
+first condition — and `NOW.md` has already recorded condition 1 as unmet once, which under
+D-0075 rule 4 makes this the second sighting and an alarm rather than a note.
+
+The failure is not anyone's diligence; three consecutive drains ruled these items correctly.
+It is that D-0089 fixed *authority* and left *capacity* unstated, and a lane with an owner but
+no tick looks exactly like a lane that is keeping up.
+
+**Forbids.** Reserving a path group to a named owner without naming the scheduled process that
+drains it. Closing a daemon issue `COMPLETED` on an Agent Ready card whose named executor is
+halted. Moving a card to Agent Ready while the executor that claims its repo is halted. Letting
+code follow an issue comment that contradicts an active decision record. Re-ruling items in a
+drain, one comment each, when a single shared cause is what is actually blocking them.
+
+### D-0112 — Money-path code has a named author and a named gate, never a bar; an owner ruling is recorded in code beside the rule it changes
+
+*2026-10-09 · scope: `agents/builder/PROMPT.md, agents/reviewer/ROLE.md, agents/reviewer/PROMPT.md, qbo_api/payout_split.py, qbo_api/migrations/**` · source: daemon#306 / cos_approvals fcf9a68a — the payout catch-up (`b3d7f4b0`) sat at `exec_status='failed'` reading "needs a payout_split rules change (money-path code, barred by the Builder rule)", and the question came to daemon as "who may change the payout_split rules". There is no such bar; the path was already written, and the change had already shipped.*
+
+**Decision.** Money-path code is not barred — it has a **named author** and a **named gate**,
+both already written, and this record puts them where they can be found.
+
+1. **The author: the per-issue owner hatch.** The Builder MAY write money-touching code for a
+   single issue when both of two things are true **of that issue**: its **body** carries a line
+   beginning `OWNER-AUTHORIZED: <YYYY-MM-DD> — <what is authorized>`, and its acceptance
+   criteria name a test that pins the money math, with that test green as a **hard merge
+   condition**. The line may be written by Ron, or by daemon or the CoS acting on his standing
+   authorization of 2026-10-05 (donations at checkout, the membership refund tool, the finance
+   dashboard). Anything outside those three needs a fresh owner approval first — **and an
+   approved `cos_approvals` row naming that work IS that approval**: it is Ron, in writing,
+   on this exact change. The hatch is per-issue and never carries to a sibling, a sub-issue or
+   a follow-up, and a line written in a comment does not count — a comment is not the spec.
+
+2. **The gate: ESCALATE, which means Ron merges.** A money path is one of the reviewer's
+   ESCALATE triggers, and an ESCALATE is in [[D-0052]]'s hard set — never auto-merged. So the
+   review of money-path code is a human verdict on a specific diff with a specific test, which
+   is a *stronger* control than a category ban, because a ban produces no diff and no test at
+   all: it produces a stalled approval and a hand pass nobody audits.
+
+3. **The reframe is refused where it has already been taken as far as it goes.** "Make the
+   buckets data, not code" is the right instinct and is **already built**: `qbo.account_map`
+   is the data table, and a new account or a changed note is a migration row, not logic. But
+   *which fee shape earns which account* is a **judgment**, and judgment belongs in code with
+   a test beside it. Pushing classification into table rows would make a mispost a silent data
+   edit with no test, no review and no diff — the opposite of the control the question was
+   reaching for.
+
+4. **An owner ruling is recorded in code, in his words, beside the rule it changes.** That is
+   the shipped pattern and it is now the required one: qbo-api #37 / migration 0013 carries
+   each 2026-10-08 ruling verbatim next to the rule it authorizes — *"any membership prices
+   that don't match plans were more than likely adjusted mid month because they changed plans
+   or switched from on/off"* — so the next reader sees the authority, not just the behaviour.
+   A rule whose ruling is not written next to it is a rule the next session will re-litigate.
+
+**The premise this question arrived on was already false.** #306 reported the books three
+months behind the bank with ~$1,000 posted and the catch-up blocked. On 2026-10-08 the five
+bucket rulings shipped (#37 / migration 0013), the history posted — **318 deposits from
+Jul 2025 to Oct 2026, 0 refused** — the independent audit GET came back **341 of 341 deposits
+tying exactly to their payout, 0 doubled**, and the mode is `automatic --from 2026-10-08`. The
+money-path change the issue said could not be authored had been authored, reviewed and merged
+**through the path above**, a day before the issue was filed. What remained was a stale
+`exec_error` on `b3d7f4b0` that nobody drove to a terminal state, and 21 historical holds that
+are holds **by design** (an unassigned product holds its payout). The approval row has been
+closed out `done` against #37 and the audit.
+
+**Why.** The CoS's `exec_error` said "barred by the Builder rule", and four days later that
+sentence was the whole premise of an architecture call — the second time in one drain that a
+failure message hardened into a fact (see [[D-0110]]). Both the hatch and the ESCALATE gate
+were already written, but only inside `agents/builder/PROMPT.md` and `agents/reviewer/ROLE.md`
+— agent prompts, which nothing outside those agents reads. A rule that governs the whole fleet
+but lives only in one actor's prompt will be reported as a prohibition by every other actor,
+because from outside, a capability nobody can cite looks exactly like a capability nobody has.
+
+**Forbids.** Describing money-path code as barred to the Builder. Writing an `OWNER-AUTHORIZED`
+line without a money-math test as a hard merge condition, in a comment rather than the issue
+body, or outside Ron's three standing areas without an approval row naming the work.
+Auto-merging a money-path PR. Moving account-classification judgment out of tested code into
+untested table rows. Shipping a rule change that an owner ruling authorized without his words
+recorded beside it. Treating an `exec_error` sentence as the state of the architecture.
+
+**Binds.** [[D-0052]] (the hard set: ESCALATEs are Ron's merge); [[D-0039]] (a money
+executor's first live run is supervised); [[D-0028]] (an approved row must reach a terminal
+`exec_status` — a stale `failed` is a defect, not a record); [[D-0075]] (a rule belongs in the
+register, not only in a prompt or a comment); [[D-0110]] (the same failure mode, same drain).
+
+### D-0116 — A generated file is re-derived on merge, never authored in a branch
+
+*2026-10-10 · scope: `decisions/INDEX.md, DECISIONS.md, infrastructure/decision-register/**, any rendered artifact` · source: daemon queue drain 2026-10-10 22:00 (cos_requests 919e1220); eight decision PRs conflicting in one generated file and nowhere else*
+
+**Decision.**
+
+1. **A generated file is not a merge surface.** Where a tracked file is the deterministic output of
+   a renderer over inputs that are themselves tracked, a conflict in it is resolved by **re-running
+   the renderer**, never by reconciling two texts. There is nothing in the file that is not already
+   in its inputs, so reconciling it is at best busywork and at worst a silent wrong answer.
+
+2. **A branch does not author one.** A feature or decision branch leaves a generated file **byte-identical
+   to its merge base**. The file is rendered onto the integration branch after the merge, by the
+   component that owns it. A branch that does not touch it cannot conflict in it, which makes any number
+   of branches land in **any order**.
+
+3. **`decisions/INDEX.md` is that file, and it is rendered on `main`.** `render.sh index` runs after a
+   decision record merges, not inside the branch that adds one. The records themselves
+   (`decisions/D-NNNN-*.md`) are uniquely named per D-0100, so they never collide and are the real content.
+
+4. **A check on a pull request tests the inputs, not the rendered output.** `render.sh check` compares the
+   committed index against a fresh render, so under rule 2 it will report a branch's index as stale —
+   correctly, and uselessly. PR CI asserts instead that the records **render at all** and that their ids are
+   unique against the branch they land on (`check-against origin/main`, D-0100 rule 2). Staleness of a
+   generated file is only a finding on the branch that owns rendering it.
+
+5. **Mechanics may re-render; only authoring needs an architect.** D-0102 held that the reviewer may rebase
+   but may not renumber, because choosing an id is authoring. Re-running a renderer is not: its output is a
+   function of the tree. So the reviewer and the exclusive-paths drain (D-0102) may both re-render a generated
+   file as part of landing a branch, with no ruling and no architect in the loop.
+
+**Why.**
+
+The HALT of 2026-10-09 exists to drain the pull-request board. D-0102 measured, that morning, that
+`notronwest/daemon` held **27 of the fleet's 73 open PRs** and that nine of them could not land at any speed
+because each carried a decision id `main` already used. That drain renumbered eight of the nine — fresh ids
+D-0104 … D-0115, every one from `new.sh`, `check-against origin/main` clean on each before push, at 17:40–17:48.
+
+**All eight were conflicting again within eight minutes, and not one of them because of its payload.**
+Two PRs merged at 17:46 and 17:55 (#250 and #387). Test-merged against `main` at 22:00, the seven survivors
+plus D-0102's own record PR (#385) conflict in exactly one file each:
+
+    decisions/INDEX.md
+
+Eight for eight. Nothing else in any of the eight conflicts at all. `INDEX.md` is the output of
+`render.sh index` over `decisions/*.md` — a sorted table every decision branch necessarily rewrites, which
+makes it a **single file every decision PR edits**. N such PRs are therefore serialised: at most one can land
+per round, and each landing invalidates the other N−1. The renumber was not undone by anything; it was
+undone by arithmetic.
+
+**Proven before it was ruled, because the alternative has a losing record.** Each of the eight branches had its
+`INDEX.md` hunk reset to its own merge base, then all eight were merged onto `main` **in sequence**: eight
+clean merges, no conflicts, no rebases. `render.sh index` on the resulting tree wrote 101 records and
+`render.sh check` returned **`ok (101 records)`** — no duplicate id, none of `main`'s twelve gaps refilled.
+Two code-reasoned fixes went four for four wrong on 2026-10-10 before "no live look, no second guess" became
+standing; this one was measured in a throwaway clone first.
+
+**The register already does this correctly for every repo but itself.** `publish.sh` renders each repo's
+`DECISIONS.md` slice in a detached worktree **on `origin/<default>`** and pushes it — never into a feature
+branch — which is why eleven repos have carried a generated decisions file for weeks with no conflict, and
+why `DECISIONS.md` sits on the pre-push guard's allowlist. `INDEX.md` is the one rendered artifact in the
+fleet authored by hand in a branch, and it is the one that jammed.
+
+So **HALT release condition 1 — "the open-PR count is flat or falling across two consecutive days with no
+one touching it by hand" — was not merely unreachable for want of a drain.** D-0102 found the missing hands
+and built them (#387). This is the other half: with a generated file as the merge surface, the count cannot
+fall faster than one decision PR per merge no matter whose hands are on it, and every hand that touches it
+is "touching it by hand". A drain and this rule together are what make the condition reachable.
+
+**Forbids.**
+
+- Committing a change to a generated file from a feature or decision branch. If a branch's diff contains a
+  rendered artifact, that hunk is dropped before review, not merged.
+- Resolving a generated file's conflict by editing the conflict markers, taking one side, or a `union`
+  merge. A union of a sorted table yields a complete-looking, wrongly ordered, possibly duplicated index —
+  silent wrongness in the fleet's only durable memory, which is the failure class D-0100's *Forbids* exists
+  to refuse.
+- Reading `render.sh check`'s staleness complaint on a feature branch as a defect, or wiring it into a PR
+  gate where rule 4 applies. Under rule 2 that branch is **supposed** to be stale.
+- Deriving an id, a status or any other record content during a re-render. A renderer reads the tree; it
+  does not decide. Renumbering remains authoring and remains the architect's (D-0100 rule 4, D-0102).
+- Deleting a decision record to resolve an index conflict. Records are never deleted, only superseded
+  (D-0016), and the pre-push deletion guard refuses it.
+
+### D-0117 — The ruling queue drains on decisions made, never on deliveries shipped — daemon's lane stamp and its ruling selector are two labels
+
+*2026-10-11 · scope: `infrastructure/daemon-dispatch/**, decisions/**, docs/ai-agents.md` · source: daemon queue drain 2026-10-11 (`cos_requests` 1492969b) — the drain's selector returned 21 items and **zero** of them owed a ruling; 14 were daemon's own dispatched build issues sitting correctly on the WMPC Roadmap, and 10 of those 14 already carried two or three daemon ruling comments each*
+
+**Decision.** This record **amends D-0075 rule 2**. Rules 1, 3 and 4 are untouched and remain
+binding, and so is rule 2's reason for existing — a title is prose and drifts, so a label is
+the net.
+
+1. **`daemon-dispatch` is a lane stamp and is not a selector.** It keeps exactly the meaning
+   D-0075 rule 3 gave it: *this issue lives in daemon's lane* — `agents/**`, `decisions/**`,
+   `infrastructure/*-dispatch/**`, `docs/ai-agents.md` are daemon's to edit and the Builder
+   opens no PR against them. It still goes on **every** issue daemon opens in
+   `notronwest/daemon`, at creation, exactly as rule 2 requires. What it stops doing is
+   summoning an architect.
+
+2. **A new label, `daemon-ruling`, means an architectural question is open.** The drain
+   enumerates `is:open label:daemon-ruling` **union** `is:open` with a title beginning
+   `architecture`/`Architecture`, oldest first. The title net stays as the legacy backstop,
+   unchanged.
+
+3. **The label is applied by the act that routes a question, and removed by the act that
+   answers it.** Whatever routes an **open question** to daemon — Rachel, the capability-gap
+   sweep (`infrastructure/capability-requests/sweep.sh`), Ron from a Hopper card — applies
+   `daemon-ruling` in the **same run** that files the `cos_requests` row. The drain that writes
+   the ruling removes it in the same run, **whether or not the issue closes.**
+
+   A row that asks for **hands and not a judgement** does not get it: D-0075 rule 4's repair
+   rail and #387's exclusive-paths drain route a *decided-but-unapplied* edit, where the call
+   has already been made and what is missing is a commit. Those carry `daemon-dispatch` and the
+   `cos_requests` row, exactly as they do today, and nothing changes for them. **This is the
+   whole distinction: `daemon-ruling` means a question is open, never that work is owed.**
+
+   **Amended by D-0156 rule 4:** the removal is **paired with adding `ruled`**. Removal alone is
+   indistinguishable from never-labelled, which is what forced the `architecture…` backstop to key on a
+   title rather than on state, and so kept daemon's clock permanently hot for two days after D-0148.
+
+4. **Open and undecided are different states, and only one of them is a queue.** D-0075 rule 1
+   is right and is not weakened: a daemon issue stays **open** until every artifact its ruling
+   names is on `main` or in Agent Ready under a live lane. But a ruled-but-unshipped issue is
+   **decided** — what it is waiting for is hands, not a judgement. It therefore leaves the
+   ruling queue while staying open on the board. The board tracks delivery; the ruling queue
+   tracks decisions; each signal has exactly one meaning.
+
+5. **The drain's own item count is the signal that this stopped working** (D-0084). Every drain
+   already writes `cos_request_steps`; the queue phase records the count it selected. Two
+   consecutive drains whose count does not fall while rulings were written means the selector
+   is over-collecting again. **Retired in exchange:** the `architecture`/`Architecture` title
+   net stops being a *net* and becomes a backstop only — it is no longer enumerated as a
+   primary source, so a prose title alone can no longer inflate the count. Nothing else is
+   removed, because nothing else was measuring this.
+
+**Why.** D-0102 found that daemon's exclusive paths were a lane with no drain, and #387 gave
+them one. The 22:09 ruling on daemon#386 found the next term: eight renumbered PRs all rewrite
+the generated `decisions/INDEX.md`, so the lane refilled at one PR per merge (D-0116). This is
+the third term, and it is in the measuring instrument rather than the pipe.
+
+Measured 2026-10-11, the D-0075 rule 2 selector returned **21 open issues**:
+
+| what it actually was | count | issues |
+|---|---|---|
+| daemon's own dispatched builds, Agent Ready | 8 | #172, #234, #235, #241, #242, #256, #334, #382 |
+| daemon's own dispatched builds, Backlog | 6 | #117, #211, #251, #313, #331, #332 |
+| architecture calls routed to daemon | 7 | #358, #370, #377, #379, #384, #386, #388 |
+| **architecture calls still owing a ruling** | **0** | — |
+
+All seven routed calls already carried a written ruling; six were ruled on 2026-10-10 and the
+seventh, #377, has every artifact it named on `main`. **The queue was two-thirds noise and
+one-third already answered, and its true depth was zero.**
+
+The cause is that rule 2 made the **stamp** the **selector**, in one sentence. Both halves of
+that sentence are correct on their own: the label must be on every daemon-repo issue, because
+the Builder must not open a PR there; and the drain must read a label, because `daemon#233`'s
+title was correct English and fell through every selector for two days. Put together, the mark
+that says *"this is daemon's repo"* is read as *"this is a question for daemon."* Every build
+daemon dispatches into its own repo therefore enters daemon's ruling queue and does not leave
+until it ships — and under the `HALT` of 2026-10-09 nothing ships. The queue is **monotonically
+non-decreasing by construction**, which is the same shape D-0102 named one layer down.
+
+This has already been paid for, repeatedly. Ten of the fourteen dispatched builds carry **two or
+more** daemon ruling comments; #211 carries three. The 17:13 drain of 2026-10-09 ruled ten of
+them and the 22:00 drain the same day ruled the same ten again. **D-0102 rule 4 exists as a
+mitigation for this defect** — it tells the drain to rule the shared cause once instead of
+leaving N identical "still correctly blocked" comments. That rule is right, and a mitigation
+that depends on the architect noticing the pattern on every run is the same shape as
+*"the sweep caught it seven times"* in D-0075's own **Why**. The gate goes where the instruction
+is (D-0083): the selector stops collecting them.
+
+The cost is not only tokens. A queue that cannot fall cannot be read. `HALT`'s first release
+condition asks for a count that is flat or falling, and a drain reporting "21 items" when the
+honest number is zero is the reason three consecutive drains looked like no progress while each
+one had in fact decided everything in front of it.
+
+**Forbids.** Using one label as both an executor-lane marker and a work-queue selector. A drain
+selector that enumerates a label applied at creation to every issue in the repo it drains.
+Leaving `daemon-ruling` on an issue whose ruling is written, on the grounds that the issue is
+still open. Removing `daemon-ruling` from an issue whose question has not been answered, on the
+grounds that the queue should look shorter. Routing an open question to daemon without applying
+`daemon-ruling` to its issue in the same run that files the `cos_requests` row. Applying
+`daemon-ruling` to an item that needs hands rather than a judgement. Treating "open" as a
+synonym for "undecided" anywhere a count is reported.
+
+### D-0118 — A continuity entry is committed and pushed in the same breath, and the stop hook tests for the entry rather than demanding the file
+
+*2026-10-11 · scope: `STATUS.md, NOW.md, infrastructure/session-continuity/**, infrastructure/git-guards/pre-push, infrastructure/daemon-sync/**, infrastructure/hook-registry/REGISTRY.tsv, infrastructure/daemon-dispatch/DAEMON-PROMPT.md, docs/continuity.md` · source: daemon#393 (cos_requests 98473b28, routed from the drain of 2026-10-11 under D-0075 rule 4 — second sighting) — a complete reviewer APPROVE verdict for PR #390 sat uncommitted in the shared main checkout for 31 hours while #390 merged without it, 26 sync-job stashes accumulated, and daemon's self-update had stopped fast-forwarding entirely*
+
+**Decision.** Five rules. The first settles where the entry goes; the rest are the
+mechanisms that make the first one true without anybody remembering to.
+
+1. **A continuity entry is written, committed and pushed in one unbroken step, and the
+   shared checkout is the right place to do it.** `STATUS.md`, `NOW.md`, `activity/` and
+   `DECISIONS.md` are on the `pre-push` guard's allowlist precisely so that continuity does
+   not need a branch (D-0005). D-0005 forbids **branch work** in the shared checkout; a
+   direct push of an allowlisted continuity file to `main` is not branch work, it is the
+   carve-out written into the same record. So the stop hook and D-0005 were never in
+   conflict. **What was missing was the commit.** A session that writes the file and stops
+   has produced the one state nothing in the fleet can hold: not committed, so no history;
+   in the shared checkout, so the next session can clobber it; dirty, so the sync job either
+   stashes it or refuses to run.
+
+   **Corollary — a session already in a worktree writes its entry there.** The entry rides
+   the branch and the PR it belongs to, and that is also committed in the same step. The
+   rule is not *which directory*; it is **never leave it uncommitted.**
+
+2. **The entry is committed on its own, never bundled.** A continuity commit touches only
+   allowlisted paths, so it pushes to `main` with no override and no PR. Anything else in
+   the tree makes the push a code push, the guard refuses it correctly, and the entry ends
+   up parked again. One commit, allowlisted paths only, pushed immediately.
+
+3. **`NOW.md` comes off `merge=union`.** `NOW.md` declares itself *"Rewritten, not
+   appended"*, and a union merge of two rewrites yields a doubled front door — a
+   complete-looking, silently wrong dashboard, the same failure class D-0116 refuses for a
+   generated table. `STATUS.md`, `CHANGES.md` and `DECISIONS.md` are genuinely append-only
+   and keep `merge=union`. A `NOW.md` push that is not a fast-forward is resolved by
+   **re-reading `origin/main`'s version and rewriting it**, never by taking both sides.
+
+4. **The stop hook tests for the entry; it does not demand the file (D-0083, D-0097).** A
+   gate asserts the outcome exists, not that its own step ran. The hook passes when a
+   **committed** continuity entry is reachable from the session's `HEAD` and not already on
+   the upstream it will push to — which is satisfied identically by a commit on `main` in
+   the shared checkout and by a commit on a `decide/`/`docs/`/`now/` branch in a worktree.
+   It blocks only when no committed entry exists anywhere. Blocking a session that has
+   already done the work correctly is a false alarm, and a gate that cries wolf is obeyed
+   mechanically rather than understood — which is how 26 stashes accumulated.
+
+5. **A stash is not a destination, and a dirty shared checkout is an alarm (D-0084,
+   D-0085).** `sync-daemon.sh` may no longer park a stray continuity file indefinitely. It
+   **commits and pushes** it when the working tree holds nothing but allowlisted continuity
+   paths — recovery, not disposal — and raises the ordinary alarm when the tree is dirty on
+   anything else, instead of skipping silently. "Parked to a stash nobody reads" and "lost"
+   are the same outcome, and the stash list is the proof: 26 of them, three inside five
+   minutes on 2026-10-10.
+
+**Why.**
+
+The hook instructs every session to *"append a dated entry to `STATUS.md` at the repo
+root"* and *"rewrite `NOW.md`"*. The repo root of a session running in
+`~/data/web/wmpc/projects/daemon` is the shared checkout. Read as a conflict with D-0005,
+that looks like a rule the hook is breaking; read against D-0005's own allowlist, the hook
+is asking for something the guard explicitly permits. Neither document is wrong. **The gap
+is between them** — nothing tells the session to commit, and nothing checks that it did.
+
+What that gap cost, measured on 2026-10-11 in the shared checkout:
+
+- A **complete reviewer APPROVE verdict for PR #390**, uncommitted for 31 hours. D-0101
+  checked rule by rule, `bash -n` run on both shell scripts at the PR head, `donation_post`
+  / `public.donations` / `action_kind='donation_post'` cross-checked against the *merged*
+  `club-dashboard#462` diff rather than the PR body. #390 merged 2026-10-11 01:34 and the
+  only record of why it was approved did not go with it. Under D-0018 the verdict *is* the
+  gate; a gate whose reasoning is unrecoverable has not been passed, it has been assumed.
+- **26 stashes**, `auto: sync-daemon parked stray STATUS/NOW`, three of them inside five
+  minutes.
+- **Self-update stopped.** `decisions/INDEX.md` was also dirty, which is not on the sync
+  job's two-file nuisance list, so every tick logged `sync: dirty tree (real local changes),
+  skip`. The primitive the whole "registration is machine-local, behaviour is repo-driven"
+  architecture rests on had quietly stopped fast-forwarding, from nothing but an
+  uncommitted generated file. It resumed the moment the two files were committed.
+
+**And the alternative loses on its own terms.** Putting every session's continuity entry on
+a worktree branch and a pull request — which is what the 10-10 and 10-11 drains did, and
+reasonable in isolation — adds **one pull request per session** to a board whose HALT release
+condition 1 is *"the open-PR count is flat or falling across two consecutive days with no one
+touching it by hand."* D-0116 established that a board cannot fall faster than its serialising
+surface allows; a per-session PR makes the condition unreachable by construction, in a repo
+that already held 27 of the fleet's 73 open PRs. The continuity allowlist exists so the
+fleet's most frequent write is the one write that needs no board at all. Choosing the PR
+answer would make that allowlist dead text and the HALT permanent.
+
+**The second sighting is why this is a record and not a comment.** `NOW.md` had already
+captured this once from the 10-10 drain: *"the first attempt at this entry was written in the
+shared main checkout and silently wiped by a concurrent session before it could be staged."*
+Same shape, same checkout, one day apart — D-0075 rule 4's rail failure. The 10-10 sighting
+drew the conclusion *"continuity docs are not exempt from the worktree rule"*; that reading is
+**superseded by rule 1 above**. The wipe happened because the entry sat unstaged, not because
+it sat in the shared checkout, and the repair is the commit, not the branch.
+
+**Forbids.**
+
+- Ending a session with a continuity entry uncommitted, in any checkout.
+- Bundling a continuity entry into a commit that touches a non-allowlisted path, then
+  pushing it at `main`.
+- A `union` merge driver on `NOW.md`, or resolving a `NOW.md` divergence by keeping both
+  sides.
+- A stop hook, or any gate, that blocks on its own instruction not being followed rather
+  than on the outcome being absent — and specifically one that blocks a session whose entry
+  is already committed.
+- `sync-daemon.sh` parking a continuity file to a stash as a terminal outcome, or skipping
+  on a dirty tree without raising an alarm.
+- Opening a pull request whose only content is a session's own `STATUS.md`/`NOW.md` entry.
+- Rendering `decisions/INDEX.md` inside a decision branch — unchanged from D-0116 rule 2,
+  restated here because `infrastructure/daemon-dispatch/DAEMON-PROMPT.md` instructed the
+  opposite and a prompt that contradicts an active record is a defect in the prompt
+  (D-0102 rule 3).
+
+### D-0120 — Campaign reporting lives in the Marketing dashboard behind one reporting service; a campaign is a registered row and archive hides the report, never the money
+
+*2026-10-11 · scope: `supabase/migrations/**, worker-campaign-report/**, web/src/views/marketing/**, web/src/lib/loadCampaignFunnel.ts, DEPLOYMENT.md` · source: Ron, 2026-10-11 — "now build the dashboard report — and remember that we may have other campaigns that we want to track and we will want to archive and delete these at some point as well", then, asked what delete should do to granted credits, "I mean the report". Table of three voices (club-dashboard, tournament-manager, qbo-api): no veto, two design changes adopted.*
+
+**Decision.** Four rules.
+
+### 1. One reporting service holds the only credential, and it is narrow
+
+The campaign data lives in the Bert & Erne Supabase project; club-dashboard has one client, on the
+club project. A **separate Worker** (`worker-campaign-report`, the `worker-cameras` precedent) is the
+only thing that may read across. In: the caller's own club-Supabase JWT checked against
+`my_privileges()` — **`marketing.write` for the funnel counts, `money.read` for the dollar figures**
+(D-0057 keeps them apart, and dollars outstanding is money). Out: a **dedicated `campaign_reporter`
+Postgres role** with `EXECUTE` on the three reporting functions and **nothing else** — *not* a
+`service_role` key, which the RPC signatures do not narrow and which bypasses RLS on `payments`.
+Aggregates only; no player id, visitor id, name or email crosses. The credential is a **Worker
+secret** (`wrangler secret put`); only the service **origin** is a `VITE_*` in both Pages scopes.
+
+### 2. A campaign is a registered row, so a new one is not a deploy
+
+A `campaigns` registry in the Bert & Erne project (slug, display name, entity, window, report state).
+`credit_campaigns` keeps owning the money and is not merged into it — money config and reporting
+metadata have different access rules. **A retired slug may never be reused:**
+`account_credits_grant_once_idx` is unique on `(campaign, player_id)` and survives everything, so a
+reused slug silently refuses re-grants to prior recipients. The registry refuses loudly instead.
+
+### 3. Archive and delete act on the report, never on the data
+
+Ron's "archive and delete these" means the Marketing **listing**. Archive hides a campaign from the
+default view and is reversible. Delete removes it from the listing. **Neither touches
+`account_credits` nor `campaign_events`.** `account_credits.campaign` stays retained text — no
+`ON DELETE CASCADE` (that deletes money), no `SET NULL` (that destroys attribution). The grant path
+is **not** edited, which keeps this entirely clear of D-0077 §2's money hold.
+
+### 4. The service ships by hand, and the deployment doc says so in the same change
+
+`worker-campaign-report` is a manual `wrangler deploy`. Merging to `main` ships the UI and not the
+service — a 404 that reads as a UI bug. Its `DEPLOYMENT.md` target block lands in the same change.
+club-dashboard's Workers have no preview deploy, so **every open PR preview reads live Bert & Erne
+data**; that is accepted and written down, not discovered later.
+
+**Why.** The data is in another project and the dashboard user has no session there, so a server-side
+hop is the only way this report can exist at all — the question is only how much that hop is trusted,
+and the table's answer was "much less than first proposed". The first draft of this decision put the
+credential in both Cloudflare Pages scopes, which would have put a privileged key in the browser
+bundle (D-0030 forbids it), and claimed the RPC signatures narrowed a `service_role` key, which they
+do not. Both are corrected above. Registering campaigns is what makes "other campaigns" cost a row
+instead of a release. And separating the report's lifecycle from the ledger's is what lets Ron tidy
+his own screen without anyone losing the $20 they were promised — the ledger is append-only under
+D-0077 for a reason, and a tidy-up button is not a reason to weaken it. qbo-api confirmed it does not
+read that ledger yet at all, so nothing downstream breaks.
+
+**Forbids.** A `service_role` key in the reporting service, or any credential there that can read
+outside the three reporting functions. A Bert & Erne key in any `VITE_*` or Pages variable scope. A
+second Supabase client in the dashboard bundle pointed at Bert & Erne. Granting any campaign read to
+`anon` or `authenticated`. Returning a player id, visitor id, name or email across the boundary.
+Gating dollar figures on `marketing.write` alone. Deleting or nulling `account_credits` rows, or
+cascading from a campaign to them. Editing `grant_account_credit` under this decision. Reusing a
+retired campaign slug. Shipping the Marketing UI without the `DEPLOYMENT.md` target block for the
+service it depends on.
+
+### D-0121 — A command is never named in prose, and a rule that keeps breaking gets a mechanical check
+
+*2026-10-11 · scope: `infrastructure/instruction-guard/**, agents/**, docs/ai-agents.md` · source: Ron 2026-10-11 — "We have so many repositories and you are asking me to run ./setup.sh without specifying a repo... You keep giving me ambiguous instructions and I have asked numerous times for you to make all instructions easier." Amends D-0068 (which stays active); hook + tests in infrastructure/instruction-guard.*
+
+**Decision.** Two rules, one from the complaint and one from the shape of it.
+
+1. **A command appears in a complete copy box or it does not appear at all.** No agent
+   names a command in prose — not as a label, not as a reminder, not as a reference back to
+   a box it already gave. To refer to a step, describe what it does ("the install step for
+   the books service"), never what it is called. This **amends D-0068 rule 3**, which
+   governed the contents of a box and said nothing about the sentences around it. D-0068
+   stays active and unchanged; this adds the rule it was missing.
+
+2. **When a written rule is broken repeatedly, the fix is the narrowest mechanical check
+   that can tell the difference — not a restatement.** Rewriting the rule more firmly is
+   the move that has already failed by the time anyone proposes it. If no cheap check
+   exists, say so and name what cannot be checked, rather than writing the rule a third
+   time.
+
+`infrastructure/instruction-guard/` is the enforcement of rule 1: a model-free `Stop` hook,
+twelve tested cases, fail-open, propagated by `reconcile.sh`.
+
+**Why.** D-0068 rules 3 and 4 were written in Ron's own words, carried in every repo's
+`CLAUDE.md`, and still produced the complaint above. They were being obeyed *inside* the
+copy boxes and broken immediately afterwards: a reply gave two correct, complete boxes and
+then referred to them three times as *"the two `./setup.sh` runs on the mini."* Across
+fifteen repos that names nothing, and recovering the meaning costs Ron a scroll through a
+long thread — the exact cost D-0068 exists to prevent.
+
+So the gap was never the box. It was the prose, which nothing governed. And the reason it
+survived days of the rule being in context is rule 2's point: **a rule obeyed in one
+paragraph and broken in the next is not being enforced by the agent reading it.** A fourth
+restatement would have been the cheapest-looking fix and the one already disproven.
+
+**Forbids.**
+- Naming a command in prose — a script, `npm`/`git`/`gh`/`wrangler`/`supabase`/`launchctl`/
+  `psql`/`docker` and the like — anywhere outside a fenced block. An inline code span naming
+  a *thing* (a table, a column, a file) is not a command and is fine.
+- A copy box carrying a `<placeholder>`, an ellipsis, a leading `$ ` prompt, a `#` comment
+  (zsh pastes it as a literal and the line fails), or a bare `./script` with neither an
+  absolute path nor a `cd` to one on the same line.
+- Referring back to a command already given, by name, in a later summary. That is the
+  specific thing that produced this record.
+- Answering a repeatedly-broken rule by restating it, when a mechanical check is available.
+- Treating this as covering D-0068 rule 1. **It does not.** No check can tell that a step
+  should never have been handed over at all, and on the day this was written the machine was
+  reachable the whole time. The guard's block message must keep saying rule 1 out loud.
+
+### D-0123 — A server-only database function names the client roles it excludes, and every schema asserts it on apply
+
+*2026-10-11 · scope: `supabase/migrations/**` · source: 2026-10-11 — five functions in three repos were callable by `anon` on PROD despite their own comments calling them server-only, including one that writes the credit ledger and one that approves work. Found when an assertion written for D-0120's reporting functions failed on its own first draft. Closed on Ron's instruction ("close the anonymous access now"); fixed in tournament-manager#1151 (promoted), club-dashboard#474, third-shot-academy#678.*
+
+**Decision.** Three rules.
+
+### 1. `revoke … from public` is never the lock
+
+A function that must not be called by a client **names the client roles**:
+
+```sql
+revoke all on function public.f(args) from anon, authenticated;
+```
+
+`revoke … from public` removes the **PUBLIC pseudo-role**. Supabase ships an
+`ALTER DEFAULT PRIVILEGES … GRANT EXECUTE ON FUNCTIONS TO anon, authenticated`, which grants those
+roles **directly at CREATE time**, and a direct grant is not removed by revoking PUBLIC. So the
+familiar line reads like a lock and is not one. It may stay, but it never counts as the lock.
+
+### 2. The schema asserts it, in both directions, on every apply
+
+Each schema carries a `do $$ … $$` block over a **named list** of its server-only functions that
+raises if any is executable by `anon` or `authenticated` — and a second block pinning the
+**deliberately public** ones (`validate_coupon`, `grant_account_credit`, `record_campaign_event` and
+their equivalents) so the fix cannot be tightened into a checkout or signup outage. Adding a
+server-only function means adding it to that list. There is no staging database to run a separate
+RLS suite against, so the assertion runs as part of the migration, like the `anon`-select assertions
+already in `campaign_events`.
+
+### 3. `anon`-callable is not the finding; `anon`-callable **with no internal guard** is
+
+A `SECURITY DEFINER` function whose **first act** is its own check — `is_dashboard_admin()`,
+`has_org_role(org,'admin')`, `is_org_member()`, a null-JWT rejection, or an unguessable token as the
+credential — is **correct** and must not be "fixed". The guard belongs in the function, where it
+cannot be undone by a grant. **A grep decides none of this: it produced three false positives out of
+nine flags** (`merge_events` — guarded by `has_org_role`, a name the pattern missed;
+`dashboard_add_member`; `cos_answer_card_questions`). **Each candidate is read in full before it is
+called a hole, and before anything is revoked.**
+
+**Why.** The same line was written in three repos by three different changes and was wrong every
+time, which makes it a property of the platform rather than anyone's slip: the grant that matters is
+invisible at the point you write the revoke. Five functions were reachable by anyone on the internet
+— `redeem_account_credit` (writes the append-only money ledger, so a forged redemption cannot be
+deleted), `redeem_coupon`, `account_credit_balance`, `cos_decide` (approves work, and approval is the
+trigger for unattended execution — measured: 7 production deploys and 9 member-visible event moves
+have really executed; `spend` never has), and `apply_session_tagging` (silently rewrites which player
+played in a recorded game). Nothing was lost, because the credit ledger and coupon table happened to
+be empty — **timing, not safety**. A rule that depends on remembering a Postgres subtlety will fail
+again, so it is enforced where it cannot be forgotten: in the apply. Rule 3 exists because the first
+sweep of this was over-eager, and an audit that cries wolf gets ignored or, worse, revokes something
+load-bearing.
+
+**Forbids.** Treating `revoke … from public` as sufficient for a server-only function. Shipping a
+server-only function without adding it to its schema's assertion list. Asserting only one direction,
+so a later tightening can silently break a public path. Revoking a role from a function because a
+pattern-match flagged it, without reading the function. "Fixing" a function that already guards
+itself internally, or moving such a guard out of the function and into a grant. Leaving a
+hand-applied production revoke uncommitted — it evaporates at the next schema re-apply.
+
+### D-0127 — A capability is a service plus a registry row, so it travels forward to new roles, backward to existing ones, and into the framework defaults
+
+*2026-10-12 · scope: `agents/**, docs/ai-agents.md, framework/**` · source: Ron 2026-10-12 — activated the same day on "Everyone will have to use it" ("one of its key features is for it to work forward and backwards … when built this feature rolls in Cairn as a default for the new product manager")*
+
+**Decision.** A capability is **a service plus a registry row — never a paragraph in one
+agent's prompt.** One service per external system holds the credentials (D-0019, D-0008);
+one row per capability says what an agent may do with it, and every agent reads that
+registry at the top of every run and never writes it. **A role is the list of rows it
+holds**, so standing up a role is configuration, not code — `cos-dispatch.sh` already
+branches on `channel` to pick the brain, so a new role is a row and a channel, not a
+second dispatcher.
+
+Because capability and role are separate, a capability travels three ways:
+
+1. **Forward** — a role created later holds every capability built before it. Nobody
+   rebuilds what exists.
+2. **Backward** — a role that already exists gains a capability built after it, by
+   holding one more row. No prompt rewrite.
+3. **Into the framework** — a capability proven in the live operation graduates into the
+   Cairn starter's default library (`framework/installer/SPEC.md` → `framework-core`),
+   genericized and **gate-off**, so a fresh install starts with it already built.
+
+**The gate travels with the capability.** The existing staged-rollout pattern
+(`draft_campaigns` enabled, `send_campaigns` seeded off, both branches written up front)
+becomes a portability rule: the irreversible half moves with the safe half, seeded off,
+so a capability never arrives wide open on a role nobody vetted for it. What graduates
+into the defaults is the capability **and** its off switch.
+
+**The reverse leg already exists.** D-0094 rule 7 — a refusal that leaves no capability
+request behind is a defect — is what makes the ratchet self-feeding: the operation tells
+the architect what to grow next, and no human has to notice the gap first. D-0088 rule 3
+still holds: a *permission* gap is never work.
+
+**Why.** The fleet is about to go from one operator-facing agent to several (a VP of
+Marketing reporting to Caryn; a product manager after that). Hand-building each one's
+reach is both expensive and decaying — the newest agent becomes the only capable one and
+last quarter's agents are stuck with last quarter's reach. It is also the load-bearing
+claim of the shareable framework: "it rolls in as a default for the new product manager"
+is only true if the capability was never written into the VP of Marketing. The pieces are
+already in place (`cos_whitelist` read-never-written, one service per external system,
+channel-branching dispatch, capability requests) — this record names the property they
+add up to and forbids the shortcuts that break it.
+
+**Forbids.** A capability written into one agent's `PROMPT.md` — it cannot travel either
+direction, so it is a defect even when it works; prompts name *where the shared assets
+are*, never *what the agent may do*. A second service for an external system that already
+has one (D-0019: extend `marketing-api`). A role whose reach is implied by its code path
+rather than listed as rows. Promoting a capability into the starter defaults with its
+gates open, or with org names or credentials in it. And this record does **not** loosen any
+gate: D-0019 still forbids auto-posting to public social without an approval, so an
+auto-*reply* capability requires superseding D-0019 — until then it ships as
+`draft_social_replies` enabled plus `send_social_replies` seeded off.
+
+### D-0128 — A pause covers the actor that is actually filling the board, and a release condition is a number the paused system can move
+
+*2026-10-11 · scope: `infrastructure/builder-dispatch/**, infrastructure/heartbeat/**, decisions/**` · source: daemon queue drain 2026-10-11 22:00 UTC (`cos_requests` 11bee86e), ruling on daemon#402 — the 17:10 measurement said no PR in the fleet could be landed; re-measured at 00:40 UTC it was still true of 64 of 65, and the one exception landed itself, unattended, during the drain*
+
+**Decision.** This record does **not** narrow the pause of 2026-10-09 — that is Ron's call and
+it is in front of him on his own card. It fixes the three things that are true whichever way he
+answers, and that were wrong in the way the pause was written and measured.
+
+1. **A pause names the actors it covers, and it is only honest if those actors are measurably
+   the source of the inflow it exists to stop.** Measured over the 54 hours since
+   `infrastructure/builder-dispatch/HALT` was set (2026-10-09 14:35 EDT), the Builder has
+   started **zero** items: its log says `HALTED … starting no new work` on **every** 30-minute
+   tick from 14:41 that day to 20:41 on 10-11, and its last `item done` line is 2026-10-09
+   14:39:46. Over those same 54 hours **10 of `notronwest/daemon`'s 30 open non-draft PRs were
+   created** — #348, #389, #394, #397, #399, #412, #416, #423, #428, #435 — and **not one of
+   them is the Builder's**: every single branch is a session branch (`claude/*`, `decide/*`,
+   `db/*`, `docs/*`, `decision/*`). The pause switched off the actor
+   that was contributing **nothing** to the growth, and left untouched the actor contributing
+   **all** of it. A pause whose covered set does not intersect its inflow cannot change the
+   number it is being judged on, and must not be written as if it will.
+
+2. **A release condition is a number the paused system can move.** A condition that only the
+   paused actor can satisfy is a **deadlock, not a condition** — and it is not released by
+   waiting. `HALT` condition 1 asks for the open-PR count to fall; **29 of the 65 open PRs
+   carry `reviewed:changes`**, rework is a code change on a branch, and rework is the Builder's
+   — which `HALT` stops. Before a pause is set, each of its release conditions names the actor
+   that can satisfy it; if that actor is inside the pause, the condition is rewritten or the
+   pause is scoped to leave it out.
+
+3. **The open-PR count is split by origin wherever it is reported or alarmed on, and
+   "with no one touching it by hand" is not a release test.** One undifferentiated total cannot
+   answer *"is the pause working?"* — a flat 65 made of "the robot stopped and people kept
+   building" reads identically to "nothing is happening at all," and only the first is true
+   here. Watchdog check 6 reports **agent-opened** and **session-opened** as two numbers, and
+   the pause is judged on the first. `HALT` condition 1's clause *"with no one touching it by
+   hand"* is unmeasurable by construction on this board — hands are on it every night, by
+   design and productively — so it is not used as a test.
+
+4. **Landing is not the bottleneck, and nothing here weakens it.** The landing rail works
+   unattended and was observed working **during** this drain: `daemon#421` was reviewed
+   `APPROVE` at 18:10 EDT and merged by the reviewer at **19:47:34** with no human in the loop
+   — the sixth unattended merge of the day (`daemon#391`, `#392`, `#396`, `#398`, `#421`,
+   `courtreserve-api#385`). `NEVER-AUTO-MERGE-REPOS` is empty and stays empty (D-0052, D-0096
+   for promotions). At 00:40 UTC, **zero** PRs in the fleet carry `reviewed:approve` — not
+   because approvals are stuck, but because the last one merged itself.
+
+**The signal that says this stopped working** (D-0084). Two consecutive days where
+`builder-dispatch.sh` logs `HALTED` on every tick **and** the session-opened PR count is
+non-zero means a pause is in force against an actor that is not the inflow — the shape this
+record names. **Retired in exchange:** the single undifferentiated `PR_PILE` threshold on total
+open PRs in watchdog check 6. It is **replaced** by the split count, not added to — one
+mechanism out for one in, and the retired one is the one that could not distinguish the two
+causes it was being read for.
+
+**Why.** This is the fourth instance of one shape in three days, which is why it is a record
+and not a comment:
+
+- **D-0102** — daemon's exclusive paths were a lane with **no drain**.
+- **D-0116** — eight renumbered PRs all rewrote the generated `INDEX.md`, so the lane refilled
+  at one PR per merge.
+- **D-0117** — the ruling queue was monotonically non-decreasing **by construction**, so three
+  consecutive drains looked like no progress while each had decided everything in front of it.
+- **this** — the pause's exit condition can only be satisfied by the actor the pause halts,
+  and the count it is judged on cannot distinguish the pause working from the pause being
+  irrelevant.
+
+Each one is a **measuring instrument or a valve pointed at the wrong thing**, and each was
+expensive precisely because the number it produced was not wrong in a way anyone could see.
+D-0097 is the general rule — a mechanism never asserts what its evidence cannot support — and
+a release condition is an assertion about the future (D-0090).
+
+The honest reading of the 2026-10-09 pause is that it did exactly what it says and that was
+never going to drain the board: *"you cannot drain a pool with the tap running"* is right, and
+**the Builder was not the tap.** The tap is interactive work, which is also where the fleet's
+real output came from on 10-11 (the Marketing screen, five merged PRs, three decision records)
+— so the answer is not to pause that too. It is to stop reading one number as if it measured
+one thing.
+
+**Forbids.** Setting a pause without naming the actors it covers and the measured inflow it is
+meant to stop. Writing a release condition whose only possible satisfier is inside the pause.
+Reporting or alarming on a single undifferentiated open-PR count as evidence that a pause is or
+is not working. Using "with no one touching it by hand" as a release test on a board that is
+worked by hand every day. Reading "no PR carries an approve verdict" as "approvals are stuck"
+without checking whether the last one merged. Adding a repo to `NEVER-AUTO-MERGE-REPOS` to slow
+a pile down — the pile is inflow, and merging is what removes it.
+
+### D-0132 — A worktree is retired by the mechanism that made it, and "merged" is proven by content
+
+*2026-10-12 · scope: `infrastructure/worktrees/**` · source: daemon STATUS 2026-10-12 (136 registered worktrees across 12 repos; D-0069 recovered from an orphaned directory in /private/tmp)*
+
+**Promoted to `active` by Ron, 2026-10-12** ("and promote"), in the same change that
+landed the mechanism.
+
+**Decision.** Two rules, one cause.
+
+1. **A mechanism that creates worktrees retires them.** `new-worktree.sh` reaps worktrees
+   whose branch is merged and whose tree is clean, on every run. Isolation (D-0005) is only
+   useful while `git worktree list` shows live work; a list of finished branches is not a
+   smaller problem than no isolation, because a registered worktree **holds its branch
+   checked out**, so `git branch -D` refuses even after the PR merged.
+
+2. **"Merged" is proven against content, never inferred from a PR's state or a branch name.**
+   The accepted proofs are: `HEAD` is an ancestor of `origin/main`, **or** every file the
+   branch touched is byte-identical on `origin/main`. Nothing else counts.
+
+**Why.** Measured on 2026-10-12: **136 registered worktrees across 12 repos** on one laptop,
+plus ~34 orphaned directories no repo still referenced. Three costs, all observed.
+
+A registered worktree pins its branch, so cleanup needed a manual `worktree remove --force`
+twice on 2026-10-11. A session reading the list cannot separate live work from residue — 23
+of the 136 were real. And an orphaned directory is **outside git's protection entirely**: one
+held the only copy of **D-0069**, absent from `origin/main`, as loose files in `/private/tmp`,
+which macOS clears.
+
+Rule 2 is the sharp one, because the obvious shortcut is wrong in both directions. A **squash
+merge** makes ancestry *and* `git cherry` report "unmerged" on a branch that is fully shipped —
+the squashed commit shares no SHA and no patch-id with the branch's commits. And in the other
+direction, **6 branches whose PR was MERGED had diverged from the merged head afterwards**
+(reused or rebased branch names), so "PR merged → delete" would have destroyed real commits.
+Neither a PR's state nor ancestry alone is evidence; the content test is.
+
+**Forbids.** Deleting a worktree on an inference — a PR's state, a branch's name, or ancestry
+alone. Reaping a worktree whose `git status --porcelain` is non-empty: uncommitted and
+untracked files are the only thing a worktree holds that the repository does not. Reaping with
+`--force`, which would defeat git's own independent refusal.
+
+**Guard (D-0097 rule 2).** The block is in code, not prose: dry run is the default, removal
+requires an empty status, removal runs without `--force`, and `.no-reap` exempts a directory.
+Every uncertainty — detached HEAD, missing `origin/main`, a failed removal — resolves to KEEP.
+Design and the verification of all three paths: `infrastructure/worktrees/DESIGN.md`.
+
+### D-0134 — Third Shot Academy is its own Cairn operation, and a repo belongs to exactly one decision register
+
+*2026-10-12 · scope: `decisions/**, DECISIONS.md, infrastructure/decision-register/**, framework/**` · source: Ron, 2026-10-12 — "I am ready to build Third Shot Academy as its own Cairn application with its own dashboard and its own context" and, asked the two open questions, "TSA gets its own decision register". Table run per PROCESS.md: four voices, four concerns, no veto.*
+
+**Decision.** Third Shot Academy becomes a **full Cairn operation** — its own operations repo,
+its own agents, its own business repo, its own register — and `third-shot-academy` is reassigned
+from the WMPC operation to it. This answers the question `INSTANCES.md` left open, and it is the
+clause that amends D-0016, which this record restates rather than narrows by hand.
+
+**The restatement.** Decisions are records in **an operation's** register, one file each, with an
+id, status, the repos and paths they govern, the decision, the why, and the forbids. A decision is
+never deleted; a reversal supersedes. daemon holds **WMPC's** register and is the architect of
+record for the WMPC operation; a second operation holds its own. **Each repo belongs to exactly one
+operation and carries exactly one `DECISIONS.md`, published by that operation's register** — which
+is also why no second slice filename is needed, the `pre-push` guard allowlisting exactly
+`^DECISIONS\.md$`. `NOW.md` is the front door, `STATUS.md` the log under it, and the SessionStart
+hook prints both.
+
+**Which register owns a record — by what it binds, not who reads it.** Three classes, and nothing
+lives in two registers:
+1. **Process and infrastructure that binds every repo in any operation** — D-0004, D-0005, D-0007,
+   D-0049, D-0093, D-0098 and the 18 `repos: all` records — stays in daemon's register and reaches
+   TSA as a **Cairn convention travelling down** (D-0136), never as a slice from a register that
+   does not own its repo.
+2. **TSA's product and nothing else** — D-0024, D-0055, D-0063, D-0064, D-0113 — moves to TSA's.
+3. **Boundary-spanners** — D-0009, D-0030, D-0041, D-0059, D-0060, D-0062, D-0095, D-0103 — **stay
+   in daemon's register and keep binding `third-shot-academy`**, because each is enforced by
+   something the WMPC operation owns: the mini, the Pi, `camd`, `courtreserve-api`. **A record is
+   owned by the register of the operation that owns the enforcing side, not the consuming side.**
+
+**Two prerequisites, and they fail closed.** (1) `publish.sh`'s `$STATE/lock` and
+`$STATE/published/<repo>` are **unnamespaced**: two registers publishing one repo's `DECISIONS.md`
+either no-op on a shared lock or flip-flop one push per sync into a `main` that deploys TEST. They
+are namespaced per register **before any second register publishes** — which includes the
+`personal` instance of D-0131, so this is owed now, not at TSA standup. (2) `third-shot-academy` is
+**not** dropped from `infrastructure/decision-register/REPOS` until every record naming it has been
+moved or re-scoped: `render.sh check` exits 1 on a record naming an absent repo, and `publish.sh:60`
+then refuses to publish **for every repo in the fleet**, not just TSA's.
+
+**Why.** D-0009 has made TSA a separate entity with separate money since August, so a separate
+operation is the topology catching up with the company, not a fork. D-0131 is the precedent that a
+second register is an addition D-0016 tolerates — but `personal` only ever added repos, while TSA
+*removes* one, and that is what made a restatement honest rather than a quiet narrowing. The
+alternative, leaving TSA a scope inside WMPC, is what `INSTANCES.md` already warns multiplies
+registers: a product repo counted as an instance.
+
+**Forbids.** Recording a decision only in `STATUS.md`. Editing a superseded record instead of
+adding a new one. Hand-editing a repo's `DECISIONS.md`. Two registers publishing one repo's slice,
+or one record living in two registers. Dropping a repo from `REPOS` before its records have moved.
+Standing up TSA's register before the publisher's state and lock are namespaced. Counting any other
+product repo — `club-dashboard`, `courtreserve-api`, `rating-session-manager` — as an operation.
+
+### D-0142 — A designed ambiguity is not a capability gap, and the shape key is a natural key that prose must not forge
+
+*2026-10-12 · scope: `infrastructure/capability-requests/**` · source: daemon#451 (routed from cos_requests 73320fa2) — the FIRST live item the capability-requests sweep ever filed, 2026-10-12. The refusal it carried was specified behaviour, and all three tokens in its shape key `add_date|courts+price+time` were prose. Table convened per decisions/PROCESS.md: daemon CONCERN, wmpc-web CONCERN, no veto.*
+
+**Decision.** Three rules. The first is the filter D-0094's loop was always going to need;
+the second and third are what the first one's key must be worth.
+
+1. **A refusal the refusing system is SPECIFIED to give is not a capability gap, and closes
+   NOT PLANNED.** `wmpc-command/index.ts` carries, in its own prompt, "⚠️ MATCH ON NAME,
+   NEVER ON LEVEL … If the request does not say which, that is an ambiguity to `blocked` —
+   picking one has silently booked the wrong series before." A refusal produced by that
+   instruction is the scheduling system working, not a limit to grow past: the capability
+   (`add_date`) exists, the parse succeeded, every field resolved, and what is missing is one
+   fact only the human has — **which** event they meant. Growing the scheduler here would mean
+   **guessing which public series to write**, which is the bug the instruction was written to
+   stop. This does **not** reopen the "that was only a clarification" prose classifier
+   `DESIGN.md` forbids, and that prohibition stands: the test is not a sentence's tone, it is
+   whether the refusing code was **told** to refuse. Only daemon's ruling may apply it, which
+   is where DESIGN.md already put the filter.
+
+2. **The shape key is a natural key, so a vocabulary token that can fire on incidental prose
+   is a defect in the key, not a loose match.** `#451` keyed `add_date|courts+price+time` on a
+   refusal about none of those: `courts` fired on **"Court Reserve"** — the product's own
+   name, which appears in most refusals this rail will ever read — `price` on the `rate`
+   inside "sepa**rate** them", and `time` on "time-of-day **variants**" of an event name. The
+   count, the dedup and the closed-issue memory all rest on that string, so three false
+   tokens are not cosmetic: a later genuine `add_date` price gap would have been folded into
+   `#451`'s count, and `#451`'s NOT PLANNED close would then have suppressed it forever. The
+   vocabulary is therefore **word-bounded**, the product's own name is stripped in `norm`
+   before matching, and the key asserted against the real refusal in `test.sh` — red on the
+   old classifier, green on the new.
+
+3. **Where the code and the DESIGN disagree about a key, the DESIGN binds (D-0102 rule 3).**
+   `DESIGN.md` states the field set is "matched in the refusal reason (**falling back** to the
+   sentence)". `classify.jq` concatenated the two and matched the union, so the asker's own
+   words manufactured tokens about what the system *denied* — `courts` from "on 1 court" in a
+   refusal that denied nothing about courts. `fields_of` now reads the reason and uses the
+   sentence only when the reason names nothing, which is what a `parse_failed` row needs it
+   for. The `other:` fingerprint keeps both, because a sentence nothing matched is all that
+   row has.
+
+4. **Changing the vocabulary re-keys every shape, so the migration ships in the same
+   commit.** The ruling memory is a literal `shape_key:` comparison across
+   `--label capability-gap --state all`: re-anchoring makes already-ruled issues stop matching,
+   and the next sighting of a ruled shape files a fresh ticket instead of a comment. Today that
+   is exactly one issue and the migration is one footer edit. It will not stay one, so a
+   vocabulary change that does not re-key the existing footers is incomplete.
+
+**Why.** D-0094 rule 7 made a refusal with no capability behind it a defect in the loop, and
+`capability-requests` is the rail that catches them. It fired for the first time on 2026-10-12
+and produced, correctly, an item — and that item was a false positive with a forged key. Both
+halves matter and they pull opposite ways. DESIGN.md was right that no prose test may decide a
+refusal was harmless: that is how real gaps get thrown away, and it deliberately left the
+filter to daemon. But "the architect rules on it" is only affordable if the key the ruling is
+remembered by is trustworthy, and this one was not: every token in it came from the product's
+own name, a substring, and a noun about event variants. The rail's memory is the close plus the
+key. Rule 1 makes the close honest for the commonest shape this rail will see — the command bar
+asking which of two real events — and rules 2–4 make the key worth closing against.
+
+What is NOT in this record, deliberately: a machine-readable `blocked_kind` on the ask log, so
+the sweep could skip a specified refusal without a daemon slot. It is the right eventual shape
+and it is filed (`wmpc-web`), not built. The wmpc-web voice priced it: that repo has **no
+migrations rail** — `supabase/schema.sql` is pasted into the SQL editor on a project shared with
+third-shot-academy — the function is hand-deployed, and deploying before the DDL makes every
+`logAsk` insert fail against an unknown column, which the deliberately fail-open log would
+**swallow**, taking the whole ask log dark. Also `public.wmpc_command_ask_log` enumerates its
+columns, so the sweep would not see the new one, and `resolveCourt` sets `blocked` in code three
+ways that carry no kind at all. That is a hand-ordered DDL on a live shared database to save one
+daemon slot per sighting, at a frequency of **one, ever**. The trigger is named on the issue
+instead: build it when a third specified-refusal shape is filed.
+
+**Forbids.** Closing a `capability-gap` issue **COMPLETED** on a ruling that no capability was
+missing — the close is the memory, and completed means the capability landed. Adding or widening
+a `field_vocab` token that can match inside another word or match the product's own name.
+Deriving the denied-field set from the asker's sentence while the refusal reason names fields.
+Changing `field_vocab` or `norm` without re-keying the footers of every existing
+`capability-gap` issue in the same commit. Re-admitting a prose classifier that decides a
+refusal was harmless (`DESIGN.md`; this record narrows the filter to "the refusing code was
+specified to refuse", applied by daemon's ruling only).
+
+### D-0144 — An artifact a rail installs into every repo must be tracked or ignored by the same act
+
+*2026-10-12 · scope: `infrastructure/git-guards/**, infrastructure/fleet-sync/**, infrastructure/builder-dispatch/**` · source: daemon queue drain 2026-10-12 (`cos_requests` `e0152571`), ruling on daemon#445 — nine of eleven checkouts on the mini were behind origin, frozen by one identical untracked file that D-0093's guard install had copied into each of them*
+
+**Decision.** An automated rail that writes a file into a working checkout it does not own must,
+**in the same act**, put that file into exactly one of two states:
+
+1. **Tracked** — committed, so every clone has it and no tree is dirty because of it; or
+2. **Ignored** — entered in `.git/info/exclude` when the artifact is machine-local, or in the
+   repo's `.gitignore` when the artifact is reproducible everywhere.
+
+A rail may not leave behind a third state — **present and unknown to git** — because that state is
+indistinguishable from human work, and every rail downstream is obliged to treat it as human work.
+The installer picks the state; it is not allowed to defer the choice to whoever next reads the tree.
+
+**Corollary, for the reader rather than the writer.** A rail that skips in order to protect
+uncommitted work is correct and stays correct. Its allowlist of disposable paths is not the fix for
+this defect and must not be grown to paper over it: a rail that *distributes* a path is the rail
+that must declare it. The `DISPOSABLE` entry added alongside this record (daemon#477) is a
+**one-time cure for the nine trees already wedged**, not the mechanism — the mechanism is the
+exclude written at install.
+
+**Why.** D-0093 (2026-10-09, *"this can NEVER happen again"*) shipped a credential scanner into
+every repo, and the audit that followed on 2026-10-10 found the pre-commit hook in zero of fourteen
+repos and fixed it by riding the same install. `infrastructure/git-guards/install.sh:41` copies
+`scripts/scan-secrets.sh` into each repo and `chmod +x`es it. That is the whole of it: the file is
+tracked nowhere and ignored nowhere. Measured 2026-10-12, it sits untracked with **identical sha1
+`4ee5306c34`** in `daemon`, `wmpc-web`, `third-shot-academy`, `rating-session-manager`,
+`club-dashboard`, `courtreserve-api`, `court-reserve-scheduler`, `qbo-api` and `marketing-api`, and
+`git check-ignore` returns nothing in any of them.
+
+`infrastructure/fleet-sync/fleet-sync.sh` is the reader, and it behaved exactly as designed — it
+fast-forwards only, parks a *disposable* dirty file, and **skips** when any non-disposable file is
+dirty, because it must never clobber real work. `scripts/scan-secrets.sh` is not in its
+`DISPOSABLE` class, so from the day the guard shipped every repo it had touched became a permanent
+skip:
+
+```
+rating-session-manager: real local changes, skip (behind 14): scripts/videos/roi.json baseline_test.jpg scripts/scan-secrets.sh
+wmpc-web:               real local changes, skip (behind 21): scripts/scan-secrets.sh
+third-shot-academy:     real local changes, skip (behind 14): scripts/scan-secrets.sh
+fleet-sync: alerted 11 wedged repo(s)
+```
+
+**Nine of eleven checkouts were behind origin** — wmpc-web by 21, third-shot-academy by 14,
+rating-session-manager by 14, daemon by 11, court-reserve-scheduler by 10.
+
+**Neither rail was broken, and that is the finding.** Both did their jobs and both said so:
+fleet-sync ran at 12:56 and alerted all eleven wedges; the guard install reported every copy it
+made. The defect lived in the space between a writer and a reader, where no single component was
+wrong and no single component was accountable. This is why the gate goes on the **writer** (D-0083 —
+the gate goes where the instruction is): the reader cannot distinguish a rail's artifact from a
+human's edit, and asking it to guess is asking it to clobber work sooner or later.
+
+The damage was quiet and compounding, in the shape D-0084 names:
+
+- `rating-session-manager`'s decision slice stopped at **D-0052 (2026-10-01)** while `origin/main`
+  carried it through **D-0117** and the register stood at D-0142. daemon#242 filed this as a wedged
+  checkout freezing a repo's decision slice and it was still true eleven days later — because the
+  slice was *published* correctly every time and never *pulled*. A publish rail proving its own
+  output is not evidence that any reader received it.
+- daemon's own shared `main` checkout was 11 behind, which is the mechanism under daemon#393's
+  reviewer APPROVE sitting uncommitted since 10-10.
+- `HALT`'s first release condition is *"the open-PR count is flat or falling across two consecutive
+  days"*. That cannot be **measured** from trees 21 commits stale, so the pause was holding shut a
+  door only fresh checkouts could open — the same shape daemon#402 found one layer up.
+
+**The heartbeat was green throughout.** `~/.local/state/wmpc-heartbeat/fleet-sync.last` read
+`projects synced` at 12:56 on the day nine repos were frozen, because it records *that the job ran*,
+not *that the repos are current*. A liveness signal is not a correctness signal, and where the two
+are confused the instrument reports health over a stalled fleet — the defect D-0117 found in the
+ruling queue's own count, here in the sync rail's.
+
+**Forbids.** An installer that writes into a checkout and leaves the file unknown to git. Writing a
+machine-local artifact into a repo's tracked `.gitignore` (it would need a pull request in every
+repo to repair a file that only exists on one machine). Growing a sync rail's disposable-path
+allowlist as the standing remedy for an undeclared artifact, instead of fixing the rail that
+distributes it. Weakening a sync rail's refusal to fast-forward over uncommitted work — the skip is
+the safety property and is not negotiable. Reporting a sync rail as healthy on the evidence that
+its job completed, where no check compares a checkout against its origin.
+
+### D-0147 — Retrieval is deterministic where a key exists, agentic where it does not, and embedded only for semantic recall; an index is never the system of record
+
+*2026-10-12 · scope: `**retriev*, **embedding*, **vector*, **knowledge*, **faq*, **prompt*, **PROMPT*, **rag/**, **tools/**, infrastructure/decision-register/**` · source: Ron, 2026-10-12, in a daemon session: "Talk to me about RAG and where could/should we be using it?" then "yes, write the decision record", then "compile the table". Table run per PROCESS.md with six voices (club-phone, courtreserve-api, club-dashboard, wmpc-mcp, third-shot-academy, wmpc-meta), each reading its own repo at refs/heads/main: no veto, six concerns. This draft is the one the concerns rebuilt — see The table, below. Promoted to active on Ron's word, 2026-10-12, with the verdicts in front of him: "promote it and do the wmpc-meta block." Renumbered from D-0133 on merge (D-0100 — ids 0133-0146 were claimed on branches in flight); every reference to it outside this file carries 0147.*
+
+**Decision.** "Use RAG" is not an architecture. Fetching a slice of a corpus before answering
+is almost always right; *how the slice is found* is the decision, and it has three tiers. A
+build picks the **highest tier it can** and says in its ticket why the tier below does not reach.
+
+1. **Deterministic — a key selects the slice.** Where a record carries metadata (an id, a repo,
+   a date, a scope glob, a foreign key), retrieval is a filter or a query, and the answer is
+   exact, auditable and reproducible. This is the fleet's existing and preferred shape:
+   `render.sh applies <repo> <path>` and each repo's generated `DECISIONS.md`, the
+   `# wmpc-deployment: v1` YAML block, and the cached occupancy read of D-0060/D-0103 are all
+   already retrieval-augmented generation with a retriever that cannot guess.
+2. **Agentic — the model searches.** Where no key exists, hand the model the tools (grep, SQL,
+   an MCP read, the GitHub API) and let it query, read, and refine. No index to build, none to
+   keep current, and the search is visible in the transcript. This is the default for text the
+   fleet owns but has not keyed. **Naming this the default obliges no repo to grow a search
+   surface it does not have** — where a service exposes only fixed-key lookups, a free-text
+   search tool is a build with its own ticket and its own privacy review, never implied by
+   this record.
+3. **Embedded — similarity over chunks.** Earns its place only when the question is *semantic
+   recall*, the corpus has no usable metadata, and it is too large to search by term. Two
+   candidates are identified and neither is built: semantic recall over daemon's own written
+   history, and third-shot-academy's lesson transcripts and coach free-text notes, where keys
+   cover sessions but not prose. Each needs its own record, because the Claude API exposes no
+   embeddings endpoint and the real cost is a second AI vendor, not the index.
+
+**An index is a derived view, never the system of record.** It is rebuildable from its source,
+and a disagreement between the two is resolved by re-deriving it, never by trusting the index
+(D-0049, D-0060, D-0103).
+
+**And an answer states the provenance its evidence actually carries — no more.** This is D-0097
+rule 1 applied to retrieval, and it takes three different shapes, because one mechanism does not
+fit all three:
+
+- **Retrieved text presented as an answer** carries a citation. The API's document `citations`
+  give `cited_text` and a location; use them where document blocks are the input.
+- **A structured tool result** carries **provenance, not a citation**: an `as_of` and a source on
+  the payload. A tool that returns neither must not have freshness asserted on its behalf — a
+  caller may report the value and must not imply it is current.
+- **A corpus sitting in the prompt behind a cache breakpoint** produces no citation object and
+  is not retrieval. Where the answer is spoken and no reader can follow a reference, the
+  obligation is a logged source and, where a person is relying on it, spoken attribution.
+
+**Why.** The corpora are real and measured on `origin/main`, 2026-10-12: `STATUS.md` is
+**11,495 lines**, there are **102 decision records**, and daemon alone holds **~441,000 words
+across 222 markdown files** — before any sibling repo. `CLAUDE.md` already concedes the limit it
+has reached: *"Read the newest few entries, not the file; it is long by design."*
+
+The cost of not retrieving is already written down twice. `CLAUDE.md`'s scheduler-directory note
+exists because a session on 2026-10-09 spent real time on two failed attempts to open a path
+whose correct spelling was recorded. `NOW.md`'s campaign-results entry says *"Same mistake shape
+as #414 earlier today"* — a session repeated a diff-is-not-a-merge misreading from the same day.
+In both the knowledge existed and the session did not find it. That is a retrieval failure, and
+tier 3 is not what fixes it: **the first fix is a key.** The register works *because* its records
+carry `id/date/repos/scope`; `STATUS.md` entries carry a date heading and nothing else, so the
+only retrieval available over the fleet's largest corpus is reading it. Give the entries
+frontmatter and the hard question becomes a filter.
+
+Two places tier 3 would be actively wrong, both already decided:
+
+- **Club data** (Court Reserve, occupancy, payments, QBO). D-0060 forbids a second Court Reserve
+  read of sessions, occurrences or rosters in any repo; D-0103 forbids any second table
+  materialized from the PLAY report. An embedding index over bookings is that second copy, and it
+  answers *approximately* where the question is exact. On money it is worse: campaign reporting
+  (D-0120) returns **`null` plus "needs money access"** rather than a confident `$0`, and
+  approximate retrieval over dollars re-opens exactly the hole that rule closed.
+- **Session history.** `.claude/history/` is the highest-value unindexed corpus the fleet owns
+  and it is gitignored for cause: `infrastructure/session-history/DESIGN.md` records that the
+  logs *"can contain full conversation text and secrets quoted mid-session."* Any index over it
+  is a new copy of those secrets in a new place, which is D-0093's boundary. It stays local and
+  per-machine until a record says otherwise.
+
+A third place is a *general* claim and not a finding about any repo's schema: **retrieval over
+incoherent state produces a fluent answer from a broken record, which is worse than the broken
+record, because the record at least looks broken.** The case that prompted it — a Hopper row
+carrying five fields and four different answers — is diagnosed in daemon's `NOW.md` of
+2026-10-11 and is *not* reproduced from club-dashboard's own records; its voice said so, and D-0044
+already treats a divergent card as a bug. Where state does not reconcile, the fix is the schema.
+
+What to do before building any index: **prompt caching**, which is free accuracy and a direct
+cost cut. Every scheduled agent resends a large stable prefix (`CLAUDE.md`, `NOW.md`, a register
+slice) ahead of a small volatile tail — the ideal cache shape — and cache reads are a fifth of
+input price. A corpus small enough to sit behind a cache breakpoint should sit there rather than
+be retrieved.
+
+**The club-phone receptionist is the worked case, and the two reads behind it are not the same
+read.** Its policy text — hours, tiers, pricing, court rules — is small enough to cache, and that
+corpus **does not exist in any repo yet**; this record does not create it, and when someone does,
+it is member-facing and secret-adjacent (D-0093). For live state the target is the **cached
+occupancy read** (D-0103, served from `courtreserve.play` without touching the browser lock). It
+is **not** `GET /events/open-play`: that is two live Court Reserve passes behind the one Playwright
+lock that `/book`, `/move` and `/cancel` also hold, its own provider doc records that it *"will
+not hit the spec's <1.5 s target … revisit before heavy call volume"*, and the authenticated
+tunnel fronting the mini is unbuilt. So the receptionist's shape is **cached corpus plus a cached
+read, no vectors** — and its per-call volume against any live scrape is unbudgeted and owed a
+ticket before it ships.
+
+**How this binds — and it is wired, not asserted.** It binds tickets and the review gates, which
+is where tier choice is argued. It does **not** reach the Builder by being written here: D-0049 is
+the precedent — "reuse before you build" was unenforced until it was written into wmpc-meta's
+`engineering-standard` and `ui-work` blocks, which sync into every repo's `CLAUDE.md`. So the
+execute step shipped with the promotion: **wmpc-meta#45 carries the tier rule as a gate bullet in
+`engineering-standard-claude-block.md`, version bumped v4 → v5.** The bump is the load-bearing
+part — `sync_block` no-ops when a repo already holds the current version, so an edit without a
+bump reaches no repo that already has v4, which is the propagation bug the versioned markers were
+added to fix. On merge every repo picks it up on its next pull. This is CLAUDE.md's own principle
+applied to a decision record: a rule is enforced in code, not by install discipline.
+
+**The table.** Run per `PROCESS.md`, 2026-10-12, six voices, each reading its own repo at
+`refs/heads/main` through the GitHub API rather than a local clone — only daemon is checked out in
+this cloud session, and the live remote ref is strictly fresher than the clone the process
+describes. **No veto. Six concerns**, and four of them corrected this record rather than costing
+anything:
+
+| Voice | Verdict | What it said |
+|---|---|---|
+| courtreserve-api | CONCERN | The draft conflated its cheap cached read with the live `open-play` scrape behind the booking lock. **Record corrected**; per-call volume named as unbudgeted. |
+| wmpc-mcp | CONCERN | Citation "is not satisfiable today" — its tools return shaped JSON with no `cited_text`; citing them would assert freshness they cannot establish (D-0097 r1). Also has no tier-2 surface. **Rule split into text / structured / cached**; tier-2 designation made non-obliging. Wants `as_of`/source on four bare read tools. |
+| club-phone | CONCERN | Citation does not land on voice; the cached corpus does not exist yet and is secret-adjacent. **Both now stated in the record.** Confirms its `ARCHITECTURE.md` already plans this shape. |
+| club-dashboard | CONCERN | The money-gate reading is accurate and verified from its own `DEPLOYMENT.md`. The card-lifecycle claim was "diagnosed in someone else's record while being cited as a fact about my schema." **Re-attributed.** |
+| third-shot-academy | CONCERN | Tier 3 blocks nothing committed; already caches with `cache_control: ephemeral`. Real cost: per-block citations mean reworking its `emit_analysis` schema and three renderers. Expects to file the lesson-transcript record and wants a fast fan-out. |
+| wmpc-meta | CONCERN | It is a decision, not a convention, and duplicates nothing. But as drafted it is install discipline — the scope globs match no file there. **Enforcement step named.** Confirms the scope-glob guidance belongs in daemon's `decisions/README.md`. |
+
+Two propagation defects surfaced that are not this record's to fix and are now known: **club-dashboard's
+`DECISIONS.md` slice stops at D-0117**, so D-0120 — which binds its own Marketing screens — is
+unreadable from that repo; and **club-phone's slice carries neither D-0060, D-0103 nor D-0120**,
+so it reads this record's forbids as inherited rather than as its own law. That is tier-1
+retrieval failing open, in the mechanism this record holds up as the good case.
+
+**Promoted by Ron, not by daemon.** Under D-0015 daemon promotes only where no concern changes
+cost or customer-facing behaviour, and two did — third-shot-academy's citation rework is
+customer-facing, and wmpc-mcp's provenance fields are cost — so it went to him with the verdicts
+attached and he promoted it. What the two costs owe is work, not a blocker on this record:
+wmpc-mcp adds `as_of` and a source to `member_lookup`, `package_balance`, `court_schedule` and
+`membership_pricing`, and **until it does nothing is blocked**, because the provenance clause
+above already permits reporting a value without implying it is current. third-shot-academy's
+`emit_analysis` schema and its three block renderers carry citations when that work is scheduled;
+this record does not backdate onto shipped output.
+
+**Forbids.**
+- Building an embedding or vector index where the records carry a key that would select the
+  same slice, or where a tool the model can call already answers the question. The ticket names
+  the tier and why the tier below does not reach; "we are using RAG" is not a design.
+- Treating an index, embedding or cache as the system of record, or resolving a disagreement
+  between an index and its source in the index's favour. It is derived and rebuildable.
+- Any retrieval-backed index over Court Reserve bookings, occurrences, rosters, occupancy,
+  payments, or QuickBooks data — D-0060 and D-0103 own those reads, and D-0120's money gate
+  forbids an approximate dollar figure.
+- Indexing `.claude/history/`, or committing or syncing it, while it is gitignored for secret
+  content (D-0093).
+- Asserting freshness or a source that the evidence does not carry: a citation on retrieved
+  text, provenance on a structured result, and neither invented where the tool supplies none
+  (D-0097).
+- Adding an embeddings provider, or any second AI vendor, as an implementation detail. It is a
+  new external service and needs its own record.
+
+### D-0148 — An instruction is changed in every clock that fires it, not only in the prompt that documents it — and a drain is not a rail until its job is loaded
+
+*2026-10-12 · scope: `infrastructure/daemon-dispatch/**, infrastructure/cos-triage-schedule/**, decisions/**` · source: daemon queue drain 2026-10-12 22:00 (`cos_requests` `d25bdd13`) — ruling queue depth 0 for the third time in six runs; found D-0117's selector retired in `DAEMON-PROMPT.md` alone while two clocks still fire on the retired net, and `com.wmpc.daemon-exclusive-drain` present in the repo and absent from `~/Library/LaunchAgents`*
+
+**Decision.** This record **amends D-0117** and **adds a fourth rule to D-0075**. Every existing
+rule of both stands. Three findings, one shape: an instruction was corrected in the file that
+*documents* it and left standing in the things that *execute* it.
+
+1. **The ruling selector has exactly one home: `infrastructure/daemon-dispatch/DAEMON-PROMPT.md`.**
+   No other file names it — not a clock, not a DESIGN.md, not a `cos_requests` body. D-0117 rule 2
+   replaced `daemon-dispatch` with `daemon-ruling` in the prompt and in no other place, and three
+   stale copies went on instructing the retired net for 34 hours.
+
+2. **A clock triggers on the same net the drain it wakes enumerates.** **Amended by D-0156 rules 1–3:**
+   this rule corrected the label half of `d_issues` and left the `architecture…` title beside it, which is
+   the same never-quiet defect and went on firing. The title is now a labelling step in both rails, and the
+   counted net is `daemon-ruling` alone. Both of daemon's clocks are
+   corrected to `label:daemon-ruling` (plus the legacy `architecture`-title backstop, unchanged):
+   `cos-triage-schedule.sh`'s `d_issues` counter, and `exclusive-paths-drain.sh`'s shape 3. Neither
+   may count `daemon-dispatch`. That label is on **every** issue daemon opens in its own repo by
+   D-0075 rule 3, so a count of it is monotonically non-decreasing by construction and the clock is
+   permanently hot — which is D-0117's **Forbids**, verbatim, in a file D-0117 never opened.
+
+3. **The "nobody has touched it" shape is retired, not re-pointed.** **Amended by D-0156 rule 3:** the
+   backstop this rule left in place as a selector is a labeller in both rails. `exclusive-paths-drain.sh`
+   shape 3 asked for a **ruling** on lane-stamped issues idle for six hours. Under D-0117 rule 4 an
+   idle ruled issue is *decided and awaiting hands*, and staleness is therefore a delivery signal
+   that the board already carries. What replaces it is the narrow true case: a stale
+   **`daemon-ruling`** issue is a question that has waited, and that is worth a row.
+
+4. **A rail is not installed until its job is loaded, and that is D-0075 rule 1 applied to the
+   rail itself.** An artifact whose purpose is to *run* satisfies "on `main`" and still does
+   nothing. For any committed `launchd` plist, done means: present in `~/Library/LaunchAgents` on
+   the host named in its `DRAIN-HOST` file, listed by `launchctl list`, and with one log line
+   proving it fired. A plist in a repo is a design document.
+
+5. **Rule 5's alarm compares identity, not count.** Adopting the correction filed on daemon#446 by
+   the 12:00 drain, which declined to mint a record for one clause and asked that it ride the next
+   amendment. The over-collection alarm fires when **the same item is selected by two consecutive
+   drains that both wrote rulings** — never when a count merely fails to fall. A flat count across
+   two drains that ruled *different* items is a healthy queue with live inflow, and the literal
+   test tripped on exactly that at 12:00 for no reason.
+
+6. **An amended rule carries a forward pointer in its own text.** D-0075 rule 2 still reads as the
+   live selector with an empty `superseded_by` — and the clock's comment cites *"D-0075 rule 2"* by
+   name as its authority. Every reader who lands there is handed the retired net, which is how the
+   clock came to be written that way. A record amending part of another adds the pointer **inline
+   at the amended rule**. `superseded_by` stays empty: D-0075 is not superseded.
+
+**Why.** This is the fourth term of the arithmetic D-0102 opened, and the second consecutive one to
+land in the measuring instrument rather than the pipe. Measured at this drain, 2026-10-12 22:00 UTC:
+
+| selector | written in | returns |
+|---|---|---|
+| `daemon-ruling` ∪ title backstop | `DAEMON-PROMPT.md` — live, correct | **0** |
+| `daemon-dispatch` ∪ title backstop | `cos-triage-schedule.sh:113` (`d_issues`) | **33** of 36 open issues |
+| `daemon-dispatch` ∪ title backstop | `cos-triage-schedule.sh:111` (`DAEMON_BODY`) | **33** |
+| `daemon-dispatch`, idle > 6 h | `exclusive-paths-drain.sh:151` (shape 3) | **27** |
+| `daemon-dispatch` ∪ title backstop | `daemon-dispatch/DESIGN.md:13,47`, `D-0075` rule 2 | prose |
+
+32 of the 33 are there only because they carry the lane stamp. The backstop net alone is 11, and
+**all 11 already carry a written ruling** — checked individually at this drain, not assumed. The
+true depth is zero, and it was zero or one at the head of every one of the six drains filed since
+D-0117 merged (`1492969b`, `eba38f3d`, `11bee86e`, `4f260d03`, `e0152571`, `d25bdd13`).
+
+**The failure is not that a drain found nothing. It is that the trigger can never go quiet.**
+`d_issues > 0` has been unconditionally true since the `HALT` of 2026-10-09 froze delivery, so the
+clock enqueues an opus drain every slot it is given, forever, against a queue that is empty.
+D-0117 fixed what the drain *reads* and so stopped the 21-item *reports*; it did not stop the fleet
+*paying* for the runs, because the thing that decides whether to pay is the clock. The register
+recorded the decision and the money kept moving.
+
+Shape 3 is the same defect, latent and larger: the row it files says *"Rule on the daemon-dispatch
+issues nobody has touched in 6h: …"* over 27 issues — among them #172, #211, #234, #235, #241,
+#242, #251, #256, #334 and #382, which are precisely the dispatched builds D-0117's own table
+identified as noise and which already carry two or three ruling comments each. #211 carries three.
+
+It is latent for a reason that is itself the third finding. This host **is** `wmpcMacMini1`, the
+`DRAIN-HOST`, and `com.wmpc.daemon-exclusive-drain.plist` is committed at
+`infrastructure/daemon-dispatch/` — and it is **not** in `~/Library/LaunchAgents`, **not** in
+`launchctl list`, and has no log. Forty-one other `com.wmpc.*` jobs are installed; this one never
+was. So **D-0102 rule 1's drain has never run once.** The rail that #386 built to land the nine
+stuck PRs, which D-0075 rule 4 and D-0117 rule 3 both name as "the hands", is prose.
+
+**And it is not one job.** The gate written for rule 4 inventoried every committed
+`com.wmpc.*.plist` against `~/Library/LaunchAgents` on this host. Of 21, **five are installed
+nowhere** — `daemon-exclusive-drain`, `blocked-mirror`, `hook-audit`, `doc-freshness`,
+`hopper-invariants` — and **two are installed but unloaded**: `lesson-plan`, `record-watchdog`.
+(`switchd` and `route-check` live under `infrastructure/pi-capture/**`, which declares its own
+`CAPTURE-HOST`; they belong to the Pi and are correctly absent here.) So seven committed rails on
+the mini are not running, and nothing was measuring that. Each one was built, reviewed, merged and
+reported done. Rule 4 is therefore not a note about one plist — it is the missing half of D-0075
+rule 1 for every artifact whose purpose is to run.
+
+The gate's hard assertions stay scoped to `infrastructure/daemon-dispatch/**`, because `DRAIN-HOST`
+declares the host for that rail alone and a test must not claim a Pi job is missing from the mini.
+The other nineteen get a non-failing inventory line, so the evidence is visible without the gate
+asserting something it cannot support. **It fails today, on `daemon-exclusive-drain`, by design**
+— the violation is live, and the gate goes green when the job is installed, which is rule 4's
+load-last step and is queued on the approval rail rather than taken unilaterally.
+
+That closes the loop on why nothing lands. D-0144 (today) ruled that the guard install must track
+or ignore the file it distributes; measured at this drain, `git-guards/install.sh:41` still copies
+`scripts/scan-secrets.sh` with no exclude and `fleet-sync.sh:52`'s `DISPOSABLE` still has no entry,
+so nine checkouts stay frozen and `daemon`'s own tree is dirty with it right now. daemon#477 is open
+and correctly labelled. Its hands were always going to be the drain that was never loaded.
+
+**The order of operations is load-last, and it is not optional.** Installing the job before rule 3
+ships would file the 27-issue ruling row within the hour and reproduce the 2026-10-11 drain at
+greater scale. Fix the selectors, merge, then install.
+
+**Forbids.** Writing a ruling selector in any file other than the prompt the drain reads. A trigger
+whose net differs from the net the drain it triggers enumerates. Counting `daemon-dispatch`, or any
+label applied at creation to every issue in a repo, in a trigger or a queue. Putting a selector in a
+`cos_requests` body. Treating a committed plist as an installed job, or reporting a rail as built
+while its job is unloaded. Installing `com.wmpc.daemon-exclusive-drain` before rule 3 is on `main`.
+Amending a numbered rule of another record without a forward pointer at that rule's own text.
+Raising the D-0117 rule 5 alarm on a flat count alone.
+
+### D-0151 — The secret scanner takes D-0144's tracked state, published to origin — because tracking it makes both of its writers no-ops
+
+*2026-10-12 · scope: `scripts/scan-secrets.sh, infrastructure/convention-sync/**, infrastructure/git-guards/pre-push` · source: Selects D-0144 option 1 for this artifact, and amends D-0093 rule 2 and D-0005's allowlist enumeration only (the register has no partial-supersession field; `supersedes:` means the whole record, which this is not — stated in prose instead). Ron 2026-10-12, "look at the 10 wedged repos". Table compiled per PROCESS.md, 13 voices: 11 NO OBJECTION, 2 CONCERN (qbo-api and cairn-agents, both coverage, both addressed in rule 2), no veto.*
+
+**Decision.** [D-0144](./D-0144-an-artifact-a-rail-installs-into-every-repo-must-be-tracked-.md)
+requires an artifact a rail installs into every repo to be **either tracked or ignored, by the same
+act**. For `scripts/scan-secrets.sh` this record **selects option 1, tracked**, and says how. It
+also **amends D-0093 rule 2** and **D-0005's allowlist enumeration**. D-0093 rules 1, 3 and 4,
+D-0144 in full, and D-0005's worktree discipline and `WMPC_ALLOW_MAIN_PUSH` override are untouched.
+
+1. **`scripts/scan-secrets.sh` is published to `origin` in every repo**, by the host-gated
+   `infrastructure/convention-sync/publish-conventions.sh` from a throwaway clone — the way
+   `CLAUDE.md` already is. D-0093 rule 2 said the scanner was *"published into every repo by
+   `claude-bootstrap`"*; bootstrap only ever `cp`-ed it into the **working tree**. Publishing means
+   reaching origin. Copying into a checkout is the opposite: it guarantees the tree is dirty.
+2. **Published independently of the bootstrap shim.** `CLAUDE.md` is generated per repo and needs
+   the shim; the scanner is a byte-for-byte copy of the canonical and needs nothing. Gating it on
+   the shim would skip **6 of 14** repos — daemon, wmpc-meta, qbo-api, wmpc-mcp, cairn-agents,
+   marketing-api — and **four of those were wedged on this very file**, daemon included. The
+   qbo-api voice caught this: *"ship it and count 8, not 9."*
+3. **`scripts/scan-secrets.sh` joins the `pre-push` allowlist**, alongside `STATUS.md`, `NOW.md`,
+   `activity/`, `DECISIONS.md`, `CLAUDE.md`, `.gitattributes` and `decisions/INDEX.md`. **D-0005's
+   prose, which still lists only `STATUS.md`, `activity/` and `DECISIONS.md`, is amended to that
+   full set** — it had drifted across at least four additions, and three repo voices caught it
+   independently.
+4. **The publisher refuses to publish from a stale canonical.** If the local `wmpc-meta` is behind
+   origin, or dirty under `conventions/` or `scripts/`, it publishes **nothing** that run.
+   Everything it writes into thirteen repos is read from that one checkout, so a wedged
+   `wmpc-meta` would push a stale convention set — and now a stale **security gate** — fleet-wide.
+5. **`wmpc-meta` is excluded from the publish list.** The scanner is authored there, not generated.
+   A publisher that writes it back makes the generated copy a second master.
+
+**Why tracked rather than ignored** — D-0144 permits both, and its corollary leans toward the
+exclude-at-install. Two reasons to take the other branch for *this* artifact:
+
+- **There are TWO writers, and tracking disarms both at once.** D-0144 names
+  `infrastructure/git-guards/install.sh:41`. It missed
+  `wmpc-meta/conventions/claude-bootstrap.sh:147`, which `cp`s the same file **unconditionally on
+  every pull** (install.sh at least guards on `[ ! -x ]`). An ignore-at-install fix applied to the
+  rail D-0144 names would have left the other rail re-dirtying every tree on every pull, and the
+  wedge would have looked fixed while persisting. Once the file is **tracked**, both writers become
+  no-ops for free: install.sh's `[ ! -x ]` sees it present, and bootstrap's `cp` writes identical
+  bytes, so the tree stays clean with neither rail changed.
+- **A gate that is ignored does not ship with the repo.** `.git/info/exclude` is per-machine and
+  `.gitignore` leaves the file absent from a fresh clone, so D-0093's *"this can NEVER happen
+  again"* would hold only on machines where some rail had already run. Tracked, the pre-commit gate
+  arrives with `git clone`.
+
+**Why it mattered.** A written premise nobody checked cost three days of fleet sync. Because the
+scanner was only written into working trees, **every repo carried it untracked, so every tree was
+permanently dirty, so `fleet-sync`'s "real local changes → skip" refused to sync it.** Measured on
+the mini 2026-10-12: **9 of 11 wedged repos had this single cause**, and **daemon's own self-update
+had skipped 197 consecutive runs (~33 h)**. The tell was that `wmpc-meta` — the one repo where the
+file is tracked, because it is its home — was the only repo reading `up to date`.
+
+This is the **same failure `convention-sync` was built to fix**, with a different file: *a file a
+tool regenerates on every pull can never pull cleanly unless origin already holds it.* That fix was
+written for `CLAUDE.md` and never generalised, so the next file through the same door reopened the
+same hole — and `claude-bootstrap.sh`'s own comment says "published the same way CLAUDE.md is". The
+intent was right and the code did something else.
+
+Rule 3 is the smaller lesson and the more general one: **a record that enumerates what a guard
+enforces will drift from it**, silently, one addition at a time. Enumerate in the guard; have the
+record point at the guard.
+
+**Forbids.**
+- Adding a file to any repo by having a per-pull tool write it into the working tree without
+  putting it into one of D-0144's two states in the same act.
+- Gating the scanner's publication on `scripts/claude-bootstrap.sh` existing.
+- Publishing conventions or the scanner from a `wmpc-meta` checkout that is behind origin or dirty.
+- Writing `scripts/scan-secrets.sh` back into `wmpc-meta`, or hand-editing it in any other repo —
+  it is generated there; change the canonical.
+- Adding `scripts/scan-secrets.sh` to a sync rail's disposable/parked class as the remedy. D-0144
+  already forbids this, and it is worse than it looks now: a parked file goes into a stash no
+  session reads, which is the loss D-0151's sibling work (daemon PR #399) exists to stop.
+- Enumerating the `pre-push` allowlist in a new record as though it were closed. Name the guard.
+
+### D-0155 — The engineering function reports to the CTO — the no-departments rule bars a second watcher, not a report
+
+*2026-10-12 · scope: `agents/**, infrastructure/*-dispatch/**, infrastructure/fleet-watch/**, infrastructure/heartbeat/**, docs/ai-agents.md` · source: Ron, 2026-10-12, with a path and nothing else — `agents/CTO/agents/user-story` — then, asked how far it went, "All engineering agents move under the CTO." He first asked for D-0130 to be reworded before it merged; it merged first (#517), so the register's own rule applies instead: never edit a merged record's decision text, supersede it.*
+
+**Decision.** Three parts. The first two restate D-0130 unchanged — it is superseded only so
+its third part can be corrected, and nothing in it is retired.
+
+1. **The watcher lives off the fleet.** The job that notices the fleet has gone quiet does
+   not run on a machine it watches. It runs off-fleet — a scheduled Cloudflare Worker,
+   independent of every machine Ron owns — and reads liveness from a **published** signal (a
+   `fleet_heartbeats` row in the shared Supabase project), never from files on a host it would
+   have to reach. The on-mini `heartbeat-watchdog` stays and keeps doing the close-in work.
+   Specification: `infrastructure/fleet-watch/DESIGN.md`. The **CTO (Seth)** owns it and the
+   question behind it: *is the fleet actually running, and is what we believe about it true.*
+   He watches anything a human would notice, not only cron jobs; **only two things interrupt
+   Ron** — the fleet is dark, or work he asked for was cut off — by SMS, everything else
+   collecting into one daily digest; and **blindness is a finding**, raised after two
+   consecutive blind checks.
+
+2. **No second watcher under him.** The fleet does not grow a watcher per service, per repo or
+   per money path. A standing officer is earned by **where it runs** (a failure domain it must
+   not share), **what it may do without asking**, and **who reads it** — never by subject
+   matter. A "phone-line Seth" and a "money-path Seth" would run in the same place, with the
+   same powers, for the same reader: they earn nothing and cost plenty. What grows instead is
+   **data** — the thing watched is a row in `infrastructure/heartbeat/JOBS`, not a persona —
+   and a finding needing domain depth **spawns a specialist and lets it go**, which is a
+   contractor, not a department.
+
+3. **But the engineering function reports to the CTO.** The **Builder**, the **Reviewer**, the
+   **Testing agent**, the **Backlog Steward** and the **User Story agent** are Seth's, and
+   their contracts live at `agents/cto/agents/<name>/`. Read against the three tests in part 2
+   they **pass**: they run *inside* the fleet, which is the one place Seth deliberately is not;
+   they hold different powers (the Builder pushes branches, the Reviewer merges to `main` —
+   D-0052 — where Seth may restart a job and send a text); and they are read by different
+   people (a PR verdict, not a 2am text). Seth's remit widens with them: he owns whether the
+   fleet is running **and** the function that builds it. He still does not write features or
+   grade a diff, and daemon remains architect of record (D-0016) — **owning a function is not
+   doing its work.**
+
+**Why.** D-0130's third part said "No departments under him," settled the same night Seth was
+and from Ron's own question — *"Do we need to build departments under CIO? Or will he do that?"*
+On 2026-10-12 he instructed the opposite for engineering, and both readings are defensible
+because the clause conflated two things. What it was protecting is real and survives here
+intact: **one beat watching the fleet, one voice that may wake Ron**, because the one thing
+nobody can do for a watcher is notice *it* stopped. What it accidentally also barred was an org
+chart. The five agents affected were already running, already had their own beats in `JOBS`,
+and already reported through the board and the standup; what changed is who owns the function,
+not how many alarms exist. Superseding rather than rewording is itself the lesson — the reword
+was requested while D-0130 was unmerged and would have been correct then; it merged first, and
+a merged record's decision text is not edited.
+
+**Forbids.** A second standing watcher split by subject rather than by failure domain, blast
+radius or audience. Giving any of Seth's reports a tier-1 path to Ron's phone — the SMS tier is
+his alone. Filing an engineering agent's contract outside `agents/cto/agents/`, or moving an
+agent's directory without the references read at runtime in the same commit. Enumerating agents
+with a single-level glob (`agents/*/ROLE.md`), which silently drops a nested contract — list
+both depths. And reading this record as technical authority Seth does not have: he does not
+write features, grade diffs, or rule on architecture.
+
+### D-0156 — A trigger may only count work that goes to zero when it is done, and an architecture title is a label failure not a trigger
+
+*2026-10-13 · scope: `infrastructure/cos-triage-schedule/**, infrastructure/daemon-dispatch/**, infrastructure/git-guards/**, decisions/**` · source: daemon queue drain 2026-10-13 08:00 (`cos_requests` `1192838e`) — the first firing of D-0148's corrected clock, which enqueued a deep run against a ruling queue of depth 0 on a count of 12, all twelve from the half of the counter D-0148 left standing*
+
+**Decision.** This record **amends D-0148 rules 2–3** and **adds a rule to D-0117 rules 3–4**. Every
+existing rule of both stands. It is the fifth term of the arithmetic D-0102 opened and the third
+consecutive one to land in the measuring instrument rather than the pipe.
+
+1. **A trigger may only count a set that empties when the work is done.** This is the general law
+   the last three records each proved one instance of. If a property survives the work, a count of
+   it is monotonically non-decreasing by construction and the trigger it feeds can never go quiet —
+   whatever the property is, and however correct the prose around it reads.
+
+2. **A title is identity; only a label is state.** `architecture: …` is still on an issue after the
+   ruling is written, and stays on it until the artifacts land — weeks, under a delivery halt. So
+   the title backstop in `cos-triage-schedule.sh`'s `d_issues` is the *same defect* D-0117 and
+   D-0148 each removed from the other half of the same expression. D-0117 took out
+   `daemon-dispatch`-the-lane-stamp; D-0148 took it out of the clocks; **neither looked at the
+   `or` beside it.** Measured at this drain: the corrected clock fired at 08:00 and logged
+   `12 ruling-labelled/architecture issues` — **0 labelled, 12 titled, and all 12 already carrying
+   a written ruling**, eleven of them verified one by one by the 22:00 drain and the twelfth being
+   **#497, which that same drain filed.** The output of a drain is an input to its own trigger.
+
+3. **The architecture-title backstop is a labeller, not a counter — in the clock and in the drain,
+   the same act.** Its real job was always to catch a **labelling failure**, and a labelling
+   failure is repaired by labelling: one `gh` call, no model, no run. Before it counts, the clock
+   labels `daemon-ruling` on any open daemon issue titled `architecture…` that carries neither
+   `daemon-ruling` nor `ruled`. Then it counts `daemon-ruling` alone, and the trigger's net is the
+   **same string** as the net `DAEMON-PROMPT.md` enumerates — D-0148's Forbids satisfied rather
+   than traded away. The 2026-10-08 hazard the backstop was added for is covered better than
+   before: an unlabelled question now enters the net *as a labelled question*, so it is visible on
+   the board and not only to whichever rail happens to grep titles.
+
+4. **A ruling leaves a positive mark: the `ruled` label.** D-0117 rule 4 removes `daemon-ruling`
+   whether or not the item closes, and removal alone is **indistinguishable from never-labelled** —
+   which is precisely why no previous record could point the backstop at state instead of identity.
+   Every item daemon rules gets `ruled` **added in the same action that removes `daemon-ruling`**.
+   Without this, rule 3's labeller re-labels every ruled-but-open issue forever: the current bug
+   in a new costume. Applied retroactively at this drain to the twelve architecture-titled issues
+   already verified as ruled.
+
+5. **D-0144's one-time cure is applied to the trees, not to the reader's allowlist.** D-0144
+   (yesterday) ruled that a rail writing a file into a checkout it does not own must track or
+   ignore it **in the same act**, and named `.git/info/exclude` as the mechanism. The mechanism was
+   never written: measured now, `git-guards/install.sh` still copies `scripts/scan-secrets.sh` with
+   no exclude (daemon#477, open). The mechanism ships here. D-0144's corollary also named a
+   `DISPOSABLE` entry in `fleet-sync.sh` as a one-time cure for the nine trees already wedged;
+   that entry was never written either, and **it is not written now.** The same corollary forbids
+   growing a reader's allowlist to paper over a writer's defect, and the cure belongs where the
+   defect is: the exclude is written into the nine wedged clones directly at this drain. A reader's
+   allowlist that names a rail's artifact is a second declaration of the same fact, and the whole
+   of D-0144 is that there must be one.
+
+**Why.** D-0148 measured the cost of a trigger that cannot go quiet and fixed the half it was
+looking at. Fourteen hours later its own corrected clock paid for a deep Opus run against an empty
+queue — the seventh such run since D-0117 merged, and the first one *after* the record that exists
+to stop them. This is the evidence:
+
+| firing | logged count | labelled | titled | true ruling depth |
+|---|---|---|---|---|
+| 2026-10-11 13:00 | 6 | — | — | 0 |
+| 2026-10-11 18:00 | 8 | — | — | 0 |
+| 2026-10-12 08:00 | 8 | — | — | 0 or 1 |
+| 2026-10-12 13:00 | 11 | — | — | 0 |
+| 2026-10-12 18:00 | 33 | 0 | 11 | 0 |
+| **2026-10-13 08:00** | **12** | **0** | **12** | **0** |
+
+The count has never once fallen, and it cannot: every row of it is a title. **The series goes up by
+one each time daemon files an issue**, because daemon's own filing convention is
+`architecture: …` — so the trigger is wired to the drain's output. That is not a stale copy and not
+an oversight in a clock nobody read; it is the *corrected* clock, reviewed and merged yesterday,
+behaving exactly as written. Prose caught neither occurrence. A test is what catches the third
+(D-0071, D-0083).
+
+Two things this drain looked at and ruled **not** findings, recorded so the next drain does not
+re-open them:
+
+- **`com.wmpc.daemon-exclusive-drain` is unloaded on purpose.** It is absent from
+  `~/Library/LaunchAgents` on `wmpcMacMini1`, and that is D-0149 rule 6 working: `DRAIN-ENABLED` is
+  `no`, the rail starts a paid hourly session, and the switch is Ron's — `cos_approvals` `0b46409c`
+  is **pending**, with `2a9c29dd` and `73d706b8` already denied. D-0148 rule 4 is satisfied by a
+  committed enable fact that says `no`; installing it here would be taking a decision Ron has twice
+  declined to make. It is not re-filed and not installed.
+- **Queue depth 0 is not itself a failure.** D-0148 rule 5 is read as written: the over-collection
+  alarm compares identity across two drains that both wrote rulings. This drain and the 22:00 drain
+  both ruled on the clock, which is that shape — and the correct response to it is the one D-0148's
+  own Why names: the fix is the capability, not another ticket. Hence rule 1 is a law with a test,
+  not a third correction to the same expression.
+
+**Forbids.** A trigger, counter or queue that counts any property an item keeps after its work is
+done — a title, a lane stamp, a milestone, a repo, a creation-time label. Counting an
+`architecture…` title anywhere outside the labelling step rule 3 defines. Running the backstop as a
+selector in one rail and a labeller in another. Removing `daemon-ruling` without adding `ruled`.
+Re-labelling an issue that carries `ruled`. Adding a rail's own artifact to a reader's disposable
+allowlist instead of excluding it at the writer (D-0144). Installing a rail whose committed enable
+fact says `no`, or re-filing an approval Ron has denied.
+
+### D-0161 — A pause covers one phase, and the phase it covers is named in code
+
+*2026-10-13 · scope: `infrastructure/builder-dispatch/**, **HALT*` · source: Ron, 2026-10-13 — "narrow the halt — no new cards, rework continues", answering the call D-0128 explicitly left to him; found while draining the Blocked + In Review queues (STATUS 2026-10-13)*
+
+**Decision.** The Builder's committed `HALT` pauses **exactly one phase**: a fresh build off an
+Agent Ready card with no open PR (Phase B2). Three things explicitly continue — rework of an
+existing PR (B1), orphan recovery (A), and the whole zero-token board reconcile.
+
+1. **A pause is a mode, not an early exit.** `HALT` set `exit 0` at the top of the dispatcher,
+   before the host lock, the board read and every reconcile. A pause implemented as an exit
+   cannot distinguish the inflow it means to stop from the landing it means to protect, because
+   it runs before anything has been classified. The gate now sets `HALT_NEW_BUILDS` and the
+   decision is applied *after* classification — because "a new card" is a classification
+   outcome, not a board column: an Agent Ready card is rework if an open PR already closes its
+   issue, and a fresh build if not.
+2. **A pause whose file and whose code disagree is the file lying.** `HALT` said *"The Builder
+   finishes nothing it has not already started"* and the code finished nothing **at all**, for
+   four days, invisibly. A pause states which phase it covers and a test proves the others still
+   run, or it is not a pause — it is an outage with a note attached.
+3. **A paused item is named, never silently skipped, and an idle tick caused by a pause says so.**
+   The run summary carries `paused_builds=<n>`, the log names the issue numbers, the heartbeat
+   payload carries `paused_builds` and `halt`, and the idle ping stops claiming "Agent Ready is
+   empty — add cards" when the halt is what emptied it.
+4. **Capping interacts with pausing, and the retained set is what gets capped.** The per-run cap
+   is 5 and is applied before classification on the normal path, unchanged. Under the pause it is
+   applied to the retained set instead — five paused cards ahead of a rework item in board order
+   would otherwise consume every slot and starve the phase the narrowing exists to permit, while
+   the log reported a full tick.
+
+**Why.** D-0128 (2026-10-11) named this deadlock and declined to resolve it: *"This record does
+not narrow the pause of 2026-10-09 — that is Ron's call."* Its rule 2 is the binding half — *a
+release condition whose only possible satisfier is inside the pause is a deadlock, not a
+condition* — and `HALT` condition 1 asked the open-PR count to fall while the pause switched off
+rework, the only non-hand way a `reviewed:changes` PR moves. Ron chose the second of the two
+remedies rule 2 allows: scope the pause to leave the satisfier out. So condition 1 is also
+rewritten here to the **agent-opened** count per D-0128 rule 3, and its unmeasurable *"with no
+one touching it by hand"* clause is retired.
+
+Measured the same day, and recorded so this record is not read as a cure: **all 18 open
+`reviewed:changes` PRs in BUILDER-REPOS are session-opened** — not one carries a
+`feature|db|fn/issue-<N>-` branch and 13 have no linked issue at all, so no card exists to
+trigger the Builder's rework path. Narrowing lets the Builder finish **its own** bounced PRs and
+restores the free reconcile; it moves none of those 18. That is a second, separate gap (a
+session-opened PR has no executor and no card), not this one.
+
+**The signal that says this stopped working** (D-0084). A tick that logs `paused_builds=0` while
+cards sit in Agent Ready with no open PR means the gate is no longer reached — the `exit 0` shape
+has come back. A `HALT` file whose text names phases that `test-halt.sh` does not assert means the
+two have drifted apart again.
+
+**Forbids.** Implementing a pause as an early `exit 0` ahead of classification. Shipping a pause
+whose file names a phase no test asserts. Skipping a paused work item without naming it. Reporting
+an idle tick as a dry queue when a pause emptied it. Applying a per-run cap before a pause filters
+the queue, so paused items consume the slots of the phase still permitted. Reinstating `HALT`
+condition 1's "with no one touching it by hand" clause, or judging the pause on one
+undifferentiated open-PR total (D-0128 rule 3).
+
 ## Proposed (not binding yet)
 
-_None._
+- D-0157 — A colour is measured where it is used, and a brand fill is not text ink (2026-10-13)
 
 ## Superseded (history)
 
 - D-0006 — Pre-launch, PRs deploy to prod only (2026-06-10) → superseded by D-0007
 - D-0011 — A "Tournament Management" income account for the $5 platform fee (2026-08-30) → superseded by D-0012
+- D-0016 — daemon is the architect of record; decisions live in a register and each repo carries its slice (2026-09-16) → superseded by D-0134
+- D-0130 — The fleet watchdog lives off the fleet, and a quiet agent is an alarm (2026-10-11) → superseded by D-0155

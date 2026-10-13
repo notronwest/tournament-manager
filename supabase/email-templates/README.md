@@ -72,7 +72,7 @@ shared module share the same visual tokens — keep them in sync when either cha
 | Link color | `#1e6cd6` | Inline links |
 | CTA button bg | `#14181f` | Primary button |
 | CTA button text | `#fafaf7` | Primary button label |
-| Logo URL | `https://bertanderne.com/email/logo@2x.png` | Header PNG |
+| Logo URL | `https://assets.bertanderne.com/n/email-logo-bert-erne.png` | Header PNG — managed, swappable (D-0095) |
 | Card max-width | `560px` | Wrapper `width` |
 
 ### Convention for new transactional emails
@@ -104,8 +104,15 @@ HTML shell. See that file's JSDoc for the full parameter signature.
   by `scripts/render-email-logo.mjs`. Re-run after any logo change:
   `node scripts/render-email-logo.mjs` (needs `@resvg/resvg-js`, a
   devDependency of `web/`).
-- Served as a static asset at **`https://bertanderne.com/email/logo@2x.png`**
-  once `web/public/` is deployed to prod. The templates reference that
-  absolute prod URL so both the test and prod projects load the same
-  always-available image. **The asset must be live in prod before pasting
+- **Served from the asset library at
+  **`https://assets.bertanderne.com/n/email-logo-bert-erne.png`** — a Cloudflare
+  Worker over R2, owned by `club-dashboard` (daemon **D-0095**). Both the test
+  and prod projects load the same always-available image from there.
+- **To change the logo you no longer touch this repo.** Upload the new file
+  under the same name in **Dashboard → Assets**; the URL does not change and new
+  sends pick it up within about five minutes. Mail already delivered may keep
+  showing the old file from the recipient's image proxy.
+- `web/public/email/logo@2x.png` **stays committed and served from
+  `bertanderne.com`**. Emails already in inboxes point at that old address and
+  re-fetch it whenever they are opened — deleting it would break them. **The asset must be live in prod before pasting
   the updated templates**, or the logo 404s in sent mail.

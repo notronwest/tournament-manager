@@ -4,6 +4,13 @@
 // web/public/email/ so Cloudflare Pages serves it as a static asset at
 // /email/logo@2x.png (NOT caught by the SPA _redirects fallback).
 //
+// NOTE (daemon D-0095): the email templates no longer point HERE. They load
+// https://assets.bertanderne.com/n/email-logo-bert-erne.png from the asset
+// library. This script is still how you RENDER a new wordmark PNG -- but to
+// ship it, upload the output in Dashboard -> Assets under the existing name
+// rather than committing it and deploying. The committed copy stays because
+// mail already delivered still points at the old address.
+//
 // Run from anywhere:  node scripts/render-email-logo.mjs
 // (@resvg/resvg-js is a devDependency of web/, resolved explicitly below.)
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";

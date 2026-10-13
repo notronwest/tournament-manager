@@ -62,6 +62,7 @@ export const SEED = {
     seekerEmail: "e2e-sage-notice@wmpc.test", // Sage — "I need a partner"
     singlesTournamentSlug: "e2e-partner-notice-singles",
     singlesEmail: "e2e-milo-notice@wmpc.test", // Milo — singles, no partner section at all
+  },
   // Partner-mode segmented control (#15) — the "I have a partner / I need a
   // partner" toggle renders as a real radiogroup, not two action buttons.
   partnerMode: {
@@ -81,6 +82,11 @@ export const SEED = {
   },
   invitesView: {
     inviteeEmail: "e2e-vic@wmpc.test", // dedicated invitee — invite never consumed
+  },
+  // Public recap page (#1108) — the only seeded tournament whose status is
+  // 'completed', so this is also what the mobile-audit recap case drives.
+  recap: {
+    tournamentSlug: "e2e-recap-cup",
   },
   // Pricing-model clarity in the admin forms (#12): event-fee "override"
   // hint on EventFormPage + the tournament wizard's "Preview math" box.
