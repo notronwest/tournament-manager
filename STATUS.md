@@ -5,6 +5,28 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-13 — Builder: PR #965 rework (rebase, clear CONFLICTING)
+
+Reviewer gate had put PR #965 (issue #964 — regression spec for #64, global
+partner-selection notification) back in `Agent Ready` with "needs rebase —
+`main` has moved" (branch stuck at `2850f5e` since 2026-10-02, `main` since
+moved to `a10c6bb`). Rebased `test/issue-64-spec` onto current `origin/main`
+in an isolated worktree. Only real conflict: `seed.ts`'s fixture-numbering
+comments — `main` had independently landed its own "11. Public recap fixture
+(#1108)" at the same insertion point this branch's "11. Global
+partner-selection notification" used. Kept both fixtures, renumbered this
+PR's to **12** (no other file references the old number — `fixtures.ts`'s
+`globalNotice` key is untouched). Re-verified: `eslint` clean on the 4
+touched e2e files, `playwright test --list` → 83 tests/15 files (clean
+parse — counts shifted from the original 74/14 since `main` has gained
+specs), `typecheck` + `build` clean. Force-pushed; PR is now `MERGEABLE`.
+Still stacked on open PR #955 (`fix/e2e-fixtures-syntax`) as before — that's
+unchanged by this rework, already explained in the PR body. Card moved back
+to **In Review**.
+
+**Next:** Ron re-reviews PR #965; once #955 merges this PR's diff shrinks to
+just the new spec.
+
 ## 2026-10-11 — RECOVERED: 24 entries that were written but never committed
 
 Written into this checkout's `STATUS.md` between 2026-09-25 and
@@ -783,6 +805,7 @@ Job 2 skipped (daytime slot; per-day authoring cap belongs to the morning run).
 **Job 2 (author specs), update:** shortlisted 8 Done issues lacking a spec (oldest first, via an Explore agent): #64, #81, #98, #100, #102, #103, #104, #117. Since `main`'s `e2e/fixtures.ts` + `seed.ts` are themselves unparseable right now (blocked on #955), every new branch had to base on `fix/e2e-fixtures-syntax` instead of `main` (noted transparently in each PR — the diff shrinks to just the new spec once #955 merges). Authored and shipped **1 of the planned 5** given the added overhead this cycle: [PR #965](https://github.com/notronwest/tournament-manager/pull/965) — regression spec for #64 (global partner-selection notification), verified via `eslint` + `playwright test --list` (74/14, up from 72/13) but **not run against the live app** (no executable path right now).
 - **Designed but not yet authored** (ready to pick up next run, no re-research needed): **#81** (returning-registrant additional-event pricing — fix already shipped via `computeLineItems`'s `alreadyHasPaidEvent` flag; needs a paid-then-pending-in-same-tournament fixture + a checkout-page tier-label assertion), **#98** (register focus-mode overlay — found the shipped implementation **narrows the issue's own AC**: it explicitly documents that scrim-click-to-close and the mockup's "×" were deliberately dropped, only "Not now" + Esc actually close focus — worth flagging to Ron: wire those up, or amend the AC), **#100** (V5 login rebrand — fully confirmed shipped; spec is fully designed, no seed needed), **#102** (partner-seeker checkout unblock — fix already shipped in `CheckoutPage.tsx`'s `blockingError` exemption; needs a seeker fixture + a pricing tier so the real Pay-gate branch renders instead of the free-tournament shortcut).
 - Deferred #103/#104/#117 untouched (beyond the cap either way).
+**Local checkout note:** this host's working tree had a stale, uncommitted STATUS.md/CLAUDE.md diff on `test/issue-12-spec` reflecting this morning's run — content already captured in the open docs PR [#959](https://github.com/notronwest/tournament-manager/pull/959), so stashed rather than committed (avoids a duplicate/conflicting entry). This entry lands on `fix/e2e-fixtures-syntax` (PR #955) instead, since that's the branch with this run's actual work; expect a small STATUS.md merge conflict between #955 and #959 when both land — normal, resolve by keeping both entries.
 
 ## 2026-09-22 — Testing agent (daytime run): Job 1 triage, known #936 failure (persistent this time), no new card
 
