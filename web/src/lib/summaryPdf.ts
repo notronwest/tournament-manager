@@ -731,7 +731,7 @@ function drawDays(s: Sheet, summary: TournamentSummary): void {
     { label: "Day", w: 110, align: "left" },
     { label: "Matches", w: 70, align: "right" },
     { label: "Points", w: 70, align: "right" },
-    { label: "First – last score", w: 190, align: "left" },
+    { label: "On court – last score", w: 190, align: "left" },
     { label: "Span", w: 100, align: "right" },
   ];
   const padX = 6;
@@ -767,7 +767,7 @@ function drawDays(s: Sheet, summary: TournamentSummary): void {
       fmtDay(d.date),
       String(d.matches),
       d.points.toLocaleString(),
-      `${fmtTime(d.firstFinish)} – ${fmtTime(d.lastFinish)}`,
+      `${fmtTime(d.firstStart)} – ${fmtTime(d.lastFinish)}`,
       fmtMinutes(d.spanMinutes),
     ];
     const base = Sheet.baseline(s.y, ROW.size, rowH);
@@ -779,7 +779,7 @@ function drawDays(s: Sheet, summary: TournamentSummary): void {
   }
   s.y -= 6;
   s.flow(
-    wrap("Times are when each score was recorded at the desk, shown in the time zone this report was generated in.", regular, FINE.size, CONTENT_W),
+    wrap("Each day runs from the first match going on court to the last score recorded, shown in the time zone this report was generated in.", regular, FINE.size, CONTENT_W),
     MARGIN,
     FINE.size,
     FINE.lh,
