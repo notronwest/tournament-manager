@@ -2688,3 +2688,19 @@ errors), build ✅, 399/399 vitest, lint identical to `origin/main` baseline (35
 problems/31 errors/4 warnings, none in touched files). Pushed to the same branch, commented
 on the PR, moved card back to **In Review**. Next: reviewer re-review; PR is `MERGEABLE`
 with the required "PR links an issue" check green.
+
+## 2026-10-14 — Promoted to PROD: campaign reporting role + functions (club dashboard Marketing → Results)
+
+Ron asked to switch on the club dashboard's Campaign results screen ("Not switched on yet").
+Its reporting Worker (club-dashboard `worker-campaign-report`, D-0120) reads the Bert & Erne
+**PROD** project, where `campaign_reporter` and the three `campaign_report*` functions did not
+exist yet — the migration was only on TEST. Merged the queue's open promotion PR #1163
+(main → production, 27 commits; reviewer escalated only because promotions are Ron's call,
+Ron said "promote to prod"). `migrations.yml` on production applied
+`20261011120000_campaign_registry_and_reporting.sql` (log shows "Applying migration …",
+apply-time assertions passed). The red `e2e` check on #1163 was the nightly regression
+against TEST failing on pages this release does not touch (reopen registration, admin
+rating picker, recap/credit smoke, mobile recap) — pre-existing, not from this release.
+**Remaining (Ron, needs his Cloudflare + Supabase sign-ins):** deploy the Worker, set its
+two secrets, set `VITE_CAMPAIGN_REPORT_URL` in the club-dashboard Pages project (Production
++ Preview) and rebuild. Step-by-step given in chat.
