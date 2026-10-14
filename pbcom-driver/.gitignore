@@ -5,3 +5,8 @@ dist/
 .DS_Store
 # local run state (push ledger snapshots, lock files) — never committed
 state/
+# Live tournament -> PB.com event binding for THIS host's account. Machine-local
+# operational state like state/ above, not source: the path is overridable via
+# PBCOM_BINDING_PATH and the ids differ per environment. (PBCOM-PUSH-HOST stays
+# tracked — that one is the committed singleton fact.)
+binding.json
