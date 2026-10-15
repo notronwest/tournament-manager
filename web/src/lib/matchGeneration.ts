@@ -47,13 +47,76 @@ export interface RoundRobinTeam {
   poolIndex: number | null;
 }
 
-// n-choose-2 pairings, generated once per `play_each_team_times`. Multi-pool:
-// pairings only happen within a single pool. `position` increments GLOBALLY
-// across pools and reps, so every row in one generate gets a distinct
-// position — which is exactly what the (event_id, stage, round, position)
-// unique index keys on. The same pair legitimately repeats when
-// play_each_team_times > 1, and lands at a different position each rep, so
-// the constraint allows it.
+// Circle / polygon-rotation round-robin scheduler. Teams must arrive in SEED
+// ORDER (the console's buildTeams sorts by seed, unseeded last, before this
+// runs). Returns the schedule as an ordered list of rounds; each round lists
+// its real pairings, with bye pairings omitted.
+//
+// Round 1 is the "fold": seed i vs seed (n+1−i). For 7 seeded teams that is
+// {1v7, 2v6, 3v5} with the MIDDLE seed (4) idle — exactly what
+// PickleballBrackets.com schedules. We realize this by laying the seeds out
+// with a phantom BYE inserted at the middle for odd counts, so the initial
+// column-fold pairs the ends inward and the middle seed draws the bye; then
+// we hold slot 0 fixed and rotate the rest (the canonical circle method),
+// which yields n−1 rounds (even n) or n rounds (odd n, one bye per round) in
+// which every unordered pair appears exactly once and each team plays at most
+// once per round.
+//
+// CAVEAT: round 1 is verified against PB.com (the fold); rounds 2+ follow the
+// canonical circle rotation and may not match PB.com's later-round ordering
+// slot-for-slot. For a round robin that is cosmetic — the full set of games
+// and the scoring (by player, not slot) are identical.
+const RR_BYE = Symbol("rr-bye");
+export function circleMethodRounds<T>(teams: T[]): [T, T][][] {
+  const n = teams.length;
+  if (n < 2) return [];
+  type Slot = T | typeof RR_BYE;
+  // Pad odd counts to an even slot count with a BYE placed at the middle, so
+  // the opening fold idles the MIDDLE seed (PB.com's round 1) rather than seed 1.
+  const slots: Slot[] =
+    n % 2 === 0
+      ? [...teams]
+      : [...teams.slice(0, Math.ceil(n / 2)), RR_BYE, ...teams.slice(Math.ceil(n / 2))];
+  const m = slots.length; // always even
+  const rounds: [T, T][][] = [];
+  let cur = slots.slice();
+  for (let r = 0; r < m - 1; r++) {
+    const round: [T, T][] = [];
+    for (let k = 0; k < m / 2; k++) {
+      const a = cur[k];
+      const b = cur[m - 1 - k];
+      if (a !== RR_BYE && b !== RR_BYE) round.push([a as T, b as T]);
+    }
+    rounds.push(round);
+    // Hold slot 0 fixed; rotate the rest (move the last slot to the front of
+    // the rotating tail). Direction is immaterial to correctness.
+    cur = [cur[0], cur[m - 1], ...cur.slice(1, m - 1)];
+  }
+  return rounds;
+}
+
+// Build the round-robin schedule as match rows. Unlike the old naive C(n,2)
+// nested loop (which marked EVERY match round 1 and let seed 1 play
+// back-to-back), this schedules pairings into real ROUNDS via the circle
+// method above, so each team plays at most once per round and round 1 is the
+// PB.com fold.
+//
+// Keys / constraints:
+//   * `position` increments GLOBALLY across pools and reps in schedule
+//     (round-major) order, so every row in one generate has a distinct
+//     position. That alone makes (event_id, stage, round, position) unique —
+//     and, because it is emitted round-major within each pool, the display
+//     helper packRoundRobinRounds (which re-derives rounds by walking matches
+//     in position order) reproduces this exact schedule without change.
+//   * Multi-pool (pool_count > 1): the circle method runs INDEPENDENTLY within
+//     each pool (pairings never cross pools). Round numbers are per pool; the
+//     global position counter keeps (round, position) unique across pools.
+//   * play_each_team_times > 1: the whole schedule repeats, and each later rep
+//     CONTINUES the round numbering after the previous rep's last round
+//     (round = rep * roundsThisGroup + localRound). This keeps every team to
+//     at most one match per round across the whole event, and the global
+//     position counter keeps the repeated pairs at distinct positions so the
+//     unique index allows the legitimate repeat.
 export function buildRoundRobinRows(
   event: RoundRobinEvent,
   teams: RoundRobinTeam[],
@@ -68,19 +131,21 @@ export function buildRoundRobinRows(
       : [teams];
   for (let rep = 0; rep < event.play_each_team_times; rep++) {
     for (const group of poolGroups) {
-      for (let i = 0; i < group.length; i++) {
-        for (let j = i + 1; j < group.length; j++) {
+      const rounds = circleMethodRounds(group);
+      rounds.forEach((pairs, roundIdx) => {
+        const round = rep * rounds.length + roundIdx + 1;
+        for (const [a, b] of pairs) {
           rows.push({
             event_id: event.id,
             stage: "round_robin",
-            round: 1,
+            round,
             position: position++,
-            team_a_reg_id: group[i].captainRegId,
-            team_b_reg_id: group[j].captainRegId,
+            team_a_reg_id: a.captainRegId,
+            team_b_reg_id: b.captainRegId,
             status: "pending",
           });
         }
-      }
+      });
     }
   }
   return rows;
