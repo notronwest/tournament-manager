@@ -17,6 +17,7 @@ import { TournamentSummaryReport } from "../../components/TournamentSummaryRepor
 import { SummaryEmailModal } from "../../components/SummaryEmailModal";
 import { PublicPageLink } from "../../components/PublicPageLink";
 import { renderSummaryPdf, summaryPdfFilename } from "../../lib/summaryPdf";
+import { fetchHomeClubPlayerIds } from "../../lib/clubAffiliations";
 import { displayHeading, fieldLabel } from "./contactsUi";
 import {
   ink,
@@ -83,6 +84,7 @@ export default function TournamentSummaryPage() {
   const [events, setEvents] = useState<SummaryEvent[]>([]);
   const [regs, setRegs] = useState<EventRegistration[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [homeClubIds, setHomeClubIds] = useState<Set<string>>(() => new Set());
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,10 +182,21 @@ export default function TournamentSummaryPage() {
         playerRows = p.rows;
       }
 
+      // Home-club members get a ⭐. Not fatal: without it the report just
+      // shows no stars (e.g. before the affiliations table exists).
+      let clubIds = new Set<string>();
+      if (playerIds.length > 0) {
+        const club = await fetchHomeClubPlayerIds(org.id, playerIds);
+        if (cancelled) return;
+        if (club.error) console.warn("home-club affiliations unavailable", club.error.message);
+        else clubIds = club.ids;
+      }
+
       setTournament(tRow);
       setEvents(eventRows);
       setRegs(regRows);
       setPlayers(playerRows);
+      setHomeClubIds(clubIds);
       setMatches(matchRows);
       setLoading(false);
     })();
@@ -201,9 +214,10 @@ export default function TournamentSummaryPage() {
             players,
             matches,
             window: { startsAt: tournament.starts_at, endsAt: tournament.ends_at },
+            homeClub: org ? { name: org.name, playerIds: homeClubIds } : undefined,
           })
         : null,
-    [tournament, events, regs, players, matches],
+    [tournament, events, regs, players, matches, org, homeClubIds],
   );
 
   const header = useMemo<ReportHeader | null>(() => {
