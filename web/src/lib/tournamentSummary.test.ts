@@ -137,6 +137,30 @@ describe("buildTournamentSummary", () => {
     timeZone: TZ,
   });
 
+  it("marks a team with a home-club player with ⭐ (either partner), and reports the legend", () => {
+    const starred = buildTournamentSummary({
+      events,
+      regs: [...regs1, ...regs2],
+      players,
+      matches: [...rr1, ...playoff2],
+      timeZone: TZ,
+      // Di (p4) is Cy's partner in event 1; Bo (p2) plays singles in event 2.
+      homeClub: { name: "WMPC", playerIds: new Set(["p4", "p2"]) },
+    });
+    const e1 = starred.events.find((e) => e.id === "e1")!;
+    expect(e1.podium.map((p) => p.team)).toEqual(["Ann Adams / Bo Burke ⭐", "Cy Cole / Di Dunn ⭐", "Ed Eng / Flo Fox"]);
+    const e2 = starred.events.find((e) => e.id === "e2")!;
+    expect(e2.podium.find((p) => p.place === "gold")!.team).toBe("Bo Burke ⭐");
+    expect(starred.homeClub).toEqual({ name: "WMPC", teams: 4 }); // Di also plays singles in e2
+    expect(summary.homeClub).toBeNull();
+    expect(summary.events[0].podium.every((p) => !p.team.includes("⭐"))).toBe(true);
+  });
+
+  it("leaves the legend off when no team has a home-club player", () => {
+    const s = buildTournamentSummary({ events, regs: regs1, players, matches: rr1, timeZone: TZ, homeClub: { name: "WMPC", playerIds: new Set() } });
+    expect(s.homeClub).toBeNull();
+  });
+
   it("counts players once across events, teams per event, and only scored matches", () => {
     expect(summary.headline).toMatchObject({
       players: 6,

@@ -116,6 +116,7 @@ function twoEventSummary() {
     players,
     matches: [...rr1, ...playoff2, ...open3],
     timeZone: "UTC",
+    homeClub: { name: "WMPC", playerIds: new Set(["p1", "p5"]) },
   });
 }
 
@@ -166,6 +167,14 @@ describe("renderSummaryPdf", () => {
     const doc = await PDFDocument.load(bytes);
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
     expect(doc.getTitle()).toBe("NH Baners — Fall Classic — Tournament summary");
+  });
+
+  it("renders home-club ⭐ team names and the legend without throwing", async () => {
+    const summary = twoEventSummary();
+    expect(summary.homeClub).not.toBeNull();
+    expect(summary.events.some((e) => e.podium.some((p) => p.team.includes("⭐")))).toBe(true);
+    const bytes = await renderSummaryPdf({ header, summary, note: "" });
+    expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
   });
 
   it("survives an empty tournament and an empty note", async () => {
