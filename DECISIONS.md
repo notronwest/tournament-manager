@@ -3505,6 +3505,7 @@ settings file that could not be rendered whole.
 
 ## Proposed (not binding yet)
 
+- D-0153 — The CTO stands up with every repo on a schedule, and the fleet map is a committed artifact (2026-10-12)
 - D-0157 — A colour is measured where it is used, and a brand fill is not text ink (2026-10-13)
 
 ## Superseded (history)
