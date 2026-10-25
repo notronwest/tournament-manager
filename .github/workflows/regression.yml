@@ -75,9 +75,22 @@ jobs:
           E2E_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
         run: npx tsx e2e/record-history.ts
 
+      # Reports to the NIGHTLY TEST CHANNEL when one is configured, and to the old
+      # destination when it is not. These results are their own kind of traffic — one line
+      # a night, every night, mostly green — and they do not belong in the channel that
+      # exists for things going wrong. Two properties matter more than the move:
+      #
+      #   * nothing goes quiet in between. No DISCORD_TEST_RESULTS_WEBHOOK secret and this
+      #     posts exactly where it posts today.
+      #   * the failure mode that matters is NO line, not a red one, so a webhook that
+      #     refuses the post falls back rather than swallowing the result.
+      #
+      # The club's nightly Court Reserve scheduling check posts to the same channel through
+      # its own half of this change, so one webhook moves both.
       - name: Report to Discord
         if: always() && steps.cfg.outputs.ready == 'true'
         env:
+          TEST_RESULTS_WEBHOOK: ${{ secrets.DISCORD_TEST_RESULTS_WEBHOOK }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
           if [ "${{ steps.tests.outcome }}" = "success" ]; then
@@ -85,7 +98,15 @@ jobs:
           else
             msg="❌ Nightly regression FAILED — a previously-fixed behavior may have regressed. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           fi
-          curl -s -X POST -H "Content-Type: application/json" -d "$(jq -Rn --arg m "$msg" '{content:$m}')" "$DISCORD_WEBHOOK" || true
+          body="$(jq -Rn --arg m "$msg" '{content:$m}')"
+          post() { curl -fsS -m 20 -X POST -H "Content-Type: application/json" -d "$body" "$1" >/dev/null; }
+          if [ -n "$TEST_RESULTS_WEBHOOK" ] && post "$TEST_RESULTS_WEBHOOK"; then
+            echo "posted to the nightly test channel"
+          elif [ -n "$DISCORD_WEBHOOK" ] && post "$DISCORD_WEBHOOK"; then
+            echo "posted to the original channel (no test-results webhook, or it refused)"
+          else
+            echo "::warning::the nightly result reached no channel — a report nobody receives looks exactly like a quiet night"
+          fi
 
       # HTML report (A): upload on every run (pass or fail) so each night has a
       # downloadable per-test report — with traces/screenshots on failures.
