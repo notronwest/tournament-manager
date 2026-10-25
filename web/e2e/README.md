@@ -22,7 +22,14 @@ resolves) and the occasional maintenance fix.
    (email/password — the app supports `signInWithPassword`).
 3. **Report** (`regression.yml`) — nightly GitHub Action: seed → `playwright
    test` → record per-test history → post a one-line pass/fail summary to the
-   Backlog Discord channel.
+   **nightly test channel** (`DISCORD_TEST_RESULTS_WEBHOOK`), falling back to the
+   Backlog channel (`DISCORD_WEBHOOK`) when that secret is unset or the webhook
+   refuses the post. These results are their own kind of traffic — one line a
+   night, mostly green — and they do not belong in a channel meant for things
+   going wrong; the club's nightly Court Reserve scheduling check posts to the
+   same channel, so one webhook moves both. A run that reaches NO channel logs a
+   workflow warning, because a report nobody receives looks exactly like a quiet
+   night.
 
 ## Where to see results
 
@@ -61,7 +68,9 @@ BASE_URL=https://tournament-manager.pages.dev TEST_ORG_PW=… npm run test:e2e
 - `E2E_SUPABASE_URL`, `E2E_SUPABASE_SERVICE_ROLE_KEY` — for the seed.
 - `E2E_BASE_URL` — the deployed app to test (prod or a preview).
 - `E2E_TEST_PASSWORD` — password for the seeded test accounts.
-- `DISCORD_WEBHOOK` — the Backlog channel webhook for the report.
+- `DISCORD_TEST_RESULTS_WEBHOOK` — the nightly test channel. When unset, the report
+  falls back to `DISCORD_WEBHOOK` so nothing goes quiet.
+- `DISCORD_WEBHOOK` — the Backlog channel webhook; now the fallback, not the default.
 
 ## Status / what's left to go green
 
