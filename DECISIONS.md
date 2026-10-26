@@ -3778,6 +3778,40 @@ destination, because this board has no cancelled column and `In Review` is a wor
   than discovered later.
 - Re-writing a card already in `Done` on every tick. Churn on a board Ron reads is its own noise.
 
+### D-0225 — The 44px target floor binds controls, not an inline text link inside dense metadata
+
+*2026-10-25 · scope: `docs/design-system.md, infrastructure/design-gate/CHECKLIST.md, web/src/**` · source: Two design-critic runs on one club-dashboard change (presets gaining the Court Reserve event each template copies, 2026-10-25) graded the same inline link opposite ways on the same rule. The first FAILED it for a 46.4 × 13.5px hit box under the 44px floor. The fix — `minHeight: 44` on an inline-flex link inside an 11.5px line — was then FAILED by the second critic, measured: the row grew 27.8px, the link floated under a dangling separator, and the editor field jumped 27.5px taller on the first keystroke. Both critics graded to the rule as written and both flagged that the rule does not say whether it reaches an inline link in running prose. The repo already ships inline Court Reserve links at 12.5px on four other screens.*
+
+**Decision.** The 44px minimum target applies to **controls**: buttons, icon buttons, inputs,
+rows that are themselves tappable, and any link that is a screen's navigation or its primary
+action. It does **not** apply to a text link inside a line of dense metadata, on two
+conditions, both measurable:
+
+1. The link's text is **at least 11px** and clears **4.5:1** against its own background
+   (D-0157). An inline link that is hard to read is a defect on contrast, which is the rule
+   that actually protects it.
+2. There is **another way to reach the same destination** that does meet the floor, or the
+   destination is **supplementary** — context rather than the task. A link that is the only
+   route to something the screen exists for is navigation, and the floor binds it.
+
+**Why this is not a loosening.** The floor exists so a thumb can hit a control on a phone. An
+id inside a metadata line — "Clinic · 22 tiers priced · 2 courts · command bar copies 1672774"
+— is a fact being stated, and the link is a convenience on top of the fact. Forcing 44px on it
+does not make the line easier to use: measured, it made the row 27.8px taller, broke the
+sentence it sat in, and left the link floating under a dangling separator. The rule made the
+screen worse while scoring better, which is the signal that it was being applied to the wrong
+kind of thing.
+
+**What it costs, stated.** An inline link is a smaller target, and someone will occasionally
+miss it. That is the trade, taken deliberately: condition 2 is what keeps the miss cheap —
+nothing is reachable *only* through an inline link. Where that is not true, the floor binds
+and the link is a control.
+
+**Two things this does not say.** It does not exempt a link because it happens to be inline —
+condition 2 is a test of what the link DOES, not of its markup. And it does not touch
+contrast, spacing or focus order: an inline link still needs a visible focus ring and still
+answers to every other point on the checklist.
+
 ## Proposed (not binding yet)
 
 - D-0153 — The CTO stands up with every repo on a schedule, and the fleet map is a committed artifact (2026-10-12)
