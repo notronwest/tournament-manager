@@ -180,10 +180,6 @@ const MAX_MATCH_MS = 3 * 60 * 60 * 1000;
 // in one or two corrections after the fact, not a whole day's results.
 const LATE_ENTRY_MAX_PER_DAY = 2;
 
-// A start more than this before its finish isn't a real play window (the
-// match sat loaded on a court, or was scored the next day).
-const MAX_MATCH_MS = 3 * 60 * 60 * 1000;
-
 const GENDER_LABEL: Record<SummaryEvent["gender"], string> = {
   men: "Men's",
   women: "Women's",
