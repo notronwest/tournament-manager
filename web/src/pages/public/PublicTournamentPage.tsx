@@ -2610,7 +2610,7 @@ function EventCard({
         eligibilityReasons.some((r) => r.startsWith("needs age"));
       if (agedOut && dependents.length === 0) {
         return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-end" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <span style={{ fontSize: 12, color: inkMuted }}>
               Not eligible: {eligibilityReasons.join("; ")}
             </span>
@@ -2622,21 +2622,16 @@ function EventCard({
       }
       if (dependentsAlreadyIn.length > 0) {
         return (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 2,
-              alignItems: "flex-end",
-              textAlign: "right",
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <span style={{ fontSize: 12, color: ink }}>
               {dependentsAlreadyIn.map((d) => playerName(d.player)).join(", ")}{" "}
               {dependentsAlreadyIn.length === 1 ? "is" : "are"} registered
             </span>
+            {/* Whose refusal this is has to be said: under a sentence naming a
+                child, a bare "not eligible: needs age 18 or under" reads as
+                the system calling an 11-year-old too old for the under-18s. */}
             <span style={{ fontSize: 12, color: inkMuted }}>
-              Not eligible: {eligibilityReasons.join("; ")}
+              You can&rsquo;t enter: {eligibilityReasons.join("; ")}
             </span>
           </div>
         );
@@ -2648,6 +2643,13 @@ function EventCard({
       );
     }
     return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+        {dependentsAlreadyIn.length > 0 && (
+          <span style={{ fontSize: 12, color: ink }}>
+            {dependentsAlreadyIn.map((d) => playerName(d.player)).join(", ")}{" "}
+            {dependentsAlreadyIn.length === 1 ? "is" : "are"} registered
+          </span>
+        )}
       <button
         ref={registerBtnRef}
         type="button"
@@ -2661,6 +2663,7 @@ function EventCard({
       >
         {isFull ? "Join waitlist" : "Register"}
       </button>
+      </div>
     );
   };
 

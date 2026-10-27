@@ -10,6 +10,7 @@ import { supabase } from "../supabase";
 import { PAYABLE_STATUSES } from "../lib/registrationStatus";
 import { useAuth } from "../auth/AuthProvider";
 import { computeLineItems } from "../lib/pricing";
+import { fetchDependents, playerName } from "../lib/guardians";
 import { pickActivePricingTier, type PricingTier } from "../lib/pricingTiers";
 import type { Database } from "../types/supabase";
 
@@ -76,6 +77,15 @@ export function PendingPaymentsProvider({
       return;
     }
 
+    // The basket is the family's: compute_checkout_total bills a guardian for
+    // their dependents too (#1169), so a bar scoped to the payer alone would
+    // either not appear at all for a parent who entered only their child, or
+    // quote less than the checkout it opens.
+    const { dependents } = await fetchDependents(me.id);
+    const registrantNames = new Map<string, string | null>([[me.id, null]]);
+    for (const d of dependents) registrantNames.set(d.player.id, playerName(d.player));
+    const payingFor = [me.id, ...dependents.map((d) => d.player.id)];
+
     // Pull every pending_payment registration with enough joined
     // context to render the bar + group by tournament. We fetch the
     // event + tournament + its pricing tiers alongside the reg, so
@@ -84,7 +94,7 @@ export function PendingPaymentsProvider({
     const { data, error } = await supabase
       .from("event_registrations")
       .select(
-        `id, event_id,
+        `id, event_id, player_id,
          event:events!event_id (
            id, name, event_fee_cents,
            tournament:tournaments!tournament_id (
@@ -99,7 +109,7 @@ export function PendingPaymentsProvider({
            )
          )`,
       )
-      .eq("player_id", me.id)
+      .in("player_id", payingFor)
       .in("status", PAYABLE_STATUSES)
       .is("deleted_at", null);
     if (error || !data) {
@@ -112,6 +122,7 @@ export function PendingPaymentsProvider({
     type Row = {
       id: string;
       event_id: string;
+      player_id: string;
       event: {
         id: string;
         name: string;
@@ -141,7 +152,10 @@ export function PendingPaymentsProvider({
         entryFeeCents: number;
         additionalEventFeeCents: number;
         firstEventsIncluded: number;
-        events: { id: string; name: string; event_fee_cents: number }[];
+        byRegistrant: Map<
+          string,
+          { id: string; name: string; event_fee_cents: number }[]
+        >;
       }
     >();
     for (const r of rows) {
@@ -160,63 +174,79 @@ export function PendingPaymentsProvider({
           entryFeeCents: activeTier?.first_event_fee_cents ?? 0,
           additionalEventFeeCents: activeTier?.additional_event_fee_cents ?? 0,
           firstEventsIncluded: activeTier?.first_events_included ?? 1,
-          events: [],
+          byRegistrant: new Map(),
         };
         byTournament.set(t.id, g);
       }
-      g.events.push({
-        id: ev.id,
+      const mine = g.byRegistrant.get(r.player_id) ?? [];
+      mine.push({
+        // The REGISTRATION id, not the event id: two registrants in one
+        // bracket would otherwise collide on the key computeLineItems uses.
+        id: r.id,
         name: ev.name,
         event_fee_cents: ev.event_fee_cents,
       });
+      g.byRegistrant.set(r.player_id, mine);
     }
 
     // Check which pending tournaments the player already has a paid
     // registration in — those are returning registrants whose
     // first-event fee was already collected in a prior session.
+    // Asked per registrant as well as per tournament: a parent who has already
+    // paid for themselves has not used up their child's first-event rate.
     const pendingTournamentIds = Array.from(byTournament.keys());
-    const paidTournamentIds = new Set<string>();
+    const paidAlready = new Set<string>(); // `${tournamentId}:${playerId}`
     if (pendingTournamentIds.length > 0) {
       const { data: paidRegData } = await supabase
         .from("event_registrations")
-        .select(`event:events!event_id (tournament_id)`)
-        .eq("player_id", me.id)
+        .select(`player_id, event:events!event_id (tournament_id)`)
+        .in("player_id", payingFor)
         .eq("status", "paid")
         .is("deleted_at", null);
-      type PaidRow = { event: { tournament_id: string } | null };
+      type PaidRow = { player_id: string; event: { tournament_id: string } | null };
       for (const pr of (paidRegData ?? []) as unknown as PaidRow[]) {
         const tid = pr.event?.tournament_id;
         if (tid && pendingTournamentIds.includes(tid)) {
-          paidTournamentIds.add(tid);
+          paidAlready.add(`${tid}:${pr.player_id}`);
         }
       }
     }
 
     const out: PendingTournamentGroup[] = [];
     for (const g of byTournament.values()) {
-      const { items, totalCents } = computeLineItems(
-        g.events,
-        {
-          firstEventFeeCents: g.entryFeeCents,
-          additionalEventFeeCents: g.additionalEventFeeCents,
-          firstEventsIncluded: g.firstEventsIncluded,
-        },
-        paidTournamentIds.has(g.tournamentId),
-      );
+      const events: PendingTournamentGroup["events"] = [];
+      let totalCents = 0;
+      for (const [playerId, theirEvents] of g.byRegistrant) {
+        const result = computeLineItems(
+          theirEvents,
+          {
+            firstEventFeeCents: g.entryFeeCents,
+            additionalEventFeeCents: g.additionalEventFeeCents,
+            firstEventsIncluded: g.firstEventsIncluded,
+          },
+          paidAlready.has(`${g.tournamentId}:${playerId}`),
+        );
+        totalCents += result.totalCents;
+        const who = registrantNames.get(playerId) ?? null;
+        for (const it of result.items) {
+          const name = theirEvents.find((e) => e.id === it.event.id)?.name ?? "Event";
+          events.push({
+            eventId: it.event.id,
+            // Named only for someone other than the payer, so a bar with no
+            // dependents in it reads exactly as it always has.
+            eventName: who ? `${name} — ${who}` : name,
+            cents: it.cents,
+            tier: it.tier,
+          });
+        }
+      }
       out.push({
         tournamentId: g.tournamentId,
         tournamentName: g.tournamentName,
         tournamentSlug: g.tournamentSlug,
         orgSlug: g.orgSlug,
         totalCents,
-        events: items.map((it) => ({
-          eventId: it.event.id,
-          eventName:
-            g.events.find((e) => e.id === it.event.id)?.name ??
-            "Event",
-          cents: it.cents,
-          tier: it.tier,
-        })),
+        events,
       });
     }
     // Stable sort by tournament name so the bar's order doesn't
