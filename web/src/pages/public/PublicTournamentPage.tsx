@@ -64,6 +64,7 @@ import {
   dangerFg,
   successBg,
   successFg,
+  inputStyle,
 } from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
@@ -1703,9 +1704,20 @@ function EventCard({
   // button on the parent alone would leave them no way to reach the chooser
   // and enter the child — a dead end in front of the one flow this card is
   // for. The button opens whenever SOMEONE here can enter.
+  // Already in this event? The player's own case never reaches here —
+  // `myStatus` turns the card into Change partner / Cancel first — but a
+  // dependent's registration is invisible to that map, which is what let the
+  // button through for a child who was already entered.
+  const alreadyInThisEvent = (playerId: string) =>
+    dependentEventIds.get(playerId)?.has(event.id) ?? false;
   const eligibleRegistrants = registrants.filter(
-    (r) => checkEligibility(r.player, event, tournamentStartsAt).eligible,
+    (r) =>
+      checkEligibility(r.player, event, tournamentStartsAt).eligible &&
+      !alreadyInThisEvent(r.player.id),
   );
+  // Named where the button was, rather than leaving the card silent about why
+  // it has nothing to offer.
+  const dependentsAlreadyIn = dependents.filter((d) => alreadyInThisEvent(d.player.id));
   // A dependent's registration doesn't show in `myStatus` — that map is the
   // signed-in player's own. Without this the card would still offer Register
   // for a child who is already in, and the insert would die on the
@@ -1716,9 +1728,7 @@ function EventCard({
   // exclusion list and a seeker should stay pickable. A child registered and
   // looking for a partner is exactly the case this guard is for.
   const subjectAlreadyIn =
-    registeringSomeoneElse &&
-    subjectPlayer != null &&
-    (dependentEventIds.get(subjectPlayer.id)?.has(event.id) ?? false);
+    registeringSomeoneElse && subjectPlayer != null && alreadyInThisEvent(subjectPlayer.id);
 
   // The cost line is a statement about the person the form names, not about
   // the person paying. `entryCostTier` is the payer's, derived from
@@ -2610,6 +2620,27 @@ function EventCard({
           </div>
         );
       }
+      if (dependentsAlreadyIn.length > 0) {
+        return (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              alignItems: "flex-end",
+              textAlign: "right",
+            }}
+          >
+            <span style={{ fontSize: 12, color: ink }}>
+              {dependentsAlreadyIn.map((d) => playerName(d.player)).join(", ")}{" "}
+              {dependentsAlreadyIn.length === 1 ? "is" : "are"} registered
+            </span>
+            <span style={{ fontSize: 12, color: inkMuted }}>
+              Not eligible: {eligibilityReasons.join("; ")}
+            </span>
+          </div>
+        );
+      }
       return (
         <span style={{ fontSize: 12, color: inkMuted }}>
           Not eligible: {eligibilityReasons.join("; ")}
@@ -3412,16 +3443,9 @@ const notEligibleLinkStyle: CSSProperties = {
 // and the register form already carries a radiogroup for partner mode.
 // 44px minimum height so it is a real tap target on a phone.
 const registeringForSelectStyle: CSSProperties = {
-  width: "100%",
+  ...inputStyle,
   maxWidth: 320,
   minHeight: 44,
-  padding: "10px 12px",
-  border: `1px solid ${rule}`,
-  borderRadius: 6,
-  fontSize: 14,
-  fontFamily: "inherit",
-  background: "#ffffff",
-  color: ink,
 };
 
 // The chosen registrant is already in this event, or doesn't qualify for it.

@@ -74,7 +74,6 @@ type Row = {
 type RegData = {
   id: string;
   player_id: string;
-  registeredByName: string | null;
   partner_registration_id: string | null;
   partner_status: PartnerStatus;
   status: RegistrationStatus;
@@ -371,9 +370,6 @@ export default function AttendeesPage() {
           status: r.status,
           event_fee_cents: r.event_fee_cents,
           player: r.players,
-          registeredByName: r.registered_by
-            ? `${r.registered_by.first_name} ${r.registered_by.last_name}`.trim()
-            : null,
         };
         const eid = r.events.id;
         if (!byEvent.has(eid)) {
