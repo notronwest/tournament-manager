@@ -116,6 +116,16 @@ as $$
      where g.dependent_player_id = p_player_id
        and g.guardian_player_id = current_player_id()
        and g.deleted_at is null
+       -- The authority holds only while the dependent is still account-less.
+       -- Once the real person claims the row (auth_user_id set) the link goes
+       -- inert, so a link made against an unclaimed contact cannot be used to
+       -- reach that person's registrations or profile after they sign up.
+       and exists (
+         select 1 from players d
+          where d.id = g.dependent_player_id
+            and d.auth_user_id is null
+            and d.deleted_at is null
+       )
   );
 $$;
 
@@ -267,6 +277,28 @@ create policy "event_regs update by player or org staff" on event_registrations
       where e.id = event_registrations.event_id and has_org_role(t.organization_id, 'staff')
     )
   );
+
+-- registered_by_player_id is write-once. The INSERT policy pins it to the
+-- caller, but an UPDATE policy cannot compare against the OLD row, so any
+-- permitted updater could otherwise rewrite who "signed this child up". A
+-- trigger keeps the inserted value, whoever updates (a `with check` mirroring
+-- `using` would instead block the dependent or staff from updating a row a
+-- guardian created).
+create or replace function public.keep_registered_by_player_id()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.registered_by_player_id := old.registered_by_player_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists keep_registered_by_player_id on event_registrations;
+create trigger keep_registered_by_player_id
+  before update on event_registrations
+  for each row execute function public.keep_registered_by_player_id();
 
 -- DELETE is NOT widened. A guardian withdraws a dependent through the
 -- withdrawal columns (an UPDATE), the same route a player has for themselves;
@@ -554,6 +586,7 @@ begin
      where g.guardian_player_id = p_player_id
        and g.deleted_at is null
        and p.deleted_at is null
+       and p.auth_user_id is null
     order by is_payer desc, display_name
   loop
     -- Each entrant's tiering is their own, so the "has this person already
