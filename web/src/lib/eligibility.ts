@@ -12,9 +12,9 @@ type Player = Database["public"]["Tables"]["players"]["Row"];
 // doubles + men/women → self_rating_doubles; singles → self_rating_singles.
 // A null self-rating for the required format counts as ineligible.
 //
-// Gender rule: mixed events never gate on gender. Men's → player.gender "M";
-// women's → player.gender "F". Any other player gender (including null or "X")
-// is blocked from a gendered event.
+// Gender rule: mixed and open events never gate on gender. Men's →
+// player.gender "M"; women's → player.gender "F". Any other player gender
+// (including null or "X") is blocked from a single-gender event.
 export function checkEligibility(
   player: Player,
   event: Event,
@@ -55,7 +55,13 @@ export function checkEligibility(
     }
   }
 
-  if (event.gender !== "mixed") {
+  // Only the two single-gender divisions gate on gender. `event_gender` has
+  // four values — men | women | mixed | open — and both mixed and open are
+  // open to any pairing, so they gate on gender for no one. Checking the two
+  // gated values explicitly (rather than excusing one) keeps a future enum
+  // value from silently falling into the women's branch, which is exactly
+  // how `open` came to reject every player who was not female (#1170).
+  if (event.gender === "men" || event.gender === "women") {
     const required = event.gender === "men" ? "M" : "F";
     if (player.gender !== required) {
       const label = event.gender === "men" ? "men's" : "women's";
