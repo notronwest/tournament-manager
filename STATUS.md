@@ -2818,3 +2818,19 @@ rating picker, recap/credit smoke, mobile recap) — pre-existing, not from this
 **Remaining (Ron, needs his Cloudflare + Supabase sign-ins):** deploy the Worker, set its
 two secrets, set `VITE_CAMPAIGN_REPORT_URL` in the club-dashboard Pages project (Production
 + Preview) and rebuild. Step-by-step given in chat.
+
+## 2026-10-27 — #1174 rework (PR #1175, guardian registrations DB half)
+Reviewer's second REQUEST CHANGES addressed in `20261027120000_guardian_registrations.sql`:
+removed the `player_guardians` INSERT policy + grant; links are now made only by the
+SECURITY DEFINER `add_dependent(first, last, dob, relationship)` (child row + link in one
+call), so no one can link to a player they didn't create. Guardian inserts on
+`event_registrations` must now set `registered_by_player_id = current_player_id()`.
+Migration unapplied (CI applies on merge). **Next:** reviewer re-review; then the UX PR
+(Add-a-child via `add_dependent`, "Registering for" chooser; partner-invite RLS has no
+guardian branch yet).
+
+## 2026-10-27 — #1174 rework 3 (PR #1175)
+Reviewer's third REQUEST CHANGES: a guardian could `update player_guardians set
+dependent_player_id = <any account-less player>` and bypass the add_dependent() guarantee.
+Fixed by narrowing the grant to `update (deleted_at, relationship)` only (reviewer's option a).
+Migration unapplied (CI applies on merge). **Next:** reviewer re-review, then the UX PR.
