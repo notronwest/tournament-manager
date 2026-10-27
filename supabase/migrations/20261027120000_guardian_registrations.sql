@@ -100,7 +100,13 @@ alter table player_guardians enable row level security;
 -- account_credits / campaign_events). No INSERT grant: links are created only
 -- by add_dependent() below. No grant to `anon`: a guardian link is
 -- meaningless without a player row, and there is no public view of a family.
-grant select, update on public.player_guardians to authenticated;
+-- UPDATE is column-scoped: a guardian may retire a link (deleted_at) or edit
+-- its label (relationship), but can never re-point guardian_player_id or
+-- dependent_player_id at a player they did not create via add_dependent()
+-- (RLS cannot see the old row, so the grant is what pins those columns).
+grant select on public.player_guardians to authenticated;
+revoke update on public.player_guardians from authenticated;
+grant update (deleted_at, relationship) on public.player_guardians to authenticated;
 
 -- The one predicate every guardian branch calls. SECURITY DEFINER so a policy
 -- on another table can consult the link without needing a read policy on it —
