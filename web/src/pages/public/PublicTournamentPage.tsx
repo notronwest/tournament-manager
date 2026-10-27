@@ -3290,6 +3290,10 @@ function EventCard({
                   {registeringSomeoneElse
                     ? `We'll register ${subjectPlayer?.first_name} for this event without a partner.`
                     : "We'll register you for this event without a partner."}
+                  {/* JSX drops the whitespace between a closing brace and a
+                      text node on the next line, so without this the two
+                      sentences fuse: "…without a partner.Other registrants". */}
+                  {" "}
                   Other registrants will be able to find
                   {registeringSomeoneElse ? " them " : " you "}
                   in the partner search, and the organizer will see
