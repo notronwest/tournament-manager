@@ -38,23 +38,24 @@
 --
 -- ─── How tight the guardian link is ─────────────────────────────────
 --
--- `players` INSERT is `with check (true)`, so anyone can create a player row.
--- That makes "which rows may I claim as my dependent?" the security question
--- for this whole feature, because a guardian link grants read AND write over
--- that player's registrations. The INSERT policy below therefore allows a link
--- only to a player who:
---   * is not soft-deleted,
---   * has NO auth account (auth_user_id is null) — so an adult who holds an
---     account can never be adopted as someone's dependent, and
---   * has NO event_registrations at all — so the row has nothing on it to
---     read or grief. In practice that means "a player row you just created",
---     which is exactly what the Add-a-child flow does.
+-- `players` INSERT is `with check (true)`, so anyone can create a player row,
+-- and a guardian link grants read AND write over that player's registrations
+-- and profile. So "which rows may I claim as my dependent?" is the security
+-- question for this whole feature, and a table-level INSERT policy cannot
+-- answer it: no condition on an existing row proves the CALLER created it
+-- (an organizer-created contact is account-less and registration-less too).
 --
--- Known limit, deliberate: a second guardian cannot self-link once the child
--- has registered for anything (the no-registrations condition). The table
--- models many guardians per dependent — there is no unique constraint on
--- dependent_player_id — so the schema is ready; the self-service "invite my
--- co-parent" flow is its own card.
+-- Therefore authenticated users get NO insert on player_guardians. The only
+-- way to create a link is add_dependent(), a SECURITY DEFINER function that
+-- inserts the child's players row AND the link in one call, with
+-- guardian_player_id = current_player_id(). A caller can never be linked to a
+-- row they did not create in that same call. Service role (support tooling)
+-- may still insert directly.
+--
+-- Known limit, deliberate: there is no self-service way to add a second
+-- guardian to an existing child. The table models many guardians per
+-- dependent — no unique constraint on dependent_player_id — so the schema is
+-- ready; the "invite my co-parent" flow is its own card.
 
 set search_path = public;
 
@@ -96,9 +97,10 @@ alter table player_guardians enable row level security;
 
 -- The policies above are the restriction; these are the table privileges that
 -- let a signed-in player reach them at all (the house pattern — see
--- account_credits / campaign_events). No grant to `anon`: a guardian link is
+-- account_credits / campaign_events). No INSERT grant: links are created only
+-- by add_dependent() below. No grant to `anon`: a guardian link is
 -- meaningless without a player row, and there is no public view of a family.
-grant select, insert, update on public.player_guardians to authenticated;
+grant select, update on public.player_guardians to authenticated;
 
 -- The one predicate every guardian branch calls. SECURITY DEFINER so a policy
 -- on another table can consult the link without needing a read policy on it —
@@ -134,47 +136,54 @@ comment on function public.is_guardian_of(uuid) is
   'over p_player_id (#1169). The authorization predicate for every guardian '
   'branch in RLS.';
 
--- "Is this a player row it is safe to adopt as a dependent?" — account-less,
--- not soft-deleted, and holding no registrations.
---
--- This HAS to be a SECURITY DEFINER function rather than a subquery inside the
--- policy: a subquery in a policy runs as the caller and is itself subject to
--- RLS on the table it reads, so `not exists (select 1 from
--- event_registrations ...)` written inline would only ever see the rows the
--- caller can already read — none of the dependent's, since the guardian link
--- that would grant that read does not exist yet. It would have been a guard
--- that always passed. Here the check sees the table whole.
-create or replace function public.player_is_adoptable_dependent(p_player_id uuid)
-returns boolean
-language sql
-stable
+-- Create a child and the guardian link to them, atomically, for the caller.
+-- SECURITY DEFINER so it can insert the link that no client policy permits;
+-- the link's guardian is always the caller's own player row, and the
+-- dependent is always the row inserted here, so no one can be linked to a
+-- player they did not just create.
+create or replace function public.add_dependent(
+  p_first_name   text,
+  p_last_name    text,
+  p_dob          date,
+  p_relationship text default null
+) returns uuid
+language plpgsql
+volatile
 security definer
 set search_path = public
 as $$
-  select exists (
-           select 1 from players p
-            where p.id = p_player_id
-              and p.deleted_at is null
-              and p.auth_user_id is null
-         )
-     and not exists (
-           select 1 from event_registrations er
-            where er.player_id = p_player_id
-         );
+declare
+  v_guardian  uuid := current_player_id();
+  v_dependent uuid;
+begin
+  if v_guardian is null then
+    raise exception 'add_dependent: sign in with a player profile first'
+      using errcode = '42501';
+  end if;
+  if nullif(btrim(coalesce(p_first_name, '')), '') is null
+     or nullif(btrim(coalesce(p_last_name, '')), '') is null then
+    raise exception 'add_dependent: first and last name are required'
+      using errcode = '22023';
+  end if;
+
+  insert into players (first_name, last_name, dob)
+  values (btrim(p_first_name), btrim(p_last_name), p_dob)
+  returning id into v_dependent;
+
+  insert into player_guardians (guardian_player_id, dependent_player_id, relationship)
+  values (v_guardian, v_dependent, nullif(btrim(coalesce(p_relationship, '')), ''));
+
+  return v_dependent;
+end;
 $$;
 
--- Gotcha for whoever writes the next client: this predicate is STABLE, so it
--- reads the snapshot as of the start of the CURRENT STATEMENT. Creating the
--- child and the link in ONE statement (a `with n as (insert into players …)
--- insert into player_guardians …` CTE) therefore cannot see the new player row
--- and is refused. Two statements — create the player, then create the link —
--- work inside a single transaction, which is what the Add-a-child flow does.
+comment on function public.add_dependent(text, text, date, text) is
+  'Creates an account-less player row for a child and links the caller as its '
+  'guardian, atomically (#1169). The only way a player_guardians row is made '
+  'by a client, so a caller can never be linked to a row they did not create.';
 
-comment on function public.player_is_adoptable_dependent(uuid) is
-  'True when p_player_id may be linked as someone''s dependent (#1169): an '
-  'active player row with no auth account and no event registrations. '
-  'SECURITY DEFINER because a policy subquery would read event_registrations '
-  'under the caller''s own RLS and so could never see the rows it must check.';
+revoke all on function public.add_dependent(text, text, date, text) from public, anon;
+grant execute on function public.add_dependent(text, text, date, text) to authenticated, service_role;
 
 -- Only the two people in the link can see it. Org staff deliberately CANNOT:
 -- the Attendees page names the registering guardian through
@@ -187,14 +196,7 @@ create policy "player_guardians read by guardian or dependent" on player_guardia
     or dependent_player_id = current_player_id()
   );
 
--- You may only add YOURSELF as a guardian, and only over an account-less
--- player row that holds no registrations. See the header for why.
-drop policy if exists "player_guardians insert by guardian over an unclaimed player" on player_guardians;
-create policy "player_guardians insert by guardian over an unclaimed player" on player_guardians
-  for insert to authenticated with check (
-    guardian_player_id = current_player_id()
-    and player_is_adoptable_dependent(dependent_player_id)
-  );
+-- No INSERT policy: links are created by add_dependent() only (see header).
 
 -- A guardian maintains their own links (the soft delete runs through here).
 -- with check pins the guardian end so an update cannot hand the link to
@@ -244,10 +246,10 @@ create policy "event_regs read by player or org" on event_registrations
     )
   );
 
--- The guardian branch also pins registered_by_player_id to the caller, so the
--- "who signed this child up" column cannot be forged into naming someone else.
--- NULL stays allowed, which is what every self-registration and every existing
--- client insert writes.
+-- registered_by_player_id is pinned to the caller whenever it is set, and is
+-- REQUIRED when someone other than the registrant is acting and is not org
+-- staff (a guardian), so a guardian's signup always leaves an attribution
+-- record. Self-registrations and staff placements may leave it NULL.
 drop policy if exists "event_regs insert by player or org staff" on event_registrations;
 create policy "event_regs insert by player or org staff" on event_registrations
   for insert to authenticated with check (
@@ -263,6 +265,15 @@ create policy "event_regs insert by player or org staff" on event_registrations
     and (
       registered_by_player_id is null
       or registered_by_player_id = current_player_id()
+    )
+    and (
+      player_id = current_player_id()
+      or registered_by_player_id = current_player_id()
+      or exists (
+        select 1 from events e
+        join tournaments t on t.id = e.tournament_id
+        where e.id = event_registrations.event_id and has_org_role(t.organization_id, 'staff')
+      )
     )
   );
 
