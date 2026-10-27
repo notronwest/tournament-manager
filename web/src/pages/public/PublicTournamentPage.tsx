@@ -246,6 +246,13 @@ export default function PublicTournamentPage({
   const [me, setMe] = useState<Player | null>(null);
   // The players this user may register besides themselves (#1169).
   const [dependents, setDependents] = useState<Dependent[]>([]);
+  // Which events each dependent already holds a live registration in. Their
+  // rows don't appear in `myStatus` — that map is the signed-in player's own —
+  // and the roster RPC returns no player id, so this is read directly. The
+  // guardian SELECT policy is what makes it readable at all.
+  const [dependentEventIds, setDependentEventIds] = useState<
+    Map<string, Set<string>>
+  >(new Map());
   // Per-event registration status for the signed-in user, keyed by
   // event_id. Empty when nobody's signed in.
   const [myStatus, setMyStatus] = useState<Map<string, MyRegStatus>>(
@@ -479,6 +486,7 @@ export default function PublicTournamentPage({
       setMyStatus(new Map());
       setInboundInvites([]);
       setDependents([]);
+      setDependentEventIds(new Map());
       setLoading(false);
       return;
     }
@@ -488,6 +496,23 @@ export default function PublicTournamentPage({
     // only themselves, which is what happened before this existed.
     const { dependents: family } = await fetchDependents(myPlayer.id);
     setDependents(family);
+
+    const familyIds = family.map((d) => d.player.id);
+    const depEvents = new Map<string, Set<string>>();
+    if (familyIds.length > 0) {
+      const { data: depRegs } = await supabase
+        .from("event_registrations")
+        .select("event_id, player_id")
+        .in("player_id", familyIds)
+        .in("status", ["paid", "pending_payment", "waitlisted", "waitlisted_pending_payment"])
+        .is("deleted_at", null);
+      for (const r of depRegs ?? []) {
+        const set = depEvents.get(r.player_id) ?? new Set<string>();
+        set.add(r.event_id);
+        depEvents.set(r.player_id, set);
+      }
+    }
+    setDependentEventIds(depEvents);
 
     const eventIds = evs.map((e) => e.id);
     // Three reads in parallel:
@@ -1258,6 +1283,7 @@ export default function PublicTournamentPage({
                 myStatus={myStatus.get(ev.id)}
                 me={me}
                 dependents={dependents}
+                dependentEventIds={dependentEventIds}
                 tournamentStartsAt={tournament.starts_at}
                 user={user}
                 regFeeCents={regFeeCents}
@@ -1510,6 +1536,7 @@ function EventCard({
   myStatus,
   me,
   dependents,
+  dependentEventIds,
   tournamentStartsAt,
   user,
   regFeeCents,
@@ -1534,6 +1561,8 @@ function EventCard({
   // Anyone else this player may register (#1169). Empty for almost everybody,
   // which is why the chooser below only appears when it isn't.
   dependents: Dependent[];
+  // event ids each dependent is already in, keyed by their player id.
+  dependentEventIds: Map<string, Set<string>>;
   // The age gate measures age on the day of play, not the day of
   // registration — so the eligibility check needs the tournament's start.
   tournamentStartsAt: string;
@@ -1660,6 +1689,27 @@ function EventCard({
   const { eligible: subjectEligible, reasons: subjectReasons } = subjectPlayer
     ? checkEligibility(subjectPlayer, event, tournamentStartsAt)
     : { eligible: true, reasons: [] as string[] };
+  // Anyone in the family who qualifies. A juniors bracket is the case this
+  // exists for: the parent never qualifies for it, so gating the Register
+  // button on the parent alone would leave them no way to reach the chooser
+  // and enter the child — a dead end in front of the one flow this card is
+  // for. The button opens whenever SOMEONE here can enter.
+  const eligibleRegistrants = registrants.filter(
+    (r) => checkEligibility(r.player, event, tournamentStartsAt).eligible,
+  );
+  // A dependent's registration doesn't show in `myStatus` — that map is the
+  // signed-in player's own. Without this the card would still offer Register
+  // for a child who is already in, and the insert would die on the
+  // (event_id, player_id) unique index with a message nobody can act on.
+  //
+  // Not alreadyRegisteredPlayerIds: that RPC deliberately leaves out players
+  // whose partner_status is 'seeking', because its job is the partner-picker
+  // exclusion list and a seeker should stay pickable. A child registered and
+  // looking for a partner is exactly the case this guard is for.
+  const subjectAlreadyIn =
+    registeringSomeoneElse &&
+    subjectPlayer != null &&
+    (dependentEventIds.get(subjectPlayer.id)?.has(event.id) ?? false);
 
   // ─── Derived state for visual treatment ──────────────────────────
   const isPaid =
@@ -1687,6 +1737,12 @@ function EventCard({
     }
     onRequestFocus();
     setEditMode("register");
+    // Default to the player when they qualify; otherwise to the first family
+    // member who does, so opening a juniors bracket lands on the child rather
+    // than on a name the form will refuse.
+    setSubjectId(
+      (playerEligible ? me.id : eligibleRegistrants[0]?.player.id) ?? me.id,
+    );
     setPartner(emptySelection);
     setSeekingPartner(false);
     setRegistrationSide(null);
@@ -2473,7 +2529,7 @@ function EventCard({
     // Everything below creates a NEW registration — closed means closed.
     if (!registrationOpen) return null;
     if (expanded) return null;
-    if (me && !playerEligible) {
+    if (me && !playerEligible && eligibleRegistrants.length === 0) {
       // An UNSET gender on a single-gender event is fixable — point the
       // player at their profile instead of a dead-end "Not eligible." A
       // *set-but-wrong* gender (e.g. M on a women's event) stays a plain
@@ -2553,7 +2609,7 @@ function EventCard({
     (!isDoubles || partnerPicked || seekingPartner) &&
     // A chosen registrant who doesn't qualify can't be submitted; the reason
     // is rendered in the form, so this disables rather than dead-ends.
-    (editMode !== "register" || subjectEligible);
+    (editMode !== "register" || (subjectEligible && !subjectAlreadyIn));
 
   // ─── #98: card visual state ───────────────────────────────────────
   // Lifted card (isFocused): position:relative + z-index:60 places it
@@ -2905,15 +2961,29 @@ function EventCard({
           {/* The chosen registrant doesn't qualify. Said here rather than by
               hiding the button that opens this form, because the form is
               where the choice was made and where it can be changed. */}
-          {editMode === "register" && registeringSomeoneElse && !subjectEligible && (
+          {editMode === "register" && subjectAlreadyIn && (
+            <div style={subjectAlreadyInStyle}>
+              <strong>{subjectPlayer?.first_name} is already registered</strong>{" "}
+              for this event. Pick someone else above, or ask the organizer if
+              you need their entry changed.
+            </div>
+          )}
+
+          {editMode === "register" && !subjectEligible && !subjectAlreadyIn && (
             <div style={subjectBlockedStyle}>
               <strong>
-                {subjectPlayer?.first_name} can&rsquo;t enter this event:{" "}
-                {subjectReasons.join("; ")}.
+                {registeringSomeoneElse
+                  ? `${subjectPlayer?.first_name} can't enter this event`
+                  : "You can't enter this event"}
+                : {subjectReasons.join("; ")}.
               </strong>{" "}
               {subjectReasons.some((r) => r.includes("date of birth"))
-                ? "Add their date of birth under My family on your profile."
-                : "Pick a different event, or someone else above."}
+                ? registeringSomeoneElse
+                  ? "Add their date of birth under My family on your profile."
+                  : "Add your date of birth on your profile."
+                : registrants.length > 1
+                  ? "Pick someone else above, or a different event."
+                  : "Pick a different event."}
             </div>
           )}
 
@@ -3257,6 +3327,18 @@ const registeringForSelectStyle: CSSProperties = {
   fontFamily: "inherit",
   background: "#ffffff",
   color: ink,
+};
+
+// The chosen registrant is already in this event.
+const subjectAlreadyInStyle: CSSProperties = {
+  marginBottom: 12,
+  padding: "10px 12px",
+  background: "#eff6ff",
+  border: "1px solid #bfdbfe",
+  borderRadius: 8,
+  fontSize: 13,
+  color: "#1e3a8a",
+  lineHeight: 1.5,
 };
 
 // The chosen registrant doesn't qualify for this event.

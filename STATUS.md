@@ -5,6 +5,103 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-27 — A parent can register their child; the age gate finally bites
+
+Four PRs open, to be merged **in this order**. Ron merges; nothing here was
+merged or pushed to `main`/`production`.
+
+**#1172 — `main` does not compile.** `tournamentSummary.ts` declared
+`MAX_MATCH_MS` twice (the home-club-star merge took the constant from both
+sides). `npm run build` is `tsc -b --noEmit && vite build`, so the Cloudflare
+Pages build of `main` has been failing before Vite runs and **TEST has been
+serving a stale bundle**. Nothing in CI catches it — no workflow in this repo
+runs typecheck, build or vitest on a PR; the only signal is the Pages build
+going red. One duplicate line deleted. Closes #1171.
+
+**#1173 — an `open` division rejected everyone who wasn't female.** The
+client gender gate excused only `mixed`, so `open` fell through and `required`
+resolved to `"F"`. All three brackets of the Loon Race Team tournament are
+`open`. The trigger always had it right; only the client was stale. Rewritten
+to name the two gated values rather than excuse one, plus a unit test that
+fails on the old condition. Closes #1170.
+
+**#1175 `[DB]` — the guardian half.** `player_guardians` (many-to-many, soft
+delete, RLS from day one), `is_guardian_of()` as the single predicate, a
+guardian branch on the event_registrations SELECT/INSERT/UPDATE policies and
+on the players UPDATE policy, `event_registrations.registered_by_player_id`,
+the age gate in `enforce_event_eligibility()`, and a family-aware
+`compute_checkout_total`. Closes #1174, part of #1169.
+
+**#1176 `[UX]` — the half Ron can see.** Profile grows "My family" and a
+date-of-birth field; the register card grows a "Registering for" chooser;
+checkout tiers per registrant and names anyone who isn't the payer; Attendees
+shows a player's age and the guardian who signed them up. Closes #1169.
+
+### Decisions worth keeping
+
+**RLS, not a service-role edge function.** `admin-register-contact` was the
+obvious model, and it is the wrong one: `enforce_event_eligibility()` returns
+early when `auth.uid()` is null, so a service-role insert is never
+eligibility-checked. Org staff *want* that exemption; a guardian must not have
+it, because the age gate binding them is the point of the card. Registering
+through RLS keeps the caller's JWT, so the trigger fires on a guardian's insert
+exactly as on a self-registration and the age rule has one implementation at
+the trust boundary.
+
+**NULL dob is ineligible for an age-restricted event, and irrelevant
+elsewhere.** Same rule the rating gate already uses for a missing self-rating.
+What keeps it from locking anyone out is that it fires only when the event
+sets a bound: every player row in production has `dob = NULL` today, and all
+of them stay eligible for every unrestricted event.
+
+**Age is measured at the tournament's UTC start date, not today.** "18 &
+under" is about the day of play, and measuring at registration time would let
+eligibility drift while a bracket sits open. Client and trigger both read the
+UTC calendar date of `starts_at` so they cannot disagree by a day.
+
+**A guardian may only adopt an account-less player row with no
+registrations** — in practice, one they just created. `players` INSERT is
+`with check (true)`, so "which rows may I claim?" is the security question for
+the whole feature. That check had to be a SECURITY DEFINER function: a
+subquery inside a policy runs as the caller under RLS, so an inline
+`not exists (select 1 from event_registrations …)` would only ever see rows
+the caller can already read — a guard that always passes.
+
+**Reuse:** the child's player row goes through `persistPlayerSelection` (the
+helper the partner "+ Add new player" path uses), extended with an optional
+`dob` rather than copied. Checkout calls the existing `computeLineItems` once
+per registrant instead of changing its tier math. `ConfirmModal` for the
+remove-child confirm. No edge-function change was needed for payment: the
+payable-status guard, the free-confirm flip and `stripe-webhook` all work off
+`payment_line_items`, never the payer's `player_id`.
+
+### Verified, not assumed
+
+The migration was applied to a **local Supabase stack with all 116 migrations**
+and driven through the real app at 390px: a parent added a child with no
+email, registered them for the juniors bracket, and saw `$45.00` in checkout
+against a server-side `compute_checkout_total` of `4500` for the same line
+item. Attendees showed "Maya Harper / 11 years old / Registered by Dana
+Harper". A second parent saw none of it and was refused the insert by RLS. The
+trigger refused a 44-year-old and a NULL-dob player from the juniors bracket
+and allowed both into the unrestricted one. Two bugs in the first draft were
+caught this way: `text[] || <untyped literal>` raised "malformed array
+literal", and the button gate left a parent with **no Register button at all**
+on a juniors bracket, because it asked only whether the parent qualified.
+
+### Known limits, deliberate
+
+A dependent cannot be waitlisted (`join_waitlist` resolves the player from
+`auth.uid()`), the inbound auto-pair lookup is skipped for a dependent (it
+keys on the signed-in user's email), and a guardian creates and pays for a
+registration but cannot yet change or cancel it from the card — the RLS
+permits it, no surface uses it. The Event Console roster still does not render
+the age the `event_roster` RPC already returns (AC 11's second half).
+
+**Next:** Ron merges #1172 → #1173 → #1175 → #1176, then regenerates types
+(`cd web && npx supabase gen types typescript --linked > src/types/supabase.ts`)
+so the local type extensions in `lib/guardians.ts` can go.
+
 ## 2026-10-13 — Builder: PR #965 rework (rebase, clear CONFLICTING)
 
 Reviewer gate had put PR #965 (issue #964 — regression spec for #64, global

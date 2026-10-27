@@ -916,10 +916,15 @@ export default function ProfilePage() {
             {familyLoading ? (
               <div style={{ fontSize: 13, color: inkMuted }}>Loading your family…</div>
             ) : dependents.length === 0 ? (
-              <div style={{ fontSize: 13, color: inkSoft }}>
-                Nobody here yet. Add a child and they&rsquo;ll show up as someone
-                you can register.
-              </div>
+              // The empty state's job is to explain the blank card and point
+              // at the button. Once that button has been pressed the form
+              // says the same thing better, so it steps aside.
+              addChildOpen ? null : (
+                <div style={{ fontSize: 13, color: inkSoft }}>
+                  Nobody here yet. Add a child and they&rsquo;ll show up as
+                  someone you can register.
+                </div>
+              )
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {dependents.map((d) => {
