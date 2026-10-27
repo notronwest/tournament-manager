@@ -126,6 +126,7 @@ function composeLocationAddress(loc: {
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
+type RegistrationStatus = Database["public"]["Enums"]["registration_status"];
 
 // Per-event registration status for the currently signed-in user.
 // Only computed when the user is logged in; for anon visitors the
@@ -252,7 +253,7 @@ export default function PublicTournamentPage({
   // and the roster RPC returns no player id, so this is read directly. The
   // guardian SELECT policy is what makes it readable at all.
   const [dependentEventIds, setDependentEventIds] = useState<
-    Map<string, Set<string>>
+    Map<string, Map<string, RegistrationStatus>>
   >(new Map());
   // Per-event registration status for the signed-in user, keyed by
   // event_id. Empty when nobody's signed in.
@@ -499,11 +500,11 @@ export default function PublicTournamentPage({
     setDependents(family);
 
     const familyIds = family.map((d) => d.player.id);
-    const depEvents = new Map<string, Set<string>>();
+    const depEvents = new Map<string, Map<string, RegistrationStatus>>();
     if (familyIds.length > 0) {
       const { data: depRegs } = await supabase
         .from("event_registrations")
-        .select("event_id, player_id")
+        .select("event_id, player_id, status")
         .in("player_id", familyIds)
         // This tournament only: the count drives the price tier below, and
         // the entry fee is per tournament.
@@ -511,9 +512,9 @@ export default function PublicTournamentPage({
         .in("status", ["paid", "pending_payment", "waitlisted", "waitlisted_pending_payment"])
         .is("deleted_at", null);
       for (const r of depRegs ?? []) {
-        const set = depEvents.get(r.player_id) ?? new Set<string>();
-        set.add(r.event_id);
-        depEvents.set(r.player_id, set);
+        const byEvent = depEvents.get(r.player_id) ?? new Map<string, RegistrationStatus>();
+        byEvent.set(r.event_id, r.status);
+        depEvents.set(r.player_id, byEvent);
       }
     }
     setDependentEventIds(depEvents);
@@ -1568,7 +1569,7 @@ function EventCard({
   // which is why the chooser below only appears when it isn't.
   dependents: Dependent[];
   // event ids each dependent is already in, keyed by their player id.
-  dependentEventIds: Map<string, Set<string>>;
+  dependentEventIds: Map<string, Map<string, RegistrationStatus>>;
   // The age gate measures age on the day of play, not the day of
   // registration — so the eligibility check needs the tournament's start.
   tournamentStartsAt: string;
@@ -1708,8 +1709,9 @@ function EventCard({
   // `myStatus` turns the card into Change partner / Cancel first — but a
   // dependent's registration is invisible to that map, which is what let the
   // button through for a child who was already entered.
-  const alreadyInThisEvent = (playerId: string) =>
-    dependentEventIds.get(playerId)?.has(event.id) ?? false;
+  const dependentStatusHere = (playerId: string) =>
+    dependentEventIds.get(playerId)?.get(event.id) ?? null;
+  const alreadyInThisEvent = (playerId: string) => dependentStatusHere(playerId) !== null;
   const eligibleRegistrants = registrants.filter(
     (r) =>
       checkEligibility(r.player, event, tournamentStartsAt).eligible &&
@@ -1718,6 +1720,16 @@ function EventCard({
   // Named where the button was, rather than leaving the card silent about why
   // it has nothing to offer.
   const dependentsAlreadyIn = dependents.filter((d) => alreadyInThisEvent(d.player.id));
+  // A dependent's entry that still owes money. The card's amber treatment and
+  // its Pending payment pill are keyed off `myStatus`, which only ever holds
+  // the signed-in player's rows — so without this a parent's own pending entry
+  // gets the amber card, the pill and a route to checkout while their child's
+  // identical entry gets a grey line, on a product that sweeps stale pending
+  // registrations away.
+  const dependentsPendingHere = dependentsAlreadyIn.filter((d) => {
+    const st = dependentStatusHere(d.player.id);
+    return st === "pending_payment" || st === "waitlisted_pending_payment";
+  });
   // A dependent's registration doesn't show in `myStatus` — that map is the
   // signed-in player's own. Without this the card would still offer Register
   // for a child who is already in, and the insert would die on the
@@ -1757,7 +1769,8 @@ function EventCard({
   const isAmberCard =
     isPending ||
     myStatus?.state === "awaiting_partner" ||
-    myStatus?.state === "invited";
+    myStatus?.state === "invited" ||
+    dependentsPendingHere.length > 0;
   // Left border encodes the EVENT TYPE (#152), independent of status.
   const cardBorderLeft = `6px solid ${eventTypeColor(event.format, event.gender)}`;
   const cardBorderColor = isAmberCard ? courtYellow : isPaid ? courtGreen : rule;
@@ -2643,7 +2656,7 @@ function EventCard({
       );
     }
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {dependentsAlreadyIn.length > 0 && (
           <span style={{ fontSize: 12, color: ink }}>
             {dependentsAlreadyIn.map((d) => playerName(d.player)).join(", ")}{" "}
@@ -2849,6 +2862,12 @@ function EventCard({
             )}
             {myStatus?.state === "pending_payment" && (
               <Pill bg={ink} fg={courtYellow}>Pending payment</Pill>
+            )}
+            {dependentsPendingHere.length > 0 && (
+              <Pill bg={ink} fg={courtYellow}>
+                {dependentsPendingHere.map((d) => d.player.first_name).join(", ")} — pending
+                payment
+              </Pill>
             )}
             {myStatus?.state === "awaiting_partner" && (
               <Pill bg={ink} fg={courtYellow}>Awaiting partner</Pill>
