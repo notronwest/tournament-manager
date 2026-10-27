@@ -67,9 +67,12 @@ subquery inside a policy runs as the caller under RLS, so an inline
 `not exists (select 1 from event_registrations …)` would only ever see rows
 the caller can already read — a guard that always passes.
 
-**Reuse:** the child's player row goes through `persistPlayerSelection` (the
-helper the partner "+ Add new player" path uses), extended with an optional
-`dob` rather than copied. Checkout calls the existing `computeLineItems` once
+**Reuse:** the child's player row and its guardian link are created together by
+a `SECURITY DEFINER add_dependent()`, which is where the reviewer landed after
+four passes on #1175 — `player_guardians` has no INSERT policy and no INSERT
+grant, so a link can never be pointed at a player row that already existed. An
+earlier draft of this branch reused `persistPlayerSelection` and fenced the
+insert with a policy; closing the path beats fencing it. Checkout calls the existing `computeLineItems` once
 per registrant instead of changing its tier math. `ConfirmModal` for the
 remove-child confirm. No edge-function change was needed for payment: the
 payable-status guard, the free-confirm flip and `stripe-webhook` all work off
@@ -94,9 +97,23 @@ on a juniors bracket, because it asked only whether the parent qualified.
 A dependent cannot be waitlisted (`join_waitlist` resolves the player from
 `auth.uid()`), the inbound auto-pair lookup is skipped for a dependent (it
 keys on the signed-in user's email), and a guardian creates and pays for a
-registration but cannot yet change or cancel it from the card — the RLS
-permits it, no surface uses it. The Event Console roster still does not render
+registration but cannot yet change or cancel it from the card, and a guardian
+who is already entered in an event has no route to enter their child in that
+same event (the card returns on the player's own status before it reaches the
+chooser — the juniors case works only because a parent can never be in that
+bracket). The Event Console roster still does not render
 the age the `event_roster` RPC already returns (AC 11's second half).
+
+**The design gate graded #1176 nine times and failed it eight**, each time on
+something real: the register form quoting the payer's price instead of the
+registrant's; the sticky checkout bar blind to a dependent, so a parent who
+entered only their child got no route to checkout at all, and one who had their
+own entry too saw $45.00 over a $90.00 bill; "My Tournaments" saying "you
+haven't registered for anything" with that bar billing them; the parent unable
+to open the juniors form at all; a refused form still offering a roster search
+and "+ Add new player"; the attendees row shredding at 390px; a child's pending
+entry not looking like one. The verdicts are on the branch under
+`.design/verdicts/`.
 
 **Next:** Ron merges #1172 → #1173 → #1175 → #1176, then regenerates types
 (`cd web && npx supabase gen types typescript --linked > src/types/supabase.ts`)
