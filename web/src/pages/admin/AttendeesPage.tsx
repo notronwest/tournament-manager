@@ -163,10 +163,14 @@ function playerFullName(p: Player) {
 }
 
 // Secondary detail under a player's name: their age, and the guardian who
-// registered them when it wasn't themselves (#1169). Rendered as lines inside
-// the existing Name cell rather than as new columns — these tables already
-// scroll horizontally on a phone, and a sixth column would push that further
-// for a fact that is only present on a minority of rows.
+// registered them when it wasn't themselves (#1169).
+//
+// Used by the By Player view only, in both its layouts — the stacked cards on
+// a phone and the table above 700px. Deliberately NOT in By Event: that table
+// doesn't stack, and at 390px neither of its cells is wide enough to hold
+// these two lines (the Name cell measured 85px, the Contact cell 60.6px, and
+// both shred the text). Carrying them there means stacking that table too,
+// which is its own change; until then the facts live one tab away.
 function PlayerSubLines({
   dob,
   registeredByName,
@@ -184,16 +188,9 @@ function PlayerSubLines({
   );
 }
 
-function ContactCell({
-  player,
-  registeredByName,
-}: {
-  player: Player;
-  registeredByName?: string | null;
-}) {
+function ContactCell({ player }: { player: Player }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <PlayerSubLines dob={player.dob} registeredByName={registeredByName ?? null} />
       {player.email ? (
         <a
           href={`mailto:${player.email}`}
@@ -1036,7 +1033,7 @@ function ConfirmedPairRows({
           </div>
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>
-          <ContactCell player={primary.player} registeredByName={primary.registeredByName} />
+          <ContactCell player={primary.player} />
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>
           {paymentBadge(primary.status)}
@@ -1065,7 +1062,7 @@ function ConfirmedPairRows({
           </div>
         </td>
         <td style={{ ...tdStyle, paddingTop: 3 }}>
-          <ContactCell player={partner.player} registeredByName={partner.registeredByName} />
+          <ContactCell player={partner.player} />
         </td>
         <td style={{ ...tdStyle, paddingTop: 3 }}>
           {paymentBadge(partner.status)}
@@ -1101,7 +1098,7 @@ function SingleEntryRow({
         {playerFullName(reg.player)}
       </td>
       <td style={tdStyle}>
-        <ContactCell player={reg.player} registeredByName={reg.registeredByName} />
+        <ContactCell player={reg.player} />
       </td>
       <td style={tdStyle}>{paymentBadge(reg.status)}</td>
       <td style={tdStyle}>{partnerBadge(reg.partner_status)}</td>
