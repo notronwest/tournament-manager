@@ -504,6 +504,9 @@ export default function PublicTournamentPage({
         .from("event_registrations")
         .select("event_id, player_id")
         .in("player_id", familyIds)
+        // This tournament only: the count drives the price tier below, and
+        // the entry fee is per tournament.
+        .in("event_id", evs.map((e) => e.id))
         .in("status", ["paid", "pending_payment", "waitlisted", "waitlisted_pending_payment"])
         .is("deleted_at", null);
       for (const r of depRegs ?? []) {
@@ -1289,6 +1292,7 @@ export default function PublicTournamentPage({
                 regFeeCents={regFeeCents}
                 additionalFeeCents={additionalFeeCents}
                 entryCostTier={entryCostTier}
+                includedEvents={includedEvents}
                 alreadyRegisteredPlayerIds={
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
@@ -1542,6 +1546,7 @@ function EventCard({
   regFeeCents,
   additionalFeeCents,
   entryCostTier,
+  includedEvents,
   alreadyRegisteredPlayerIds,
   rosterRows,
   isFocused,
@@ -1573,6 +1578,10 @@ function EventCard({
   regFeeCents: number;
   additionalFeeCents: number;
   entryCostTier: "first" | "included" | "additional";
+  // How many events the entry fee covers. Needed here (rather than just the
+  // player's already-computed tier) because the cost line has to be answered
+  // for whoever the chooser names, not for the payer (#1169).
+  includedEvents: number;
   // F3: ids of players already registered for THIS event. Folded
   // into the PartnerSearch excludePlayerIds so the search can't
   // surface someone who's already in.
@@ -1710,6 +1719,23 @@ function EventCard({
     registeringSomeoneElse &&
     subjectPlayer != null &&
     (dependentEventIds.get(subjectPlayer.id)?.has(event.id) ?? false);
+
+  // The cost line is a statement about the person the form names, not about
+  // the person paying. `entryCostTier` is the payer's, derived from
+  // `myStatus`, which holds only their own registrations — so for a dependent
+  // it has to be recomputed from theirs, or a child's first event is quoted at
+  // the additional rate (or vice versa) while checkout charges the other.
+  const subjectActiveRegCount = registeringSomeoneElse
+    ? (subjectPlayer ? (dependentEventIds.get(subjectPlayer.id)?.size ?? 0) : 0)
+    : null;
+  const subjectCostTier: "first" | "included" | "additional" =
+    subjectActiveRegCount === null
+      ? entryCostTier
+      : subjectActiveRegCount === 0
+        ? "first"
+        : subjectActiveRegCount < includedEvents
+          ? "included"
+          : "additional";
 
   // ─── Derived state for visual treatment ──────────────────────────
   const isPaid =
@@ -2554,6 +2580,41 @@ function EventCard({
           </Link>
         );
       }
+      // A missing date of birth is fixable in one screen, exactly like an
+      // unset gender — so it gets the same treatment rather than a grey line
+      // with no next move. The copy that explains it lives inside the
+      // register form, which this player can never open.
+      const profileLink = `/profile?return=${encodeURIComponent(
+        `/t/${orgSlug}/${tournamentSlug}`,
+      )}`;
+      const needsDob = eligibilityReasons.some((r) => r.includes("date of birth"));
+      if (needsDob) {
+        return (
+          <Link to={profileLink} style={notEligibleLinkStyle}>
+            Add your date of birth to register →
+          </Link>
+        );
+      }
+      // An age-capped bracket the player has aged out of is the juniors case:
+      // the product CAN enter their child, and the only route to that is the
+      // family list on their profile. Saying nothing here is what left a
+      // parent staring at "Not eligible" on the one bracket this feature was
+      // built for.
+      const agedOut =
+        event.max_age != null &&
+        eligibilityReasons.some((r) => r.startsWith("needs age"));
+      if (agedOut && dependents.length === 0) {
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-end" }}>
+            <span style={{ fontSize: 12, color: inkMuted }}>
+              Not eligible: {eligibilityReasons.join("; ")}
+            </span>
+            <Link to={profileLink} style={notEligibleLinkStyle}>
+              Registering a child? Add them →
+            </Link>
+          </div>
+        );
+      }
       return (
         <span style={{ fontSize: 12, color: inkMuted }}>
           Not eligible: {eligibilityReasons.join("; ")}
@@ -3044,26 +3105,34 @@ function EventCard({
                 color: inkSoft,
               }}
             >
-              {entryCostTier === "additional" ? (
+              {subjectCostTier === "additional" ? (
                 <>
                   Extra event:{" "}
                   <strong>+${(additionalFeeCents / 100).toFixed(0)}</strong>{" "}
                   <span style={{ color: inkMuted }}>
-                    (added to your registration)
+                    {registeringSomeoneElse
+                      ? `(added to ${subjectPlayer?.first_name}'s registration)`
+                      : "(added to your registration)"}
                   </span>
                 </>
-              ) : entryCostTier === "included" ? (
+              ) : subjectCostTier === "included" ? (
                 <>
                   <strong>$0</strong>{" "}
                   <span style={{ color: inkMuted }}>
-                    · included in your entry
+                    {registeringSomeoneElse
+                      ? `· included in ${subjectPlayer?.first_name}'s entry`
+                      : "· included in your entry"}
                   </span>
                 </>
               ) : (
                 <>
                   <strong>${(regFeeCents / 100).toFixed(0)}</strong>{" "}
                   entry{" "}
-                  <span style={{ color: inkMuted }}>· includes this event</span>
+                  <span style={{ color: inkMuted }}>
+                    {registeringSomeoneElse
+                      ? `· ${subjectPlayer?.first_name}'s first event here`
+                      : "· includes this event"}
+                  </span>
                 </>
               )}
             </div>
@@ -3159,13 +3228,22 @@ function EventCard({
                 </button>
               </div>
               {seekingPartner ? (
+                // Suppressed while the chosen registrant is blocked: a
+                // reassurance stacked under a refusal reads as a contradiction.
+                subjectEligible && !subjectAlreadyIn ? (
                 <div style={{ ...statusPanelStyle("info"), fontSize: 12 }}>
-                  We'll register you for this event without a partner.
-                  Other registrants will be able to find you in the
-                  partner search, and the organizer will see you in
-                  their "looking for a partner" list to help match you
+                  {registeringSomeoneElse
+                    ? `We'll register ${subjectPlayer?.first_name} for this event without a partner.`
+                    : "We'll register you for this event without a partner."}
+                  Other registrants will be able to find
+                  {registeringSomeoneElse ? " them " : " you "}
+                  in the partner search, and the organizer will see
+                  {registeringSomeoneElse ? " them " : " you "}
+                  in their "looking for a partner" list to help match
+                  {registeringSomeoneElse ? " them " : " you "}
                   up.
                 </div>
+                ) : null
               ) : (
                 <>
                   <div
@@ -3312,6 +3390,15 @@ function Pill({
 // from across the form; inactive stays white with a neutral border.
 // The whole tile is the click target — both the icon and the label
 // inherit `currentColor` so hover/active states flow through.
+// The "fix it and come back" link offered beside a refusal. Same treatment
+// the unset-gender case has always had; shared so the two cannot drift.
+const notEligibleLinkStyle: CSSProperties = {
+  fontSize: 12,
+  color: courtBlue,
+  textDecoration: "underline",
+  whiteSpace: "nowrap",
+};
+
 // "Registering for" (#1169). A plain select rather than a tile row or a
 // radiogroup: it is one choice from a short list that most people never see,
 // and the register form already carries a radiogroup for partner mode.
@@ -3329,28 +3416,19 @@ const registeringForSelectStyle: CSSProperties = {
   color: ink,
 };
 
-// The chosen registrant is already in this event.
+// The chosen registrant is already in this event, or doesn't qualify for it.
+// Both use the theme's own status panels rather than a near-copy of them, so a
+// change to the house wash reaches these too.
 const subjectAlreadyInStyle: CSSProperties = {
+  ...statusPanelStyle("info"),
   marginBottom: 12,
-  padding: "10px 12px",
-  background: "#eff6ff",
-  border: "1px solid #bfdbfe",
-  borderRadius: 8,
   fontSize: 13,
-  color: "#1e3a8a",
-  lineHeight: 1.5,
 };
 
-// The chosen registrant doesn't qualify for this event.
 const subjectBlockedStyle: CSSProperties = {
+  ...statusPanelStyle("danger"),
   marginBottom: 12,
-  padding: "10px 12px",
-  background: dangerBg,
-  border: `1px solid ${dangerFg}`,
-  borderRadius: 8,
   fontSize: 13,
-  color: dangerFg,
-  lineHeight: 1.5,
 };
 
 function partnerModeTileStyle(active: boolean): CSSProperties {

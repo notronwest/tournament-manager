@@ -135,6 +135,7 @@ export default function ProfilePage() {
   const [familyBusy, setFamilyBusy] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [familyAdded, setFamilyAdded] = useState<string | null>(null);
+  const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Dependent | null>(null);
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -246,6 +247,7 @@ export default function ProfilePage() {
     if (!myPlayerId) return;
     setFamilyError(null);
     setFamilyAdded(null);
+    setFamilyRemoved(null);
 
     if (!childFirst.trim() || !childLast.trim()) {
       setFamilyError("A first and last name are both needed.");
@@ -286,6 +288,7 @@ export default function ProfilePage() {
     if (!removeTarget) return;
     setFamilyError(null);
     setFamilyAdded(null);
+    setFamilyRemoved(null);
     const { error: rmErr } = await removeDependent(removeTarget.linkId);
     if (rmErr) {
       setFamilyError(rmErr);
@@ -293,6 +296,7 @@ export default function ProfilePage() {
       return;
     }
     setDependents((prev) => prev.filter((d) => d.linkId !== removeTarget.linkId));
+    setFamilyRemoved(playerName(removeTarget.player));
     setRemoveTarget(null);
   };
 
@@ -569,6 +573,24 @@ export default function ProfilePage() {
       )}
       <h1 style={pageH1Style}>{heading}</h1>
       <p style={pageSubStyle}>{subhead}</p>
+
+      {/* What this page lets you do, named at the top and linked. "My family"
+          is the only entry point to registering a child, and on a phone it
+          sits well below the fold — a section heading further down is not a
+          way to find out it exists. */}
+      {!isFirstFill && (
+        <p style={{ fontSize: 13, color: inkSoft, margin: "-6px 0 20px" }}>
+          On this page: your details,{" "}
+          <a href="#my-family" style={jumpLinkStyle}>
+            my family
+          </a>{" "}
+          (register a child from your account), and your{" "}
+          <a href="#account" style={jumpLinkStyle}>
+            account
+          </a>
+          .
+        </p>
+      )}
 
       {/* ── Account email + change request ──────────────────────── */}
       <div style={{ ...panelStyle, marginBottom: 8 }}>
@@ -896,7 +918,9 @@ export default function ProfilePage() {
       {!isFirstFill && (
         <>
           <div style={sectionDivider} />
-          <h2 style={sectionHeadingStyle}>My family</h2>
+          <h2 id="my-family" style={sectionHeadingStyle}>
+            My family
+          </h2>
           <p style={{ fontSize: 13, color: inkSoft, margin: "-8px 0 16px" }}>
             Add a child here and you can register and pay for them from your own
             account. They need no email address and no account of their own.
@@ -910,6 +934,12 @@ export default function ProfilePage() {
               <div style={statusPanelStyle("success")}>
                 {familyAdded} is on your family list. You can register them from
                 any tournament page.
+              </div>
+            )}
+            {familyRemoved && (
+              <div style={statusPanelStyle("info")}>
+                {familyRemoved} was removed from your family. Anything they were
+                already registered for is unchanged.
               </div>
             )}
 
@@ -1035,6 +1065,7 @@ export default function ProfilePage() {
                   onClick={() => {
                     setAddChildOpen(true);
                     setFamilyAdded(null);
+                    setFamilyRemoved(null);
                     setFamilyError(null);
                   }}
                   style={ctaPrimaryStyle}
@@ -1046,7 +1077,9 @@ export default function ProfilePage() {
           </div>
 
           <div style={sectionDivider} />
-          <h2 style={sectionHeadingStyle}>Account</h2>
+          <h2 id="account" style={sectionHeadingStyle}>
+            Account
+          </h2>
           <form
             onSubmit={onPasswordSubmit}
             style={{ display: "flex", flexDirection: "column", gap: 16 }}
@@ -1294,6 +1327,11 @@ const progressStep: CSSProperties = {
 const progressStepActive: CSSProperties = {
   ...progressStep,
   background: courtYellow,
+};
+
+const jumpLinkStyle: CSSProperties = {
+  color: courtBlue,
+  textDecoration: "underline",
 };
 
 // A family row: the name/age column wraps above the action on a narrow

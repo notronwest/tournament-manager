@@ -128,9 +128,13 @@ const modalStyle: CSSProperties = {
   boxShadow: "0 10px 40px rgba(0, 0, 0, 0.2)",
 };
 
+// 44px minimum on all three: these buttons measured 34px tall, under the
+// touch floor, and this modal is where the app asks for destructive
+// confirmations. Fixed here so every confirm in the app clears it.
 function primaryBtn(busy: boolean): CSSProperties {
   return {
-    padding: "8px 16px",
+    padding: "11px 16px",
+    minHeight: 44,
     background: busy ? "var(--text-subtle)" : "var(--primary)",
     color: "var(--primary-contrast)",
     border: "none",
@@ -144,7 +148,8 @@ function primaryBtn(busy: boolean): CSSProperties {
 
 function destructiveBtn(busy: boolean): CSSProperties {
   return {
-    padding: "8px 16px",
+    padding: "11px 16px",
+    minHeight: 44,
     background: busy ? "var(--text-subtle)" : "var(--danger)",
     color: "var(--primary-contrast)",
     border: "none",
@@ -158,7 +163,8 @@ function destructiveBtn(busy: boolean): CSSProperties {
 
 function secondaryBtn(busy: boolean): CSSProperties {
   return {
-    padding: "8px 16px",
+    padding: "11px 16px",
+    minHeight: 44,
     background: "var(--surface)",
     color: "var(--text-muted)",
     border: "1px solid var(--border)",

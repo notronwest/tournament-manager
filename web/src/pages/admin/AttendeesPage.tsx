@@ -657,7 +657,7 @@ function ByPlayerView({
                 borderBottom: `1px solid ${rule}`,
               }}
             >
-              <th style={thStyle}>Name</th>
+              <th style={{ ...thStyle, ...nameCellStyle }}>Name</th>
               <th style={thStyle}>Email</th>
               <th style={thStyle}>Phone</th>
               <th style={thStyle}>Events</th>
@@ -670,7 +670,7 @@ function ByPlayerView({
                 key={row.player.id}
                 style={{ borderBottom: `1px solid ${rule}` }}
               >
-                <td style={{ ...tdStyle, fontWeight: 500 }}>
+                <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500 }}>
                   {row.player.first_name} {row.player.last_name}
                   <PlayerSubLines
                     dob={row.player.dob}
@@ -915,7 +915,7 @@ function EventRosterSection({
                 borderBottom: `1px solid ${rule}`,
               }}
             >
-              <th style={thStyle}>
+              <th style={{ ...thStyle, ...nameCellStyle }}>
                 {event.format === "doubles" ? "Team / Player" : "Player"}
               </th>
               <th style={thStyle}>Contact</th>
@@ -984,7 +984,7 @@ function ConfirmedPairRows({
   return (
     <>
       <tr style={{ background: rowBg, borderTop: `1px solid ${rule}` }}>
-        <td style={{ ...tdStyle, fontWeight: 500, paddingBottom: 3 }}>
+        <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500, paddingBottom: 3 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
               style={{
@@ -1017,7 +1017,7 @@ function ConfirmedPairRows({
         </td>
       </tr>
       <tr style={{ background: rowBg, borderBottom: `1px solid ${rule}` }}>
-        <td style={{ ...tdStyle, fontWeight: 500, paddingTop: 3 }}>
+        <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500, paddingTop: 3 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
               style={{
@@ -1069,7 +1069,7 @@ function SingleEntryRow({
         borderTop: `1px solid ${rule}`,
       }}
     >
-      <td style={{ ...tdStyle, fontWeight: 500 }}>
+      <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500 }}>
         {playerFullName(reg.player)}
         <PlayerSubLines
           dob={reg.player.dob}
@@ -1383,6 +1383,19 @@ const seekerPillStyle: CSSProperties = {
   borderRadius: 4,
   fontSize: 11,
   fontWeight: 600,
+};
+
+// The Name column carries two optional sub-lines (age, and the guardian who
+// registered a dependent — #1169). At 390px the five-column table squeezed it
+// to 85px and "Registered by Dana Harper" wrapped to three lines. These tables
+// already scroll horizontally inside the admin shell, so giving the column a
+// floor keeps the lines readable instead of trading one phone problem for a
+// fact hidden on phones.
+const nameCellStyle: CSSProperties = {
+  // Wide enough for "Registered by <first> <last>" to sit on one line for a
+  // typical name; a very long one wraps once, which reads, rather than
+  // breaking after every word.
+  minWidth: 200,
 };
 
 const thStyle: CSSProperties = {
