@@ -2569,12 +2569,7 @@ function EventCard({
             to={`/profile?return=${encodeURIComponent(
               `/t/${orgSlug}/${tournamentSlug}`,
             )}`}
-            style={{
-              fontSize: 12,
-              color: courtBlue,
-              textDecoration: "underline",
-              whiteSpace: "nowrap",
-            }}
+            style={notEligibleLinkStyle}
           >
             Set your gender to register →
           </Link>
@@ -3097,7 +3092,14 @@ function EventCard({
               {isDoubles ? " Your partner pick carries over." : ""}
             </div>
           )}
-          {editMode === "register" && regFeeCents > 0 && (!isFull || fillsOpenSlot) && (
+          {/* Not shown while the chosen registrant is refused: a price for a
+              registration the screen has just said cannot be made reads as a
+              contradiction, the same one the partner reassurance below avoids. */}
+          {editMode === "register" &&
+            subjectEligible &&
+            !subjectAlreadyIn &&
+            regFeeCents > 0 &&
+            (!isFull || fillsOpenSlot) && (
             <div
               style={{
                 marginBottom: 12,

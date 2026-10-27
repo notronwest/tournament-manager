@@ -647,6 +647,44 @@ function ByPlayerView({
             : "No attendees match the filter."}
         </div>
       ) : (
+        isNarrowViewport ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {visible.map((row) => (
+            <div key={row.player.id} style={attendeeCardStyle}>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>
+                {row.player.first_name} {row.player.last_name}
+              </div>
+              <PlayerSubLines
+                dob={row.player.dob}
+                registeredByName={row.registeredByName}
+              />
+              <div style={{ fontSize: 12, color: inkMuted, marginTop: 6 }}>
+                {row.player.email ?? "no email"}
+                {row.player.phone ? ` · ${row.player.phone}` : ""}
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+                {row.events.map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => onEditReg(row.player, e)}
+                    title={`Manage ${row.player.first_name}'s ${e.name} registration`}
+                    style={eventChipStyle}
+                  >
+                    {e.name}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => onManage(row.player)}
+                style={{ ...manageButtonStyle, marginTop: 10, minHeight: 44 }}
+              >
+                Manage
+              </button>
+            </div>
+          ))}
+        </div>
+        ) : (
         <table
           style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
         >
@@ -657,7 +695,7 @@ function ByPlayerView({
                 borderBottom: `1px solid ${rule}`,
               }}
             >
-              <th style={{ ...thStyle, ...nameCellStyle }}>Name</th>
+              <th style={thStyle}>Name</th>
               <th style={thStyle}>Email</th>
               <th style={thStyle}>Phone</th>
               <th style={thStyle}>Events</th>
@@ -670,7 +708,7 @@ function ByPlayerView({
                 key={row.player.id}
                 style={{ borderBottom: `1px solid ${rule}` }}
               >
-                <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500 }}>
+                <td style={{ ...tdStyle, fontWeight: 500 }}>
                   {row.player.first_name} {row.player.last_name}
                   <PlayerSubLines
                     dob={row.player.dob}
@@ -704,17 +742,7 @@ function ByPlayerView({
                         type="button"
                         onClick={() => onEditReg(row.player, e)}
                         title={`Manage ${row.player.first_name}'s ${e.name} registration`}
-                        style={{
-                          padding: "2px 8px",
-                          background: infoBg,
-                          color: infoFg,
-                          border: `1px solid ${infoBg}`,
-                          borderRadius: 4,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
+                        style={eventChipStyle}
                       >
                         {e.name}
                       </button>
@@ -724,7 +752,7 @@ function ByPlayerView({
                 <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                   <button
                     onClick={() => onManage(row.player)}
-                    style={{ fontSize: 12, fontWeight: 600, color: courtBlue, background: "none", border: `1px solid ${rule}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}
+                    style={manageButtonStyle}
                   >
                     Manage
                   </button>
@@ -733,6 +761,7 @@ function ByPlayerView({
             ))}
           </tbody>
         </table>
+        )
       )}
     </>
   );
@@ -915,7 +944,7 @@ function EventRosterSection({
                 borderBottom: `1px solid ${rule}`,
               }}
             >
-              <th style={{ ...thStyle, ...nameCellStyle }}>
+              <th style={thStyle}>
                 {event.format === "doubles" ? "Team / Player" : "Player"}
               </th>
               <th style={thStyle}>Contact</th>
@@ -984,7 +1013,7 @@ function ConfirmedPairRows({
   return (
     <>
       <tr style={{ background: rowBg, borderTop: `1px solid ${rule}` }}>
-        <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500, paddingBottom: 3 }}>
+        <td style={{ ...tdStyle, fontWeight: 500, paddingBottom: 3 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
               style={{
@@ -998,10 +1027,6 @@ function ConfirmedPairRows({
             />
             {playerFullName(primary.player)}
           </div>
-          <PlayerSubLines
-            dob={primary.player.dob}
-            registeredByName={primary.registeredByName}
-          />
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>
           <ContactCell player={primary.player} />
@@ -1017,7 +1042,7 @@ function ConfirmedPairRows({
         </td>
       </tr>
       <tr style={{ background: rowBg, borderBottom: `1px solid ${rule}` }}>
-        <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500, paddingTop: 3 }}>
+        <td style={{ ...tdStyle, fontWeight: 500, paddingTop: 3 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
               style={{
@@ -1031,10 +1056,6 @@ function ConfirmedPairRows({
             />
             {playerFullName(partner.player)}
           </div>
-          <PlayerSubLines
-            dob={partner.player.dob}
-            registeredByName={partner.registeredByName}
-          />
         </td>
         <td style={{ ...tdStyle, paddingTop: 3 }}>
           <ContactCell player={partner.player} />
@@ -1069,12 +1090,8 @@ function SingleEntryRow({
         borderTop: `1px solid ${rule}`,
       }}
     >
-      <td style={{ ...tdStyle, ...nameCellStyle, fontWeight: 500 }}>
+      <td style={{ ...tdStyle, fontWeight: 500 }}>
         {playerFullName(reg.player)}
-        <PlayerSubLines
-          dob={reg.player.dob}
-          registeredByName={reg.registeredByName}
-        />
       </td>
       <td style={tdStyle}>
         <ContactCell player={reg.player} />
@@ -1385,17 +1402,44 @@ const seekerPillStyle: CSSProperties = {
   fontWeight: 600,
 };
 
-// The Name column carries two optional sub-lines (age, and the guardian who
-// registered a dependent — #1169). At 390px the five-column table squeezed it
-// to 85px and "Registered by Dana Harper" wrapped to three lines. These tables
-// already scroll horizontally inside the admin shell, so giving the column a
-// floor keeps the lines readable instead of trading one phone problem for a
-// fact hidden on phones.
-const nameCellStyle: CSSProperties = {
-  // Wide enough for "Registered by <first> <last>" to sit on one line for a
-  // typical name; a very long one wraps once, which reads, rather than
-  // breaking after every word.
-  minWidth: 200,
+// Phone width. The By Player table holds a name (now with up to two sub-lines
+// — age, and the guardian who registered a dependent, #1169), two contact
+// fields, a chip row and an action; five columns of that do not fit 390px, and
+// widening the name column put the whole admin page into horizontal scroll.
+// Stacking is what DESIGN_PREFERENCES records as the remedy for this shape.
+const isNarrowViewport =
+  typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 699px)").matches;
+
+const attendeeCardStyle: CSSProperties = {
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  padding: 12,
+  background: "#fff",
+};
+
+const eventChipStyle: CSSProperties = {
+  padding: "2px 8px",
+  background: infoBg,
+  color: infoFg,
+  border: `1px solid ${infoBg}`,
+  borderRadius: 4,
+  fontSize: 11,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const manageButtonStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: courtBlue,
+  background: "none",
+  border: `1px solid ${rule}`,
+  borderRadius: 6,
+  padding: "4px 10px",
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 
 const thStyle: CSSProperties = {
