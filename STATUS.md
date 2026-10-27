@@ -2834,3 +2834,6 @@ Reviewer's third REQUEST CHANGES: a guardian could `update player_guardians set
 dependent_player_id = <any account-less player>` and bypass the add_dependent() guarantee.
 Fixed by narrowing the grant to `update (deleted_at, relationship)` only (reviewer's option a).
 Migration unapplied (CI applies on merge). **Next:** reviewer re-review, then the UX PR.
+
+## 2026-10-27 — #1169 / PR #1176 rework (phone coverage)
+Reviewer asked for populated-state 390px coverage. Seeded a guardian (Gwen) + dependent (Kit) with a pending reg (`e2e-family`), added four cases to `web/e2e/mobile/audit.spec.ts` (My family, Registering-for chooser, family checkout basket, Attendees sub-lines). Merged current `main`. Not run locally (needs the E2E Supabase creds; runs in `regression.yml`). Types regen deferred as follow-up. Next: reviewer re-review.
