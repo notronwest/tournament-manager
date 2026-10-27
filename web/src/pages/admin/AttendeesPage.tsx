@@ -16,6 +16,7 @@ import {
   type Seeker,
 } from "../../lib/partnerPairing";
 import { holdsSpot } from "../../lib/registrationStatus";
+import { ageAt } from "../../lib/eligibility";
 import {
   ink,
   inkSoft,
@@ -65,11 +66,15 @@ type EventForPlayer = {
 type Row = {
   player: Player;
   events: EventForPlayer[];
+  // The guardian who signed this player up, when someone else did (#1169).
+  // Null for a self-registration, which is every row made before that.
+  registeredByName: string | null;
 };
 
 type RegData = {
   id: string;
   player_id: string;
+  registeredByName: string | null;
   partner_registration_id: string | null;
   partner_status: PartnerStatus;
   status: RegistrationStatus;
@@ -157,6 +162,28 @@ function playerFullName(p: Player) {
   return `${p.first_name} ${p.last_name}`;
 }
 
+// Secondary detail under a player's name: their age, and the guardian who
+// registered them when it wasn't themselves (#1169). Rendered as lines inside
+// the existing Name cell rather than as new columns — these tables already
+// scroll horizontally on a phone, and a sixth column would push that further
+// for a fact that is only present on a minority of rows.
+function PlayerSubLines({
+  dob,
+  registeredByName,
+}: {
+  dob: string | null;
+  registeredByName: string | null;
+}) {
+  const age = ageAt(dob);
+  if (age == null && !registeredByName) return null;
+  return (
+    <div style={{ fontWeight: 400, fontSize: 12, color: inkMuted, marginTop: 2 }}>
+      {age != null && <div>{age} years old</div>}
+      {registeredByName && <div>Registered by {registeredByName}</div>}
+    </div>
+  );
+}
+
 function ContactCell({ player }: { player: Player }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -236,7 +263,14 @@ export default function AttendeesPage() {
       const { data, error: regErr } = await supabase
         .from("event_registrations")
         .select(
-          "id, player_id, partner_registration_id, partner_status, status, event_fee_cents, players(*), events!inner(id, name, format, gender, tournament_id, deleted_at)",
+          // Two foreign keys to `players` now (the registrant and, for a
+          // dependent, the guardian who signed them up — #1169), so both
+          // embeds have to name their constraint. A bare `players(*)` is
+          // ambiguous once the second FK exists and PostgREST refuses it.
+          "id, player_id, registered_by_player_id, partner_registration_id, partner_status, status, event_fee_cents, " +
+            "players!event_registrations_player_id_fkey(*), " +
+            "registered_by:players!event_registrations_registered_by_player_id_fkey(id, first_name, last_name), " +
+            "events!inner(id, name, format, gender, tournament_id, deleted_at)",
         )
         .eq("events.tournament_id", t.id)
         .is("deleted_at", null)
@@ -255,7 +289,14 @@ export default function AttendeesPage() {
         partner_status: PartnerStatus;
         status: RegistrationStatus;
         event_fee_cents: number;
+        registered_by_player_id: string | null;
         players: Player | null;
+        // Null for a self-registration, which is every row made before #1169.
+        registered_by: {
+          id: string;
+          first_name: string;
+          last_name: string;
+        } | null;
         events: {
           id: string;
           name: string;
@@ -296,6 +337,9 @@ export default function AttendeesPage() {
           byPlayer.set(r.players.id, {
             player: r.players,
             events: [eventEntry],
+            registeredByName: r.registered_by
+              ? `${r.registered_by.first_name} ${r.registered_by.last_name}`.trim()
+              : null,
           });
         }
       }
@@ -323,6 +367,9 @@ export default function AttendeesPage() {
           status: r.status,
           event_fee_cents: r.event_fee_cents,
           player: r.players,
+          registeredByName: r.registered_by
+            ? `${r.registered_by.first_name} ${r.registered_by.last_name}`.trim()
+            : null,
         };
         const eid = r.events.id;
         if (!byEvent.has(eid)) {
@@ -625,6 +672,10 @@ function ByPlayerView({
               >
                 <td style={{ ...tdStyle, fontWeight: 500 }}>
                   {row.player.first_name} {row.player.last_name}
+                  <PlayerSubLines
+                    dob={row.player.dob}
+                    registeredByName={row.registeredByName}
+                  />
                 </td>
                 <td
                   style={{
@@ -947,6 +998,10 @@ function ConfirmedPairRows({
             />
             {playerFullName(primary.player)}
           </div>
+          <PlayerSubLines
+            dob={primary.player.dob}
+            registeredByName={primary.registeredByName}
+          />
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>
           <ContactCell player={primary.player} />
@@ -976,6 +1031,10 @@ function ConfirmedPairRows({
             />
             {playerFullName(partner.player)}
           </div>
+          <PlayerSubLines
+            dob={partner.player.dob}
+            registeredByName={partner.registeredByName}
+          />
         </td>
         <td style={{ ...tdStyle, paddingTop: 3 }}>
           <ContactCell player={partner.player} />
@@ -1012,6 +1071,10 @@ function SingleEntryRow({
     >
       <td style={{ ...tdStyle, fontWeight: 500 }}>
         {playerFullName(reg.player)}
+        <PlayerSubLines
+          dob={reg.player.dob}
+          registeredByName={reg.registeredByName}
+        />
       </td>
       <td style={tdStyle}>
         <ContactCell player={reg.player} />

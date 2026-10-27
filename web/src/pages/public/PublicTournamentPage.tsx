@@ -18,6 +18,13 @@ import { parseDescription } from "../../lib/descriptionBlocks";
 import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
 import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
+  asRegistrationInsert,
+  fetchDependents,
+  playerName,
+  registrantsFor,
+  type Dependent,
+} from "../../lib/guardians";
+import {
   deriveRegistrationStatus,
   pickActivePricingTier,
   type PricingTier,
@@ -237,6 +244,8 @@ export default function PublicTournamentPage({
   // hasn't set up a profile yet — RequireProfile handles that case
   // when they navigate to anything write-capable.
   const [me, setMe] = useState<Player | null>(null);
+  // The players this user may register besides themselves (#1169).
+  const [dependents, setDependents] = useState<Dependent[]>([]);
   // Per-event registration status for the signed-in user, keyed by
   // event_id. Empty when nobody's signed in.
   const [myStatus, setMyStatus] = useState<Map<string, MyRegStatus>>(
@@ -469,9 +478,16 @@ export default function PublicTournamentPage({
     if (!myPlayer) {
       setMyStatus(new Map());
       setInboundInvites([]);
+      setDependents([]);
       setLoading(false);
       return;
     }
+
+    // A guardian's family list. A failure here must not block the page: the
+    // worst case is that the chooser doesn't appear and the player registers
+    // only themselves, which is what happened before this existed.
+    const { dependents: family } = await fetchDependents(myPlayer.id);
+    setDependents(family);
 
     const eventIds = evs.map((e) => e.id);
     // Three reads in parallel:
@@ -1241,6 +1257,8 @@ export default function PublicTournamentPage({
                 tournamentSlug={tournamentSlug ?? ""}
                 myStatus={myStatus.get(ev.id)}
                 me={me}
+                dependents={dependents}
+                tournamentStartsAt={tournament.starts_at}
                 user={user}
                 regFeeCents={regFeeCents}
                 additionalFeeCents={additionalFeeCents}
@@ -1491,6 +1509,8 @@ function EventCard({
   tournamentSlug,
   myStatus,
   me,
+  dependents,
+  tournamentStartsAt,
   user,
   regFeeCents,
   additionalFeeCents,
@@ -1511,6 +1531,12 @@ function EventCard({
   tournamentSlug: string;
   myStatus: MyRegStatus | undefined;
   me: Player | null;
+  // Anyone else this player may register (#1169). Empty for almost everybody,
+  // which is why the chooser below only appears when it isn't.
+  dependents: Dependent[];
+  // The age gate measures age on the day of play, not the day of
+  // registration — so the eligibility check needs the tournament's start.
+  tournamentStartsAt: string;
   user: ReturnType<typeof useAuth>["user"];
   // Active-tier fees + how this event prices for the player right now.
   // Drives the context-aware cost line in the register form: entry fee
@@ -1596,6 +1622,10 @@ function EventCard({
   // partner is picked (discards the in-progress pick).
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Who this registration is FOR (#1169). The player themselves by default,
+  // which is the only option most people ever have — the chooser is only
+  // rendered when there is a second name to pick.
+  const [subjectId, setSubjectId] = useState<string | null>(null);
   // Roster panel collapsed by default; toggled by the toggle bar.
   const [rosterOpen, setRosterOpen] = useState(false);
 
@@ -1609,9 +1639,26 @@ function EventCard({
   // requestDiscardForm without re-running on every render.
   const requestDiscardFormRef = useRef<() => void>(() => {});
 
+  // ─── Who is being registered (#1169) ─────────────────────────────
+  // The player plus any dependents, player first. `subject` falls back to
+  // the player, so every path below reads the same whether or not a chooser
+  // was ever shown.
+  const registrants = registrantsFor(me, dependents);
+  const subject =
+    registrants.find((r) => r.player.id === subjectId) ?? registrants[0] ?? null;
+  const subjectPlayer = subject?.player ?? me;
+  const registeringSomeoneElse = subject != null && !subject.isSelf;
+
   // ─── Eligibility: compute once, gate the Register button ─────────
+  // The button gate stays on the PLAYER, because the chooser defaults to them
+  // and is only reachable once the form is open. The chosen registrant is
+  // checked separately, so picking a child who doesn't qualify explains
+  // itself inside the form rather than hiding the button that opens it.
   const { eligible: playerEligible, reasons: eligibilityReasons } = me
-    ? checkEligibility(me, event)
+    ? checkEligibility(me, event, tournamentStartsAt)
+    : { eligible: true, reasons: [] as string[] };
+  const { eligible: subjectEligible, reasons: subjectReasons } = subjectPlayer
+    ? checkEligibility(subjectPlayer, event, tournamentStartsAt)
     : { eligible: true, reasons: [] as string[] };
 
   // ─── Derived state for visual treatment ──────────────────────────
@@ -1783,6 +1830,10 @@ function EventCard({
       onNeedsAuth();
       return;
     }
+    // The person being entered. Everything below registers THEM; `me` stays
+    // the actor — who pays, and who is recorded as having done it.
+    const registrant = subjectPlayer ?? me;
+    const actingForDependent = registrant.id !== me.id;
     setFormError(null);
 
     // Validate paired-roles side selection (required before partner pick).
@@ -1801,8 +1852,12 @@ function EventCard({
         setFormError("Pick a partner to continue.");
         return;
       }
-      if (partner.mode === "existing" && partner.player.id === me.id) {
-        setFormError("You picked yourself as your partner.");
+      if (partner.mode === "existing" && partner.player.id === registrant.id) {
+        setFormError(
+          actingForDependent
+            ? `${registrant.first_name} can't be their own partner.`
+            : "You picked yourself as your partner.",
+        );
         return;
       }
       if (partner.mode === "new") {
@@ -1826,9 +1881,13 @@ function EventCard({
       }
     }
 
-    const { eligible, reasons } = checkEligibility(me, event);
+    const { eligible, reasons } = checkEligibility(registrant, event, tournamentStartsAt);
     if (!eligible) {
-      setFormError(`Not eligible: ${reasons.join("; ")}.`);
+      setFormError(
+        actingForDependent
+          ? `${registrant.first_name} isn't eligible: ${reasons.join("; ")}.`
+          : `Not eligible: ${reasons.join("; ")}.`,
+      );
       return;
     }
 
@@ -1857,8 +1916,12 @@ function EventCard({
     // this event? If so, registering with them picked counts as
     // accepting their invite — no new outbound invite, no
     // duplicate. Mirrors the logic in the legacy /register page.
+    // Only for the player's OWN registration: the lookup keys on the
+    // signed-in user's email, which is the guardian's, not the dependent's. A
+    // dependent has no email by design, so there is no inbound invite of
+    // theirs to find, and matching the guardian's would pair the wrong person.
     let inboundInviteId: string | null = null;
-    if (isDoubles && resolvedPartnerId && user?.email) {
+    if (isDoubles && !actingForDependent && resolvedPartnerId && user?.email) {
       const { data: inbound } = await supabase
         .from("partner_invites")
         .select("id")
@@ -1899,6 +1962,17 @@ function EventCard({
     // normal pairing INSERT + outbound invite below.
     const fillsOpenSlot =
       isDoubles && !seekingPartner && joiningSeeker && resolvedPartnerId != null;
+    if (isFull && !fillsOpenSlot && actingForDependent) {
+      // join_waitlist resolves the player from auth.uid(), so it can only ever
+      // waitlist the caller — there is no way to put a dependent in the queue
+      // through it. Say so, rather than silently waitlisting the parent under
+      // the child's name. Widening the RPC is its own change.
+      setFormError(
+        `This event is full, and we can't add ${registrant.first_name} to the waitlist yet — a waitlist place can only be taken by the player themselves. Ask the organizer to add them.`,
+      );
+      setSubmitting(false);
+      return;
+    }
     if (isFull && !fillsOpenSlot) {
       // FULL event → join the WAITLIST (free). join_waitlist creates a
       // 'waitlisted' reg (partner_status seeking for doubles / solo for
@@ -1932,16 +2006,23 @@ function EventCard({
     } else {
       const { error: regErr } = await supabase
         .from("event_registrations")
-        .insert({
-          event_id: event.id,
-          player_id: me.id,
-          event_fee_cents: 0,
-          status: "pending_payment",
-          partner_status: partnerStatusOnInsert,
-          ...(event.is_paired_roles && registrationSide
-            ? { registration_side: registrationSide }
-            : {}),
-        })
+        .insert(
+          asRegistrationInsert({
+            event_id: event.id,
+            player_id: registrant.id,
+            // Who did it, when that wasn't the registrant themselves — null
+            // means self-registered, which is every row the product has made
+            // so far. The organizer's Attendees page reads this to name the
+            // parent (#1169), and RLS pins it to the caller so it can't lie.
+            ...(actingForDependent ? { registered_by_player_id: me.id } : {}),
+            event_fee_cents: 0,
+            status: "pending_payment",
+            partner_status: partnerStatusOnInsert,
+            ...(event.is_paired_roles && registrationSide
+              ? { registration_side: registrationSide }
+              : {}),
+          }),
+        )
         .select()
         .single();
       if (regErr) {
@@ -1956,7 +2037,9 @@ function EventCard({
       // closure-captured value in insertOutboundInvite doesn't
       // re-widen to nullable.
       const partnerIdNN = resolvedPartnerId;
-      const meIdNN = me.id;
+      // The inviter is whoever is entered in the event, so a dependent's
+      // doubles partner is invited by the dependent rather than the parent.
+      const meIdNN = registrant.id;
       const insertOutboundInvite = async () => {
         // Queue the partner_invite as 'pending'. The invite EMAIL
         // doesn't fire yet — it fires from the checkout page after
@@ -2465,7 +2548,12 @@ function EventCard({
   // Submit gate: singles always submit-able. Doubles need EITHER a
   // partner picked OR the "I need a partner" toggle on.
   const sideChosen = !event.is_paired_roles || !isDoubles || registrationSide !== null;
-  const canSubmit = sideChosen && (!isDoubles || partnerPicked || seekingPartner);
+  const canSubmit =
+    sideChosen &&
+    (!isDoubles || partnerPicked || seekingPartner) &&
+    // A chosen registrant who doesn't qualify can't be submitted; the reason
+    // is rendered in the form, so this disables rather than dead-ends.
+    (editMode !== "register" || subjectEligible);
 
   // ─── #98: card visual state ───────────────────────────────────────
   // Lifted card (isFocused): position:relative + z-index:60 places it
@@ -2781,6 +2869,54 @@ function EventCard({
             borderTop: `1px dashed ${rule}`,
           }}
         >
+          {/* Who this registration is for (#1169). Rendered only when there
+              IS someone else to pick, so an adult with no dependents sees
+              exactly the form they saw before — the chooser is invisible
+              rather than a control that always says "me". */}
+          {editMode === "register" && registrants.length > 1 && (
+            <div style={{ marginBottom: 14 }}>
+              <label
+                htmlFor={`registering-for-${event.id}`}
+                style={{
+                  display: "block",
+                  fontSize: 12,
+                  color: inkSoft,
+                  marginBottom: 4,
+                }}
+              >
+                Registering for
+              </label>
+              <select
+                id={`registering-for-${event.id}`}
+                value={subject?.player.id ?? ""}
+                onChange={(e) => setSubjectId(e.target.value)}
+                disabled={submitting}
+                style={registeringForSelectStyle}
+              >
+                {registrants.map((r) => (
+                  <option key={r.player.id} value={r.player.id}>
+                    {r.isSelf ? `${playerName(r.player)} (you)` : playerName(r.player)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* The chosen registrant doesn't qualify. Said here rather than by
+              hiding the button that opens this form, because the form is
+              where the choice was made and where it can be changed. */}
+          {editMode === "register" && registeringSomeoneElse && !subjectEligible && (
+            <div style={subjectBlockedStyle}>
+              <strong>
+                {subjectPlayer?.first_name} can&rsquo;t enter this event:{" "}
+                {subjectReasons.join("; ")}.
+              </strong>{" "}
+              {subjectReasons.some((r) => r.includes("date of birth"))
+                ? "Add their date of birth under My family on your profile."
+                : "Pick a different event, or someone else above."}
+            </div>
+          )}
+
           {/* Context-aware cost line. Only on the register flow (not
               the change-partner flow, which doesn't change the price).
               We don't re-explain the whole first/additional model —
@@ -3106,6 +3242,35 @@ function Pill({
 // from across the form; inactive stays white with a neutral border.
 // The whole tile is the click target — both the icon and the label
 // inherit `currentColor` so hover/active states flow through.
+// "Registering for" (#1169). A plain select rather than a tile row or a
+// radiogroup: it is one choice from a short list that most people never see,
+// and the register form already carries a radiogroup for partner mode.
+// 44px minimum height so it is a real tap target on a phone.
+const registeringForSelectStyle: CSSProperties = {
+  width: "100%",
+  maxWidth: 320,
+  minHeight: 44,
+  padding: "10px 12px",
+  border: `1px solid ${rule}`,
+  borderRadius: 6,
+  fontSize: 14,
+  fontFamily: "inherit",
+  background: "#ffffff",
+  color: ink,
+};
+
+// The chosen registrant doesn't qualify for this event.
+const subjectBlockedStyle: CSSProperties = {
+  marginBottom: 12,
+  padding: "10px 12px",
+  background: dangerBg,
+  border: `1px solid ${dangerFg}`,
+  borderRadius: 8,
+  fontSize: 13,
+  color: dangerFg,
+  lineHeight: 1.5,
+};
+
 function partnerModeTileStyle(active: boolean): CSSProperties {
   return {
     display: "flex",

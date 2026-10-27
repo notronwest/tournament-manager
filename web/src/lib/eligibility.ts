@@ -15,9 +15,25 @@ type Player = Database["public"]["Tables"]["players"]["Row"];
 // Gender rule: mixed and open events never gate on gender. Men's →
 // player.gender "M"; women's → player.gender "F". Any other player gender
 // (including null or "X") is blocked from a single-gender event.
+//
+// Age rule (#1169): only when the event sets min_age or max_age. Age is
+// measured at the TOURNAMENT'S START, not today — "18 & under" is a statement
+// about the day of play, and measuring at registration time would let
+// eligibility drift as a bracket sits open. Pass the tournament's starts_at;
+// without it this falls back to today, which is only right for a bracket
+// being entered on the day. A null dob is ineligible for an age-restricted
+// event (the same treatment the rating gate gives a missing self-rating) and
+// irrelevant for an event that sets no bound.
+//
+// This function is the FRIENDLY HALF of a deliberate double implementation.
+// enforce_event_eligibility() in the database is the trust boundary and
+// carries the identical rule; a rule added only here is bypassable by posting
+// straight to PostgREST. Keep the two in step — including the UTC date both
+// sides measure age against, so they cannot disagree by a day over a timezone.
 export function checkEligibility(
   player: Player,
   event: Event,
+  tournamentStartsAt?: string | null,
 ): { eligible: boolean; reasons: string[] } {
   const reasons: string[] = [];
 
@@ -69,7 +85,59 @@ export function checkEligibility(
     }
   }
 
+  if (event.min_age != null || event.max_age != null) {
+    const age = ageAt(player.dob, tournamentStartsAt);
+    if (age == null) {
+      reasons.push("needs a date of birth on file");
+    } else if (
+      (event.min_age != null && age < event.min_age) ||
+      (event.max_age != null && age > event.max_age)
+    ) {
+      reasons.push(`needs age ${ageRangeLabel(event.min_age, event.max_age)}`);
+    }
+  }
+
   return { eligible: reasons.length === 0, reasons };
+}
+
+// Full years old on the day of the event. Returns null when there's no dob to
+// go on, which the caller reads as "can't tell".
+//
+// Everything here is UTC: the trigger compares against
+// (tournaments.starts_at at time zone 'UTC')::date, so reading the same UTC
+// calendar date is what keeps the two sides from disagreeing by a day for a
+// player whose birthday falls on the event. Parsing dob by its parts rather
+// than through Date() avoids the opposite trap — "2015-06-01" through the
+// Date constructor is midnight UTC, which is the previous day in any western
+// timezone.
+export function ageAt(dob: string | null, asOf?: string | null): number | null {
+  const birth = isoDateParts(dob);
+  if (!birth) return null;
+
+  const at = asOf ? new Date(asOf) : new Date();
+  if (Number.isNaN(at.getTime())) return null;
+  const y = at.getUTCFullYear();
+  const m = at.getUTCMonth() + 1;
+  const d = at.getUTCDate();
+
+  let years = y - birth.y;
+  if (m < birth.m || (m === birth.m && d < birth.d)) years -= 1;
+  return years;
+}
+
+function isoDateParts(value: string | null): { y: number; m: number; d: number } | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+  return { y: Number(match[1]), m: Number(match[2]), d: Number(match[3]) };
+}
+
+// Mirrors the range text enforce_event_eligibility() builds, so the browser's
+// message and the database's rejection read the same.
+function ageRangeLabel(min: number | null, max: number | null): string {
+  if (min != null && max != null) return `${min}–${max}`;
+  if (min != null) return `${min}+`;
+  return `${max} or under`;
 }
 
 // Render an event's eligibility settings (rating bounds, rating source,
