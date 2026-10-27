@@ -30,11 +30,6 @@ export type PlayerSelection =
       lastName: string;
       email: string;
       phone: string;
-      // Optional, and the picker's own form never collects it — it exists so
-      // the Add-a-child flow on Profile (#1169) can create a dependent's
-      // player row through this same helper instead of growing a second
-      // player-creation path. A date of birth is what the age gate reads.
-      dob?: string;
     };
 
 export const emptySelection: PlayerSelection = { mode: "empty" };
@@ -394,7 +389,6 @@ export async function persistPlayerSelection(
       last_name: last,
       email: s.email.trim() || null,
       phone: s.phone.trim() || null,
-      dob: s.dob?.trim() || null,
     })
     .select()
     .single();

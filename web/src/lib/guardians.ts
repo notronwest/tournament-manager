@@ -8,15 +8,20 @@
 //
 // Two properties of the database shape the code here:
 //
-//   * A dependent's player row must be created BEFORE the link, in a separate
-//     statement. The policy that decides whether a player may be adopted is
-//     STABLE, so it reads the snapshot as of the start of the current
-//     statement — doing both in one statement (a CTE) cannot see the new row
-//     and is refused.
-//   * A player may only be adopted while they hold no auth account and no
-//     registrations, which in practice means "a row you just created". That
-//     is what keeps a guardian link from being a way to reach into an
-//     existing player's registrations.
+//   * There is NO insert policy on player_guardians and no insert grant. A
+//     link exists only where add_dependent() made one, and that function
+//     creates the player row and the link together — so there is no way to
+//     point a link at a player row that already exists, which is what would
+//     otherwise turn a guardian link into a way to reach into someone else's
+//     registrations. (An earlier draft did allow an insert, fenced by a policy
+//     that the dependent hold no account and no registrations; the review
+//     closed the path instead of fencing it.)
+//   * is_guardian_of() requires the dependent to still be account-less, so a
+//     guardian's authority over a row ends the moment the real person claims
+//     it — the orphan-claim flow is how a child gets their own account at 18.
+//   * Table-level UPDATE is revoked; the grant covers (deleted_at,
+//     relationship) only, so a guardian can retire a link or label it but
+//     cannot re-point either end of it.
 //
 // player_guardians is newer than the generated types, so it is read through an
 // untyped view of the client — the same pattern as CheckoutPage's
@@ -26,7 +31,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
 import type { Database } from "../types/supabase";
-import { persistPlayerSelection } from "../components/PlayerPicker";
 
 type Player = Database["public"]["Tables"]["players"]["Row"];
 
@@ -116,10 +120,10 @@ export async function fetchDependents(
   return { dependents, error: null };
 }
 
-// Creates the dependent's player row and links it to the guardian. The player
-// row goes through persistPlayerSelection — the same helper the partner
-// "+ Add new player" path uses — rather than a second creation path; it takes
-// the date of birth as an optional field added for exactly this caller.
+// Creates the dependent's player row and the guardian link, in one
+// SECURITY DEFINER call. The client cannot do this in two steps any more and
+// should not want to: there is no insert policy on player_guardians, precisely
+// so a link can never be pointed at a player row that already existed.
 //
 // A child needs no email address: that is the point of the feature, and
 // nothing in this path asks for one.
@@ -129,42 +133,34 @@ export async function addDependent(args: {
   lastName: string;
   dob: string;
 }): Promise<{ dependent: Dependent | null; error: string | null }> {
-  const { player, error } = await persistPlayerSelection({
-    mode: "new",
-    firstName: args.firstName,
-    lastName: args.lastName,
-    email: "",
-    phone: "",
-    dob: args.dob,
+  const { data: newId, error: rpcErr } = await untyped.rpc("add_dependent", {
+    p_first_name: args.firstName,
+    p_last_name: args.lastName,
+    p_dob: args.dob,
   });
-  if (error || !player) {
-    return { dependent: null, error: error ?? "Couldn't save that child." };
+  if (rpcErr || !newId) {
+    return { dependent: null, error: rpcErr?.message ?? "Couldn't add that child." };
   }
 
-  const { data, error: linkErr } = await untyped
-    .from("player_guardians")
-    .insert({
-      guardian_player_id: args.guardianPlayerId,
-      dependent_player_id: player.id,
-    })
-    .select("id")
-    .single();
-  if (linkErr || !data) {
-    // The player row exists but is unreachable without the link, so say so
-    // plainly rather than reporting a success that isn't one. It holds no
-    // registrations, so re-adding the same child is safe.
+  // Read the pair back rather than assembling it from the arguments, so the
+  // list shows what the database actually stored (trimmed names, the link id
+  // the remove action needs).
+  const { dependents, error: readErr } = await fetchDependents(args.guardianPlayerId);
+  const dependent = dependents.find((d) => d.player.id === (newId as string)) ?? null;
+  if (!dependent) {
     return {
       dependent: null,
-      error: linkErr?.message ?? "Couldn't link that child to your account.",
+      error: readErr ?? "Added, but couldn't read the family list back. Reload to see them.",
     };
   }
-
-  return { dependent: { linkId: (data as { id: string }).id, player }, error: null };
+  return { dependent, error: null };
 }
 
 // Retires the link, not the player. The child's own row and any history stay
 // where they are — this is the soft delete the table was built for, and it is
-// what lets the same child be re-added or later claim their own account.
+// what lets the same child later claim their own account. (Re-adding the same
+// child now means adding them again, since add_dependent() always makes a new
+// player row; the retired link and its player stay as they are.)
 export async function removeDependent(linkId: string): Promise<{ error: string | null }> {
   const { error } = await untyped
     .from("player_guardians")
