@@ -3139,7 +3139,7 @@ function EventCard({
               )}
             </div>
           )}
-          {isDoubles && (
+          {isDoubles && subjectEligible && !subjectAlreadyIn && (
             <>
               {/* Paired-roles: side selector — appears above the partner
                   picker when event.is_paired_roles is true. Must be
@@ -3345,12 +3345,18 @@ function EventCard({
                 option above to complete your registration.
               </span>
             )}
-            {sideChosen && isDoubles && !partnerPicked && !seekingPartner && !submitting && (
-              <span style={{ fontSize: 12, color: inkMuted }}>
-                Pick a partner to continue (or choose "I need a
-                partner" above).
-              </span>
-            )}
+            {sideChosen &&
+              isDoubles &&
+              subjectEligible &&
+              !subjectAlreadyIn &&
+              !partnerPicked &&
+              !seekingPartner &&
+              !submitting && (
+                <span style={{ fontSize: 12, color: inkMuted }}>
+                  Pick a partner to continue (or choose "I need a
+                  partner" above).
+                </span>
+              )}
           </div>
         </div>
       )}

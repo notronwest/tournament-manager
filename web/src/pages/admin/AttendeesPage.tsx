@@ -184,9 +184,16 @@ function PlayerSubLines({
   );
 }
 
-function ContactCell({ player }: { player: Player }) {
+function ContactCell({
+  player,
+  registeredByName,
+}: {
+  player: Player;
+  registeredByName?: string | null;
+}) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <PlayerSubLines dob={player.dob} registeredByName={registeredByName ?? null} />
       {player.email ? (
         <a
           href={`mailto:${player.email}`}
@@ -1029,7 +1036,7 @@ function ConfirmedPairRows({
           </div>
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>
-          <ContactCell player={primary.player} />
+          <ContactCell player={primary.player} registeredByName={primary.registeredByName} />
         </td>
         <td style={{ ...tdStyle, paddingBottom: 3 }}>
           {paymentBadge(primary.status)}
@@ -1058,7 +1065,7 @@ function ConfirmedPairRows({
           </div>
         </td>
         <td style={{ ...tdStyle, paddingTop: 3 }}>
-          <ContactCell player={partner.player} />
+          <ContactCell player={partner.player} registeredByName={partner.registeredByName} />
         </td>
         <td style={{ ...tdStyle, paddingTop: 3 }}>
           {paymentBadge(partner.status)}
@@ -1094,7 +1101,7 @@ function SingleEntryRow({
         {playerFullName(reg.player)}
       </td>
       <td style={tdStyle}>
-        <ContactCell player={reg.player} />
+        <ContactCell player={reg.player} registeredByName={reg.registeredByName} />
       </td>
       <td style={tdStyle}>{paymentBadge(reg.status)}</td>
       <td style={tdStyle}>{partnerBadge(reg.partner_status)}</td>
