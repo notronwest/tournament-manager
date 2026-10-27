@@ -5,6 +5,66 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-27 — Data: Loon Race Team org + 12/29 tournament seeded on PROD (draft)
+
+Built the **Loon Race Team** organizer org and its **Loon Race Team Pickleball
+Tournament** (Tue 12/29/2026) directly on the PROD Supabase project
+(`wducsjqyoksmluwfgjxc`) from the confirmed details in the Laura Rubin / Ron
+"LRT EVENT" email thread — Laura's 10/19 recap plus Ron's 10/22 reply, which is
+where the numbers were actually settled. **No code change — data only.**
+
+Created: `organizations` (slug `loon-race-team`, `contact_email`
+`tournaments@bertanderne.com` per the house pattern — it is the Reply-To on all
+registration/waitlist edge-function mail); an `organization_members` **owner**
+row for Ron (the `orgs_add_creator` AFTER INSERT trigger is guarded by
+`auth.uid() is not null`, so it silently no-ops under `service_role` and the row
+must be inserted by hand); a `locations` row for the WMPC venue (557 US Route 3
+Unit B, Lincoln NH); the `tournaments` row — **status `draft`**,
+`pricing_pattern 'early_bird'`, `court_count` 4, `inter_event_buffer_minutes` 15,
+`location_id` set with `location_name`/`location_address` left NULL per the UI's
+mutually-exclusive rule; 2 `tournament_pricing_tiers` ($55 "Early bird" with
+`ends_at` = local midnight 12/20 → $65 "Regular" with `starts_at` equal to it,
+`first_events_included` 1 — nothing auto-creates tiers since
+`tournaments_create_single_tier` was dropped in
+`20260529160000_drop_legacy_fee_columns.sql`, so a tournament without them
+checks out at $0); a `tournament_contacts` row for Laura
+(`receives_form_messages` true, **`is_public` false** — her personal cell and
+gmail are stored for form routing, not published); and 3 `events`: Social
+Doubles 2:00pm, Kids 18 & Under Doubles 4:30pm (`max_age` 18), Competitive
+Doubles 6:30pm — all `gender 'open'` (Ron confirmed m/m, f/f and mixed all
+welcome), `max_teams` 7, round robin, top 4 into a 2-round playoff,
+`schedule_order` 1/2/3 set explicitly since no insert path sets it and readers
+sort `(schedule_order NULLS LAST, created_at)`.
+
+Tier labels were normalized to the exact `PRESET_LABELS` strings
+("Early bird"/"Regular", `web/src/lib/pricingTiers.ts:232`) so
+`applyPresetLabels` is a no-op if the pricing wizard step is reopened;
+`tierPhase` lowercases before matching, so the public pill reads "Early Bird
+Registration Open".
+
+Ran the whole CTE chain as `begin; … rollback;` against PROD first — caught a
+UNION type error (untyped `null` in the first branch resolving to `text` against
+a `timestamptz` column) and confirmed zero residue before committing. Verified
+after: 1 org / 1 member / 1 location / 1 tournament / 3 events / 2 tiers /
+1 contact, event start times read back as 14:00, 16:30, 18:30 America/New_York.
+
+Two discrepancies in the thread, resolved toward Ron's 10/22 reply: Laura's
+10/10 mail floated "Saturday, Feb 20th" (the 10/19 recap and Ron both say Tue
+12/29 — and 12/29/2026 is a Tuesday), and Laura asked "14 teams per bracket?"
+twice where Ron answered "up to 7".
+
+**Open, needs Ron:** LRT's Stripe is `not_connected`, which blocks checkout even
+once published (Ron was to wire Laura's own account with Sarah Snell);
+`registration_opens_at`/`closes_at` are both NULL, so publishing opens
+registration immediately and it never auto-closes;
+`additional_event_fee_cents` was set to a full entry ($55/$65) because
+multi-bracket pricing never came up, so a kid playing both Kids and Social pays
+twice; `cancellation_policy_preset`, `pickleball_type` and `accepts_donations`
+are at defaults, and donations may be wanted given it is a fundraiser. The $600
+facility fee WMPC charges LRT has no field on a tournament and is recorded
+nowhere in the app. **Next:** publish to mint the flyer's QR target,
+`/t/loon-race-team/loon-race-team-pickleball-tournament`.
+
 ## 2026-10-13 — Builder: PR #965 rework (rebase, clear CONFLICTING)
 
 Reviewer gate had put PR #965 (issue #964 — regression spec for #64, global
