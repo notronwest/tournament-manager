@@ -2998,3 +2998,60 @@ unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
 database, so the hand-written `"a" | "b"` narrowing was the only thing typing them. Dropping it
 is correct — the code now matches the column — but the honest fix is a DB enum so the generated
 type carries the constraint. That is a migration, not a types change.
+
+---
+
+## 2026-10-28 — Register a youth from the register form (#1182)
+
+Ron opened the register form on TEST and asked where the option to register a youth was.
+It wasn't there. The guardian flow (#1169) shipped on 2026-10-27 and needs **no organizer
+setting** — no org flag, no tournament flag, no event flag; `add_dependent()` asks only that
+you be signed in with a player profile. But the "Registering for" chooser rendered only when
+`registrants.length > 1`, so a parent with nobody on file saw nothing. The capability was
+always on and completely invisible until you had already found **My family** on your profile.
+`player_guardians` had 0 rows on TEST — nobody had found it.
+
+**The change.** The chooser now renders whenever the register form is open, and carries an
+**Add a youth…** entry after the family names. Choosing it opens the name/DOB form in place;
+saving adds the child, selects them, and drops you back into the registration you were already
+filling in. The rest of the form stands down while that step is open, so the panel never shows
+two submit buttons.
+
+Also: an age-capped bracket the parent has aged out of used to replace Register with a link to
+the profile page. It now shows **Register a child** and opens the form — that juniors case is
+the sharpest form of the same bug, and it was being sent to another screen to solve it.
+
+**Reuse, not a copy (D-0049).** The add-a-child form moved out of `ProfilePage` into
+`components/AddChildForm.tsx` with a `variant="page" | "inline"` prop, and both hosts mount the
+one file. `Field` / `FieldRow` moved alongside it into `components/Field.tsx`. ProfilePage lost
+its three field states, its busy flag and its submit handler — net **−156 / +115** lines.
+
+**Verified** on the local offline stack (`scripts/offline.sh`), signed in as the seeded
+director, at **390 × 844**: chooser present with zero children; add-a-youth opens inline; saving
+creates an account-less player plus a live `player_guardians` link and selects them; cancel
+restores the previous pick and the partner step; the child then appears under My family, and the
+juniors card flips from "Not eligible" to Register. No horizontal scroll (scrollWidth 390).
+typecheck ✅, build ✅, **421/421 vitest in 36 files** ✅, lint at the unchanged `origin/main`
+baseline (35 problems / 31 errors / 4 warnings — identical with the change stashed).
+
+**Not done:** the date of birth is still required to add a child. It is the only required input
+on the youth path and it is not a setting, but the eligibility rule already degrades gracefully
+without one ("needs a date of birth on file", and only where an event has an age bound), so
+making it optional is a client-only change worth its own card.
+
+**Design gate: three rounds, two of them mine.** The first FAIL was the aged-out juniors CTA
+opening the register form on the parent — a registrant the card had already established nobody
+could satisfy — under advice that said "Pick a different event", which is the #1182 dead end
+moved one tap deeper rather than closed. The second FAIL was a regression from fixing the
+first: keying the new copy on *the event having an age bound* offered "add a youth" on a 40+
+bracket, where every registrant that advice can produce fails the same gate, and on a
+skill-bounded juniors bracket it refused the child the parent had just created and told them to
+add a youth again. Both now hang off whether a child could actually enter — no adult minimum
+age — and the refusal panel additionally off the refusal being the age one. PASSed on
+`43d3bf1228f54fbc`, no findings, rendered and clicked at 390×844 and 1280×800.
+
+**Filed, not fixed:** #1183 — nothing anywhere can set a dependent's skill rating *or gender*,
+so a skill-bounded or single-gender bracket opens a path a child cannot finish. The gate's
+judgement was that the fix is that missing screen, not a narrower gate here, since gating on it
+would hide the youth path from most real divisions. This branch owes an honest refusal, and has
+one.

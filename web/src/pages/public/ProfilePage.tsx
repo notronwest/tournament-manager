@@ -13,10 +13,11 @@ import { useAuth } from "../../auth/AuthProvider";
 import { recordSignupEvent, grantAccountCreditIfEligible } from "../../lib/campaignCapture";
 import type { Database } from "../../types/supabase";
 import { RatingPicker } from "../../components/RatingPicker";
+import { AddChildForm } from "../../components/AddChildForm";
+import { Field, FieldRow } from "../../components/Field";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { ageAt } from "../../lib/eligibility";
 import {
-  addDependent,
   fetchDependents,
   playerName,
   removeDependent,
@@ -129,10 +130,6 @@ export default function ProfilePage() {
   const [dependents, setDependents] = useState<Dependent[]>([]);
   const [familyLoading, setFamilyLoading] = useState(false);
   const [addChildOpen, setAddChildOpen] = useState(false);
-  const [childFirst, setChildFirst] = useState("");
-  const [childLast, setChildLast] = useState("");
-  const [childDob, setChildDob] = useState("");
-  const [familyBusy, setFamilyBusy] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [familyAdded, setFamilyAdded] = useState<string | null>(null);
   const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
@@ -242,45 +239,16 @@ export default function ProfilePage() {
     };
   }, [myPlayerId]);
 
-  const onAddChild = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!myPlayerId) return;
+  // What this page does once the shared form has made the child: fold them
+  // into the family list and say so. The validation and the write itself live
+  // in AddChildForm, which the register form mounts too.
+  const onChildAdded = (dependent: Dependent) => {
     setFamilyError(null);
-    setFamilyAdded(null);
     setFamilyRemoved(null);
-
-    if (!childFirst.trim() || !childLast.trim()) {
-      setFamilyError("A first and last name are both needed.");
-      return;
-    }
-    if (!childDob) {
-      // Not a database rule — the row would save without one. But a child
-      // added for a juniors bracket and no date of birth is a registration
-      // that will be refused later for a reason nobody can see here, so the
-      // field is required at the point where it is easy to supply.
-      setFamilyError("A date of birth is needed so age-restricted brackets can check it.");
-      return;
-    }
-
-    setFamilyBusy(true);
-    const { dependent, error: addErr } = await addDependent({
-      guardianPlayerId: myPlayerId,
-      firstName: childFirst,
-      lastName: childLast,
-      dob: childDob,
-    });
-    setFamilyBusy(false);
-    if (addErr || !dependent) {
-      setFamilyError(addErr ?? "Couldn't add that child.");
-      return;
-    }
     setDependents((prev) =>
       [...prev, dependent].sort((a, b) => playerName(a.player).localeCompare(playerName(b.player))),
     );
     setFamilyAdded(playerName(dependent.player));
-    setChildFirst("");
-    setChildLast("");
-    setChildDob("");
     setAddChildOpen(false);
   };
 
@@ -991,73 +959,16 @@ export default function ProfilePage() {
               </div>
             )}
 
-            {addChildOpen ? (
-              <form
-                onSubmit={onAddChild}
-                style={{ display: "flex", flexDirection: "column", gap: 12 }}
-              >
-                <FieldRow>
-                  <Field label="First name" required>
-                    <input
-                      type="text"
-                      required
-                      value={childFirst}
-                      onChange={(e) => setChildFirst(e.target.value)}
-                      style={inputStyle}
-                      disabled={familyBusy}
-                    />
-                  </Field>
-                  <Field label="Last name" required>
-                    <input
-                      type="text"
-                      required
-                      value={childLast}
-                      onChange={(e) => setChildLast(e.target.value)}
-                      style={inputStyle}
-                      disabled={familyBusy}
-                    />
-                  </Field>
-                </FieldRow>
-                <FieldRow>
-                  <Field label="Date of birth" required>
-                    <input
-                      type="date"
-                      required
-                      value={childDob}
-                      onChange={(e) => setChildDob(e.target.value)}
-                      style={inputStyle}
-                      disabled={familyBusy}
-                    />
-                    <span style={{ fontSize: 12, color: inkMuted }}>
-                      A juniors bracket checks this, so it&rsquo;s needed here.
-                    </span>
-                  </Field>
-                </FieldRow>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <button
-                    type="submit"
-                    disabled={familyBusy}
-                    style={familyBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
-                  >
-                    {familyBusy ? "Saving…" : "Save child"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={familyBusy}
-                    onClick={() => {
-                      setAddChildOpen(false);
-                      setFamilyError(null);
-                    }}
-                    style={
-                      familyBusy
-                        ? { ...ctaSecondaryStyle, opacity: 0.6, cursor: "not-allowed" }
-                        : ctaSecondaryStyle
-                    }
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+            {addChildOpen && myPlayerId ? (
+              <AddChildForm
+                variant="page"
+                guardianPlayerId={myPlayerId}
+                onAdded={onChildAdded}
+                onCancel={() => {
+                  setAddChildOpen(false);
+                  setFamilyError(null);
+                }}
+              />
             ) : (
               <div>
                 <button
@@ -1270,44 +1181,6 @@ function Shell({ children }: { children: ReactNode }) {
         {children}
       </main>
     </div>
-  );
-}
-
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        fontSize: 12,
-        color: inkSoft,
-        flex: "1 1 160px",
-        minWidth: 0,
-      }}
-    >
-      <span>
-        {label}
-        {required && (
-          <span style={{ color: courtRed, marginLeft: 4 }}>*</span>
-        )}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function FieldRow({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{children}</div>
   );
 }
 

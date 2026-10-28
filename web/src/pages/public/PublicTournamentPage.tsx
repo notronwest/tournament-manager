@@ -33,6 +33,7 @@ import type { Database } from "../../types/supabase";
 import { computeMedals, type Team as BracketTeam } from "../../lib/bracketTeams";
 import { playoffStageLabel } from "../../lib/matchLabel";
 import { BracketView, type MatchRow } from "../../components/BracketView";
+import { AddChildForm } from "../../components/AddChildForm";
 import { BracketStandingsPanel } from "../../components/BracketStandingsPanel";
 import {
   bg as v5Bg,
@@ -1321,6 +1322,13 @@ export default function PublicTournamentPage({
                     navigate("/login", { state: { from: { pathname: back } } });
                   }
                 }}
+                onDependentAdded={(dependent) => {
+                  setDependents((prev) =>
+                    [...prev, dependent].sort((a, b) =>
+                      playerName(a.player).localeCompare(playerName(b.player)),
+                    ),
+                  );
+                }}
               />
             ))}
           </div>
@@ -1553,6 +1561,7 @@ function EventCard({
   onChanged,
   onNeedsAuth,
   onViewBracket,
+  onDependentAdded,
 }: {
   event: Event;
   registrationOpen: boolean;
@@ -1561,7 +1570,8 @@ function EventCard({
   myStatus: MyRegStatus | undefined;
   me: Player | null;
   // Anyone else this player may register (#1169). Empty for almost everybody,
-  // which is why the chooser below only appears when it isn't.
+  // but the chooser renders either way now (#1182) — an empty family list is
+  // precisely the parent who needs to be told the youth path exists.
   dependents: Dependent[];
   // event ids each dependent is already in, keyed by their player id.
   dependentEventIds: Map<string, Map<string, RegistrationStatus>>;
@@ -1594,6 +1604,10 @@ function EventCard({
   onReleaseFocus: () => void;
   onChanged: () => Promise<void> | void;
   onNeedsAuth: () => void;
+  // A child was just created from this card's add-a-youth step. The family
+  // list lives on the page, so the card hands the new dependent up rather
+  // than keeping a second copy of it.
+  onDependentAdded: (dependent: Dependent) => void;
   // Set once the bracket has games: opens the Brackets tab on this event.
   onViewBracket?: () => void;
 }) {
@@ -1658,9 +1672,12 @@ function EventCard({
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   // Who this registration is FOR (#1169). The player themselves by default,
-  // which is the only option most people ever have — the chooser is only
-  // rendered when there is a second name to pick.
+  // which is the only option most people ever have. The chooser renders
+  // whenever the form is open, so this is also what it falls back to.
   const [subjectId, setSubjectId] = useState<string | null>(null);
+  // The add-a-youth step is open. It replaces the rest of the register form
+  // while it is, so there is only ever one submit button on screen.
+  const [addingChild, setAddingChild] = useState(false);
   // Roster panel collapsed by default; toggled by the toggle bar.
   const [rosterOpen, setRosterOpen] = useState(false);
 
@@ -1684,6 +1701,28 @@ function EventCard({
   const subjectPlayer = subject?.player ?? me;
   const registeringSomeoneElse = subject != null && !subject.isSelf;
 
+  // A child added through the chooser's own step is, by definition, a minor.
+  // So a bracket with an ADULT minimum age can never accept one however many
+  // you add, and offering the step there is a false door — the option, the
+  // aged-out CTA and the advice below all hang off this.
+  const youthCanEnterByAge = event.min_age == null || event.min_age < 18;
+
+  // What to actually DO when the chooser's current pick can't enter. Two
+  // sentences, and picking between them is the whole of it: naming the
+  // add-a-youth step only helps when adding a youth is genuinely the way
+  // through. Keyed on the bracket having an age cap alone it was not — on a
+  // 40+ event it offered a move that same gate rejects, and on a skill-bounded
+  // juniors event it told the parent to add a youth, refused the child they
+  // had just added for having no rating, and said to add a youth again.
+  const addYouthClause =
+    registrants.length > 1
+      ? 'Pick someone else above, or choose "Add a youth\u2026" to enter a child.'
+      : 'Choose "Add a youth\u2026" above to enter a child.';
+  const otherRegistrantClause =
+    registrants.length > 1
+      ? "Pick someone else above, or a different event."
+      : "Pick a different event.";
+
   // ─── Eligibility: compute once, gate the Register button ─────────
   // The button gate stays on the PLAYER, because the chooser defaults to them
   // and is only reachable once the form is open. The chosen registrant is
@@ -1695,6 +1734,10 @@ function EventCard({
   const { eligible: subjectEligible, reasons: subjectReasons } = subjectPlayer
     ? checkEligibility(subjectPlayer, event, tournamentStartsAt)
     : { eligible: true, reasons: [] as string[] };
+
+  // Only the age gate is fixable by choosing a younger person. A rating or a
+  // gender refusal follows a brand-new child too, so those keep the old copy.
+  const refusedOnAge = subjectReasons.some((r) => r.startsWith("needs age"));
   // Anyone in the family who qualifies. A juniors bracket is the case this
   // exists for: the parent never qualifies for it, so gating the Register
   // button on the parent alone would leave them no way to reach the chooser
@@ -1772,7 +1815,11 @@ function EventCard({
   const cardBg = isAmberCard ? warnBg : "#fff";
 
   // ─── Handlers ────────────────────────────────────────────────────
-  const startRegister = () => {
+  // `opts.addChild` opens straight onto the add-a-youth step. The aged-out
+  // juniors CTA uses it: that card only renders when NOBODY on the family
+  // list qualifies, so opening on a registrant would land the parent on a
+  // refusal the card already knew it would produce (design gate, #12).
+  const startRegister = (opts?: { addChild?: boolean }) => {
     if (!user || !me) {
       // Anon visitor or no profile yet — bounce through auth, then
       // they come back here and click Register again.
@@ -1787,6 +1834,7 @@ function EventCard({
     setSubjectId(
       (playerEligible ? me.id : eligibleRegistrants[0]?.player.id) ?? me.id,
     );
+    setAddingChild(opts?.addChild === true);
     setPartner(emptySelection);
     setSeekingPartner(false);
     setRegistrationSide(null);
@@ -2616,15 +2664,42 @@ function EventCard({
       const agedOut =
         event.max_age != null &&
         eligibilityReasons.some((r) => r.startsWith("needs age"));
-      if (agedOut && dependents.length === 0) {
+      if (agedOut && youthCanEnterByAge) {
+        // The juniors case, and the sharpest form of #1182: the parent can
+        // never play this bracket, their child can, and the route to that is
+        // now the register form itself — the chooser and its add-a-youth step
+        // — rather than a link to a family list on another screen a parent had
+        // no reason to know existed. The button opens the form on a registrant
+        // the form will refuse, which is why the panel inside names whose
+        // refusal it is and offers the chooser straight away.
+        const someoneIn = dependentsAlreadyIn.length > 0;
         return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {someoneIn && (
+              <span style={{ fontSize: 12, color: ink }}>
+                {dependentsAlreadyIn.map((d) => playerName(d.player)).join(", ")}{" "}
+                {dependentsAlreadyIn.length === 1 ? "is" : "are"} registered
+              </span>
+            )}
+            {/* Whose refusal this is has to be said: under a sentence naming a
+                child, a bare "not eligible: needs age 18 or under" reads as
+                the system calling an 11-year-old too old for the under-18s. */}
             <span style={{ fontSize: 12, color: inkMuted }}>
-              Not eligible: {eligibilityReasons.join("; ")}
+              {someoneIn ? "You can\u2019t enter" : "Not eligible"}:{" "}
+              {eligibilityReasons.join("; ")}
             </span>
-            <Link to={profileLink} style={notEligibleLinkStyle}>
-              Registering a child? Add them →
-            </Link>
+            <button
+              type="button"
+              onClick={() => startRegister({ addChild: true })}
+              style={{
+                ...ctaPrimaryStyle,
+                background: courtRed,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {someoneIn ? "Register another child" : "Register a child"}
+            </button>
           </div>
         );
       }
@@ -2661,7 +2736,7 @@ function EventCard({
       <button
         ref={registerBtnRef}
         type="button"
-        onClick={startRegister}
+        onClick={() => startRegister()}
         style={{
           ...ctaPrimaryStyle,
           background: isFull ? courtBlue : courtRed,
@@ -3029,11 +3104,15 @@ function EventCard({
             borderTop: `1px dashed ${rule}`,
           }}
         >
-          {/* Who this registration is for (#1169). Rendered only when there
-              IS someone else to pick, so an adult with no dependents sees
-              exactly the form they saw before — the chooser is invisible
-              rather than a control that always says "me". */}
-          {editMode === "register" && registrants.length > 1 && (
+          {/* Who this registration is for (#1169), and the way to add someone
+              who isn't on the list yet (#1182). Rendered whenever the register
+              form is open — including for an adult with nobody else on file,
+              which is the case the chooser used to hide from. Registering a
+              minor needs no organizer setting and is always allowed, so the
+              register form is where a parent should be able to find it rather
+              than having to already know about the family list on their
+              profile. */}
+          {editMode === "register" && (
             <div style={{ marginBottom: 14 }}>
               <label
                 htmlFor={`registering-for-${event.id}`}
@@ -3048,8 +3127,15 @@ function EventCard({
               </label>
               <select
                 id={`registering-for-${event.id}`}
-                value={subject?.player.id ?? ""}
-                onChange={(e) => setSubjectId(e.target.value)}
+                value={addingChild ? ADD_YOUTH_VALUE : (subject?.player.id ?? "")}
+                onChange={(e) => {
+                  if (e.target.value === ADD_YOUTH_VALUE) {
+                    setAddingChild(true);
+                    return;
+                  }
+                  setAddingChild(false);
+                  setSubjectId(e.target.value);
+                }}
                 disabled={submitting}
                 style={registeringForSelectStyle}
               >
@@ -3058,9 +3144,33 @@ function EventCard({
                     {r.isSelf ? `${playerName(r.player)} (you)` : playerName(r.player)}
                   </option>
                 ))}
+                {youthCanEnterByAge && (
+                  <option value={ADD_YOUTH_VALUE}>Add a youth…</option>
+                )}
               </select>
             </div>
           )}
+
+          {/* The add-a-youth step. Saving puts the child on the family list and
+              selects them, so the parent lands back on the registration they
+              were already filling in rather than starting over. */}
+          {editMode === "register" && addingChild && me && (
+            <AddChildForm
+              variant="inline"
+              guardianPlayerId={me.id}
+              onAdded={(dependent) => {
+                onDependentAdded(dependent);
+                setSubjectId(dependent.player.id);
+                setAddingChild(false);
+              }}
+              onCancel={() => setAddingChild(false)}
+            />
+          )}
+
+          {/* The rest of the register form stands down while the child is
+              being added, so the panel never shows two submit buttons. */}
+          {!(editMode === "register" && addingChild) && (
+          <>
 
           {/* The chosen registrant doesn't qualify. Said here rather than by
               hiding the button that opens this form, because the form is
@@ -3068,8 +3178,9 @@ function EventCard({
           {editMode === "register" && subjectAlreadyIn && (
             <div style={subjectAlreadyInStyle}>
               <strong>{subjectPlayer?.first_name} is already registered</strong>{" "}
-              for this event. Pick someone else above, or ask the organizer if
-              you need their entry changed.
+              for this event.{" "}
+              {youthCanEnterByAge ? addYouthClause : otherRegistrantClause} Or
+              ask the organizer if you need their entry changed.
             </div>
           )}
 
@@ -3085,9 +3196,9 @@ function EventCard({
                 ? registeringSomeoneElse
                   ? "Add their date of birth under My family on your profile."
                   : "Add your date of birth on your profile."
-                : registrants.length > 1
-                  ? "Pick someone else above, or a different event."
-                  : "Pick a different event."}
+                : youthCanEnterByAge && refusedOnAge
+                  ? addYouthClause
+                  : otherRegistrantClause}
             </div>
           )}
 
@@ -3410,6 +3521,8 @@ function EventCard({
                 </span>
               )}
           </div>
+          </>
+          )}
         </div>
       )}
     </div>
@@ -3458,6 +3571,13 @@ const notEligibleLinkStyle: CSSProperties = {
   textDecoration: "underline",
   whiteSpace: "nowrap",
 };
+
+// The chooser's add-a-youth entry (#1182). A sentinel option value rather
+// than a separate button beside the select: the parent is already looking at
+// the list of people they can register, so "someone not on this list yet"
+// belongs in that list. Prefixed and suffixed so it can never collide with a
+// player uuid.
+const ADD_YOUTH_VALUE = "__add_youth__";
 
 // "Registering for" (#1169). A plain select rather than a tile row or a
 // radiogroup: it is one choice from a short list that most people never see,
