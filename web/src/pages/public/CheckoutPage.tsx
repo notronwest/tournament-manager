@@ -51,6 +51,7 @@ import { getStripeForAccount, stripeConfigured } from "../../lib/stripe";
 import { trackEvent } from "../../lib/analytics";
 import DonationAmountPicker from "../../components/DonationAmountPicker";
 import type { Database } from "../../types/supabase";
+import { fetchDependents, playerName } from "../../lib/guardians";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   computeAccountCreditBalance,
@@ -79,6 +80,12 @@ type PendingRow = {
   regId: string;
   eventId: string;
   eventName: string;
+  // Who is entered in this event. Normally the payer; a guardian's basket
+  // also carries their dependents' rows (#1169), which is why the pricing
+  // below tiers per registrant and the summary names anyone who isn't the
+  // payer.
+  playerId: string;
+  registrantLabel: string | null;
   format: Database["public"]["Enums"]["event_format"];
   partner_status: Database["public"]["Enums"]["partner_status"];
   eventFeeCentsOverride: number;
@@ -162,7 +169,10 @@ export default function CheckoutPage() {
   // True when the player already has a paid registration in this
   // tournament from a prior session. Drives the additional-only
   // pricing path in computeLineItems.
-  const [alreadyHasPaidEvent, setAlreadyHasPaidEvent] = useState(false);
+  // Which registrants in this basket have already paid for something in this
+  // tournament. Per player rather than one flag, so a guardian's own paid
+  // history doesn't price their child's first event as an addition (#1169).
+  const [paidHereByPlayer, setPaidHereByPlayer] = useState<Set<string>>(new Set());
 
   // Coupon code (#30). validate_coupon is a read-only RPC for the live
   // preview; create-payment-intent re-validates + applies the code
@@ -273,7 +283,7 @@ export default function CheckoutPage() {
     // post-pay email send).
     const { data: me } = await supabase
       .from("players")
-      .select("id")
+      .select("*")
       .eq("auth_user_id", user.id)
       .is("deleted_at", null)
       .maybeSingle();
@@ -283,13 +293,23 @@ export default function CheckoutPage() {
       return;
     }
 
+    // A guardian pays for their dependents in the same checkout, because
+    // compute_checkout_total bills the family as one basket server-side
+    // (#1169). Reading the same set here is what keeps the preview and the
+    // Stripe charge equal — they are computed independently, so if this
+    // query stayed payer-only the page would quote less than the card takes.
+    const { dependents } = await fetchDependents(me.id);
+    const registrantNames = new Map<string, string | null>([[me.id, null]]);
+    for (const d of dependents) registrantNames.set(d.player.id, playerName(d.player));
+    const payingFor = [me.id, ...dependents.map((d) => d.player.id)];
+
     const { data: regs, error: regsErr } = await supabase
       .from("event_registrations")
       .select(
-        `id, event_id, partner_status, partner_registration_id,
+        `id, event_id, player_id, partner_status, partner_registration_id,
          event:events!event_id (id, name, format, event_fee_cents)`,
       )
-      .eq("player_id", me.id)
+      .in("player_id", payingFor)
       .in("status", PAYABLE_STATUSES)
       .is("deleted_at", null);
     if (regsErr) {
@@ -304,6 +324,7 @@ export default function CheckoutPage() {
     type RegRow = {
       id: string;
       event_id: string;
+      player_id: string;
       partner_status: Database["public"]["Enums"]["partner_status"];
       partner_registration_id: string | null;
       event: {
@@ -352,7 +373,11 @@ export default function CheckoutPage() {
          inviter:players!inviter_player_id (first_name, last_name),
          invitee:players!invitee_player_id (first_name, last_name, email)`,
       )
-      .or(`inviter_player_id.eq.${me.id},invitee_player_id.eq.${me.id}`)
+      .or(
+        payingFor
+          .flatMap((id) => [`inviter_player_id.eq.${id}`, `invitee_player_id.eq.${id}`])
+          .join(","),
+      )
       .in("status", ["pending", "accepted"])
       .in(
         "event_id",
@@ -385,7 +410,9 @@ export default function CheckoutPage() {
 
     const built: PendingRow[] = mine.map((r) => {
       const inv = inviteByEvent.get(r.event_id);
-      const iAmInviter = inv?.inviter_player_id === me.id;
+      // "Me" here is the REGISTRANT of this row, not the payer — a
+      // dependent's doubles invite is sent in the dependent's name.
+      const iAmInviter = inv?.inviter_player_id === r.player_id;
       // Partner = the side of the invite that isn't me.
       const partnerPlayer = inv ? (iAmInviter ? inv.invitee : inv.inviter) : null;
       const partnerLabel = partnerPlayer
@@ -400,6 +427,8 @@ export default function CheckoutPage() {
         regId: r.id,
         eventId: r.event_id,
         eventName: r.event?.name ?? "Event",
+        playerId: r.player_id,
+        registrantLabel: registrantNames.get(r.player_id) ?? null,
         format: r.event?.format ?? "singles",
         partner_status: r.partner_status,
         eventFeeCentsOverride: r.event?.event_fee_cents ?? 0,
@@ -410,21 +439,27 @@ export default function CheckoutPage() {
         partnerEmail,
       };
     });
-    // Determine whether the player already paid for at least one
+    // Determine whether each registrant already paid for at least one
     // event in this tournament in a prior session. If so, every
     // pick in this basket is a returning-registrant addition and
     // should be priced at the additional-event rate.
+    //
+    // Asked PER REGISTRANT, because the entry fee is a statement about one
+    // entrant's basket: a parent who has already paid for themselves has not
+    // used up their child's first-event rate. compute_checkout_total asks the
+    // same question the same way.
     const { data: paidRegData } = await supabase
       .from("event_registrations")
-      .select(`event:events!event_id (tournament_id)`)
-      .eq("player_id", me.id)
+      .select(`player_id, event:events!event_id (tournament_id)`)
+      .in("player_id", payingFor)
       .eq("status", "paid")
       .is("deleted_at", null);
-    type PaidRegRow = { event: { tournament_id: string } | null };
-    const hasPriorPaid = (paidRegData ?? []).some(
-      (r) => (r as unknown as PaidRegRow).event?.tournament_id === t.id,
-    );
-    setAlreadyHasPaidEvent(hasPriorPaid);
+    type PaidRegRow = { player_id: string; event: { tournament_id: string } | null };
+    const paidHere = new Set<string>();
+    for (const r of (paidRegData ?? []) as unknown as PaidRegRow[]) {
+      if (r.event?.tournament_id === t.id) paidHere.add(r.player_id);
+    }
+    setPaidHereByPlayer(paidHere);
 
     setRows(built);
     setLoading(false);
@@ -444,21 +479,44 @@ export default function CheckoutPage() {
   // a tier boundary, they'll see the active tier update on next
   // reload — we deliberately don't lock the displayed total until
   // they actually click Pay, which is also when the snapshot lands.
+  //
+  // Tiered PER REGISTRANT and then concatenated, which is the same shape
+  // compute_checkout_total uses server-side (#1169): the entry fee covers one
+  // entrant's first N events, so a parent and a child each get their own
+  // first-event rate rather than the child's pick being priced as the
+  // parent's "additional". A basket with no dependents is a group of one and
+  // computes exactly as it did before.
+  //
+  // Note the id passed to computeLineItems is the REGISTRATION id, not the
+  // event id: it is only used as a map key and handed back as `item.event`,
+  // and two registrants in the same bracket would otherwise collide on it.
   const activeTier = pickActivePricingTier(tiers);
-  const { items: lineItems, totalCents } = tournament && activeTier
-    ? computeLineItems(
-        rows.map((r) => ({
-          id: r.eventId,
-          event_fee_cents: r.eventFeeCentsOverride,
-        })),
-        {
-          firstEventFeeCents: activeTier.first_event_fee_cents,
-          additionalEventFeeCents: activeTier.additional_event_fee_cents,
-          firstEventsIncluded: activeTier.first_events_included ?? 1,
-        },
-        alreadyHasPaidEvent,
-      )
-    : { items: [] as LineItem[], totalCents: 0 };
+  const { lineItems, totalCents } = (() => {
+    if (!tournament || !activeTier) return { lineItems: [] as LineItem[], totalCents: 0 };
+    const rates = {
+      firstEventFeeCents: activeTier.first_event_fee_cents,
+      additionalEventFeeCents: activeTier.additional_event_fee_cents,
+      firstEventsIncluded: activeTier.first_events_included ?? 1,
+    };
+    const byRegistrant = new Map<string, PendingRow[]>();
+    for (const r of rows) {
+      const list = byRegistrant.get(r.playerId);
+      if (list) list.push(r);
+      else byRegistrant.set(r.playerId, [r]);
+    }
+    const items: LineItem[] = [];
+    let total = 0;
+    for (const [playerId, theirRows] of byRegistrant) {
+      const result = computeLineItems(
+        theirRows.map((r) => ({ id: r.regId, event_fee_cents: r.eventFeeCentsOverride })),
+        rates,
+        paidHereByPlayer.has(playerId),
+      );
+      items.push(...result.items);
+      total += result.totalCents;
+    }
+    return { lineItems: items, totalCents: total };
+  })();
 
   // Coupon discount applied to the post-tier subtotal. Capped at the
   // subtotal so the payable amount never goes below zero.
@@ -899,6 +957,13 @@ export default function CheckoutPage() {
               >
                 {r.eventName}
               </div>
+              {/* Whose entry this is, when it isn't the payer's own (#1169).
+                  AC 5: the confirmation has to name the child. */}
+              {r.registrantLabel && (
+                <div style={{ fontSize: 13, color: ink, marginTop: 4 }}>
+                  Registering <strong>{r.registrantLabel}</strong>
+                </div>
+              )}
               <div
                 style={{
                   fontFamily: headingFontStack,
@@ -988,11 +1053,16 @@ export default function CheckoutPage() {
             Order summary
           </div>
           {lineItems.map((it) => {
-            const row = rows.find((r) => r.eventId === it.event.id);
+            // it.event.id is the registration id (see the tiering above), so
+            // two entries in the same bracket are distinct rows.
+            const row = rows.find((r) => r.regId === it.event.id);
             return (
               <div key={it.event.id} style={summaryRow}>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  {row?.eventName ?? "Event"}{" "}
+                  {row?.eventName ?? "Event"}
+                  {/* Named only for someone other than the payer, so a
+                      checkout with no dependents reads as it always has. */}
+                  {row?.registrantLabel ? ` — ${row.registrantLabel}` : ""}{" "}
                   <span style={{ color: inkSoft }}>
                     (
                     {it.tier === "first"

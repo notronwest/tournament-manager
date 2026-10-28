@@ -18,6 +18,13 @@ import { parseDescription } from "../../lib/descriptionBlocks";
 import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
 import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
 import {
+  asRegistrationInsert,
+  fetchDependents,
+  playerName,
+  registrantsFor,
+  type Dependent,
+} from "../../lib/guardians";
+import {
   deriveRegistrationStatus,
   pickActivePricingTier,
   type PricingTier,
@@ -57,6 +64,7 @@ import {
   dangerFg,
   successBg,
   successFg,
+  inputStyle,
 } from "../../lib/publicTheme";
 
 type Tournament = Database["public"]["Tables"]["tournaments"]["Row"] & {
@@ -113,6 +121,7 @@ function composeLocationAddress(loc: {
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
+type RegistrationStatus = Database["public"]["Enums"]["registration_status"];
 
 // Per-event registration status for the currently signed-in user.
 // Only computed when the user is logged in; for anon visitors the
@@ -232,6 +241,15 @@ export default function PublicTournamentPage({
   // hasn't set up a profile yet — RequireProfile handles that case
   // when they navigate to anything write-capable.
   const [me, setMe] = useState<Player | null>(null);
+  // The players this user may register besides themselves (#1169).
+  const [dependents, setDependents] = useState<Dependent[]>([]);
+  // Which events each dependent already holds a live registration in. Their
+  // rows don't appear in `myStatus` — that map is the signed-in player's own —
+  // and the roster RPC returns no player id, so this is read directly. The
+  // guardian SELECT policy is what makes it readable at all.
+  const [dependentEventIds, setDependentEventIds] = useState<
+    Map<string, Map<string, RegistrationStatus>>
+  >(new Map());
   // Per-event registration status for the signed-in user, keyed by
   // event_id. Empty when nobody's signed in.
   const [myStatus, setMyStatus] = useState<Map<string, MyRegStatus>>(
@@ -464,9 +482,37 @@ export default function PublicTournamentPage({
     if (!myPlayer) {
       setMyStatus(new Map());
       setInboundInvites([]);
+      setDependents([]);
+      setDependentEventIds(new Map());
       setLoading(false);
       return;
     }
+
+    // A guardian's family list. A failure here must not block the page: the
+    // worst case is that the chooser doesn't appear and the player registers
+    // only themselves, which is what happened before this existed.
+    const { dependents: family } = await fetchDependents(myPlayer.id);
+    setDependents(family);
+
+    const familyIds = family.map((d) => d.player.id);
+    const depEvents = new Map<string, Map<string, RegistrationStatus>>();
+    if (familyIds.length > 0) {
+      const { data: depRegs } = await supabase
+        .from("event_registrations")
+        .select("event_id, player_id, status")
+        .in("player_id", familyIds)
+        // This tournament only: the count drives the price tier below, and
+        // the entry fee is per tournament.
+        .in("event_id", evs.map((e) => e.id))
+        .in("status", ["paid", "pending_payment", "waitlisted", "waitlisted_pending_payment"])
+        .is("deleted_at", null);
+      for (const r of depRegs ?? []) {
+        const byEvent = depEvents.get(r.player_id) ?? new Map<string, RegistrationStatus>();
+        byEvent.set(r.event_id, r.status);
+        depEvents.set(r.player_id, byEvent);
+      }
+    }
+    setDependentEventIds(depEvents);
 
     const eventIds = evs.map((e) => e.id);
     // Three reads in parallel:
@@ -1236,10 +1282,14 @@ export default function PublicTournamentPage({
                 tournamentSlug={tournamentSlug ?? ""}
                 myStatus={myStatus.get(ev.id)}
                 me={me}
+                dependents={dependents}
+                dependentEventIds={dependentEventIds}
+                tournamentStartsAt={tournament.starts_at}
                 user={user}
                 regFeeCents={regFeeCents}
                 additionalFeeCents={additionalFeeCents}
                 entryCostTier={entryCostTier}
+                includedEvents={includedEvents}
                 alreadyRegisteredPlayerIds={
                   registeredByEvent.get(ev.id) ?? new Set()
                 }
@@ -1486,10 +1536,14 @@ function EventCard({
   tournamentSlug,
   myStatus,
   me,
+  dependents,
+  dependentEventIds,
+  tournamentStartsAt,
   user,
   regFeeCents,
   additionalFeeCents,
   entryCostTier,
+  includedEvents,
   alreadyRegisteredPlayerIds,
   rosterRows,
   isFocused,
@@ -1506,6 +1560,14 @@ function EventCard({
   tournamentSlug: string;
   myStatus: MyRegStatus | undefined;
   me: Player | null;
+  // Anyone else this player may register (#1169). Empty for almost everybody,
+  // which is why the chooser below only appears when it isn't.
+  dependents: Dependent[];
+  // event ids each dependent is already in, keyed by their player id.
+  dependentEventIds: Map<string, Map<string, RegistrationStatus>>;
+  // The age gate measures age on the day of play, not the day of
+  // registration — so the eligibility check needs the tournament's start.
+  tournamentStartsAt: string;
   user: ReturnType<typeof useAuth>["user"];
   // Active-tier fees + how this event prices for the player right now.
   // Drives the context-aware cost line in the register form: entry fee
@@ -1513,6 +1575,10 @@ function EventCard({
   regFeeCents: number;
   additionalFeeCents: number;
   entryCostTier: "first" | "included" | "additional";
+  // How many events the entry fee covers. Needed here (rather than just the
+  // player's already-computed tier) because the cost line has to be answered
+  // for whoever the chooser names, not for the payer (#1169).
+  includedEvents: number;
   // F3: ids of players already registered for THIS event. Folded
   // into the PartnerSearch excludePlayerIds so the search can't
   // surface someone who's already in.
@@ -1591,6 +1657,10 @@ function EventCard({
   // partner is picked (discards the in-progress pick).
   const [confirmDiscardForm, setConfirmDiscardForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Who this registration is FOR (#1169). The player themselves by default,
+  // which is the only option most people ever have — the chooser is only
+  // rendered when there is a second name to pick.
+  const [subjectId, setSubjectId] = useState<string | null>(null);
   // Roster panel collapsed by default; toggled by the toggle bar.
   const [rosterOpen, setRosterOpen] = useState(false);
 
@@ -1604,10 +1674,85 @@ function EventCard({
   // requestDiscardForm without re-running on every render.
   const requestDiscardFormRef = useRef<() => void>(() => {});
 
+  // ─── Who is being registered (#1169) ─────────────────────────────
+  // The player plus any dependents, player first. `subject` falls back to
+  // the player, so every path below reads the same whether or not a chooser
+  // was ever shown.
+  const registrants = registrantsFor(me, dependents);
+  const subject =
+    registrants.find((r) => r.player.id === subjectId) ?? registrants[0] ?? null;
+  const subjectPlayer = subject?.player ?? me;
+  const registeringSomeoneElse = subject != null && !subject.isSelf;
+
   // ─── Eligibility: compute once, gate the Register button ─────────
+  // The button gate stays on the PLAYER, because the chooser defaults to them
+  // and is only reachable once the form is open. The chosen registrant is
+  // checked separately, so picking a child who doesn't qualify explains
+  // itself inside the form rather than hiding the button that opens it.
   const { eligible: playerEligible, reasons: eligibilityReasons } = me
-    ? checkEligibility(me, event)
+    ? checkEligibility(me, event, tournamentStartsAt)
     : { eligible: true, reasons: [] as string[] };
+  const { eligible: subjectEligible, reasons: subjectReasons } = subjectPlayer
+    ? checkEligibility(subjectPlayer, event, tournamentStartsAt)
+    : { eligible: true, reasons: [] as string[] };
+  // Anyone in the family who qualifies. A juniors bracket is the case this
+  // exists for: the parent never qualifies for it, so gating the Register
+  // button on the parent alone would leave them no way to reach the chooser
+  // and enter the child — a dead end in front of the one flow this card is
+  // for. The button opens whenever SOMEONE here can enter.
+  // Already in this event? The player's own case never reaches here —
+  // `myStatus` turns the card into Change partner / Cancel first — but a
+  // dependent's registration is invisible to that map, which is what let the
+  // button through for a child who was already entered.
+  const dependentStatusHere = (playerId: string) =>
+    dependentEventIds.get(playerId)?.get(event.id) ?? null;
+  const alreadyInThisEvent = (playerId: string) => dependentStatusHere(playerId) !== null;
+  const eligibleRegistrants = registrants.filter(
+    (r) =>
+      checkEligibility(r.player, event, tournamentStartsAt).eligible &&
+      !alreadyInThisEvent(r.player.id),
+  );
+  // Named where the button was, rather than leaving the card silent about why
+  // it has nothing to offer.
+  const dependentsAlreadyIn = dependents.filter((d) => alreadyInThisEvent(d.player.id));
+  // A dependent's entry that still owes money. The card's amber treatment and
+  // its Pending payment pill are keyed off `myStatus`, which only ever holds
+  // the signed-in player's rows — so without this a parent's own pending entry
+  // gets the amber card, the pill and a route to checkout while their child's
+  // identical entry gets a grey line, on a product that sweeps stale pending
+  // registrations away.
+  const dependentsPendingHere = dependentsAlreadyIn.filter((d) => {
+    const st = dependentStatusHere(d.player.id);
+    return st === "pending_payment" || st === "waitlisted_pending_payment";
+  });
+  // A dependent's registration doesn't show in `myStatus` — that map is the
+  // signed-in player's own. Without this the card would still offer Register
+  // for a child who is already in, and the insert would die on the
+  // (event_id, player_id) unique index with a message nobody can act on.
+  //
+  // Not alreadyRegisteredPlayerIds: that RPC deliberately leaves out players
+  // whose partner_status is 'seeking', because its job is the partner-picker
+  // exclusion list and a seeker should stay pickable. A child registered and
+  // looking for a partner is exactly the case this guard is for.
+  const subjectAlreadyIn =
+    registeringSomeoneElse && subjectPlayer != null && alreadyInThisEvent(subjectPlayer.id);
+
+  // The cost line is a statement about the person the form names, not about
+  // the person paying. `entryCostTier` is the payer's, derived from
+  // `myStatus`, which holds only their own registrations — so for a dependent
+  // it has to be recomputed from theirs, or a child's first event is quoted at
+  // the additional rate (or vice versa) while checkout charges the other.
+  const subjectActiveRegCount = registeringSomeoneElse
+    ? (subjectPlayer ? (dependentEventIds.get(subjectPlayer.id)?.size ?? 0) : 0)
+    : null;
+  const subjectCostTier: "first" | "included" | "additional" =
+    subjectActiveRegCount === null
+      ? entryCostTier
+      : subjectActiveRegCount === 0
+        ? "first"
+        : subjectActiveRegCount < includedEvents
+          ? "included"
+          : "additional";
 
   // ─── Derived state for visual treatment ──────────────────────────
   const isPaid =
@@ -1619,7 +1764,8 @@ function EventCard({
   const isAmberCard =
     isPending ||
     myStatus?.state === "awaiting_partner" ||
-    myStatus?.state === "invited";
+    myStatus?.state === "invited" ||
+    dependentsPendingHere.length > 0;
   // Left border encodes the EVENT TYPE (#152), independent of status.
   const cardBorderLeft = `6px solid ${eventTypeColor(event.format, event.gender)}`;
   const cardBorderColor = isAmberCard ? courtYellow : isPaid ? courtGreen : rule;
@@ -1635,6 +1781,12 @@ function EventCard({
     }
     onRequestFocus();
     setEditMode("register");
+    // Default to the player when they qualify; otherwise to the first family
+    // member who does, so opening a juniors bracket lands on the child rather
+    // than on a name the form will refuse.
+    setSubjectId(
+      (playerEligible ? me.id : eligibleRegistrants[0]?.player.id) ?? me.id,
+    );
     setPartner(emptySelection);
     setSeekingPartner(false);
     setRegistrationSide(null);
@@ -1778,6 +1930,10 @@ function EventCard({
       onNeedsAuth();
       return;
     }
+    // The person being entered. Everything below registers THEM; `me` stays
+    // the actor — who pays, and who is recorded as having done it.
+    const registrant = subjectPlayer ?? me;
+    const actingForDependent = registrant.id !== me.id;
     setFormError(null);
 
     // Validate paired-roles side selection (required before partner pick).
@@ -1796,8 +1952,12 @@ function EventCard({
         setFormError("Pick a partner to continue.");
         return;
       }
-      if (partner.mode === "existing" && partner.player.id === me.id) {
-        setFormError("You picked yourself as your partner.");
+      if (partner.mode === "existing" && partner.player.id === registrant.id) {
+        setFormError(
+          actingForDependent
+            ? `${registrant.first_name} can't be their own partner.`
+            : "You picked yourself as your partner.",
+        );
         return;
       }
       if (partner.mode === "new") {
@@ -1821,9 +1981,13 @@ function EventCard({
       }
     }
 
-    const { eligible, reasons } = checkEligibility(me, event);
+    const { eligible, reasons } = checkEligibility(registrant, event, tournamentStartsAt);
     if (!eligible) {
-      setFormError(`Not eligible: ${reasons.join("; ")}.`);
+      setFormError(
+        actingForDependent
+          ? `${registrant.first_name} isn't eligible: ${reasons.join("; ")}.`
+          : `Not eligible: ${reasons.join("; ")}.`,
+      );
       return;
     }
 
@@ -1852,8 +2016,12 @@ function EventCard({
     // this event? If so, registering with them picked counts as
     // accepting their invite — no new outbound invite, no
     // duplicate. Mirrors the logic in the legacy /register page.
+    // Only for the player's OWN registration: the lookup keys on the
+    // signed-in user's email, which is the guardian's, not the dependent's. A
+    // dependent has no email by design, so there is no inbound invite of
+    // theirs to find, and matching the guardian's would pair the wrong person.
     let inboundInviteId: string | null = null;
-    if (isDoubles && resolvedPartnerId && user?.email) {
+    if (isDoubles && !actingForDependent && resolvedPartnerId && user?.email) {
       const { data: inbound } = await supabase
         .from("partner_invites")
         .select("id")
@@ -1894,6 +2062,17 @@ function EventCard({
     // normal pairing INSERT + outbound invite below.
     const fillsOpenSlot =
       isDoubles && !seekingPartner && joiningSeeker && resolvedPartnerId != null;
+    if (isFull && !fillsOpenSlot && actingForDependent) {
+      // join_waitlist resolves the player from auth.uid(), so it can only ever
+      // waitlist the caller — there is no way to put a dependent in the queue
+      // through it. Say so, rather than silently waitlisting the parent under
+      // the child's name. Widening the RPC is its own change.
+      setFormError(
+        `This event is full, and we can't add ${registrant.first_name} to the waitlist yet — a waitlist place can only be taken by the player themselves. Ask the organizer to add them.`,
+      );
+      setSubmitting(false);
+      return;
+    }
     if (isFull && !fillsOpenSlot) {
       // FULL event → join the WAITLIST (free). join_waitlist creates a
       // 'waitlisted' reg (partner_status seeking for doubles / solo for
@@ -1927,16 +2106,23 @@ function EventCard({
     } else {
       const { error: regErr } = await supabase
         .from("event_registrations")
-        .insert({
-          event_id: event.id,
-          player_id: me.id,
-          event_fee_cents: 0,
-          status: "pending_payment",
-          partner_status: partnerStatusOnInsert,
-          ...(event.is_paired_roles && registrationSide
-            ? { registration_side: registrationSide }
-            : {}),
-        })
+        .insert(
+          asRegistrationInsert({
+            event_id: event.id,
+            player_id: registrant.id,
+            // Who did it, when that wasn't the registrant themselves — null
+            // means self-registered, which is every row the product has made
+            // so far. The organizer's Attendees page reads this to name the
+            // parent (#1169), and RLS pins it to the caller so it can't lie.
+            ...(actingForDependent ? { registered_by_player_id: me.id } : {}),
+            event_fee_cents: 0,
+            status: "pending_payment",
+            partner_status: partnerStatusOnInsert,
+            ...(event.is_paired_roles && registrationSide
+              ? { registration_side: registrationSide }
+              : {}),
+          }),
+        )
         .select()
         .single();
       if (regErr) {
@@ -1951,7 +2137,9 @@ function EventCard({
       // closure-captured value in insertOutboundInvite doesn't
       // re-widen to nullable.
       const partnerIdNN = resolvedPartnerId;
-      const meIdNN = me.id;
+      // The inviter is whoever is entered in the event, so a dependent's
+      // doubles partner is invited by the dependent rather than the parent.
+      const meIdNN = registrant.id;
       const insertOutboundInvite = async () => {
         // Queue the partner_invite as 'pending'. The invite EMAIL
         // doesn't fire yet — it fires from the checkout page after
@@ -2385,7 +2573,7 @@ function EventCard({
     // Everything below creates a NEW registration — closed means closed.
     if (!registrationOpen) return null;
     if (expanded) return null;
-    if (me && !playerEligible) {
+    if (me && !playerEligible && eligibleRegistrants.length === 0) {
       // An UNSET gender on a single-gender event is fixable — point the
       // player at their profile instead of a dead-end "Not eligible." A
       // *set-but-wrong* gender (e.g. M on a women's event) stays a plain
@@ -2399,15 +2587,61 @@ function EventCard({
             to={`/profile?return=${encodeURIComponent(
               `/t/${orgSlug}/${tournamentSlug}`,
             )}`}
-            style={{
-              fontSize: 12,
-              color: courtBlue,
-              textDecoration: "underline",
-              whiteSpace: "nowrap",
-            }}
+            style={notEligibleLinkStyle}
           >
             Set your gender to register →
           </Link>
+        );
+      }
+      // A missing date of birth is fixable in one screen, exactly like an
+      // unset gender — so it gets the same treatment rather than a grey line
+      // with no next move. The copy that explains it lives inside the
+      // register form, which this player can never open.
+      const profileLink = `/profile?return=${encodeURIComponent(
+        `/t/${orgSlug}/${tournamentSlug}`,
+      )}`;
+      const needsDob = eligibilityReasons.some((r) => r.includes("date of birth"));
+      if (needsDob) {
+        return (
+          <Link to={profileLink} style={notEligibleLinkStyle}>
+            Add your date of birth to register →
+          </Link>
+        );
+      }
+      // An age-capped bracket the player has aged out of is the juniors case:
+      // the product CAN enter their child, and the only route to that is the
+      // family list on their profile. Saying nothing here is what left a
+      // parent staring at "Not eligible" on the one bracket this feature was
+      // built for.
+      const agedOut =
+        event.max_age != null &&
+        eligibilityReasons.some((r) => r.startsWith("needs age"));
+      if (agedOut && dependents.length === 0) {
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 12, color: inkMuted }}>
+              Not eligible: {eligibilityReasons.join("; ")}
+            </span>
+            <Link to={profileLink} style={notEligibleLinkStyle}>
+              Registering a child? Add them →
+            </Link>
+          </div>
+        );
+      }
+      if (dependentsAlreadyIn.length > 0) {
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 12, color: ink }}>
+              {dependentsAlreadyIn.map((d) => playerName(d.player)).join(", ")}{" "}
+              {dependentsAlreadyIn.length === 1 ? "is" : "are"} registered
+            </span>
+            {/* Whose refusal this is has to be said: under a sentence naming a
+                child, a bare "not eligible: needs age 18 or under" reads as
+                the system calling an 11-year-old too old for the under-18s. */}
+            <span style={{ fontSize: 12, color: inkMuted }}>
+              You can&rsquo;t enter: {eligibilityReasons.join("; ")}
+            </span>
+          </div>
         );
       }
       return (
@@ -2417,6 +2651,13 @@ function EventCard({
       );
     }
     return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {dependentsAlreadyIn.length > 0 && (
+          <span style={{ fontSize: 12, color: ink }}>
+            {dependentsAlreadyIn.map((d) => playerName(d.player)).join(", ")}{" "}
+            {dependentsAlreadyIn.length === 1 ? "is" : "are"} registered
+          </span>
+        )}
       <button
         ref={registerBtnRef}
         type="button"
@@ -2430,6 +2671,7 @@ function EventCard({
       >
         {isFull ? "Join waitlist" : "Register"}
       </button>
+      </div>
     );
   };
 
@@ -2460,7 +2702,12 @@ function EventCard({
   // Submit gate: singles always submit-able. Doubles need EITHER a
   // partner picked OR the "I need a partner" toggle on.
   const sideChosen = !event.is_paired_roles || !isDoubles || registrationSide !== null;
-  const canSubmit = sideChosen && (!isDoubles || partnerPicked || seekingPartner);
+  const canSubmit =
+    sideChosen &&
+    (!isDoubles || partnerPicked || seekingPartner) &&
+    // A chosen registrant who doesn't qualify can't be submitted; the reason
+    // is rendered in the form, so this disables rather than dead-ends.
+    (editMode !== "register" || (subjectEligible && !subjectAlreadyIn));
 
   // ─── #98: card visual state ───────────────────────────────────────
   // Lifted card (isFocused): position:relative + z-index:60 places it
@@ -2610,6 +2857,12 @@ function EventCard({
             )}
             {myStatus?.state === "pending_payment" && (
               <Pill bg={ink} fg={courtYellow}>Pending payment</Pill>
+            )}
+            {dependentsPendingHere.length > 0 && (
+              <Pill bg={ink} fg={courtYellow}>
+                {dependentsPendingHere.map((d) => d.player.first_name).join(", ")} — pending
+                payment
+              </Pill>
             )}
             {myStatus?.state === "awaiting_partner" && (
               <Pill bg={ink} fg={courtYellow}>Awaiting partner</Pill>
@@ -2776,6 +3029,68 @@ function EventCard({
             borderTop: `1px dashed ${rule}`,
           }}
         >
+          {/* Who this registration is for (#1169). Rendered only when there
+              IS someone else to pick, so an adult with no dependents sees
+              exactly the form they saw before — the chooser is invisible
+              rather than a control that always says "me". */}
+          {editMode === "register" && registrants.length > 1 && (
+            <div style={{ marginBottom: 14 }}>
+              <label
+                htmlFor={`registering-for-${event.id}`}
+                style={{
+                  display: "block",
+                  fontSize: 12,
+                  color: inkSoft,
+                  marginBottom: 4,
+                }}
+              >
+                Registering for
+              </label>
+              <select
+                id={`registering-for-${event.id}`}
+                value={subject?.player.id ?? ""}
+                onChange={(e) => setSubjectId(e.target.value)}
+                disabled={submitting}
+                style={registeringForSelectStyle}
+              >
+                {registrants.map((r) => (
+                  <option key={r.player.id} value={r.player.id}>
+                    {r.isSelf ? `${playerName(r.player)} (you)` : playerName(r.player)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* The chosen registrant doesn't qualify. Said here rather than by
+              hiding the button that opens this form, because the form is
+              where the choice was made and where it can be changed. */}
+          {editMode === "register" && subjectAlreadyIn && (
+            <div style={subjectAlreadyInStyle}>
+              <strong>{subjectPlayer?.first_name} is already registered</strong>{" "}
+              for this event. Pick someone else above, or ask the organizer if
+              you need their entry changed.
+            </div>
+          )}
+
+          {editMode === "register" && !subjectEligible && !subjectAlreadyIn && (
+            <div style={subjectBlockedStyle}>
+              <strong>
+                {registeringSomeoneElse
+                  ? `${subjectPlayer?.first_name} can't enter this event`
+                  : "You can't enter this event"}
+                : {subjectReasons.join("; ")}.
+              </strong>{" "}
+              {subjectReasons.some((r) => r.includes("date of birth"))
+                ? registeringSomeoneElse
+                  ? "Add their date of birth under My family on your profile."
+                  : "Add your date of birth on your profile."
+                : registrants.length > 1
+                  ? "Pick someone else above, or a different event."
+                  : "Pick a different event."}
+            </div>
+          )}
+
           {/* Context-aware cost line. Only on the register flow (not
               the change-partner flow, which doesn't change the price).
               We don't re-explain the whole first/additional model —
@@ -2825,7 +3140,14 @@ function EventCard({
               {isDoubles ? " Your partner pick carries over." : ""}
             </div>
           )}
-          {editMode === "register" && regFeeCents > 0 && (!isFull || fillsOpenSlot) && (
+          {/* Not shown while the chosen registrant is refused: a price for a
+              registration the screen has just said cannot be made reads as a
+              contradiction, the same one the partner reassurance below avoids. */}
+          {editMode === "register" &&
+            subjectEligible &&
+            !subjectAlreadyIn &&
+            regFeeCents > 0 &&
+            (!isFull || fillsOpenSlot) && (
             <div
               style={{
                 marginBottom: 12,
@@ -2833,31 +3155,39 @@ function EventCard({
                 color: inkSoft,
               }}
             >
-              {entryCostTier === "additional" ? (
+              {subjectCostTier === "additional" ? (
                 <>
                   Extra event:{" "}
                   <strong>+${(additionalFeeCents / 100).toFixed(0)}</strong>{" "}
                   <span style={{ color: inkMuted }}>
-                    (added to your registration)
+                    {registeringSomeoneElse
+                      ? `(added to ${subjectPlayer?.first_name}'s registration)`
+                      : "(added to your registration)"}
                   </span>
                 </>
-              ) : entryCostTier === "included" ? (
+              ) : subjectCostTier === "included" ? (
                 <>
                   <strong>$0</strong>{" "}
                   <span style={{ color: inkMuted }}>
-                    · included in your entry
+                    {registeringSomeoneElse
+                      ? `· included in ${subjectPlayer?.first_name}'s entry`
+                      : "· included in your entry"}
                   </span>
                 </>
               ) : (
                 <>
                   <strong>${(regFeeCents / 100).toFixed(0)}</strong>{" "}
                   entry{" "}
-                  <span style={{ color: inkMuted }}>· includes this event</span>
+                  <span style={{ color: inkMuted }}>
+                    {registeringSomeoneElse
+                      ? `· ${subjectPlayer?.first_name}'s first event here`
+                      : "· includes this event"}
+                  </span>
                 </>
               )}
             </div>
           )}
-          {isDoubles && (
+          {isDoubles && subjectEligible && !subjectAlreadyIn && (
             <>
               {/* Paired-roles: side selector — appears above the partner
                   picker when event.is_paired_roles is true. Must be
@@ -2948,13 +3278,26 @@ function EventCard({
                 </button>
               </div>
               {seekingPartner ? (
+                // Suppressed while the chosen registrant is blocked: a
+                // reassurance stacked under a refusal reads as a contradiction.
+                subjectEligible && !subjectAlreadyIn ? (
                 <div style={{ ...statusPanelStyle("info"), fontSize: 12 }}>
-                  We'll register you for this event without a partner.
-                  Other registrants will be able to find you in the
-                  partner search, and the organizer will see you in
-                  their "looking for a partner" list to help match you
+                  {registeringSomeoneElse
+                    ? `We'll register ${subjectPlayer?.first_name} for this event without a partner.`
+                    : "We'll register you for this event without a partner."}
+                  {/* JSX drops the whitespace between a closing brace and a
+                      text node on the next line, so without this the two
+                      sentences fuse: "…without a partner.Other registrants". */}
+                  {" "}
+                  Other registrants will be able to find
+                  {registeringSomeoneElse ? " them " : " you "}
+                  in the partner search, and the organizer will see
+                  {registeringSomeoneElse ? " them " : " you "}
+                  in their "looking for a partner" list to help match
+                  {registeringSomeoneElse ? " them " : " you "}
                   up.
                 </div>
+                ) : null
               ) : (
                 <>
                   <div
@@ -3054,12 +3397,18 @@ function EventCard({
                 option above to complete your registration.
               </span>
             )}
-            {sideChosen && isDoubles && !partnerPicked && !seekingPartner && !submitting && (
-              <span style={{ fontSize: 12, color: inkMuted }}>
-                Pick a partner to continue (or choose "I need a
-                partner" above).
-              </span>
-            )}
+            {sideChosen &&
+              isDoubles &&
+              subjectEligible &&
+              !subjectAlreadyIn &&
+              !partnerPicked &&
+              !seekingPartner &&
+              !submitting && (
+                <span style={{ fontSize: 12, color: inkMuted }}>
+                  Pick a partner to continue (or choose "I need a
+                  partner" above).
+                </span>
+              )}
           </div>
         </div>
       )}
@@ -3101,6 +3450,40 @@ function Pill({
 // from across the form; inactive stays white with a neutral border.
 // The whole tile is the click target — both the icon and the label
 // inherit `currentColor` so hover/active states flow through.
+// The "fix it and come back" link offered beside a refusal. Same treatment
+// the unset-gender case has always had; shared so the two cannot drift.
+const notEligibleLinkStyle: CSSProperties = {
+  fontSize: 12,
+  color: courtBlue,
+  textDecoration: "underline",
+  whiteSpace: "nowrap",
+};
+
+// "Registering for" (#1169). A plain select rather than a tile row or a
+// radiogroup: it is one choice from a short list that most people never see,
+// and the register form already carries a radiogroup for partner mode.
+// 44px minimum height so it is a real tap target on a phone.
+const registeringForSelectStyle: CSSProperties = {
+  ...inputStyle,
+  maxWidth: 320,
+  minHeight: 44,
+};
+
+// The chosen registrant is already in this event, or doesn't qualify for it.
+// Both use the theme's own status panels rather than a near-copy of them, so a
+// change to the house wash reaches these too.
+const subjectAlreadyInStyle: CSSProperties = {
+  ...statusPanelStyle("info"),
+  marginBottom: 12,
+  fontSize: 13,
+};
+
+const subjectBlockedStyle: CSSProperties = {
+  ...statusPanelStyle("danger"),
+  marginBottom: 12,
+  fontSize: 13,
+};
+
 function partnerModeTileStyle(active: boolean): CSSProperties {
   return {
     display: "flex",

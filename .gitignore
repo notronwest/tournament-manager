@@ -31,3 +31,8 @@ vite.config.ts.timestamp-*
 
 # Local UI mockups / design scratch — not part of the app build.
 .mockups/
+
+# Design-gate screenshots: the critic writes these per run and CRITIC.md
+# says not to commit them. The verdicts beside them ARE committed — the
+# pre-push gate reads them.
+.design/shots/

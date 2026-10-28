@@ -6,13 +6,22 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Trash2 } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { recordSignupEvent, grantAccountCreditIfEligible } from "../../lib/campaignCapture";
 import type { Database } from "../../types/supabase";
 import { RatingPicker } from "../../components/RatingPicker";
+import { ConfirmModal } from "../../components/ConfirmModal";
+import { ageAt } from "../../lib/eligibility";
+import {
+  addDependent,
+  fetchDependents,
+  playerName,
+  removeDependent,
+  type Dependent,
+} from "../../lib/guardians";
 import {
   contentColStyle,
   courtRed,
@@ -30,6 +39,7 @@ import {
   pageH1Style,
   pageSubStyle,
   pageWrapStyle,
+  panelMutedStyle,
   panelStyle,
   rule,
   statusPanelStyle,
@@ -78,6 +88,7 @@ export default function ProfilePage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
   const [gender, setGender] = useState<PlayerGender | "">("");
   const [ratingDoubles, setRatingDoubles] = useState<number | null>(null);
   const [ratingMixed, setRatingMixed] = useState<number | null>(null);
@@ -111,6 +122,22 @@ export default function ProfilePage() {
   const [pwExplainerOpen, setPwExplainerOpen] = useState(false);
 
   // Avatar upload state
+  // ── My family (#1169) ────────────────────────────────────────────
+  // Its own form, its own busy/error/success state: the profile form above
+  // navigates away on save, which would throw a parent out of the page
+  // mid-way through adding a second child.
+  const [dependents, setDependents] = useState<Dependent[]>([]);
+  const [familyLoading, setFamilyLoading] = useState(false);
+  const [addChildOpen, setAddChildOpen] = useState(false);
+  const [childFirst, setChildFirst] = useState("");
+  const [childLast, setChildLast] = useState("");
+  const [childDob, setChildDob] = useState("");
+  const [familyBusy, setFamilyBusy] = useState(false);
+  const [familyError, setFamilyError] = useState<string | null>(null);
+  const [familyAdded, setFamilyAdded] = useState<string | null>(null);
+  const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<Dependent | null>(null);
+
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -171,6 +198,7 @@ export default function ProfilePage() {
         setFirstName(me.first_name ?? "");
         setLastName(me.last_name ?? "");
         setPhone(me.phone ?? "");
+        setDob(me.dob ?? "");
         setGender(me.gender ?? "");
         setRatingDoubles(me.self_rating_doubles ?? null);
         setRatingMixed(me.self_rating_mixed ?? null);
@@ -188,6 +216,89 @@ export default function ProfilePage() {
       cancelled = true;
     };
   }, [user]);
+
+  // Keyed on the player id rather than the user, so saving the profile above
+  // doesn't re-fetch the family, and a player who has no row yet never asks.
+  const myPlayerId = existingPlayer?.id ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // No player row yet means no family to hold; clearing inside the async
+      // body rather than in the effect body keeps this off the synchronous
+      // setState path (react-hooks/set-state-in-effect).
+      if (!myPlayerId) {
+        setDependents([]);
+        return;
+      }
+      setFamilyLoading(true);
+      const { dependents: found, error: depErr } = await fetchDependents(myPlayerId);
+      if (cancelled) return;
+      setDependents(found);
+      if (depErr) setFamilyError(depErr);
+      setFamilyLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [myPlayerId]);
+
+  const onAddChild = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!myPlayerId) return;
+    setFamilyError(null);
+    setFamilyAdded(null);
+    setFamilyRemoved(null);
+
+    if (!childFirst.trim() || !childLast.trim()) {
+      setFamilyError("A first and last name are both needed.");
+      return;
+    }
+    if (!childDob) {
+      // Not a database rule — the row would save without one. But a child
+      // added for a juniors bracket and no date of birth is a registration
+      // that will be refused later for a reason nobody can see here, so the
+      // field is required at the point where it is easy to supply.
+      setFamilyError("A date of birth is needed so age-restricted brackets can check it.");
+      return;
+    }
+
+    setFamilyBusy(true);
+    const { dependent, error: addErr } = await addDependent({
+      guardianPlayerId: myPlayerId,
+      firstName: childFirst,
+      lastName: childLast,
+      dob: childDob,
+    });
+    setFamilyBusy(false);
+    if (addErr || !dependent) {
+      setFamilyError(addErr ?? "Couldn't add that child.");
+      return;
+    }
+    setDependents((prev) =>
+      [...prev, dependent].sort((a, b) => playerName(a.player).localeCompare(playerName(b.player))),
+    );
+    setFamilyAdded(playerName(dependent.player));
+    setChildFirst("");
+    setChildLast("");
+    setChildDob("");
+    setAddChildOpen(false);
+  };
+
+  const onRemoveChild = async () => {
+    if (!removeTarget) return;
+    setFamilyError(null);
+    setFamilyAdded(null);
+    setFamilyRemoved(null);
+    const { error: rmErr } = await removeDependent(removeTarget.linkId);
+    if (rmErr) {
+      setFamilyError(rmErr);
+      setRemoveTarget(null);
+      return;
+    }
+    setDependents((prev) => prev.filter((d) => d.linkId !== removeTarget.linkId));
+    setFamilyRemoved(playerName(removeTarget.player));
+    setRemoveTarget(null);
+  };
 
   const handleAvatarClick = () => {
     if (!busy) fileInputRef.current?.click();
@@ -291,6 +402,10 @@ export default function ProfilePage() {
       first_name: firstName.trim(),
       last_name: lastName.trim(),
       phone: phone.trim() || null,
+      // A plain `date` column, so the YYYY-MM-DD the input emits goes
+      // straight in — no timezone conversion, which is also what keeps the
+      // age gate reading the same calendar day the player typed.
+      dob: dob || null,
       gender: (gender || null) as PlayerGender | null,
       self_rating_doubles: ratingDoubles,
       self_rating_mixed: ratingMixed,
@@ -458,6 +573,24 @@ export default function ProfilePage() {
       )}
       <h1 style={pageH1Style}>{heading}</h1>
       <p style={pageSubStyle}>{subhead}</p>
+
+      {/* What this page lets you do, named at the top and linked. "My family"
+          is the only entry point to registering a child, and on a phone it
+          sits well below the fold — a section heading further down is not a
+          way to find out it exists. */}
+      {!isFirstFill && (
+        <p style={{ fontSize: 13, color: inkSoft, margin: "-6px 0 20px" }}>
+          On this page: your details,{" "}
+          <a href="#my-family" style={jumpLinkStyle}>
+            my family
+          </a>{" "}
+          (register a child from your account), and your{" "}
+          <a href="#account" style={jumpLinkStyle}>
+            account
+          </a>
+          .
+        </p>
+      )}
 
       {/* ── Account email + change request ──────────────────────── */}
       <div style={{ ...panelStyle, marginBottom: 8 }}>
@@ -652,6 +785,22 @@ export default function ProfilePage() {
           </Field>
         </FieldRow>
 
+        <FieldRow>
+          <Field label="Date of birth">
+            <input
+              type="date"
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
+              style={inputStyle}
+              disabled={busy}
+            />
+            <span style={{ fontSize: 12, color: inkMuted }}>
+              Optional, and only used for age-restricted brackets — a juniors
+              or 50+ division can&rsquo;t check whether you qualify without it.
+            </span>
+          </Field>
+        </FieldRow>
+
         <div>
           <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
             <strong>Self-reported rating</strong>{" "}
@@ -769,7 +918,168 @@ export default function ProfilePage() {
       {!isFirstFill && (
         <>
           <div style={sectionDivider} />
-          <h2 style={sectionHeadingStyle}>Account</h2>
+          <h2 id="my-family" style={sectionHeadingStyle}>
+            My family
+          </h2>
+          <p style={{ fontSize: 13, color: inkSoft, margin: "-8px 0 16px" }}>
+            Add a child here and you can register and pay for them from your own
+            account. They need no email address and no account of their own.
+          </p>
+
+          <div style={{ ...panelMutedStyle, display: "flex", flexDirection: "column", gap: 12 }}>
+            {familyError && (
+              <div style={statusPanelStyle("danger")}>{familyError}</div>
+            )}
+            {familyAdded && (
+              <div style={statusPanelStyle("success")}>
+                {familyAdded} is on your family list. You can register them from
+                any tournament page.
+              </div>
+            )}
+            {familyRemoved && (
+              <div style={statusPanelStyle("info")}>
+                {familyRemoved} was removed from your family. Anything they were
+                already registered for is unchanged.
+              </div>
+            )}
+
+            {familyLoading ? (
+              <div style={{ fontSize: 13, color: inkMuted }}>Loading your family…</div>
+            ) : dependents.length === 0 ? (
+              // The empty state's job is to explain the blank card and point
+              // at the button. Once that button has been pressed the form
+              // says the same thing better, so it steps aside.
+              addChildOpen ? null : (
+                <div style={{ fontSize: 13, color: inkSoft }}>
+                  Nobody here yet. Add a child and they&rsquo;ll show up as
+                  someone you can register.
+                </div>
+              )
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {dependents.map((d) => {
+                  const age = ageAt(d.player.dob);
+                  return (
+                    <div key={d.linkId} style={familyRowStyle}>
+                      <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                        <div style={{ fontSize: 14, color: ink, fontWeight: 500 }}>
+                          {playerName(d.player)}
+                        </div>
+                        <div style={{ fontSize: 12, color: inkMuted, marginTop: 2 }}>
+                          {age == null
+                            ? "No date of birth yet"
+                            : `${age} year${age === 1 ? "" : "s"} old`}
+                        </div>
+                      </div>
+                      {/* Fixed-width slot so the remove control lines up down
+                          the list whether or not a row ever gains a second
+                          indicator. */}
+                      <div style={familyActionSlotStyle}>
+                        <button
+                          type="button"
+                          onClick={() => setRemoveTarget(d)}
+                          aria-label={`Remove ${playerName(d.player)} from your family`}
+                          title={`Remove ${playerName(d.player)}`}
+                          style={familyRemoveButtonStyle}
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {addChildOpen ? (
+              <form
+                onSubmit={onAddChild}
+                style={{ display: "flex", flexDirection: "column", gap: 12 }}
+              >
+                <FieldRow>
+                  <Field label="First name" required>
+                    <input
+                      type="text"
+                      required
+                      value={childFirst}
+                      onChange={(e) => setChildFirst(e.target.value)}
+                      style={inputStyle}
+                      disabled={familyBusy}
+                    />
+                  </Field>
+                  <Field label="Last name" required>
+                    <input
+                      type="text"
+                      required
+                      value={childLast}
+                      onChange={(e) => setChildLast(e.target.value)}
+                      style={inputStyle}
+                      disabled={familyBusy}
+                    />
+                  </Field>
+                </FieldRow>
+                <FieldRow>
+                  <Field label="Date of birth" required>
+                    <input
+                      type="date"
+                      required
+                      value={childDob}
+                      onChange={(e) => setChildDob(e.target.value)}
+                      style={inputStyle}
+                      disabled={familyBusy}
+                    />
+                    <span style={{ fontSize: 12, color: inkMuted }}>
+                      A juniors bracket checks this, so it&rsquo;s needed here.
+                    </span>
+                  </Field>
+                </FieldRow>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    type="submit"
+                    disabled={familyBusy}
+                    style={familyBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+                  >
+                    {familyBusy ? "Saving…" : "Save child"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={familyBusy}
+                    onClick={() => {
+                      setAddChildOpen(false);
+                      setFamilyError(null);
+                    }}
+                    style={
+                      familyBusy
+                        ? { ...ctaSecondaryStyle, opacity: 0.6, cursor: "not-allowed" }
+                        : ctaSecondaryStyle
+                    }
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAddChildOpen(true);
+                    setFamilyAdded(null);
+                    setFamilyRemoved(null);
+                    setFamilyError(null);
+                  }}
+                  style={ctaPrimaryStyle}
+                >
+                  Add a child
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div style={sectionDivider} />
+          <h2 id="account" style={sectionHeadingStyle}>
+            Account
+          </h2>
           <form
             onSubmit={onPasswordSubmit}
             style={{ display: "flex", flexDirection: "column", gap: 16 }}
@@ -916,6 +1226,28 @@ export default function ProfilePage() {
           </form>
         </>
       )}
+
+      {removeTarget && (
+        <ConfirmModal
+          title={`Remove ${playerName(removeTarget.player)}`}
+          body={
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <p style={{ margin: 0 }}>
+                They&rsquo;ll no longer appear as someone you can register, and
+                you won&rsquo;t be able to manage their registrations.
+              </p>
+              <p style={{ margin: 0 }}>
+                Anything they&rsquo;re already registered for stays as it is —
+                ask the organizer if you need it changed. You can add them back
+                at any time.
+              </p>
+            </div>
+          }
+          confirmLabel="Remove from my family"
+          onCancel={() => setRemoveTarget(null)}
+          onConfirm={onRemoveChild}
+        />
+      )}
     </Shell>
   );
 }
@@ -995,6 +1327,44 @@ const progressStep: CSSProperties = {
 const progressStepActive: CSSProperties = {
   ...progressStep,
   background: courtYellow,
+};
+
+const jumpLinkStyle: CSSProperties = {
+  color: courtBlue,
+  textDecoration: "underline",
+};
+
+// A family row: the name/age column wraps above the action on a narrow
+// screen rather than being squeezed to nothing (DESIGN_PREFERENCES).
+const familyRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  padding: "8px 0",
+  borderBottom: `1px solid ${rule}`,
+};
+
+// Fixed-width slot so the action lines up down the list.
+const familyActionSlotStyle: CSSProperties = {
+  width: 44,
+  display: "flex",
+  justifyContent: "flex-end",
+  flexShrink: 0,
+};
+
+const familyRemoveButtonStyle: CSSProperties = {
+  // 44px of tappable area on a phone, with the glyph itself kept small.
+  width: 44,
+  height: 44,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "none",
+  border: "none",
+  padding: 0,
+  color: courtRed,
+  cursor: "pointer",
 };
 
 const sectionDivider: CSSProperties = {

@@ -607,6 +607,42 @@ async function main() {
     "global-notice invite",
   );
 
+  // 13. Guardian fixture (#1169) — Gwen is a guardian with one dependent, Kit.
+  //     Populated-state target for the mobile audit: Profile "My family", the
+  //     "Registering for" chooser (event B, open to register), the family
+  //     checkout basket and the Attendees "Registered by" sub-line (event A,
+  //     Kit pending, registered by Gwen). Reset-then-mutate so reruns are clean.
+  const famT = await mkTournament("e2e-family", "E2E Family Cup");
+  const famA = await doublesEvent(famT, "E2E Family Doubles A");
+  const famB = await doublesEvent(famT, "E2E Family Doubles B");
+  await resetEvent(famA);
+  await resetEvent(famB);
+  const gwenId = await ensurePlayer("e2e-gwen-family@wmpc.test", "Gwen", "Guardian");
+  const kitId = await ensurePlayer("e2e-kit-family@wmpc.test", "Kit", "Guardian");
+  const kitDob = new Date();
+  kitDob.setFullYear(kitDob.getFullYear() - 10);
+  ok(
+    await db.from("players").update({ dob: kitDob.toISOString().slice(0, 10), email: null }).eq("id", kitId).select("id").single(),
+    "kit dob",
+  );
+  await db.from("player_guardians").delete().eq("guardian_player_id", gwenId).eq("dependent_player_id", kitId);
+  ok(
+    await db
+      .from("player_guardians")
+      .insert({ guardian_player_id: gwenId, dependent_player_id: kitId, relationship: "parent" })
+      .select("id")
+      .single(),
+    "gwen→kit guardian link",
+  );
+  ok(
+    await db
+      .from("event_registrations")
+      .insert({ event_id: famA, player_id: kitId, registered_by_player_id: gwenId, status: "pending_payment", partner_status: "seeking", event_fee_cents: 0 })
+      .select("id")
+      .single(),
+    "kit family reg",
+  );
+
   console.log("seed: e2e-test fixture ready");
 }
 

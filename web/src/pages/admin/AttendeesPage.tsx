@@ -16,6 +16,7 @@ import {
   type Seeker,
 } from "../../lib/partnerPairing";
 import { holdsSpot } from "../../lib/registrationStatus";
+import { ageAt } from "../../lib/eligibility";
 import {
   ink,
   inkSoft,
@@ -65,6 +66,9 @@ type EventForPlayer = {
 type Row = {
   player: Player;
   events: EventForPlayer[];
+  // The guardian who signed this player up, when someone else did (#1169).
+  // Null for a self-registration, which is every row made before that.
+  registeredByName: string | null;
 };
 
 type RegData = {
@@ -157,6 +161,32 @@ function playerFullName(p: Player) {
   return `${p.first_name} ${p.last_name}`;
 }
 
+// Secondary detail under a player's name: their age, and the guardian who
+// registered them when it wasn't themselves (#1169).
+//
+// Used by the By Player view only, in both its layouts — the stacked cards on
+// a phone and the table above 700px. Deliberately NOT in By Event: that table
+// doesn't stack, and at 390px neither of its cells is wide enough to hold
+// these two lines (the Name cell measured 85px, the Contact cell 60.6px, and
+// both shred the text). Carrying them there means stacking that table too,
+// which is its own change; until then the facts live one tab away.
+function PlayerSubLines({
+  dob,
+  registeredByName,
+}: {
+  dob: string | null;
+  registeredByName: string | null;
+}) {
+  const age = ageAt(dob);
+  if (age == null && !registeredByName) return null;
+  return (
+    <div style={{ fontWeight: 400, fontSize: 12, color: inkMuted, marginTop: 2 }}>
+      {age != null && <div>{age} years old</div>}
+      {registeredByName && <div>Registered by {registeredByName}</div>}
+    </div>
+  );
+}
+
 function ContactCell({ player }: { player: Player }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -236,7 +266,14 @@ export default function AttendeesPage() {
       const { data, error: regErr } = await supabase
         .from("event_registrations")
         .select(
-          "id, player_id, partner_registration_id, partner_status, status, event_fee_cents, players(*), events!inner(id, name, format, gender, tournament_id, deleted_at)",
+          // Two foreign keys to `players` now (the registrant and, for a
+          // dependent, the guardian who signed them up — #1169), so both
+          // embeds have to name their constraint. A bare `players(*)` is
+          // ambiguous once the second FK exists and PostgREST refuses it.
+          "id, player_id, registered_by_player_id, partner_registration_id, partner_status, status, event_fee_cents, " +
+            "players!event_registrations_player_id_fkey(*), " +
+            "registered_by:players!event_registrations_registered_by_player_id_fkey(id, first_name, last_name), " +
+            "events!inner(id, name, format, gender, tournament_id, deleted_at)",
         )
         .eq("events.tournament_id", t.id)
         .is("deleted_at", null)
@@ -255,7 +292,14 @@ export default function AttendeesPage() {
         partner_status: PartnerStatus;
         status: RegistrationStatus;
         event_fee_cents: number;
+        registered_by_player_id: string | null;
         players: Player | null;
+        // Null for a self-registration, which is every row made before #1169.
+        registered_by: {
+          id: string;
+          first_name: string;
+          last_name: string;
+        } | null;
         events: {
           id: string;
           name: string;
@@ -296,6 +340,9 @@ export default function AttendeesPage() {
           byPlayer.set(r.players.id, {
             player: r.players,
             events: [eventEntry],
+            registeredByName: r.registered_by
+              ? `${r.registered_by.first_name} ${r.registered_by.last_name}`.trim()
+              : null,
           });
         }
       }
@@ -600,6 +647,44 @@ function ByPlayerView({
             : "No attendees match the filter."}
         </div>
       ) : (
+        isNarrowViewport ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {visible.map((row) => (
+            <div key={row.player.id} style={attendeeCardStyle}>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>
+                {row.player.first_name} {row.player.last_name}
+              </div>
+              <PlayerSubLines
+                dob={row.player.dob}
+                registeredByName={row.registeredByName}
+              />
+              <div style={{ fontSize: 12, color: inkMuted, marginTop: 6 }}>
+                {row.player.email ?? "no email"}
+                {row.player.phone ? ` · ${row.player.phone}` : ""}
+              </div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+                {row.events.map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => onEditReg(row.player, e)}
+                    title={`Manage ${row.player.first_name}'s ${e.name} registration`}
+                    style={eventChipStyle}
+                  >
+                    {e.name}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => onManage(row.player)}
+                style={{ ...manageButtonStyle, marginTop: 10, minHeight: 44 }}
+              >
+                Manage
+              </button>
+            </div>
+          ))}
+        </div>
+        ) : (
         <table
           style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
         >
@@ -625,6 +710,10 @@ function ByPlayerView({
               >
                 <td style={{ ...tdStyle, fontWeight: 500 }}>
                   {row.player.first_name} {row.player.last_name}
+                  <PlayerSubLines
+                    dob={row.player.dob}
+                    registeredByName={row.registeredByName}
+                  />
                 </td>
                 <td
                   style={{
@@ -653,17 +742,7 @@ function ByPlayerView({
                         type="button"
                         onClick={() => onEditReg(row.player, e)}
                         title={`Manage ${row.player.first_name}'s ${e.name} registration`}
-                        style={{
-                          padding: "2px 8px",
-                          background: infoBg,
-                          color: infoFg,
-                          border: `1px solid ${infoBg}`,
-                          borderRadius: 4,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
+                        style={eventChipStyle}
                       >
                         {e.name}
                       </button>
@@ -673,7 +752,7 @@ function ByPlayerView({
                 <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                   <button
                     onClick={() => onManage(row.player)}
-                    style={{ fontSize: 12, fontWeight: 600, color: courtBlue, background: "none", border: `1px solid ${rule}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}
+                    style={manageButtonStyle}
                   >
                     Manage
                   </button>
@@ -682,6 +761,7 @@ function ByPlayerView({
             ))}
           </tbody>
         </table>
+        )
       )}
     </>
   );
@@ -1320,6 +1400,46 @@ const seekerPillStyle: CSSProperties = {
   borderRadius: 4,
   fontSize: 11,
   fontWeight: 600,
+};
+
+// Phone width. The By Player table holds a name (now with up to two sub-lines
+// — age, and the guardian who registered a dependent, #1169), two contact
+// fields, a chip row and an action; five columns of that do not fit 390px, and
+// widening the name column put the whole admin page into horizontal scroll.
+// Stacking is what DESIGN_PREFERENCES records as the remedy for this shape.
+const isNarrowViewport =
+  typeof window !== "undefined" &&
+  window.matchMedia("(max-width: 699px)").matches;
+
+const attendeeCardStyle: CSSProperties = {
+  border: `1px solid ${rule}`,
+  borderRadius: 8,
+  padding: 12,
+  background: "#fff",
+};
+
+const eventChipStyle: CSSProperties = {
+  padding: "2px 8px",
+  background: infoBg,
+  color: infoFg,
+  border: `1px solid ${infoBg}`,
+  borderRadius: 4,
+  fontSize: 11,
+  fontWeight: 500,
+  cursor: "pointer",
+  fontFamily: "inherit",
+};
+
+const manageButtonStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: courtBlue,
+  background: "none",
+  border: `1px solid ${rule}`,
+  borderRadius: 6,
+  padding: "4px 10px",
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 
 const thStyle: CSSProperties = {
