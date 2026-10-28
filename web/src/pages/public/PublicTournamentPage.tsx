@@ -25,7 +25,7 @@ import {
 import type { Database } from "../../types/supabase";
 import { computeMedals, type Team as BracketTeam } from "../../lib/bracketTeams";
 import { playoffStageLabel } from "../../lib/matchLabel";
-import { BracketView } from "../../components/BracketView";
+import { BracketView, type MatchRow } from "../../components/BracketView";
 import { BracketStandingsPanel } from "../../components/BracketStandingsPanel";
 import {
   bg as v5Bg,
@@ -91,11 +91,6 @@ type SectionTab = (typeof SECTION_TABS)[number]["key"];
 function isSectionTab(v: string | null): v is SectionTab {
   return SECTION_TABS.some((t) => t.key === v);
 }
-type MatchRow = Database["public"]["Tables"]["matches"]["Row"] & {
-  bracket?: "winners" | "consolation" | "final" | null;
-  label?: string | null;
-  if_necessary?: boolean | null;
-};
 
 function composeLocationAddress(loc: {
   address?: string | null;

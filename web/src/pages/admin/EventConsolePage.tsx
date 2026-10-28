@@ -3209,12 +3209,9 @@ function PlayoffSection({
 // Double elimination
 // ─────────────────────────────────────────────────────────────────────
 
-type DEMatchRow = Match & {
-  bracket?: "winners" | "consolation" | "final" | null;
-  slot_key?: string | null;
-  label?: string | null;
-  if_necessary?: boolean | null;
-};
+// bracket / slot_key / label / if_necessary are generated columns on `matches`
+// now, so the row needs no hand-written extras.
+type DEMatchRow = Match;
 
 // Seeded winners + consolation brackets generated from lib/doubleElim. Every
 // match row stores its bracket, slot key, label and where its winner/loser
