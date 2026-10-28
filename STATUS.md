@@ -5,6 +5,32 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-28 — PR #1176 brought up to date with main (clears CONFLICTING)
+
+`ux/guardian-registrations` was 5 commits behind `main` after PR #1178
+renumbered `20261006120000_player_club_affiliations.sql` to
+`20261012120000_...` — the file that had been wedging `db push` since
+2026-10-15, so merging it is what finally put both the club-affiliations
+migration and `20261027120000_guardian_registrations.sql` on TEST.
+
+Merged `origin/main` into the branch. **`STATUS.md` auto-merged with no
+conflict** — main's `#1175` rework entries and its 2026-10-28
+migration-order entry sit where main put them (near the bottom of the
+file, which is where those sessions appended them; not re-ordered here,
+since this log is append-only and they are not this session's entries).
+The only source file the merge brought in is `web/src/lib/clubAffiliations.ts`;
+`eligibility.ts` and every guardian surface are byte-identical to the
+graded tip, so the design verdict still stands.
+
+Verified on the merged tip: `npm run build` ✓ (2.70s), `npx vitest run`
+✓ 36 files / 421 tests.
+
+**Next:** Ron merges #1176. The preview deploy is where the
+parent-registers-child flow can be tried now that `player_guardians` is
+real on TEST — remember a preview builds against the **preview** variable
+scope, not TEST's.
+
+
 ## 2026-10-27 — A parent can register their child; the age gate finally bites
 
 Four PRs open, to be merged **in this order**. Ron merges; nothing here was
