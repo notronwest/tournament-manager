@@ -3038,3 +3038,20 @@ baseline (35 problems / 31 errors / 4 warnings — identical with the change sta
 on the youth path and it is not a setting, but the eligibility rule already degrades gracefully
 without one ("needs a date of birth on file", and only where an event has an age bound), so
 making it optional is a client-only change worth its own card.
+
+**Design gate: three rounds, two of them mine.** The first FAIL was the aged-out juniors CTA
+opening the register form on the parent — a registrant the card had already established nobody
+could satisfy — under advice that said "Pick a different event", which is the #1182 dead end
+moved one tap deeper rather than closed. The second FAIL was a regression from fixing the
+first: keying the new copy on *the event having an age bound* offered "add a youth" on a 40+
+bracket, where every registrant that advice can produce fails the same gate, and on a
+skill-bounded juniors bracket it refused the child the parent had just created and told them to
+add a youth again. Both now hang off whether a child could actually enter — no adult minimum
+age — and the refusal panel additionally off the refusal being the age one. PASSed on
+`43d3bf1228f54fbc`, no findings, rendered and clicked at 390×844 and 1280×800.
+
+**Filed, not fixed:** #1183 — nothing anywhere can set a dependent's skill rating *or gender*,
+so a skill-bounded or single-gender bracket opens a path a child cannot finish. The gate's
+judgement was that the fix is that missing screen, not a narrower gate here, since gating on it
+would hide the youth path from most real divisions. This branch owes an honest refusal, and has
+one.
