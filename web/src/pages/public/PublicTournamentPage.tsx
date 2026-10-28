@@ -1701,6 +1701,20 @@ function EventCard({
   const subjectPlayer = subject?.player ?? me;
   const registeringSomeoneElse = subject != null && !subject.isSelf;
 
+  // What to actually DO when the chooser's current pick can't enter. On an
+  // age-capped bracket the way through is the chooser's own add-a-youth
+  // entry, so the advice names it: the design gate caught "Pick a different
+  // event" being handed to a parent who had just tapped "Register a child",
+  // which is the #1182 dead end moved one tap deeper rather than removed.
+  const ageCapped = event.min_age != null || event.max_age != null;
+  const nextMoveHere = ageCapped
+    ? registrants.length > 1
+      ? 'Pick someone else above, or choose "Add a youth\u2026" to enter a child.'
+      : 'Choose "Add a youth\u2026" above to enter a child.'
+    : registrants.length > 1
+      ? "Pick someone else above, or a different event."
+      : "Pick a different event.";
+
   // ─── Eligibility: compute once, gate the Register button ─────────
   // The button gate stays on the PLAYER, because the chooser defaults to them
   // and is only reachable once the form is open. The chosen registrant is
@@ -1789,7 +1803,11 @@ function EventCard({
   const cardBg = isAmberCard ? warnBg : "#fff";
 
   // ─── Handlers ────────────────────────────────────────────────────
-  const startRegister = () => {
+  // `opts.addChild` opens straight onto the add-a-youth step. The aged-out
+  // juniors CTA uses it: that card only renders when NOBODY on the family
+  // list qualifies, so opening on a registrant would land the parent on a
+  // refusal the card already knew it would produce (design gate, #12).
+  const startRegister = (opts?: { addChild?: boolean }) => {
     if (!user || !me) {
       // Anon visitor or no profile yet — bounce through auth, then
       // they come back here and click Register again.
@@ -1804,7 +1822,7 @@ function EventCard({
     setSubjectId(
       (playerEligible ? me.id : eligibleRegistrants[0]?.player.id) ?? me.id,
     );
-    setAddingChild(false);
+    setAddingChild(opts?.addChild === true);
     setPartner(emptySelection);
     setSeekingPartner(false);
     setRegistrationSide(null);
@@ -2660,7 +2678,7 @@ function EventCard({
             </span>
             <button
               type="button"
-              onClick={startRegister}
+              onClick={() => startRegister({ addChild: true })}
               style={{
                 ...ctaPrimaryStyle,
                 background: courtRed,
@@ -2706,7 +2724,7 @@ function EventCard({
       <button
         ref={registerBtnRef}
         type="button"
-        onClick={startRegister}
+        onClick={() => startRegister()}
         style={{
           ...ctaPrimaryStyle,
           background: isFull ? courtBlue : courtRed,
@@ -3146,8 +3164,8 @@ function EventCard({
           {editMode === "register" && subjectAlreadyIn && (
             <div style={subjectAlreadyInStyle}>
               <strong>{subjectPlayer?.first_name} is already registered</strong>{" "}
-              for this event. Pick someone else above, or ask the organizer if
-              you need their entry changed.
+              for this event. {nextMoveHere} Or ask the organizer if you need
+              their entry changed.
             </div>
           )}
 
@@ -3163,9 +3181,7 @@ function EventCard({
                 ? registeringSomeoneElse
                   ? "Add their date of birth under My family on your profile."
                   : "Add your date of birth on your profile."
-                : registrants.length > 1
-                  ? "Pick someone else above, or a different event."
-                  : "Pick a different event."}
+                : nextMoveHere}
             </div>
           )}
 
