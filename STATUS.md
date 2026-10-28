@@ -64,6 +64,145 @@ are at defaults, and donations may be wanted given it is a fundraiser. The $600
 facility fee WMPC charges LRT has no field on a tournament and is recorded
 nowhere in the app. **Next:** publish to mint the flyer's QR target,
 `/t/loon-race-team/loon-race-team-pickleball-tournament`.
+## 2026-10-28 — PR #1176 brought up to date with main (clears CONFLICTING)
+
+`ux/guardian-registrations` was 5 commits behind `main` after PR #1178
+renumbered `20261006120000_player_club_affiliations.sql` to
+`20261012120000_...` — the file that had been wedging `db push` since
+2026-10-15, so merging it is what finally put both the club-affiliations
+migration and `20261027120000_guardian_registrations.sql` on TEST.
+
+Merged `origin/main` into the branch. **`STATUS.md` auto-merged with no
+conflict** — main's `#1175` rework entries and its 2026-10-28
+migration-order entry sit where main put them (near the bottom of the
+file, which is where those sessions appended them; not re-ordered here,
+since this log is append-only and they are not this session's entries).
+The only source file the merge brought in is `web/src/lib/clubAffiliations.ts`;
+`eligibility.ts` and every guardian surface are byte-identical to the
+graded tip, so the design verdict still stands.
+
+Verified on the merged tip: `npm run build` ✓ (2.70s), `npx vitest run`
+✓ 36 files / 421 tests.
+
+**Next:** Ron merges #1176. The preview deploy is where the
+parent-registers-child flow can be tried now that `player_guardians` is
+real on TEST — remember a preview builds against the **preview** variable
+scope, not TEST's.
+
+
+## 2026-10-27 — A parent can register their child; the age gate finally bites
+
+Four PRs open, to be merged **in this order**. Ron merges; nothing here was
+merged or pushed to `main`/`production`.
+
+**#1172 — `main` does not compile.** `tournamentSummary.ts` declared
+`MAX_MATCH_MS` twice (the home-club-star merge took the constant from both
+sides). `npm run build` is `tsc -b --noEmit && vite build`, so the Cloudflare
+Pages build of `main` has been failing before Vite runs and **TEST has been
+serving a stale bundle**. Nothing in CI catches it — no workflow in this repo
+runs typecheck, build or vitest on a PR; the only signal is the Pages build
+going red. One duplicate line deleted. Closes #1171.
+
+**#1173 — an `open` division rejected everyone who wasn't female.** The
+client gender gate excused only `mixed`, so `open` fell through and `required`
+resolved to `"F"`. All three brackets of the Loon Race Team tournament are
+`open`. The trigger always had it right; only the client was stale. Rewritten
+to name the two gated values rather than excuse one, plus a unit test that
+fails on the old condition. Closes #1170.
+
+**#1175 `[DB]` — the guardian half.** `player_guardians` (many-to-many, soft
+delete, RLS from day one), `is_guardian_of()` as the single predicate, a
+guardian branch on the event_registrations SELECT/INSERT/UPDATE policies and
+on the players UPDATE policy, `event_registrations.registered_by_player_id`,
+the age gate in `enforce_event_eligibility()`, and a family-aware
+`compute_checkout_total`. Closes #1174, part of #1169.
+
+**#1176 `[UX]` — the half Ron can see.** Profile grows "My family" and a
+date-of-birth field; the register card grows a "Registering for" chooser;
+checkout tiers per registrant and names anyone who isn't the payer; Attendees
+shows a player's age and the guardian who signed them up. Closes #1169.
+
+### Decisions worth keeping
+
+**RLS, not a service-role edge function.** `admin-register-contact` was the
+obvious model, and it is the wrong one: `enforce_event_eligibility()` returns
+early when `auth.uid()` is null, so a service-role insert is never
+eligibility-checked. Org staff *want* that exemption; a guardian must not have
+it, because the age gate binding them is the point of the card. Registering
+through RLS keeps the caller's JWT, so the trigger fires on a guardian's insert
+exactly as on a self-registration and the age rule has one implementation at
+the trust boundary.
+
+**NULL dob is ineligible for an age-restricted event, and irrelevant
+elsewhere.** Same rule the rating gate already uses for a missing self-rating.
+What keeps it from locking anyone out is that it fires only when the event
+sets a bound: every player row in production has `dob = NULL` today, and all
+of them stay eligible for every unrestricted event.
+
+**Age is measured at the tournament's UTC start date, not today.** "18 &
+under" is about the day of play, and measuring at registration time would let
+eligibility drift while a bracket sits open. Client and trigger both read the
+UTC calendar date of `starts_at` so they cannot disagree by a day.
+
+**A guardian may only adopt an account-less player row with no
+registrations** — in practice, one they just created. `players` INSERT is
+`with check (true)`, so "which rows may I claim?" is the security question for
+the whole feature. That check had to be a SECURITY DEFINER function: a
+subquery inside a policy runs as the caller under RLS, so an inline
+`not exists (select 1 from event_registrations …)` would only ever see rows
+the caller can already read — a guard that always passes.
+
+**Reuse:** the child's player row and its guardian link are created together by
+a `SECURITY DEFINER add_dependent()`, which is where the reviewer landed after
+four passes on #1175 — `player_guardians` has no INSERT policy and no INSERT
+grant, so a link can never be pointed at a player row that already existed. An
+earlier draft of this branch reused `persistPlayerSelection` and fenced the
+insert with a policy; closing the path beats fencing it. Checkout calls the existing `computeLineItems` once
+per registrant instead of changing its tier math. `ConfirmModal` for the
+remove-child confirm. No edge-function change was needed for payment: the
+payable-status guard, the free-confirm flip and `stripe-webhook` all work off
+`payment_line_items`, never the payer's `player_id`.
+
+### Verified, not assumed
+
+The migration was applied to a **local Supabase stack with all 116 migrations**
+and driven through the real app at 390px: a parent added a child with no
+email, registered them for the juniors bracket, and saw `$45.00` in checkout
+against a server-side `compute_checkout_total` of `4500` for the same line
+item. Attendees showed "Maya Harper / 11 years old / Registered by Dana
+Harper". A second parent saw none of it and was refused the insert by RLS. The
+trigger refused a 44-year-old and a NULL-dob player from the juniors bracket
+and allowed both into the unrestricted one. Two bugs in the first draft were
+caught this way: `text[] || <untyped literal>` raised "malformed array
+literal", and the button gate left a parent with **no Register button at all**
+on a juniors bracket, because it asked only whether the parent qualified.
+
+### Known limits, deliberate
+
+A dependent cannot be waitlisted (`join_waitlist` resolves the player from
+`auth.uid()`), the inbound auto-pair lookup is skipped for a dependent (it
+keys on the signed-in user's email), and a guardian creates and pays for a
+registration but cannot yet change or cancel it from the card, and a guardian
+who is already entered in an event has no route to enter their child in that
+same event (the card returns on the player's own status before it reaches the
+chooser — the juniors case works only because a parent can never be in that
+bracket). The Event Console roster still does not render
+the age the `event_roster` RPC already returns (AC 11's second half).
+
+**The design gate graded #1176 nine times and failed it eight**, each time on
+something real: the register form quoting the payer's price instead of the
+registrant's; the sticky checkout bar blind to a dependent, so a parent who
+entered only their child got no route to checkout at all, and one who had their
+own entry too saw $45.00 over a $90.00 bill; "My Tournaments" saying "you
+haven't registered for anything" with that bar billing them; the parent unable
+to open the juniors form at all; a refused form still offering a roster search
+and "+ Add new player"; the attendees row shredding at 390px; a child's pending
+entry not looking like one. The verdicts are on the branch under
+`.design/verdicts/`.
+
+**Next:** Ron merges #1172 → #1173 → #1175 → #1176, then regenerates types
+(`cd web && npx supabase gen types typescript --linked > src/types/supabase.ts`)
+so the local type extensions in `lib/guardians.ts` can go.
 
 ## 2026-10-13 — Builder: PR #965 rework (rebase, clear CONFLICTING)
 
@@ -2764,3 +2903,98 @@ rating picker, recap/credit smoke, mobile recap) — pre-existing, not from this
 **Remaining (Ron, needs his Cloudflare + Supabase sign-ins):** deploy the Worker, set its
 two secrets, set `VITE_CAMPAIGN_REPORT_URL` in the club-dashboard Pages project (Production
 + Preview) and rebuild. Step-by-step given in chat.
+
+## 2026-10-27 — #1174 rework (PR #1175, guardian registrations DB half)
+Reviewer's second REQUEST CHANGES addressed in `20261027120000_guardian_registrations.sql`:
+removed the `player_guardians` INSERT policy + grant; links are now made only by the
+SECURITY DEFINER `add_dependent(first, last, dob, relationship)` (child row + link in one
+call), so no one can link to a player they didn't create. Guardian inserts on
+`event_registrations` must now set `registered_by_player_id = current_player_id()`.
+Migration unapplied (CI applies on merge). **Next:** reviewer re-review; then the UX PR
+(Add-a-child via `add_dependent`, "Registering for" chooser; partner-invite RLS has no
+guardian branch yet).
+
+## 2026-10-27 — #1174 rework 3 (PR #1175)
+Reviewer's third REQUEST CHANGES: a guardian could `update player_guardians set
+dependent_player_id = <any account-less player>` and bypass the add_dependent() guarantee.
+Fixed by narrowing the grant to `update (deleted_at, relationship)` only (reviewer's option a).
+Migration unapplied (CI applies on merge). **Next:** reviewer re-review, then the UX PR.
+
+## 2026-10-27 — #1169 / PR #1176 rework (phone coverage)
+Reviewer asked for populated-state 390px coverage. Seeded a guardian (Gwen) + dependent (Kit) with a pending reg (`e2e-family`), added four cases to `web/e2e/mobile/audit.spec.ts` (My family, Registering-for chooser, family checkout basket, Attendees sub-lines). Merged current `main`. Not run locally (needs the E2E Supabase creds; runs in `regression.yml`). Types regen deferred as follow-up. Next: reviewer re-review.
+## 2026-10-28 — Migrations had not reached TEST since 10-15; renumbered the file that wedged them (#1177, PR)
+Ron merged PR #1175 (guardian registrations DB half) and asked to be told when its migration
+was live on TEST. It never applied: the `Migrations` run on the merge commit
+(40580251934) **failed closed and applied nothing**, and so had every migration run since
+2026-10-15 — #1091 (10-15), #1165 (10-19), #1175 (10-27), three in a row.
+`20261006120000_player_club_affiliations.sql` was authored 10-06 but merged after
+`20261011120000` was already applied, so `supabase db push` saw a file dated *before* the
+head of the remote history and refused ("Found local migration files to be inserted before
+the last migration on remote database") — `--include-all` is deliberately not used, because
+it re-applies recorded versions and wedged prod on 2026-06-11.
+
+**Verified against both databases** (Supabase MCP, read-only): TEST and PROD history both end
+at `20261011120000_campaign_registry_and_reporting`; neither has `player_club_affiliations`,
+neither has `player_guardians`. So `web/src/lib/clubAffiliations.ts` has been on `main`
+querying a table that exists nowhere since 10-15.
+
+**Nobody was told because the alert is dead** — the failure step's Discord call returns
+`{"message": "Unknown Webhook", "code": 10015}`. Twelve days of silent fail-closed. Needs its
+own card and a new webhook URL from Ron (a repo Actions secret, `DISCORD_WEBHOOK`).
+
+**Fix** (the one `supabase/MIGRATIONS.md` prescribes — "renumbering the file's timestamp to
+after the head"): `git mv` to `20261012120000_player_club_affiliations.sql`, keeping it ahead
+of the guardian file so authorship order survives. Pure rename, 0 content lines changed;
+updated the stale version in its own header and in the `clubAffiliations.ts` comment. Safe
+because the file had never been applied to any database, so no `schema_migrations` row points
+at the old version. Pending set is now `20261012120000`, `20261027120000` — both above the
+remote head, ascending, which is exactly the condition that was failing.
+
+**Next:** merge the PR → the run should apply both migrations → then regenerate
+`web/src/types/supabase.ts` (it is already stale: missing `schedule_order`,
+`playoff_seeding`, `double_elim_final`, `platform_fee_*`, `schedule_locked_at`,
+`first_events_included`, `resend_audience_id`) → then PR #1176 (guardian UX) is testable on
+TEST against a real table. **Hold #1176 until this one is in.**
+
+## 2026-10-28 — Regenerated the Supabase types; they were 30 tables behind, and catching up broke the build (#1179, PR)
+After PR #1178 unwedged the pipeline and both migrations applied to TEST, regenerated
+`web/src/types/supabase.ts` — the step `supabase/MIGRATIONS.md` asks for after every apply and
+which had been skipped for long enough that the committed file was **2,326 lines against the
+schema's 3,240**.
+
+Generated against **TEST explicitly** (`gen types typescript --project-id mvkhdsauaqqjehxdnbuf`),
+not `--linked`: on a locally linked machine `--linked` resolves to **PROD**, which is a different
+schema. Same generator shape as the committed file (`__InternalSupabase`, `Relationships`,
+`CompositeTypes` all present), so this is a content catch-up, not a format churn.
+
+**Thirty tables, views and functions were missing**, whole features among them: `account_credits`
+/ `account_credit_balance` / `redeem_account_credit`, `campaigns` / `campaign_events` /
+`record_campaign_event` / the three `campaign_report*`, `contact_broadcasts` /
+`contact_broadcast_recipients`, `organization_contacts`, `manual_payments`, `pbcom_push_ledger` /
+`pbcom_push_state`, `merge_players` / `merge_events` (+ previews), `tournament_setups` /
+`save_setup_by_token`, `sweep_stale_pending_regs`, `tournament_registration_counts`, the three
+`public_tournament_*` RPCs, and the two applied today — `player_club_affiliations` and
+`player_guardians` with `add_dependent`, `is_guardian_of` and
+`event_registrations.registered_by_player_id`. Plus `schedule_order`, `playoff_seeding`,
+`double_elim_final`, `schedule_locked_at`, `first_events_included`, `resend_audience_id`.
+
+**The catch-up broke typecheck, which is the point of doing it.** Two errors, both from the same
+cause: `BracketView`, `EventConsolePage` and `PublicTournamentPage` each defined
+`matches.Row & { bracket?, slot_key?, label?, if_necessary?, feeds_*? }` by hand, back when those
+columns did not exist in the generated row. Now they do — `bracket` as the real `match_bracket`
+enum, `if_necessary` as non-null `boolean`, `feeds_winner_side` as the column's own `string` —
+and because BracketView narrowed `feeds_winner_side` to `"a" | "b"` while the console left it
+alone, TypeScript held the two `MatchRow`s to be unrelated types (TS2322 + TS2719).
+
+Fixed by deleting the hand-written re-declarations in all three files: the generated row IS the
+type now. `BracketView` exports its `MatchRow` and `PublicTournamentPage` imports it rather than
+deriving an identical alias beside it. Net −10 lines of hand-written code. Every call site only
+compares these fields (`=== "a"`), so nothing behavioural changed.
+
+**Verified:** typecheck clean (0 errors), build ✅, **415/415 vitest in 36 files** ✅, lint at the
+unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
+
+**Worth a card, not done here:** `feeds_winner_side` / `feeds_loser_side` are plain `text` in the
+database, so the hand-written `"a" | "b"` narrowing was the only thing typing them. Dropping it
+is correct — the code now matches the column — but the honest fix is a DB enum so the generated
+type carries the constraint. That is a migration, not a types change.

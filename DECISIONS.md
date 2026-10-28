@@ -9,21 +9,6 @@ To question one, propose a supersession to daemon; don't work around it.
 
 ## Active
 
-### D-0004 — Migrations are code, applied by CI on merge; the Builder drafts additive and blocks risky
-
-*2026-06-07 · scope: `supabase/migrations/**, .github/workflows/migrations.yml, agents/builder/**` · source: daemon STATUS 2026-06-07 and 2026-06-09; wmpc-meta/conventions/migrations.md*
-
-**Decision.** Schema changes are drafted in a PR, reviewed, and applied by CI on merge to the
-routed branch. No interactive session runs `supabase db push`. The Builder may draft additive
-and reversible migrations (create table/index/view, nullable column, new enum value,
-non-SECURITY-DEFINER function). It blocks destructive DDL, NOT NULL or UNIQUE on populated
-columns, RLS and policies, SECURITY DEFINER, money, and backfills.
-
-**Why.** Manual pushes caused wrong-project links and drift (tournament-manager #71, #77).
-CI on merge gives one path with a review trail.
-
-**Forbids.** `supabase db push` from a session or agent. A migration outside a PR.
-
 ### D-0005 — Branch work happens in a worktree; the pre-push guard keeps code off protected branches
 
 *2026-06-08 · scope: `.git/hooks/pre-push, infrastructure/git-guards/**, infrastructure/worktrees/**` · source: daemon STATUS 2026-06-08; infrastructure/git-guards/DESIGN.md*
@@ -3812,12 +3797,235 @@ condition 2 is a test of what the link DOES, not of its markup. And it does not 
 contrast, spacing or focus order: an inline link still needs a visible focus ring and still
 answers to every other point on the checklist.
 
+### D-0239 — A merged migration is not an applied migration; where it applies is each repo's DEPLOYMENT.md, and on the mini it is a human act
+
+*2026-10-28 · scope: `supabase/migrations/**, **migrations/**, .github/workflows/migrations.yml, DEPLOYMENT.md, agents/builder/**, infrastructure/heartbeat/**` · source: demonstrated 2026-10-27 — Ron ran `./setup.sh` in `courtreserve-api` on the mini at ~15:38Z to apply `0071_cr_pos_catalog_all_items.sql`; `migrate --status` read 71 of 72 applied with 0071 `[PENDING]` before and 72 of 72 after. The migration had been merged to `main` hours earlier and nothing had applied it. Supersedes D-0004, whose "applied by CI on merge" is the premise that failed. Already recorded true elsewhere and contradicted: D-0114 rule 6, D-0135, D-0092's closing paragraph.*
+
+**Decision.** D-0004's first half stands and is carried forward: a schema change is **code**, drafted
+in a PR and reviewed; no interactive session or agent runs `supabase db push`; there is no migration
+outside a PR. The Builder may draft additive and reversible migrations — create table/index/view, a
+nullable column, a new enum value, a non-`SECURITY DEFINER` function — and blocks destructive DDL,
+`NOT NULL` or `UNIQUE` on populated columns, RLS and policies, `SECURITY DEFINER`, money, and
+backfills. One clause changes, and it is the one that matters at the other end.
+
+1. **A merge is not an application.** D-0004 said migrations are "applied by CI on merge to the routed
+   branch". That is not true fleet-wide and must never be assumed. **What applies a migration is
+   per-repo, and the authority is that repo's `DEPLOYMENT.md` YAML block** (D-0007), parsed — never
+   inferred from a workflow file, a `wrangler.*`, or the fleet norm.
+2. **Where it is a human act, it is the owner's.** In `club-dashboard`, `courtreserve-api`, `qbo-api`
+   and `court-reserve-scheduler` a migration applies when a person runs `git pull && ./setup.sh` on
+   the club Mac mini. That command is a deploy **and** a production schema migration against the one
+   live database, so it is stop-list row 3 and Ron's (D-0096). An agent prepares it, hands him the
+   step in D-0068's shape, and does not run it.
+3. **The only evidence of application is the live state, read back.** `migrate --status`, or the
+   relevant `schema_migrations` table. Merged, CI green, promoted to `production`, and a current
+   checkout on the mini are each fully compatible with `PENDING`. This is D-0083: a self-report
+   ("merged") is not the outcome ("applied").
+4. **What this record does not assert.** It names the four hand-applied repos because daemon's own
+   register already records them (D-0114 rule 6, D-0135, D-0092). It makes **no** claim about the CI
+   path in `tournament-manager`, `third-shot-academy` or `rating-session-manager`: that was not
+   verified, because this session could read only daemon. For those three, rule 1 is the whole
+   instruction — read their `DEPLOYMENT.md`.
+
+**Why.** A premise that migrations auto-apply makes a merged migration look live, so a session reads
+D-0004, concludes the schema change has landed, and reports it done while the SQL sits unapplied on a
+machine nobody has touched. On 2026-10-27 that cost a day of the point-of-sale catalogue being empty
+while everyone believed it had shipped; the fix was Ron running `./setup.sh` himself. It also sets up
+the worse error in the other direction — treating the merge as the promotion, when the promotion is a
+separate human act on a specific machine.
+
+The register had the truth and the falsehood active at the same time. D-0114 rule 6 says it outright
+("club-dashboard's migrations are not applied by CI, whatever the fleet norm says"), D-0135 and
+D-0092 say it again, and D-0004 and D-0137 went on asserting the opposite — so which a session
+believed depended on which record it happened to read. That is the fault being closed, not merely a
+wrong sentence.
+
+**Forbids.** Reporting, recording or carding a schema change as live, applied or shipped on the
+strength of a merge, a green check, a promotion or a fresh checkout. An agent or session applying a
+migration to a live database — including through a SQL or migration tool (D-0218). Writing "applied
+by CI on merge" into a record, doc or prompt for a repo whose `DEPLOYMENT.md` says a human applies it.
+Inferring a repo's migration path from a CI workflow, a plist or a `wrangler.*` instead of parsing its
+`DEPLOYMENT.md` YAML block. `supabase db push` from a session or agent, or a migration outside a PR.
+
+### D-0241 — A decision record never carries a person's name, and the register refuses one that does
+
+*2026-10-28 · scope: `decisions/**, infrastructure/decision-register/**, DECISIONS.md` · source: Ron 2026-10-28, "Go", on daemon#974 — stop the register publishing real people's names into public repositories, and write the rule so the next one is refused rather than caught. The finding behind it: writing D-0238 the day before, a session was about to commit two members' names into a record and the permission gate refused the write on [PII Data Handling] — "the gate is the thing that caught it and not me".*
+
+**Decision.** A person's name does not go into a decision record. Not a member's, not an
+instructor's, not a prospect's, not a caller's — and not in the body, the `title`, or the
+`source:` line, which publishes too.
+
+1. **Say what the person IS to the decision.** "the coach", "a member", "three instructors,
+   333 / 68 / 5 bookings, one with a login". Every record that named someone would have been
+   complete without them: the name was colour, and the measurement was the finding. Who they are
+   lives in the club database, which is where a reader with a reason to know already looks.
+
+2. **The register refuses a record that carries one.** `no-person-names.sh` reads every active
+   and proposed record for a `Firstname Lastname` token and refuses any that is not on the
+   committed `TERMS-NOT-PEOPLE` allowlist. It is wired into `render.sh check` **as an integrity
+   fault, not a quality fault** — the one place this record departs from D-0160. D-0160 ruled that
+   incomplete metadata must not withhold a rule from the repo it binds, because a stale slice is
+   recoverable. **A name on public GitHub is not.** Disclosure is one-way, so it blocks
+   distribution and a missing `enforced-by` does not.
+
+3. **The test is shape, and the allowlist holds only non-people.** A roster check was rejected for
+   two independent reasons: the gate has to be the required pre-merge check, which D-0149 rule 2
+   holds to host-independent, network-free and credential-free — a detector needing database
+   credentials goes amber on its own, teaches its readers to merge past it, and cannot run in a
+   cloud session, which is where most records are now written. And **a roster committed to a repo
+   is itself the disclosure.** So nothing in this mechanism writes a person's name to disk: the
+   allowlist is product names, board columns, lesson types and ordinary English pairs, and is
+   publishable as it stands.
+
+4. **It fails closed, and the friction is the point.** An unrecognised `Firstname Lastname` is
+   refused, so a new product or lesson name costs the author one line in `TERMS-NOT-PEOPLE`, in
+   the same change. **It is a floor, not a guarantee**: it does not catch a lone first name, a
+   nickname, an email address, a phone number or a member number. Rule 1 is the rule; the script
+   is the part of it a machine can decide.
+
+5. **Superseding is the remedy for a record already merged.** A merged record's decision text is
+   never edited (`README.md`), and `render.sh slice` renders a superseded record as a one-line
+   title with no body and no `source:` — so a name-free successor removes the name from all
+   twelve slices without touching the original, which stays in daemon's private history where the
+   audit trail belongs. The gate agrees with the renderer: a superseded record is read on its
+   title line only.
+
+6. **What was already public is removed in the same change as this rule.** D-0183 clause 2 named
+   three instructors with their individual lesson counts in `rating-session-manager`, which is
+   **public**; it is superseded by D-0242, name-free. D-0141's `source:` named a member; D-0108's
+   named a caller and carried a phone number; D-0079's quoted a prospect's name. Those three are
+   **frontmatter metadata, not decision text** — the same class of field as `status` and
+   `superseded_by`, which a supersession edits as a matter of course — so each was redacted in
+   place, marked as redacted, with the original in daemon's git history. Three records name
+   someone in their **body** and publish only into private slices: `GRANDFATHERED` lists their
+   ids and reasons, never their names, and it shrinks only.
+
+**Why.** `render.sh slice` writes a record's **full body** into `DECISIONS.md` and `publish.sh`
+pushes that file into every repo in `REPOS`. **Three of those repos are public.** daemon being
+private contains nothing: the register's whole purpose is to reach the repos it binds, so a name
+typed into a record is a name on public GitHub, and nobody writing a record had reason to know
+that. Measured 2026-10-28 (daemon#974): three named instructors with their individual lesson
+counts were in plain text in a public repository, from a record thirteen days old and `active`.
+
+The attempt caught the day before was caught by a **classifier** firing on [PII Data Handling] —
+not by a rule, and not by the author. Under D-0071 a convention is a gate deployed via a hook or
+it is not a rule, and there was no written convention saying a person's name stays out of a
+record. A control that depends on a general-purpose classifier noticing is a control that has
+already failed six times in this register without anyone hearing about it.
+
+Severity, stated rather than inflated: what was exposed is names with work volumes attached, not
+billing, membership state or contact details. It needed a decision, not an alarm. The decision is
+that the register stops being able to do it.
+
+**Applies to.** Every decision record in every operation's register, and anything generated from
+one. The register's own tooling. Any proposal to loosen the gate to make a record pass.
+
+**Forbids.** A person's name in a record's body, `title` or `source:`. Adding a person's name to
+`TERMS-NOT-PEOPLE` to make a record pass — the refusal is the ask it exists to raise, and the
+allowlist is publishable only because it holds no people. Adding a record to `GRANDFATHERED` for
+anything not already merged, or to spare a record that publishes into a public repo. Editing a
+merged record's decision text to remove a name — supersede it. Making the check a quality fault,
+or skipping it in `--for-publish`, so a slice carrying a name can publish. Giving the check a
+database, a credential or a network call (D-0149 rule 2). A member's phone number, email address
+or member number in a record, which the shape test does not catch and this rule still forbids.
+
+### D-0245 — A session does not describe a checkout it has not caught up with, and the half of "don't assume" a machine can check is the tree, not the sentence
+
+*2026-10-27 · scope: `infrastructure/stale-tree-gate/**, infrastructure/reply-gate/**, infrastructure/daemon-sync/reconcile.sh` · source: Ron, 2026-10-27, after a session made four wrong claims in one day about a repo that decides his tax categories — "Didn't we build a gate from a hook that prevents sessions from making assumptions???" — and then a FIFTH, in the turn that answered him: it reported eight session-stopping hooks from a checkout 563 commits behind origin/main, where there were twelve and eight whole components were missing from the tree it read. His 2026-10-25 ask ("make this hook and ensure that no sessions do this in the future") had already produced reply-gate's `absence-unchecked` rule; this is the remainder of it that does not need a sentence judged.*
+
+**Decision.** Three rules, one cause.
+
+1. **A session does not describe a checkout it has not caught up with.** Two states
+   are refused, and the second was found by fixing the first. **A:** the last fetch
+   is older than the cut, so the session does not know what the repo holds. **B:**
+   the fetch is recent — so the tracking ref is reliable — and it says the tree is
+   twenty or more commits behind. The remedy for A is one `git fetch`; for B it is
+   catching the tree up or saying which tree was read. Either way, naming the
+   staleness in the reply passes.
+   The question the gate asks is **how old is the comparison**, never *am I behind*,
+   because a stale tracking ref answers the second question confidently and wrong.
+   Measured on `club-dashboard` with its `FETCH_HEAD` 203 hours old:
+   `git rev-list --count HEAD..origin/main` said **181** before fetching and **438**
+   after. A gate thresholding on that number reads less than half the gap.
+
+2. **A machine that does not sync is a machine that lies about its repos.** The club
+   mini fetches continuously and all fourteen of its checkouts read 0.0 h; this
+   laptop has no sync job and ten of its seventeen read between 202 h and 533 h, with
+   three never fetched. The gate is the backstop. The cause is the missing
+   LaunchAgent, and until it is installed every session on that machine starts from a
+   tree that is days to weeks out of date.
+
+3. **The half that cannot be gated is named, not papered over.** A wrong *positive*
+   claim made in a *fresh* tree — four of the five failures that produced this record
+   — is refused by nothing, and the measurements say why rather than leaving it to
+   optimism.
+
+**Why.** Three records already say some version of "never assert what the evidence
+cannot support" and all three record that nothing enforces it: D-0083 ("refused by
+nothing; it is read by a reviewer, or it is not read"), D-0097 rule 1 ("no check can
+read a sentence's evidence"), D-0170 rule 3. Ron's 2026-10-25 ask turned the
+*absence* half into a real refusal. Asked on 2026-10-27 whether that gate existed,
+a session answered from a 563-commit-stale tree and got it wrong — which is the
+rule's own subject matter demonstrated on itself, and the one case in five whose
+cause is a fact on disk.
+
+So the split this record makes is between **two different objects**:
+
+- The **tree** is checkable. Fetch age is a number; a read is a tool call; the
+  conjunction is a fact. No phrasing is judged, so there is nothing to tune and
+  nothing to drift.
+- The **sentence** is not, and the attempt is on the record. A prose rule for
+  positive claims about live systems was built and measured against 2,260 real turns
+  on the mini and 533 on the laptop: it fired **2 times** on each corpus, and every
+  hit was a correct reply. A second shape — naming a live table while the turn made
+  no live read — found 53 turns naming one, of which **50 had already queried**, and
+  the three left were all false positives. Two hits in 2,260 turns, both correct, is
+  not a gate; it is noise with a refusal attached, and the fleet's own lesson is that
+  a gate which fires on a correct reply gets switched off (reply-gate dropped three
+  phrasing families the same way). It was not shipped.
+
+The cut is 6 hours because the data has no middle: ten of seventeen repos on this
+laptop sit between 202 h and 533 h, three have never been fetched, and all fourteen
+on the mini read 0.0 h. Two rates, and they are not the same number. Across the
+laptop's 558 turns, 49% fetched, 16% read nothing and **35% read without fetching** —
+the ceiling, reached only where the tree is also stale. But the gate judges a turn's
+closing state, and driven over the final turn of all 39 transcripts that still map to
+a checkout it refused **none**: last turns have usually fetched or read nothing. So
+this is a backstop that should rarely speak, and the 35% is a ceiling, not a
+forecast — said plainly here because quoting it as the fire rate would be the same
+error the record exists to stop.
+
+**What installing the sync revealed, and why rule 1 has two halves.** `fleet-sync`
+fetches every repo and then correctly **declines to fast-forward** one that is dirty
+or on a feature branch. Minutes after it was installed on the laptop, three repos
+sat freshly fetched and far behind — `club-dashboard` 438, `session-manager` 95,
+`wmpc-meta` 43 — a state in which a check on fetch *age* alone reports everything
+fine. So the fix for rule 2 manufactures a second way for a tree to lie, and a gate
+written only against the first would have shipped looking correct and covering less
+than it claimed. The cut of twenty is where the data has its gap: zero for every
+repo the sync could fast-forward, 43 and up for every one it could not.
+
+**Forbids.**
+- Telling Ron what a repo contains, or what it does not contain, from a checkout
+  whose last fetch is older than the cut — without fetching, or without saying in
+  the reply which tree was read and how stale it is.
+- Treating "I did not find it in this checkout" as "it does not exist", which is
+  reply-gate's case 4 ("not in the repos" is not "does not exist") in a second
+  dimension: not in the repos *as this machine last saw them*.
+- Committing in a checkout found to be behind. Write in a worktree
+  (`infrastructure/worktrees/new-worktree.sh`) and open a PR; the `pre-push` shrink
+  guard refuses the truncating push regardless.
+- Claiming, in this record's name or any other, that the assumption problem is
+  solved. Rules 2 and 3 are open gaps with no enforcement, stated here so a later
+  session does not read this file and relax.
+
 ## Proposed (not binding yet)
 
 - D-0153 — The CTO stands up with every repo on a schedule, and the fleet map is a committed artifact (2026-10-12)
 
 ## Superseded (history)
 
+- D-0004 — Migrations are code, applied by CI on merge; the Builder drafts additive and blocks risky (2026-06-07) → superseded by D-0239
 - D-0006 — Pre-launch, PRs deploy to prod only (2026-06-10) → superseded by D-0007
 - D-0011 — A "Tournament Management" income account for the $5 platform fee (2026-08-30) → superseded by D-0012
 - D-0016 — daemon is the architect of record; decisions live in a register and each repo carries its slice (2026-09-16) → superseded by D-0134

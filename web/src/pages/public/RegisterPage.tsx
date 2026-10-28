@@ -738,7 +738,7 @@ export default function RegisterPage() {
     }
 
     for (const ev of addedEvents) {
-      const { eligible, reasons } = checkEligibility(me, ev);
+      const { eligible, reasons } = checkEligibility(me, ev, tournament?.starts_at ?? null);
       if (!eligible) {
         setError(`"${ev.name}": not eligible — ${reasons.join("; ")}.`);
         return;
@@ -1520,7 +1520,7 @@ export default function RegisterPage() {
                 const sel = selections.get(ev.id)!;
                 const existing = existingRegs.get(ev.id);
                 const eligResult = me
-                  ? checkEligibility(me, ev)
+                  ? checkEligibility(me, ev, tournament?.starts_at ?? null)
                   : { eligible: true, reasons: [] as string[] };
                 return (
                   <EventRow

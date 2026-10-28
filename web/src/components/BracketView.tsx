@@ -9,16 +9,14 @@ import { ink, inkSoft, inkMuted, rule, courtBlue, courtYellow, warnBg, bodyFontS
 // and the public Results tab draw the same thing. Zoom buttons scale the
 // canvas; the container scrolls in both directions.
 
-type MatchRow = Database["public"]["Tables"]["matches"]["Row"] & {
-  bracket?: "winners" | "consolation" | "final" | null;
-  slot_key?: string | null;
-  label?: string | null;
-  if_necessary?: boolean | null;
-  feeds_winner_to?: string | null;
-  feeds_winner_side?: "a" | "b" | null;
-  feeds_loser_to?: string | null;
-  feeds_loser_side?: "a" | "b" | null;
-};
+// Every column this draws from (bracket, slot_key, label, if_necessary and the
+// four feeds_* wires) is a real column, so the generated row IS the type. This
+// was an intersection re-declaring each one by hand, which broke the moment the
+// generated types caught up: BracketView narrowed feeds_winner_side to "a"|"b"
+// while the console left it as the column's own string, so TypeScript held the
+// two MatchRows to be unrelated types. Exported so a caller can name the shape
+// instead of deriving its own copy of it.
+export type MatchRow = Database["public"]["Tables"]["matches"]["Row"];
 
 const CARD_W = 220;
 const CARD_H = 66;

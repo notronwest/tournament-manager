@@ -5,6 +5,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments } from "../../components/PendingPaymentsContext";
 import type { Database } from "../../types/supabase";
+import { fetchDependents, playerName } from "../../lib/guardians";
 import {
   regStatusLabel,
   regStatusTone,
@@ -35,6 +36,11 @@ type PartnerStatus = Database["public"]["Enums"]["partner_status"];
 
 type EventReg = {
   id: string;
+  // Null when this is the signed-in player's own entry; the dependent's name
+  // when a guardian entered them (#1169). Also decides whether the withdraw
+  // and refund actions are offered: withdraw_self authorizes strictly as the
+  // registrant, so a guardian pressing it would get a bare "forbidden".
+  registrantName: string | null;
   status: RegistrationStatus;
   partner_status: PartnerStatus;
   event_fee_cents: number;
@@ -180,11 +186,20 @@ export default function MyTournamentsPage() {
 
       const playerId = playerRow.id;
 
+      // The same family set PendingPaymentsContext and CheckoutPage build: a
+      // guardian registers and pays for a dependent, so the dependent's
+      // tournaments are theirs to see here too.
+      const { dependents } = await fetchDependents(playerId);
+      const registrantNames = new Map<string, string | null>([[playerId, null]]);
+      for (const d of dependents) registrantNames.set(d.player.id, playerName(d.player));
+      const payingFor = [playerId, ...dependents.map((d) => d.player.id)];
+
       const { data: rows, error: regsErr } = await supabase
         .from("event_registrations")
         .select(
           `
           id,
+          player_id,
           status,
           partner_status,
           event_fee_cents,
@@ -212,7 +227,7 @@ export default function MyTournamentsPage() {
           )
         `
         )
-        .eq("player_id", playerId)
+        .in("player_id", payingFor)
         .is("deleted_at", null);
 
       if (cancelled) return;
@@ -254,6 +269,7 @@ export default function MyTournamentsPage() {
         }
         group.regs.push({
           id: row.id,
+          registrantName: registrantNames.get(row.player_id) ?? null,
           status: row.status,
           partner_status: row.partner_status,
           event_fee_cents: row.event_fee_cents,
@@ -540,12 +556,23 @@ function TournamentCard({
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {group.regs.map((reg) => {
           const tone = statusTone(reg);
-          const canWithdraw = isWithdrawable(reg.status);
+          // withdraw_self and file_refund_request both resolve the player
+          // from auth.uid() and raise 'forbidden' for anyone else's row, so
+          // these are the player's own entries only. A guardian changes a
+          // dependent's entry through the organizer — said below rather than
+          // offered and refused.
+          const isMine = reg.registrantName === null;
+          const canWithdraw = isMine && isWithdrawable(reg.status);
           const canRequestRefund =
-            reg.status === "withdrawn" && reg.withdrawal_requested_at === null;
+            isMine &&
+            reg.status === "withdrawn" &&
+            reg.withdrawal_requested_at === null;
           return (
             <div key={reg.id} style={regRowStyle}>
-              <span style={eventNameStyle}>{reg.event_name}</span>
+              <span style={eventNameStyle}>
+                {reg.event_name}
+                {reg.registrantName ? ` — ${reg.registrantName}` : ""}
+              </span>
               <div
                 style={{
                   display: "flex",
@@ -584,6 +611,11 @@ function TournamentCard({
                   >
                     Request refund
                   </button>
+                )}
+                {!isMine && isWithdrawable(reg.status) && (
+                  <span style={{ fontSize: 12, color: inkMuted }}>
+                    Ask the organizer to change this
+                  </span>
                 )}
               </div>
             </div>

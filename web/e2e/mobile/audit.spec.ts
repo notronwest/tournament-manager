@@ -54,6 +54,15 @@ async function assertCtaUsable(page: Page, cta: Locator, label: string) {
   ).toBeGreaterThanOrEqual(44);
 }
 
+// No page-wide horizontal overflow (a clipped layout would still pass this, so
+// it is paired with the per-element edge checks in each case).
+async function assertNoPageOverflow(page: Page, label: string) {
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow, `${label}: must not overflow horizontally at 390px`).toBeLessThanOrEqual(0);
+}
+
 // A column that's supposed to stack on mobile must not be squeezed to ~0. A
 // 1fr/320px grid that never collapsed leaves the content column a few dozen
 // px wide and wraps its text one character per line. Floor it.
@@ -184,6 +193,64 @@ test.describe("mobile audit — layout assertions", () => {
     await expect(page.getByText(/this recap isn't available/i)).not.toBeVisible();
     const cta = page.getByRole("link", { name: /create your account/i });
     await assertCtaUsable(page, cta, "recap page — Create your account CTA");
+  });
+
+  // ── Guardian surfaces (#1169), populated: Gwen has one dependent (Kit) with
+  //    a pending registration Gwen made. Each surface must fit 390px with no
+  //    page-wide overflow, and its action must be reachable and tappable.
+  test("profile — My family populated", async ({ page }, ti) => {
+    await loginAs(page, SEED.family.guardianEmail);
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { name: "My family" })).toBeVisible();
+    await expect(page.getByText(SEED.family.dependentName)).toBeVisible();
+    await snap(page, ti, "profile-my-family");
+    await assertNoPageOverflow(page, "Profile My family");
+    await assertCtaUsable(
+      page,
+      page.getByRole("button", { name: /add a child/i }),
+      "My family — Add a child",
+    );
+  });
+
+  test("register tab — Registering-for chooser populated", async ({ page }, ti) => {
+    await loginAs(page, SEED.family.guardianEmail);
+    await gotoRegister(page, SEED.orgSlug, SEED.family.tournamentSlug);
+    await tapClear(page.getByRole("button", { name: /^register$/i }).first());
+    const chooser = page.getByLabel("Registering for");
+    await expect(chooser).toBeVisible();
+    await snap(page, ti, "registering-for-chooser");
+    await assertNoPageOverflow(page, "Registering-for chooser");
+    const box = await chooser.boundingBox();
+    expect(Math.round(box!.x + box!.width), "chooser right edge within viewport").toBeLessThanOrEqual(
+      page.viewportSize()!.width + 1,
+    );
+    expect(Math.round(box!.height), "chooser tap target ≥ 44px").toBeGreaterThanOrEqual(44);
+  });
+
+  test("checkout — family basket populated", async ({ page }, ti) => {
+    await loginAs(page, SEED.family.guardianEmail);
+    await page.goto(`/t/${SEED.orgSlug}/${SEED.family.tournamentSlug}/checkout`);
+    await expect(page.getByText(SEED.family.dependentName).first()).toBeVisible();
+    await snap(page, ti, "checkout-family-basket");
+    await assertNoPageOverflow(page, "Family checkout basket");
+    await assertCtaUsable(
+      page,
+      page.getByRole("button", { name: /continue to payment|confirm registration/i }),
+      "family checkout primary CTA",
+    );
+  });
+
+  test("attendees — By Player sub-lines populated", async ({ page }, ti) => {
+    await loginAs(page, SEED.organizerEmail);
+    await page.goto(`/admin/${SEED.orgSlug}/tournaments/${SEED.family.tournamentSlug}/attendees`);
+    const registeredBy = page.getByText(/registered by gwen/i).first();
+    await expect(registeredBy).toBeVisible();
+    await snap(page, ti, "attendees-sub-lines");
+    await assertNoPageOverflow(page, "Attendees By Player");
+    const box = await registeredBy.boundingBox();
+    expect(Math.round(box!.x + box!.width), "sub-line right edge within viewport").toBeLessThanOrEqual(
+      page.viewportSize()!.width + 1,
+    );
   });
 });
 

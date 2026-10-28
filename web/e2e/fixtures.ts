@@ -80,6 +80,14 @@ export const SEED = {
     viewerEmail: "e2e-mona@wmpc.test", // Mona — read-only view
     withdrawEmail: "e2e-will@wmpc.test", // Will — withdraw test cancels his reg
   },
+  // Guardian + dependent (#1169) — seed.ts §13.
+  family: {
+    tournamentSlug: "e2e-family",
+    guardianEmail: "e2e-gwen-family@wmpc.test", // Gwen
+    dependentName: "Kit Guardian",
+    registerEventName: "E2E Family Doubles B",
+    pendingEventName: "E2E Family Doubles A",
+  },
   invitesView: {
     inviteeEmail: "e2e-vic@wmpc.test", // dedicated invitee — invite never consumed
   },

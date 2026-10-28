@@ -483,7 +483,12 @@ export async function fetchMoveTargets(
   if (cErr) throw new Error(cErr.message);
   if (!current) return [];
 
-  const [{ data: events, error: eErr }, { data: player, error: pErr }, { data: mine, error: mErr }] =
+  const [
+    { data: events, error: eErr },
+    { data: player, error: pErr },
+    { data: mine, error: mErr },
+    { data: tournament },
+  ] =
     await Promise.all([
       supabase
         .from("events")
@@ -499,6 +504,15 @@ export async function fetchMoveTargets(
         .eq("player_id", playerId)
         .in("status", SPOT_HOLDING_STATUSES)
         .is("deleted_at", null),
+      // The age gate measures age on the day of play (#1169), so the reason
+      // shown here has to be computed against the same date the player and
+      // the database trigger use — otherwise an organizer and a player can
+      // read two different answers for the same person.
+      supabase
+        .from("tournaments")
+        .select("starts_at")
+        .eq("id", current.tournament_id)
+        .maybeSingle(),
     ]);
   if (eErr) throw new Error(eErr.message);
   if (pErr) throw new Error(pErr.message);
@@ -524,7 +538,9 @@ export async function fetchMoveTargets(
     feeCents: e.event_fee_cents,
     full: fullness[i],
     alreadyRegistered: taken.has(e.id),
-    ineligibleReasons: player ? checkEligibility(player, e).reasons : [],
+    ineligibleReasons: player
+      ? checkEligibility(player, e, tournament?.starts_at ?? null).reasons
+      : [],
   }));
 }
 
