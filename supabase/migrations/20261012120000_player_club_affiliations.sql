@@ -1,4 +1,12 @@
--- 20261006120000_player_club_affiliations.sql
+-- 20261012120000_player_club_affiliations.sql
+--
+-- Renumbered from 20261006120000 on 2026-10-28. It was authored on 10-06 but
+-- merged (#1091) after 20261011120000 had already been applied, so `db push`
+-- saw a file dated before the head of the remote history, failed closed, and
+-- applied NOTHING on every merge from 10-15 on — this file included, and the
+-- guardian migration behind it. It had never been applied to any database, so
+-- no recorded history pointed at the old version and renumbering forward (the
+-- fix supabase/MIGRATIONS.md prescribes) costs nothing. Closes #1177.
 --
 -- "Plays at <org>" — which players belong to an organization's home club, so
 -- org-facing reports (the tournament summary) can mark home-club teams with a
