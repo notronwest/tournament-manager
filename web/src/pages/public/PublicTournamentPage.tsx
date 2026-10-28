@@ -1701,17 +1701,25 @@ function EventCard({
   const subjectPlayer = subject?.player ?? me;
   const registeringSomeoneElse = subject != null && !subject.isSelf;
 
-  // What to actually DO when the chooser's current pick can't enter. On an
-  // age-capped bracket the way through is the chooser's own add-a-youth
-  // entry, so the advice names it: the design gate caught "Pick a different
-  // event" being handed to a parent who had just tapped "Register a child",
-  // which is the #1182 dead end moved one tap deeper rather than removed.
-  const ageCapped = event.min_age != null || event.max_age != null;
-  const nextMoveHere = ageCapped
-    ? registrants.length > 1
+  // A child added through the chooser's own step is, by definition, a minor.
+  // So a bracket with an ADULT minimum age can never accept one however many
+  // you add, and offering the step there is a false door — the option, the
+  // aged-out CTA and the advice below all hang off this.
+  const youthCanEnterByAge = event.min_age == null || event.min_age < 18;
+
+  // What to actually DO when the chooser's current pick can't enter. Two
+  // sentences, and picking between them is the whole of it: naming the
+  // add-a-youth step only helps when adding a youth is genuinely the way
+  // through. Keyed on the bracket having an age cap alone it was not — on a
+  // 40+ event it offered a move that same gate rejects, and on a skill-bounded
+  // juniors event it told the parent to add a youth, refused the child they
+  // had just added for having no rating, and said to add a youth again.
+  const addYouthClause =
+    registrants.length > 1
       ? 'Pick someone else above, or choose "Add a youth\u2026" to enter a child.'
-      : 'Choose "Add a youth\u2026" above to enter a child.'
-    : registrants.length > 1
+      : 'Choose "Add a youth\u2026" above to enter a child.';
+  const otherRegistrantClause =
+    registrants.length > 1
       ? "Pick someone else above, or a different event."
       : "Pick a different event.";
 
@@ -1726,6 +1734,10 @@ function EventCard({
   const { eligible: subjectEligible, reasons: subjectReasons } = subjectPlayer
     ? checkEligibility(subjectPlayer, event, tournamentStartsAt)
     : { eligible: true, reasons: [] as string[] };
+
+  // Only the age gate is fixable by choosing a younger person. A rating or a
+  // gender refusal follows a brand-new child too, so those keep the old copy.
+  const refusedOnAge = subjectReasons.some((r) => r.startsWith("needs age"));
   // Anyone in the family who qualifies. A juniors bracket is the case this
   // exists for: the parent never qualifies for it, so gating the Register
   // button on the parent alone would leave them no way to reach the chooser
@@ -2652,7 +2664,7 @@ function EventCard({
       const agedOut =
         event.max_age != null &&
         eligibilityReasons.some((r) => r.startsWith("needs age"));
-      if (agedOut) {
+      if (agedOut && youthCanEnterByAge) {
         // The juniors case, and the sharpest form of #1182: the parent can
         // never play this bracket, their child can, and the route to that is
         // now the register form itself — the chooser and its add-a-youth step
@@ -3132,7 +3144,9 @@ function EventCard({
                     {r.isSelf ? `${playerName(r.player)} (you)` : playerName(r.player)}
                   </option>
                 ))}
-                <option value={ADD_YOUTH_VALUE}>Add a youth…</option>
+                {youthCanEnterByAge && (
+                  <option value={ADD_YOUTH_VALUE}>Add a youth…</option>
+                )}
               </select>
             </div>
           )}
@@ -3164,8 +3178,9 @@ function EventCard({
           {editMode === "register" && subjectAlreadyIn && (
             <div style={subjectAlreadyInStyle}>
               <strong>{subjectPlayer?.first_name} is already registered</strong>{" "}
-              for this event. {nextMoveHere} Or ask the organizer if you need
-              their entry changed.
+              for this event.{" "}
+              {youthCanEnterByAge ? addYouthClause : otherRegistrantClause} Or
+              ask the organizer if you need their entry changed.
             </div>
           )}
 
@@ -3181,7 +3196,9 @@ function EventCard({
                 ? registeringSomeoneElse
                   ? "Add their date of birth under My family on your profile."
                   : "Add your date of birth on your profile."
-                : nextMoveHere}
+                : youthCanEnterByAge && refusedOnAge
+                  ? addYouthClause
+                  : otherRegistrantClause}
             </div>
           )}
 
