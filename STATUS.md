@@ -2720,3 +2720,37 @@ Reviewer's third REQUEST CHANGES: a guardian could `update player_guardians set
 dependent_player_id = <any account-less player>` and bypass the add_dependent() guarantee.
 Fixed by narrowing the grant to `update (deleted_at, relationship)` only (reviewer's option a).
 Migration unapplied (CI applies on merge). **Next:** reviewer re-review, then the UX PR.
+
+## 2026-10-28 — Migrations had not reached TEST since 10-15; renumbered the file that wedged them (#1177, PR)
+Ron merged PR #1175 (guardian registrations DB half) and asked to be told when its migration
+was live on TEST. It never applied: the `Migrations` run on the merge commit
+(40580251934) **failed closed and applied nothing**, and so had every migration run since
+2026-10-15 — #1091 (10-15), #1165 (10-19), #1175 (10-27), three in a row.
+`20261006120000_player_club_affiliations.sql` was authored 10-06 but merged after
+`20261011120000` was already applied, so `supabase db push` saw a file dated *before* the
+head of the remote history and refused ("Found local migration files to be inserted before
+the last migration on remote database") — `--include-all` is deliberately not used, because
+it re-applies recorded versions and wedged prod on 2026-06-11.
+
+**Verified against both databases** (Supabase MCP, read-only): TEST and PROD history both end
+at `20261011120000_campaign_registry_and_reporting`; neither has `player_club_affiliations`,
+neither has `player_guardians`. So `web/src/lib/clubAffiliations.ts` has been on `main`
+querying a table that exists nowhere since 10-15.
+
+**Nobody was told because the alert is dead** — the failure step's Discord call returns
+`{"message": "Unknown Webhook", "code": 10015}`. Twelve days of silent fail-closed. Needs its
+own card and a new webhook URL from Ron (a repo Actions secret, `DISCORD_WEBHOOK`).
+
+**Fix** (the one `supabase/MIGRATIONS.md` prescribes — "renumbering the file's timestamp to
+after the head"): `git mv` to `20261012120000_player_club_affiliations.sql`, keeping it ahead
+of the guardian file so authorship order survives. Pure rename, 0 content lines changed;
+updated the stale version in its own header and in the `clubAffiliations.ts` comment. Safe
+because the file had never been applied to any database, so no `schema_migrations` row points
+at the old version. Pending set is now `20261012120000`, `20261027120000` — both above the
+remote head, ascending, which is exactly the condition that was failing.
+
+**Next:** merge the PR → the run should apply both migrations → then regenerate
+`web/src/types/supabase.ts` (it is already stale: missing `schedule_order`,
+`playoff_seeding`, `double_elim_final`, `platform_fee_*`, `schedule_locked_at`,
+`first_events_included`, `resend_audience_id`) → then PR #1176 (guardian UX) is testable on
+TEST against a real table. **Hold #1176 until this one is in.**

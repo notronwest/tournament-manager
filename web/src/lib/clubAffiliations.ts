@@ -2,7 +2,7 @@ import type { PostgrestError } from "@supabase/supabase-js";
 import { supabase } from "../supabase";
 
 // Which players belong to an organization's home club (table
-// player_club_affiliations, migration 20261006120000). Drives the ⭐ on
+// player_club_affiliations, migration 20261012120000). Drives the ⭐ on
 // home-club teams in the tournament summary.
 //
 // The table is newer than the generated types, so it's read through a
