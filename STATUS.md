@@ -2754,3 +2754,46 @@ remote head, ascending, which is exactly the condition that was failing.
 `playoff_seeding`, `double_elim_final`, `platform_fee_*`, `schedule_locked_at`,
 `first_events_included`, `resend_audience_id`) → then PR #1176 (guardian UX) is testable on
 TEST against a real table. **Hold #1176 until this one is in.**
+
+## 2026-10-28 — Regenerated the Supabase types; they were 30 tables behind, and catching up broke the build (#1179, PR)
+After PR #1178 unwedged the pipeline and both migrations applied to TEST, regenerated
+`web/src/types/supabase.ts` — the step `supabase/MIGRATIONS.md` asks for after every apply and
+which had been skipped for long enough that the committed file was **2,326 lines against the
+schema's 3,240**.
+
+Generated against **TEST explicitly** (`gen types typescript --project-id mvkhdsauaqqjehxdnbuf`),
+not `--linked`: on a locally linked machine `--linked` resolves to **PROD**, which is a different
+schema. Same generator shape as the committed file (`__InternalSupabase`, `Relationships`,
+`CompositeTypes` all present), so this is a content catch-up, not a format churn.
+
+**Thirty tables, views and functions were missing**, whole features among them: `account_credits`
+/ `account_credit_balance` / `redeem_account_credit`, `campaigns` / `campaign_events` /
+`record_campaign_event` / the three `campaign_report*`, `contact_broadcasts` /
+`contact_broadcast_recipients`, `organization_contacts`, `manual_payments`, `pbcom_push_ledger` /
+`pbcom_push_state`, `merge_players` / `merge_events` (+ previews), `tournament_setups` /
+`save_setup_by_token`, `sweep_stale_pending_regs`, `tournament_registration_counts`, the three
+`public_tournament_*` RPCs, and the two applied today — `player_club_affiliations` and
+`player_guardians` with `add_dependent`, `is_guardian_of` and
+`event_registrations.registered_by_player_id`. Plus `schedule_order`, `playoff_seeding`,
+`double_elim_final`, `schedule_locked_at`, `first_events_included`, `resend_audience_id`.
+
+**The catch-up broke typecheck, which is the point of doing it.** Two errors, both from the same
+cause: `BracketView`, `EventConsolePage` and `PublicTournamentPage` each defined
+`matches.Row & { bracket?, slot_key?, label?, if_necessary?, feeds_*? }` by hand, back when those
+columns did not exist in the generated row. Now they do — `bracket` as the real `match_bracket`
+enum, `if_necessary` as non-null `boolean`, `feeds_winner_side` as the column's own `string` —
+and because BracketView narrowed `feeds_winner_side` to `"a" | "b"` while the console left it
+alone, TypeScript held the two `MatchRow`s to be unrelated types (TS2322 + TS2719).
+
+Fixed by deleting the hand-written re-declarations in all three files: the generated row IS the
+type now. `BracketView` exports its `MatchRow` and `PublicTournamentPage` imports it rather than
+deriving an identical alias beside it. Net −10 lines of hand-written code. Every call site only
+compares these fields (`=== "a"`), so nothing behavioural changed.
+
+**Verified:** typecheck clean (0 errors), build ✅, **415/415 vitest in 36 files** ✅, lint at the
+unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
+
+**Worth a card, not done here:** `feeds_winner_side` / `feeds_loser_side` are plain `text` in the
+database, so the hand-written `"a" | "b"` narrowing was the only thing typing them. Dropping it
+is correct — the code now matches the column — but the honest fix is a DB enum so the generated
+type carries the constraint. That is a migration, not a types change.
