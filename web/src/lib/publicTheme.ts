@@ -214,6 +214,34 @@ export const ghostButtonStyle: CSSProperties = {
 };
 
 /**
+ * Small inline action — a button that reads as a link, for a benign secondary
+ * move beside a field ("Use my address"). courtBlue rather than the courtRed
+ * of ghostButtonStyle, which the public pages spend on destructive actions.
+ *
+ * The 44px minimum is the tap target DESIGN_PREFERENCES calls a hard rule; it
+ * is carried by the box's height, not by a visible frame, so the control still
+ * reads as a link and is still thumb-sized at 390px. Three pages already
+ * hand-roll this pairing; this is the shared one to reach for from here (and
+ * to migrate those to, which is a sweep of its own).
+ */
+export const inlineActionStyle: CSSProperties = {
+  alignSelf: "flex-start",
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 44,
+  background: "transparent",
+  border: "none",
+  padding: "0 2px",
+  cursor: "pointer",
+  fontFamily: bodyFontStack,
+  fontSize: 13,
+  fontWeight: 600,
+  color: courtBlue,
+  textDecoration: "underline",
+  textUnderlineOffset: 2,
+};
+
+/**
  * Small status pill — ink fill, court-yellow label, IBM Plex Mono.
  * Mirrors the cards on the homepage. Use for "Registration open",
  * "Doubles", "Awaiting partner", etc.

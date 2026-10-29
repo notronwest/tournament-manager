@@ -12,28 +12,47 @@ import { courtRed, inkSoft } from "../lib/publicTheme";
 export function Field({
   label,
   required,
+  htmlFor,
   children,
 }: {
   label: string;
   required?: boolean;
+  // Switches from a wrapping <label> to an explicit label/control pair.
+  // Needed whenever the field holds a SECOND interactive control beside the
+  // input — a wrapping label labels every labelable control inside it, so the
+  // input's accessible name silently swallows that control's text and the
+  // helper paragraph with it. Pass the input's own id.
+  htmlFor?: string;
   children: ReactNode;
 }) {
+  const boxStyle = {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 4,
+    fontSize: 12,
+    color: inkSoft,
+    flex: "1 1 160px",
+    minWidth: 0,
+  };
+  const labelText = (
+    <>
+      {label}
+      {required && <span style={{ color: courtRed, marginLeft: 4 }}>*</span>}
+    </>
+  );
+
+  if (htmlFor) {
+    return (
+      <div style={boxStyle}>
+        <label htmlFor={htmlFor}>{labelText}</label>
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <label
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        fontSize: 12,
-        color: inkSoft,
-        flex: "1 1 160px",
-        minWidth: 0,
-      }}
-    >
-      <span>
-        {label}
-        {required && <span style={{ color: courtRed, marginLeft: 4 }}>*</span>}
-      </span>
+    <label style={boxStyle}>
+      <span>{labelText}</span>
       {children}
     </label>
   );

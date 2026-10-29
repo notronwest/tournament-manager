@@ -172,16 +172,12 @@ export async function addDependent(args: {
     };
   }
 
-  // citext, so the stored value compares case-insensitively and there is
-  // nothing to lower-case here. Blank is sent as no address at all.
+  // Blank is sent as no address at all.
   const email = (args.email ?? "").trim();
   let emailError: string | null = null;
   if (email) {
-    const { error: emailErr } = await supabase
-      .from("players")
-      .update({ email })
-      .eq("id", newId as string);
-    emailError = emailErr?.message ?? null;
+    const { error: emailErr } = await setDependentEmail(newId as string, email);
+    emailError = emailErr;
   }
 
   // Read the pair back rather than assembling it from the arguments, so the
@@ -197,6 +193,22 @@ export async function addDependent(args: {
     };
   }
   return { dependent, error: null, emailError };
+}
+
+// The address write on its own, so a form that got half of the pair can retry
+// THAT half rather than the whole call — repeating addDependent would add a
+// second child. The policy branch is the same one described above; citext, so
+// the stored value compares case-insensitively and there is nothing to
+// lower-case here.
+export async function setDependentEmail(
+  dependentPlayerId: string,
+  email: string,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("players")
+    .update({ email: email.trim() })
+    .eq("id", dependentPlayerId);
+  return { error: error?.message ?? null };
 }
 
 // Retires the link, not the player. The child's own row and any history stay

@@ -130,6 +130,7 @@ export default function ProfilePage() {
   const [dependents, setDependents] = useState<Dependent[]>([]);
   const [familyLoading, setFamilyLoading] = useState(false);
   const [addChildOpen, setAddChildOpen] = useState(false);
+  const [familyAddedNoEmail, setFamilyAddedNoEmail] = useState(false);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [familyAdded, setFamilyAdded] = useState<string | null>(null);
   const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
@@ -242,13 +243,17 @@ export default function ProfilePage() {
   // What this page does once the shared form has made the child: fold them
   // into the family list and say so. The validation and the write itself live
   // in AddChildForm, which the register form mounts too.
-  const onChildAdded = (dependent: Dependent) => {
+  const onChildAdded = (dependent: Dependent, opts?: { emailMissing?: boolean }) => {
     setFamilyError(null);
     setFamilyRemoved(null);
     setDependents((prev) =>
       [...prev, dependent].sort((a, b) => playerName(a.player).localeCompare(playerName(b.player))),
     );
     setFamilyAdded(playerName(dependent.player));
+    // The parent asked for an address and carried on without it. "Added" is
+    // true, "it worked" is not, so the panel drops to a warning and names the
+    // one move this screen offers — the Remove control is on the row above.
+    setFamilyAddedNoEmail(opts?.emailMissing === true);
     setAddChildOpen(false);
   };
 
@@ -901,9 +906,11 @@ export default function ProfilePage() {
               <div style={statusPanelStyle("danger")}>{familyError}</div>
             )}
             {familyAdded && (
-              <div style={statusPanelStyle("success")}>
+              <div style={statusPanelStyle(familyAddedNoEmail ? "warn" : "success")}>
                 {familyAdded} is on your family list. You can register them from
                 any tournament page.
+                {familyAddedNoEmail &&
+                  " Their email address didn’t save, so notices about their registration reach nobody — remove them below and add them again to set one."}
               </div>
             )}
             {familyRemoved && (

@@ -15,16 +15,15 @@
 // sharing it. The date-of-birth rule in particular is a product rule with a
 // reason attached — not a database constraint — and two copies of it would
 // drift the moment one host's wording changed.
-import { useState, type CSSProperties, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { Field, FieldRow } from "./Field";
-import { addDependent, type Dependent } from "../lib/guardians";
+import { addDependent, setDependentEmail, type Dependent } from "../lib/guardians";
 import {
-  bodyFontStack,
-  courtBlue,
   ctaPrimaryDisabledStyle,
   ctaPrimaryStyle,
   ctaSecondaryStyle,
   inkMuted,
+  inlineActionStyle,
   inputStyle,
   statusPanelStyle,
 } from "../lib/publicTheme";
@@ -44,7 +43,9 @@ export function AddChildForm({
   guardianEmail?: string | null;
   // Handed the new dependent so the host can fold it into its own family
   // list — and, on the register form, select the child as the registrant.
-  onAdded: (dependent: Dependent) => void;
+  // emailMissing says the parent asked for an address and chose to carry on
+  // without it, so the host can say "added" without claiming it all worked.
+  onAdded: (dependent: Dependent, opts?: { emailMissing?: boolean }) => void;
   onCancel: () => void;
   variant?: "page" | "inline";
 }) {
@@ -55,13 +56,14 @@ export function AddChildForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The child saved but their optional address didn't (#1186). Two writes, so
-  // this state is reachable: the row exists, which makes it a thing to report
-  // rather than a failure to retry — pressing Save again would add a second
-  // child. So the form stops offering Save and offers the way onward instead.
-  const [savedWithoutEmail, setSavedWithoutEmail] = useState<{
-    dependent: Dependent;
-    reason: string;
-  } | null>(null);
+  // this state is reachable: the row exists, which makes pressing Save again
+  // the wrong move — it would add a second child. So the form stops offering
+  // Save and offers the half that actually failed, on its own.
+  const [savedWithoutEmail, setSavedWithoutEmail] = useState<Dependent | null>(
+    null,
+  );
+  const [retryFailed, setRetryFailed] = useState(false);
+  const emailId = useId();
 
   const inline = variant === "inline";
 
@@ -107,7 +109,10 @@ export function AddChildForm({
       return;
     }
     if (emailError) {
-      setSavedWithoutEmail({ dependent, reason: emailError });
+      // The raw message is for whoever is reading the console — an RLS
+      // sentence or an envoy reset is not something to hand a parent.
+      console.error("add child: email write failed", emailError);
+      setSavedWithoutEmail(dependent);
       return;
     }
     setFirst("");
@@ -117,37 +122,73 @@ export function AddChildForm({
     onAdded(dependent);
   };
 
-  // The child exists; only the address is missing. Nothing here offers to save
-  // again — the one honest move is to say so and carry on into whatever the
-  // host was doing, which for the register form is the registration itself.
+  // The child exists; only the address is missing. The primary move is the
+  // one write that failed, retried on its own — that is a move this screen
+  // can actually perform, where "go and edit them somewhere" is not: no
+  // player-facing screen edits a dependent's address (an organizer can, from
+  // the admin player page; the parent-facing gap is the same missing screen
+  // as #1183). Carrying on is the secondary, and it is labelled for what it
+  // costs so the host can report it as something short of success.
   if (savedWithoutEmail) {
-    const { dependent, reason } = savedWithoutEmail;
+    const dependent = savedWithoutEmail;
     const name = dependent.player.first_name ?? "Your child";
+    const clear = () => {
+      setSavedWithoutEmail(null);
+      setRetryFailed(false);
+      setFirst("");
+      setLast("");
+      setDob("");
+      setEmail("");
+    };
+    const onRetry = async () => {
+      setBusy(true);
+      const { error: retryErr } = await setDependentEmail(dependent.player.id, email);
+      setBusy(false);
+      if (retryErr) {
+        console.error("add child: email retry failed", retryErr);
+        setRetryFailed(true);
+        return;
+      }
+      // Carry the stored address on the row the host is about to show, so the
+      // family list doesn't need a second read to catch up.
+      const withEmail: Dependent = {
+        ...dependent,
+        player: { ...dependent.player, email: email.trim() },
+      };
+      clear();
+      onAdded(withEmail);
+    };
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {/* Names the consequence and one move that actually exists. There is
-            no screen anywhere that edits a dependent's address (the same gap
-            as #1183), so this must not send the parent looking for one. */}
         <div style={{ ...statusPanelStyle("warn"), fontSize: 13 }}>
           <strong>{name} was added</strong>, but their email address
-          didn&rsquo;t save ({reason}). Without one, notices about their
-          registration reach nobody &mdash; remove them from My family and add
-          them again to set it.
+          didn&rsquo;t save. Without one, notices about their registration
+          reach nobody.
+          {retryFailed && " That didn't work either — the save keeps failing."}
         </div>
-        <div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
             type="button"
-            onClick={() => {
-              setSavedWithoutEmail(null);
-              setFirst("");
-              setLast("");
-              setDob("");
-              setEmail("");
-              onAdded(dependent);
-            }}
-            style={ctaPrimaryStyle}
+            onClick={onRetry}
+            disabled={busy}
+            style={busy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
           >
-            Continue
+            {busy ? "Saving…" : retryFailed ? "Try once more" : "Try again"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              clear();
+              onAdded(dependent, { emailMissing: true });
+            }}
+            style={
+              busy
+                ? { ...ctaSecondaryStyle, opacity: 0.6, cursor: "not-allowed" }
+                : ctaSecondaryStyle
+            }
+          >
+            Continue without it
           </button>
         </div>
       </div>
@@ -218,8 +259,12 @@ export function AddChildForm({
           the format check to the browser, which already does it and says so
           in the user's own language. */}
       <FieldRow>
-        <Field label="Email address (optional)">
+        {/* htmlFor rather than a wrapping label: this field holds a second
+            control, and a wrapping label would fold "Use my address" and the
+            helper sentence into the input's accessible name. */}
+        <Field label="Email address (optional)" htmlFor={emailId}>
           <input
+            id={emailId}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -233,7 +278,7 @@ export function AddChildForm({
               type="button"
               onClick={() => setEmail(mine)}
               disabled={busy}
-              style={useMineStyle}
+              style={inlineActionStyle}
             >
               Use my address
             </button>
@@ -272,19 +317,3 @@ export function AddChildForm({
     </form>
   );
 }
-
-// The small benign inline action already used on the profile page (the
-// password explainer toggle): courtBlue and underlined, not the courtRed of
-// ghostButtonStyle, which this page spends on Remove.
-const useMineStyle: CSSProperties = {
-  alignSelf: "flex-start",
-  background: "transparent",
-  border: "none",
-  padding: 0,
-  cursor: "pointer",
-  fontFamily: bodyFontStack,
-  fontSize: 12,
-  color: courtBlue,
-  textDecoration: "underline",
-  textUnderlineOffset: 2,
-};
