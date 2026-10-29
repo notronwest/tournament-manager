@@ -3210,3 +3210,30 @@ registered the child through the ordinary register form with no organizer — `p
 `registered_by_player_id` set. The organizer's player page still renders and writes through
 the shared controls. 435 tests, typecheck, build; lint one error **below** the `origin/main`
 baseline (34/30 vs 35/31).
+
+**Design gate — three rounds (FAIL, PASS, and one more because the PASS left a hole).**
+
+1. **FAIL `41d300fa0dc6a08b`** (3), all in this branch's own new surface, and two of them
+   defects in my own additions. The `fill` branch set `padding: 0` *before*
+   `padding: "0 10px"`, so it was overridden: every chip in the per-child editor kept 10px
+   each side inside the 46px it had been given, leaving a 23px content box, and all 18 split
+   their value across two lines ("2." over "5"). Saving collapsed a ~420px editor with no
+   confirmation and left the row that changed 192px above the viewport, so Save and Cancel
+   left the screen identical. And the refusal panel's advice was flat prose while the same
+   component's collapsed card rendered the identical sentence as a link with `?return=`.
+2. **PASS `e20fb357889c8257`**, 0 findings — chips one row at 46.2 × 46 with a 43px content
+   box, the saved row marked and scrolled to centre, the panel advice a 44px link inheriting
+   the panel's ink at 6.8:1.
+3. **Round 3 `1849389893dc347b`** — the PASS round's nit (the `Saved` mark was never
+   cleared, so it sat above a reopened editor and outlived a Cancel; every open and close now
+   goes through one closer), plus a defect that only appeared once the last branch could be
+   *rendered*: the collapsed card's "fix it and come back" link was **18px** tall and set
+   never to wrap, and in the state that renders it the card has no Register button, so that
+   link is its only action. Now 44px and wrapping — its label names however many blanks the
+   player is missing, and "Add a rating and a gender to register" is wider than a 390px card.
+
+**What the gate could not see for two rounds, and why.** No fixture event paired a skill or
+gender bound with **no age cap**, so an adult always landed on the aged-out "Register a
+child" route and the self-gap branch never rendered — both critics graded it from code and
+said so. Adding such an event locally is what exposed the 18px link. A fixture event with a
+skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in here.
