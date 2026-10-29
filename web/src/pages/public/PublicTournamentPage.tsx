@@ -16,7 +16,12 @@ import { usePendingPayments, type PendingTournamentGroup } from "../../component
 import { formatUsd } from "../../lib/pricing";
 import { parseDescription } from "../../lib/descriptionBlocks";
 import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
-import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
+import {
+  checkEligibility,
+  eligibilityChips,
+  listPhrase,
+  profileGaps,
+} from "../../lib/eligibility";
 import {
   asRegistrationInsert,
   fetchDependents,
@@ -1738,6 +1743,13 @@ function EventCard({
   // Only the age gate is fixable by choosing a younger person. A rating or a
   // gender refusal follows a brand-new child too, so those keep the old copy.
   const refusedOnAge = subjectReasons.some((r) => r.startsWith("needs age"));
+  // What the person looking at this card can go and fill in to clear the
+  // refusal — and whether filling it in is actually enough (#1183). Both
+  // questions are answered where the rule lives, so this card cannot promise
+  // a move the gate would refuse anyway.
+  const subjectGaps = subjectPlayer
+    ? profileGaps(subjectPlayer, event, tournamentStartsAt)
+    : { fields: [] as string[], coversEverything: false };
   // Anyone in the family who qualifies. A juniors bracket is the case this
   // exists for: the parent never qualifies for it, so gating the Register
   // button on the parent alone would leave them no way to reach the chooser
@@ -2625,45 +2637,21 @@ function EventCard({
     if (!registrationOpen) return null;
     if (expanded) return null;
     if (me && !playerEligible && eligibleRegistrants.length === 0) {
-      // An UNSET gender on a single-gender event is fixable — point the
-      // player at their profile instead of a dead-end "Not eligible." A
-      // *set-but-wrong* gender (e.g. M on a women's event) stays a plain
-      // block: they've declared a gender, so this bracket isn't theirs.
-      const genderUnset = me.gender == null;
-      const isGenderedEvent =
-        event.gender === "men" || event.gender === "women";
-      if (genderUnset && isGenderedEvent) {
-        return (
-          <Link
-            to={`/profile?return=${encodeURIComponent(
-              `/t/${orgSlug}/${tournamentSlug}`,
-            )}`}
-            style={notEligibleLinkStyle}
-          >
-            Set your gender to register →
-          </Link>
-        );
-      }
-      // A missing date of birth is fixable in one screen, exactly like an
-      // unset gender — so it gets the same treatment rather than a grey line
-      // with no next move. The copy that explains it lives inside the
-      // register form, which this player can never open.
       const profileLink = `/profile?return=${encodeURIComponent(
         `/t/${orgSlug}/${tournamentSlug}`,
       )}`;
-      const needsDob = eligibilityReasons.some((r) => r.includes("date of birth"));
-      if (needsDob) {
-        return (
-          <Link to={profileLink} style={notEligibleLinkStyle}>
-            Add your date of birth to register →
-          </Link>
-        );
-      }
       // An age-capped bracket the player has aged out of is the juniors case:
       // the product CAN enter their child, and the only route to that is the
       // family list on their profile. Saying nothing here is what left a
       // parent staring at "Not eligible" on the one bracket this feature was
       // built for.
+      //
+      // This is checked FIRST, before the links that send a player to their
+      // own profile (#1183). On a boys' 18-and-under bracket an adult with no
+      // gender on file was offered "Set your gender to register", and setting
+      // it leaves them refused for their age — a link whose own destination
+      // cannot clear the refusal. Adding a child is the move whenever the
+      // parent has aged out and a child could enter, whatever else is blank.
       const agedOut =
         event.max_age != null &&
         eligibilityReasons.some((r) => r.startsWith("needs age"));
@@ -2704,6 +2692,19 @@ function EventCard({
               {someoneIn ? "Register another child" : "Register a child"}
             </button>
           </div>
+        );
+      }
+      // What the player themselves is missing, offered as the one link that
+      // clears it — but only when filling it in is genuinely enough. A gender
+      // set to the other one, or a rating outside the bracket's range, is not
+      // a blank to fill and gets the plain refusal below: a link that leads
+      // to a screen which cannot help is worse than no link.
+      const myGaps = profileGaps(me, event, tournamentStartsAt);
+      if (myGaps.coversEverything) {
+        return (
+          <Link to={profileLink} style={notEligibleLinkStyle}>
+            Add {listPhrase(myGaps.fields)} to register →
+          </Link>
         );
       }
       if (dependentsAlreadyIn.length > 0) {
@@ -3196,12 +3197,17 @@ function EventCard({
                   : "You can't enter this event"}
                 : {subjectReasons.join("; ")}.
               </strong>{" "}
-              {subjectReasons.some((r) => r.includes("date of birth"))
-                ? registeringSomeoneElse
-                  ? "Add their date of birth under My family on your profile."
-                  : "Add your date of birth on your profile."
-                : youthCanEnterByAge && refusedOnAge
-                  ? addYouthClause
+              {/* Age first: when a younger registrant is the way through,
+                  that is the move, whatever else is also blank. Then the
+                  blanks, but only when filling them in is genuinely enough —
+                  profileGaps answers both halves, so this card never names a
+                  field the gate would refuse anyway. */}
+              {youthCanEnterByAge && refusedOnAge
+                ? addYouthClause
+                : subjectGaps.coversEverything
+                  ? registeringSomeoneElse
+                    ? `Add ${listPhrase(subjectGaps.fields)} for ${subjectPlayer?.first_name} under My family on your profile.`
+                    : `Add ${listPhrase(subjectGaps.fields)} on your profile.`
                   : otherRegistrantClause}
             </div>
           )}

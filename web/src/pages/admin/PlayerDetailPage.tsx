@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, type CSSProperties } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { impersonatePlayer } from "../../lib/impersonation";
 import { sendLoginLink, resendWelcome } from "../../lib/onboardPlayer";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { RatingPicker } from "../../components/RatingPicker";
+import { RatingFields } from "../../components/RatingFields";
+import { GenderSelect } from "../../components/GenderSelect";
 import {
   RegistrationEditorModal,
   type EditableRegistration,
@@ -106,12 +107,6 @@ async function fnError(fnErr: unknown): Promise<string> {
 }
 
 // Mirror ProfilePage.parseRating: blank → null, clamp to [0, 9.99].
-const ratingRowLabelStyle: CSSProperties = {
-  fontSize: 12.5,
-  fontWeight: 600,
-  color: inkSoft,
-  marginBottom: 8,
-};
 
 
 const fmtDate = (iso: string | null) =>
@@ -521,16 +516,11 @@ function ProfileSection({
           <input value={phone} onChange={(e) => { setPhone(e.target.value); setSaved(false); }} style={fieldInput} />
         </Field>
         <Field label="Gender">
-          <select
+          <GenderSelect
             value={gender}
-            onChange={(e) => { setGender(e.target.value as Gender | ""); setSaved(false); }}
+            onChange={(v) => { setGender(v); setSaved(false); }}
             style={{ ...fieldInput, height: 38 }}
-          >
-            <option value="">—</option>
-            <option value="M">Male</option>
-            <option value="F">Female</option>
-            <option value="X">Other / prefer not to say</option>
-          </select>
+          />
         </Field>
         <Field label="City">
           <input value={city} onChange={(e) => { setCity(e.target.value); setSaved(false); }} style={fieldInput} />
@@ -540,42 +530,20 @@ function ProfileSection({
         </Field>
       </div>
 
-      {/* Mirrors ProfilePage's rating block — one control, one scale, one
-          set of words, whether the player or an organizer sets it. */}
-      <div style={{ fontSize: 13, color: ink, margin: "20px 0 4px" }}>
-        <strong>Self-reported rating</strong>{" "}
-        <span style={{ color: inkMuted }}>
-          (optional — helps organizers seed brackets; tap a level, tap again to clear)
-        </span>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
-        <div>
-          <div style={ratingRowLabelStyle}>Doubles (same-gender)</div>
-          <RatingPicker
-            value={ratingDoubles}
-            onChange={(v) => { setRatingDoubles(v); setSaved(false); }}
-            disabled={saving}
-            ariaLabel="Doubles self-rating"
-          />
-        </div>
-        <div>
-          <div style={ratingRowLabelStyle}>Mixed doubles</div>
-          <RatingPicker
-            value={ratingMixed}
-            onChange={(v) => { setRatingMixed(v); setSaved(false); }}
-            disabled={saving}
-            ariaLabel="Mixed doubles self-rating"
-          />
-        </div>
-        <div>
-          <div style={ratingRowLabelStyle}>Singles</div>
-          <RatingPicker
-            value={ratingSingles}
-            onChange={(v) => { setRatingSingles(v); setSaved(false); }}
-            disabled={saving}
-            ariaLabel="Singles self-rating"
-          />
-        </div>
+      {/* The same rating block the player's own profile shows, from the one
+          file (D-0049) — one control, one scale, one set of words, whether
+          the player or an organizer sets it. */}
+      <div style={{ marginTop: 20 }}>
+        <RatingFields
+          values={{ doubles: ratingDoubles, mixed: ratingMixed, singles: ratingSingles }}
+          onChange={(f, v) => {
+            if (f === "doubles") setRatingDoubles(v);
+            else if (f === "mixed") setRatingMixed(v);
+            else setRatingSingles(v);
+            setSaved(false);
+          }}
+          disabled={saving}
+        />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>

@@ -218,6 +218,65 @@ export async function setDependentEmail(
   return { error: error?.message ?? null };
 }
 
+// The one rule about a dependent's date of birth, and the one wording for it.
+//
+// Not a database rule — the row saves without one. But a child added for a
+// juniors bracket with no date of birth is a registration refused later for a
+// reason nobody can see, so the field is required wherever a guardian can
+// write it. Both places are now writable (the add form and the row editor on
+// My family), and a row editor that accepted a blank would quietly undo what
+// the add form insisted on — which is why this is a function and not a rule
+// typed out twice.
+export function dependentDobError(dob: string): string | null {
+  return dob.trim()
+    ? null
+    : "A date of birth is needed so age-restricted brackets can check it.";
+}
+
+// The rest of what a bracket checks, written as one update (#1183).
+//
+// A child added through add_dependent() has a name and a date of birth and
+// nothing else, and nothing anywhere could give them more: the rating pickers
+// on the profile page write the signed-in player's own columns, and the add
+// form collects no gender. So a skill-bounded division refused the child "no
+// doubles self-rating on file" and a girls' bracket refused them "women's
+// event", with no control the parent could reach — the youth path finished
+// only on open-skill, mixed and open events.
+//
+// Same policy branch as setDependentEmail: the guardian migration's "players
+// update by self or related org" has an is_guardian_of() arm for a guardian
+// maintaining a dependent's profile, row-level over every column bar
+// auth_user_id, which its `with check` pins to null. No migration, and
+// nothing here the policy did not already intend.
+//
+// One update rather than a call per field, so a parent who sets a rating and
+// a gender together cannot end up with half of it stored. Every value is
+// sent, nulls included: clearing a rating is a real move (tapping the
+// selected chip clears it), so an undefined-means-leave-it shape would make
+// "no rating" unreachable once one had been set.
+export async function setDependentProfile(
+  dependentPlayerId: string,
+  values: {
+    dob: string | null;
+    gender: Database["public"]["Enums"]["player_gender"] | null;
+    doubles: number | null;
+    mixed: number | null;
+    singles: number | null;
+  },
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("players")
+    .update({
+      dob: values.dob,
+      gender: values.gender,
+      self_rating_doubles: values.doubles,
+      self_rating_mixed: values.mixed,
+      self_rating_singles: values.singles,
+    })
+    .eq("id", dependentPlayerId);
+  return { error: error?.message ?? null };
+}
+
 // Retires the link, not the player. The child's own row and any history stay
 // where they are — this is the soft delete the table was built for, and it is
 // what lets the same child later claim their own account. (Re-adding the same
