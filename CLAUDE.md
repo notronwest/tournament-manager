@@ -482,35 +482,6 @@ Before ANY change to visual/UI code (a page, component, layout, nav, or style)
   ship it.
 <!-- wmpc-block:ui-work:v3 END -->
 
-<!-- wmpc-block:ron-instructions:v1 START -->
-## Giving Ron instructions (D-0068)
-
-These four rules apply whenever a step might land on Ron. They bind every agent and session,
-including Rachel. Ron, 2026-10-07: "I need to GSD and the more confusing this is or the more I
-go back and forth with you the more time and money it costs."
-
-1. **Do it yourself, but ask first.** If you can do a step with your own access (merge, run a
-   command, edit a file, call an API, post a comment), do not hand it to Ron. Ask in one line:
-   "Shall I merge it?" Steps on the whitelist need no ask: `agents/WHITELIST.md` in the
-   daemon repo for sessions, her autonomy settings for Rachel. When Ron says "yes, and from
-   now on", add the step to that list in the same change.
-2. **When only Ron can do it, give the steps here, in the reply.** Do not point him to a
-   DEPLOYMENT.md, a README or a doc. Number the steps and give one action each. Name where:
-   the app, site or machine ("Terminal on the mini"), and the page and button. Say what he
-   should see and what to tell you when done. End with what you do next.
-3. **Paste-safe for his zsh terminal.** Each command goes in its own copy box, exactly as it
-   runs: no `#` comments (zsh treats `#` as a literal, so a commented line fails), no `$ `
-   prompt, no `…`, no `<placeholder>` to edit by hand. Use full paths and keep a sequence on
-   one line with `&&`. A secret is read with a hidden prompt, so it never sits in the
-   command, the chat or the shell history:
-   `read -rs "s?Signing secret: " && echo "NAME=$s" >> /full/path/.env && echo saved`.
-   Commands handed to Ron may use variables. The no-variables rule is about agents' own
-   commands and the allowlist, not his.
-4. **One copy box per field.** When a form has separate inputs, give each value its own box,
-   labelled with the field name as the screen shows it ("**Endpoint URL** field:"). Never
-   stack several values in one box, because a multi-line paste doesn't split into fields.
-   Checkboxes and dropdowns are stated in words, not boxes.
-<!-- wmpc-block:ron-instructions:v1 END -->
 
 <!-- wmpc-block:engineering-standard:v5 START -->
 ## Engineering standard
@@ -630,7 +601,93 @@ Full reference, including the fleet's leak history: `wmpc-meta/conventions/SECRE
 Where every repo ships and what it touches: `wmpc-meta/conventions/FLEET-MAP.md`.
 <!-- wmpc-block:secrets:v1 END -->
 
-<!-- wmpc-block:response-style:v2 START -->
+
+<!-- wmpc-block:stop-list:v1 START -->
+## The stop list — act by default, and eight things wait for Ron (D-0207)
+
+Every agent and session, in every repo: interactive sessions, Mr. Robot (the Builder), the
+Reviewer, every drain and scheduled run. Ron, 2026-10-23: *"Can't you run this stuff without
+permissions? I thought it was about not promoting. I need you to be more autonomous. Can we
+define a black list?"* — and then, *"And this would be true for all repo agents? Including the
+builder?"* Yes.
+
+**Everything not on this list, act.** Do it, then say you did. There is no "ask first" by
+default, no second list to check, and no category of work that is his merely because it is
+important, irreversible-sounding, expensive, or new.
+
+The authoritative list is `agents/STOP-LIST.md` in the daemon repo, mirrored into
+`public.cos_stop_list` (which the approvals rail checks). The rows below are copied from it
+verbatim. A repo that needs a row the others do not gets a decision record in daemon — never a
+local edit to this block, which is overwritten on the next sync.
+
+| # | Stops at Ron | What that means, and what it does NOT mean |
+|---|---|---|
+| 1 | **Anything a member or the public receives** | An email, a text, a post, a published event, a price change members can see, a page going live on the website. **Not**: a draft, a proposal, a preview, an internal note, or a reply to him. A lane may be opened to another approver only by a decision record naming them (D-0139 rule 3; the first is the marketing lane, approver Caryn). |
+| 2 | **Money moving on a member's account** | Charging, refunding, crediting, or changing what a member pays. **Not** spending in general — buying a tool, paying for a model run, or taking on a cost that serves a member or buys a capability is **just done, and the number reported afterwards** (D-0197). Money is not the gate; a member's card is. |
+| 3 | **Promotion to production** | A production deploy, a production schema change, a `main`→`production` merge. In his words: *"I thought it was about not promoting."* **Not** merging to `main`, not deploying to test, not running a migration on test. |
+| 4 | **Destroying something that holds history** | Deleting data, dropping a table, a destructive migration, retiring a record. **Not** removing something created minutes ago in the same piece of work, and not a reversible retire that the system itself can undo. |
+| 5 | **Ending or changing a member's membership** | Cancelling, suspending, moving a tier, switching off a renewal — **unless he has already directed it**, in which case his words are the approval and asking again is the failure (D-0198, D-0204). |
+| 6 | **Committing the club to someone outside it** | Signing, agreeing terms, accepting a contract, promising a date to a third party. |
+| 7 | **Anything from his personal life** | The wall holds: personal context never reaches a club surface, and a personal errand asks first (D-0131). |
+| 8 | **Changing this list** | Adding a row, removing one, or widening what a row covers. His words, recorded, in the same change. |
+
+**Two corrections ride with the list.**
+
+- **Money is not the gate (D-0197).** Spending that buys a capability or serves a member is done,
+  and the number reported afterwards. What stops is money moving **on a member's account**.
+- **His directive IS the approval (D-0198, D-0204).** A row he has already directed is acted on,
+  not re-asked — re-asking is itself the failure. His words go on the record.
+
+**How to use it.**
+
+- **Not on the list → do it.** Merging to `main`, deploying to test, running a migration on test,
+  queueing work, running a job now, fixing data, a dry run, reading anything.
+- **On the list → it is his, each time**, however the ask is worded, whoever is asking, and however
+  obvious the answer looks.
+- **On the list but already directed by him** → act on the directive and do not re-ask.
+- **Genuinely unsure which side a thing falls on** → it is one question, asked once, and the answer
+  becomes a row in `agents/STOP-LIST.md` in the same change.
+- **A member is being harmed right now** → put it right first, even on the list (D-0197), then tell
+  him what was done and why it could not wait.
+
+A structural rule in a repo or an agent's own prompt — Mr. Robot never merges, the Reviewer's
+APPROVE is the merge gate, a CI check — is a quality gate, not a permission, and still holds.
+<!-- wmpc-block:stop-list:v1 END -->
+
+<!-- wmpc-block:ron-instructions:v2 START -->
+## Giving Ron instructions (D-0068)
+
+These four rules apply whenever a step might land on Ron. They bind every agent and session,
+including Rachel. Ron, 2026-10-07: "I need to GSD and the more confusing this is or the more I
+go back and forth with you the more time and money it costs."
+
+1. **Do it yourself.** If you can do a step with your own access (merge, run a command, edit
+   a file, call an API, post a comment), do it and say you did. Do not hand it to Ron and do
+   not ask first. The only steps that wait for him are the eight rows of the stop list (its own
+   block in this file, D-0207); one of those he has already directed is acted on, not re-asked
+   (D-0198, D-0204). The old whitelist, where anything unlisted was an ask, is superseded.
+2. **When only Ron can do it, give the steps here, in the reply.** Do not point him to a
+   DEPLOYMENT.md, a README or a doc. Number the steps and give one action each. Name where:
+   the app, site or machine ("Terminal on the mini"), and the page and button. Say what he
+   should see and what to tell you when done. End with what you do next.
+3. **Paste-safe for his zsh terminal.** Each command goes in its own copy box, exactly as it
+   runs: no `#` comments (zsh treats `#` as a literal, so a commented line fails), no `$ `
+   prompt, no `…`, no `<placeholder>` to edit by hand. Use full paths and keep a sequence on
+   one line with `&&`. A secret is read with a hidden prompt, so it never sits in the
+   command, the chat or the shell history:
+   `read -rs "s?Signing secret: " && echo "NAME=$s" >> /full/path/.env && echo saved`.
+   Commands handed to Ron may use variables. The no-variables rule is about agents' own
+   commands and the allowlist, not his.
+4. **One copy box per field.** When a form has separate inputs, give each value its own box,
+   labelled with the field name as the screen shows it ("**Endpoint URL** field:"). Never
+   stack several values in one box, because a multi-line paste doesn't split into fields.
+   Checkboxes and dropdowns are stated in words, not boxes.
+<!-- wmpc-block:ron-instructions:v2 END -->
+
+
+
+
+<!-- wmpc-block:response-style:v6 START -->
 ## Response style — a short summary, and the ask unmistakable (D-0177)
 
 Every reply, in every repo, from every prompt — interactive sessions, spawned
@@ -651,7 +708,7 @@ agents, the Builder, scheduled runs. Ron, 2026-10-14:
    on its own, so it cannot be mistaken for commentary. Every ask of Ron is also a ledger
    line, never prose (D-0070).
 3. **If there is an action for Ron, it is unmistakable.** What to do, where, and what
-   happens next. This composes with **D-0068**: offer to do it yourself first; when only he
+   happens next. This composes with **D-0068**: do it yourself if you can (D-0207); when only he
    can do it, the numbered steps go in the reply, paste-safe, one copy box per field.
 4. **Nothing Ron reads contains an internal identifier.** No decision ids (`D-0174`), no
    repo names as nouns, no file paths, no component names, no ship or phase numbers, no
@@ -663,6 +720,40 @@ agents, the Builder, scheduled runs. Ron, 2026-10-14:
    reads, applied to every reply in every repo — which is where it was always meant to be.
    It **composes with rules 1-3 and replaces none of them**: a short reply full of codes
    still fails.
+
+5. **Don't repeat what his phone has already told him.** Ron, 2026-10-23: *"I'm getting
+   discord priority messages so I don't need you to repeat those here."* The cards are an
+   action inbox, not a copy of the reply — an ask, a decision or a finished thing that has
+   already gone out as a card **has already reached him**. So name it in one clause and link
+   it; do not restate its wording, its two choices, or its numbered steps in the reply. A
+   reply that re-renders a card he is holding spends the attention the card was built to
+   save, and makes him read the same thing twice to check whether it is the same thing.
+   **The exception is when he asks about it** — then answer the question. Answering is not
+   repeating.
+
+6. **Do the work without narrating it; say what happened when it is done.** A turn is
+   **silent between its tool calls**. Ron, 2026-10-17, on a turn rendered as eight lines of
+   running commentary — *"Let me see how the dashboard does sections…"*, *"Now the tabs. Let
+   me wire the URL, the shell, and the two tab bodies."*, *"Two unbalanced brackets from
+   that edit — let me close them properly."* — offered a cap on the total or silence, chose
+   silence. Each line was short; the stack of them was a wall, and none of it was anything
+   he could act on.
+
+   **Three exceptions, and only three.**
+   - **A genuine question** that must be answered before the work can continue. Ask it and
+     stop; do not ask it and keep going.
+   - **A warning that cannot wait** — the next step is destructive, or you have found
+     something he needs before the work finishes.
+   - **One brief note before a single long-running step.** A ten-minute silent gap with no
+     sign of life is its own problem, so this one survives: *one* line, before *one* long
+     step. One note is a sign of life; a third of one is a commentary.
+
+   Everything else — what you are about to read, which pattern you found, that a bracket was
+   unbalanced, what you plan to do next — waits for the summary, or goes in `STATUS.md`, the
+   PR body or the record where it is retrievable. **And write to him in the second person:**
+   *"you asked for tabs inside Rally"*, never *"Ron wants tabs inside Rally"*. He is the one
+   reading it; talking about him in the third person while talking to him is the same
+   writing fault one level up.
 
 **This is about the REPLY, not the work.** Two halves, and both matter:
 
@@ -687,9 +778,32 @@ database-enforced for the cards on the dashboard, and the reply surface simply n
 inherited it. An id is a pointer into a filing system Ron does not read. Handing him one
 makes him ask what it is, which is the round trip the whole convention exists to remove.
 
+**The level is a dial, and short is the default (D-0259).** Ron, 2026-10-29: *"teaching the
+models to have different levels of responses should be easier to configure."* So:
+
+- **Short** unless he asked otherwise. Aim under ~200 words of prose; nine replies in ten
+  already are, and the median is 29.
+- **Full** when he asks for it in the prompt — "full account", "walk me through", "the long
+  version", "in detail", "give me everything", "don't summarize". For that turn only. A reply
+  is long because he asked for it, which is what rule 1 always meant.
+- The two levels differ in **LENGTH ONLY**. Plain language for every identifier, the second
+  person, the one question at the end, the numbered paste-safe steps and the silence between
+  tool calls bind at both. "Full" is not a licence to narrate.
+
+**And it is primed, not refused.** The contract is stated before the reply is written rather
+than charged for afterwards: nothing can read a reply while it is being generated, so a length
+check can only stand after the fact and can only refuse by buying a second reply. Measured over
+25,995 replies, that refusal fired on 0.5% of them and cost double every time. Length is now
+recorded and counted, not rewritten. What still refuses, once, is a **sentence** fault — an
+identifier reaching him, a machine clock, a fix claimed without a re-run — because the
+correction there is one clause. And a turn that narrates itself is stopped **mid-turn**, at the
+tool call after the third line, so the rest of the commentary is never written.
+
 **Forbids.** A step-by-step narration of what you did as the body of a reply. A reply that
 restates the request before answering it. Several questions stacked for Ron to sort out. A
 question or an action buried mid-paragraph. Padding a short answer to look thorough —
-"this was already done" is a complete reply. And any identifier used as a noun in a reply:
-an id, a path, a repo, a component, a phase number, a bare issue number.
-<!-- wmpc-block:response-style:v2 END -->
+"this was already done" is a complete reply. Any identifier used as a noun in a reply:
+an id, a path, a repo, a component, a phase number, a bare issue number. And restating a
+card he has already been sent — its text, its choices or its steps — when a clause and a
+link would do. Enforcing length by throwing away a finished reply and asking for it again.
+<!-- wmpc-block:response-style:v6 END -->

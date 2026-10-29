@@ -5,6 +5,267 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-29 — Offline seed: the register card's branches, and one registered player
+
+**Seed data only — no migration, no app code.** `supabase/seed.sql` now builds
+the whole `youth-chooser-test` fixture that three design gradings in a row had
+to hand-build (or do without): a published WMPC tournament whose dates are
+relative to `now()`, six brackets, one registered pair, and an adult date of
+birth on the offline director.
+
+**What it unblocks for the design gate.** The register card's
+*"Add &lt;blanks&gt; to register →"* branch only renders when the signed-in adult
+has no eligible registrant AND every refusal is a blank on their own profile.
+Every bracket a critic could reach paired its rating bound with `max_age = 18`,
+and the aged-out check runs first — so the card always took the *"Register a
+child"* route and the branch went ungraded twice. The third grading reached it
+only by editing the local database by hand, and it turned out to carry a real
+defect (an 18px tap target where the card's only action lives, fixed in #1188).
+The six brackets now cover one card branch each, with no hand-editing:
+
+| Bracket | Bounds | Card renders |
+|---|---|---|
+| Juniors 18 & Under Doubles 4.5-5.0 | `max_age 18` + 4.5–5.0 | **Register a child** |
+| Juniors 18 & Under Doubles | `max_age 18` | **Register a child** |
+| Open Singles (no age limits) | none | **Register** |
+| Seniors 60+ Doubles 3.0-4.0 | `min_age 60` + 3.0–4.0 | plain refusal, **no link** (unfixable) |
+| Open Doubles 3.0-4.0 (no age cap) | 3.0–4.0, ages null | **Add a rating to register →** |
+| Women's Doubles 3.5-4.5 (no age cap) | 3.5–4.5 + `women`, ages null | **Add a rating and a gender to register →** |
+
+Verified live on the local stack at 390 × 844: both links measure **44px** high
+(144px and 223px wide), `scrollWidth == clientWidth` on the document.
+
+**The director's `dob` is now `1980-01-01`, and that is load-bearing.** With it
+null the parent was refused for a *blank* date of birth rather than for their
+*age*, so every juniors bracket offered a link to their own profile and the
+youth flow was unreachable from a fresh seed. Rating and gender stay blank on
+purpose — they are the blanks the advice names.
+
+**`/admin/players/:playerId` is reachable at last.** `admin-get-player` grants
+an org-scoped director access only to a player with a **non-deleted**
+registration in one of the org's own tournaments. The three regs that existed
+locally had all been soft-deleted by the pending-payment sweeper, so the page
+answered *"Not authorized to view this player."* for every id reachable
+offline, three gradings running. The seed now carries a confirmed doubles pair
+(Marta Kowalski + Dev Ramaswamy, full profiles, `status 'paid'` so the sweeper
+cannot take them) in the open 3.0–4.0 bracket. The page loads populated, with
+tournament history.
+
+**Found while verifying — a real defect, not a fixture gap, left for its own
+change:** that page's **Partner** column is permanently "—". `registered_by_player_id`
+(added by `20261027120000_guardian_registrations.sql`) is a second FK from
+`event_registrations` to `players`, so the partner-name lookup in
+`supabase/functions/admin-get-player/index.ts` (`select("id, players (…)")`)
+now fails with PostgREST `PGRST201` *"more than one relationship was found"* —
+and that query's error is never checked, so the name silently stays null.
+Confirmed against the local REST API. The fix is to disambiguate the embed
+(`players!event_registrations_player_id_fkey`) and check the error.
+
+**How to pick the fixtures up:** `seed.sql` runs on first boot of a fresh local
+database and on `supabase db reset` — `scripts/offline.sh` alone will not
+re-seed a volume that already exists. Run `supabase db reset` once (it wipes
+local data; `scripts/offline-backup.sh` first if there is anything there worth
+keeping).
+
+## 2026-10-27 — Data: Loon Race Team org + 12/29 tournament seeded on PROD (draft)
+
+Built the **Loon Race Team** organizer org and its **Loon Race Team Pickleball
+Tournament** (Tue 12/29/2026) directly on the PROD Supabase project
+(`wducsjqyoksmluwfgjxc`) from the confirmed details in the Laura Rubin / Ron
+"LRT EVENT" email thread — Laura's 10/19 recap plus Ron's 10/22 reply, which is
+where the numbers were actually settled. **No code change — data only.**
+
+Created: `organizations` (slug `loon-race-team`, `contact_email`
+`tournaments@bertanderne.com` per the house pattern — it is the Reply-To on all
+registration/waitlist edge-function mail); an `organization_members` **owner**
+row for Ron (the `orgs_add_creator` AFTER INSERT trigger is guarded by
+`auth.uid() is not null`, so it silently no-ops under `service_role` and the row
+must be inserted by hand); a `locations` row for the WMPC venue (557 US Route 3
+Unit B, Lincoln NH); the `tournaments` row — **status `draft`**,
+`pricing_pattern 'early_bird'`, `court_count` 4, `inter_event_buffer_minutes` 15,
+`location_id` set with `location_name`/`location_address` left NULL per the UI's
+mutually-exclusive rule; 2 `tournament_pricing_tiers` ($55 "Early bird" with
+`ends_at` = local midnight 12/20 → $65 "Regular" with `starts_at` equal to it,
+`first_events_included` 1 — nothing auto-creates tiers since
+`tournaments_create_single_tier` was dropped in
+`20260529160000_drop_legacy_fee_columns.sql`, so a tournament without them
+checks out at $0); a `tournament_contacts` row for Laura
+(`receives_form_messages` true, **`is_public` false** — her personal cell and
+gmail are stored for form routing, not published); and 3 `events`: Social
+Doubles 2:00pm, Kids 18 & Under Doubles 4:30pm (`max_age` 18), Competitive
+Doubles 6:30pm — all `gender 'open'` (Ron confirmed m/m, f/f and mixed all
+welcome), `max_teams` 7, round robin, top 4 into a 2-round playoff,
+`schedule_order` 1/2/3 set explicitly since no insert path sets it and readers
+sort `(schedule_order NULLS LAST, created_at)`.
+
+Tier labels were normalized to the exact `PRESET_LABELS` strings
+("Early bird"/"Regular", `web/src/lib/pricingTiers.ts:232`) so
+`applyPresetLabels` is a no-op if the pricing wizard step is reopened;
+`tierPhase` lowercases before matching, so the public pill reads "Early Bird
+Registration Open".
+
+Ran the whole CTE chain as `begin; … rollback;` against PROD first — caught a
+UNION type error (untyped `null` in the first branch resolving to `text` against
+a `timestamptz` column) and confirmed zero residue before committing. Verified
+after: 1 org / 1 member / 1 location / 1 tournament / 3 events / 2 tiers /
+1 contact, event start times read back as 14:00, 16:30, 18:30 America/New_York.
+
+Two discrepancies in the thread, resolved toward Ron's 10/22 reply: Laura's
+10/10 mail floated "Saturday, Feb 20th" (the 10/19 recap and Ron both say Tue
+12/29 — and 12/29/2026 is a Tuesday), and Laura asked "14 teams per bracket?"
+twice where Ron answered "up to 7".
+
+**Open, needs Ron:** LRT's Stripe is `not_connected`, which blocks checkout even
+once published (Ron was to wire Laura's own account with Sarah Snell);
+`registration_opens_at`/`closes_at` are both NULL, so publishing opens
+registration immediately and it never auto-closes;
+`additional_event_fee_cents` was set to a full entry ($55/$65) because
+multi-bracket pricing never came up, so a kid playing both Kids and Social pays
+twice; `cancellation_policy_preset`, `pickleball_type` and `accepts_donations`
+are at defaults, and donations may be wanted given it is a fundraiser. The $600
+facility fee WMPC charges LRT has no field on a tournament and is recorded
+nowhere in the app. **Next:** publish to mint the flyer's QR target,
+`/t/loon-race-team/loon-race-team-pickleball-tournament`.
+## 2026-10-28 — PR #1176 brought up to date with main (clears CONFLICTING)
+
+`ux/guardian-registrations` was 5 commits behind `main` after PR #1178
+renumbered `20261006120000_player_club_affiliations.sql` to
+`20261012120000_...` — the file that had been wedging `db push` since
+2026-10-15, so merging it is what finally put both the club-affiliations
+migration and `20261027120000_guardian_registrations.sql` on TEST.
+
+Merged `origin/main` into the branch. **`STATUS.md` auto-merged with no
+conflict** — main's `#1175` rework entries and its 2026-10-28
+migration-order entry sit where main put them (near the bottom of the
+file, which is where those sessions appended them; not re-ordered here,
+since this log is append-only and they are not this session's entries).
+The only source file the merge brought in is `web/src/lib/clubAffiliations.ts`;
+`eligibility.ts` and every guardian surface are byte-identical to the
+graded tip, so the design verdict still stands.
+
+Verified on the merged tip: `npm run build` ✓ (2.70s), `npx vitest run`
+✓ 36 files / 421 tests.
+
+**Next:** Ron merges #1176. The preview deploy is where the
+parent-registers-child flow can be tried now that `player_guardians` is
+real on TEST — remember a preview builds against the **preview** variable
+scope, not TEST's.
+
+
+## 2026-10-27 — A parent can register their child; the age gate finally bites
+
+Four PRs open, to be merged **in this order**. Ron merges; nothing here was
+merged or pushed to `main`/`production`.
+
+**#1172 — `main` does not compile.** `tournamentSummary.ts` declared
+`MAX_MATCH_MS` twice (the home-club-star merge took the constant from both
+sides). `npm run build` is `tsc -b --noEmit && vite build`, so the Cloudflare
+Pages build of `main` has been failing before Vite runs and **TEST has been
+serving a stale bundle**. Nothing in CI catches it — no workflow in this repo
+runs typecheck, build or vitest on a PR; the only signal is the Pages build
+going red. One duplicate line deleted. Closes #1171.
+
+**#1173 — an `open` division rejected everyone who wasn't female.** The
+client gender gate excused only `mixed`, so `open` fell through and `required`
+resolved to `"F"`. All three brackets of the Loon Race Team tournament are
+`open`. The trigger always had it right; only the client was stale. Rewritten
+to name the two gated values rather than excuse one, plus a unit test that
+fails on the old condition. Closes #1170.
+
+**#1175 `[DB]` — the guardian half.** `player_guardians` (many-to-many, soft
+delete, RLS from day one), `is_guardian_of()` as the single predicate, a
+guardian branch on the event_registrations SELECT/INSERT/UPDATE policies and
+on the players UPDATE policy, `event_registrations.registered_by_player_id`,
+the age gate in `enforce_event_eligibility()`, and a family-aware
+`compute_checkout_total`. Closes #1174, part of #1169.
+
+**#1176 `[UX]` — the half Ron can see.** Profile grows "My family" and a
+date-of-birth field; the register card grows a "Registering for" chooser;
+checkout tiers per registrant and names anyone who isn't the payer; Attendees
+shows a player's age and the guardian who signed them up. Closes #1169.
+
+### Decisions worth keeping
+
+**RLS, not a service-role edge function.** `admin-register-contact` was the
+obvious model, and it is the wrong one: `enforce_event_eligibility()` returns
+early when `auth.uid()` is null, so a service-role insert is never
+eligibility-checked. Org staff *want* that exemption; a guardian must not have
+it, because the age gate binding them is the point of the card. Registering
+through RLS keeps the caller's JWT, so the trigger fires on a guardian's insert
+exactly as on a self-registration and the age rule has one implementation at
+the trust boundary.
+
+**NULL dob is ineligible for an age-restricted event, and irrelevant
+elsewhere.** Same rule the rating gate already uses for a missing self-rating.
+What keeps it from locking anyone out is that it fires only when the event
+sets a bound: every player row in production has `dob = NULL` today, and all
+of them stay eligible for every unrestricted event.
+
+**Age is measured at the tournament's UTC start date, not today.** "18 &
+under" is about the day of play, and measuring at registration time would let
+eligibility drift while a bracket sits open. Client and trigger both read the
+UTC calendar date of `starts_at` so they cannot disagree by a day.
+
+**A guardian may only adopt an account-less player row with no
+registrations** — in practice, one they just created. `players` INSERT is
+`with check (true)`, so "which rows may I claim?" is the security question for
+the whole feature. That check had to be a SECURITY DEFINER function: a
+subquery inside a policy runs as the caller under RLS, so an inline
+`not exists (select 1 from event_registrations …)` would only ever see rows
+the caller can already read — a guard that always passes.
+
+**Reuse:** the child's player row and its guardian link are created together by
+a `SECURITY DEFINER add_dependent()`, which is where the reviewer landed after
+four passes on #1175 — `player_guardians` has no INSERT policy and no INSERT
+grant, so a link can never be pointed at a player row that already existed. An
+earlier draft of this branch reused `persistPlayerSelection` and fenced the
+insert with a policy; closing the path beats fencing it. Checkout calls the existing `computeLineItems` once
+per registrant instead of changing its tier math. `ConfirmModal` for the
+remove-child confirm. No edge-function change was needed for payment: the
+payable-status guard, the free-confirm flip and `stripe-webhook` all work off
+`payment_line_items`, never the payer's `player_id`.
+
+### Verified, not assumed
+
+The migration was applied to a **local Supabase stack with all 116 migrations**
+and driven through the real app at 390px: a parent added a child with no
+email, registered them for the juniors bracket, and saw `$45.00` in checkout
+against a server-side `compute_checkout_total` of `4500` for the same line
+item. Attendees showed "Maya Harper / 11 years old / Registered by Dana
+Harper". A second parent saw none of it and was refused the insert by RLS. The
+trigger refused a 44-year-old and a NULL-dob player from the juniors bracket
+and allowed both into the unrestricted one. Two bugs in the first draft were
+caught this way: `text[] || <untyped literal>` raised "malformed array
+literal", and the button gate left a parent with **no Register button at all**
+on a juniors bracket, because it asked only whether the parent qualified.
+
+### Known limits, deliberate
+
+A dependent cannot be waitlisted (`join_waitlist` resolves the player from
+`auth.uid()`), the inbound auto-pair lookup is skipped for a dependent (it
+keys on the signed-in user's email), and a guardian creates and pays for a
+registration but cannot yet change or cancel it from the card, and a guardian
+who is already entered in an event has no route to enter their child in that
+same event (the card returns on the player's own status before it reaches the
+chooser — the juniors case works only because a parent can never be in that
+bracket). The Event Console roster still does not render
+the age the `event_roster` RPC already returns (AC 11's second half).
+
+**The design gate graded #1176 nine times and failed it eight**, each time on
+something real: the register form quoting the payer's price instead of the
+registrant's; the sticky checkout bar blind to a dependent, so a parent who
+entered only their child got no route to checkout at all, and one who had their
+own entry too saw $45.00 over a $90.00 bill; "My Tournaments" saying "you
+haven't registered for anything" with that bar billing them; the parent unable
+to open the juniors form at all; a refused form still offering a roster search
+and "+ Add new player"; the attendees row shredding at 390px; a child's pending
+entry not looking like one. The verdicts are on the branch under
+`.design/verdicts/`.
+
+**Next:** Ron merges #1172 → #1173 → #1175 → #1176, then regenerates types
+(`cd web && npx supabase gen types typescript --linked > src/types/supabase.ts`)
+so the local type extensions in `lib/guardians.ts` can go.
+
 ## 2026-10-13 — Builder: PR #965 rework (rebase, clear CONFLICTING)
 
 Reviewer gate had put PR #965 (issue #964 — regression spec for #64, global
@@ -2704,3 +2965,337 @@ rating picker, recap/credit smoke, mobile recap) — pre-existing, not from this
 **Remaining (Ron, needs his Cloudflare + Supabase sign-ins):** deploy the Worker, set its
 two secrets, set `VITE_CAMPAIGN_REPORT_URL` in the club-dashboard Pages project (Production
 + Preview) and rebuild. Step-by-step given in chat.
+
+## 2026-10-27 — #1174 rework (PR #1175, guardian registrations DB half)
+Reviewer's second REQUEST CHANGES addressed in `20261027120000_guardian_registrations.sql`:
+removed the `player_guardians` INSERT policy + grant; links are now made only by the
+SECURITY DEFINER `add_dependent(first, last, dob, relationship)` (child row + link in one
+call), so no one can link to a player they didn't create. Guardian inserts on
+`event_registrations` must now set `registered_by_player_id = current_player_id()`.
+Migration unapplied (CI applies on merge). **Next:** reviewer re-review; then the UX PR
+(Add-a-child via `add_dependent`, "Registering for" chooser; partner-invite RLS has no
+guardian branch yet).
+
+## 2026-10-27 — #1174 rework 3 (PR #1175)
+Reviewer's third REQUEST CHANGES: a guardian could `update player_guardians set
+dependent_player_id = <any account-less player>` and bypass the add_dependent() guarantee.
+Fixed by narrowing the grant to `update (deleted_at, relationship)` only (reviewer's option a).
+Migration unapplied (CI applies on merge). **Next:** reviewer re-review, then the UX PR.
+
+## 2026-10-27 — #1169 / PR #1176 rework (phone coverage)
+Reviewer asked for populated-state 390px coverage. Seeded a guardian (Gwen) + dependent (Kit) with a pending reg (`e2e-family`), added four cases to `web/e2e/mobile/audit.spec.ts` (My family, Registering-for chooser, family checkout basket, Attendees sub-lines). Merged current `main`. Not run locally (needs the E2E Supabase creds; runs in `regression.yml`). Types regen deferred as follow-up. Next: reviewer re-review.
+## 2026-10-28 — Migrations had not reached TEST since 10-15; renumbered the file that wedged them (#1177, PR)
+Ron merged PR #1175 (guardian registrations DB half) and asked to be told when its migration
+was live on TEST. It never applied: the `Migrations` run on the merge commit
+(40580251934) **failed closed and applied nothing**, and so had every migration run since
+2026-10-15 — #1091 (10-15), #1165 (10-19), #1175 (10-27), three in a row.
+`20261006120000_player_club_affiliations.sql` was authored 10-06 but merged after
+`20261011120000` was already applied, so `supabase db push` saw a file dated *before* the
+head of the remote history and refused ("Found local migration files to be inserted before
+the last migration on remote database") — `--include-all` is deliberately not used, because
+it re-applies recorded versions and wedged prod on 2026-06-11.
+
+**Verified against both databases** (Supabase MCP, read-only): TEST and PROD history both end
+at `20261011120000_campaign_registry_and_reporting`; neither has `player_club_affiliations`,
+neither has `player_guardians`. So `web/src/lib/clubAffiliations.ts` has been on `main`
+querying a table that exists nowhere since 10-15.
+
+**Nobody was told because the alert is dead** — the failure step's Discord call returns
+`{"message": "Unknown Webhook", "code": 10015}`. Twelve days of silent fail-closed. Needs its
+own card and a new webhook URL from Ron (a repo Actions secret, `DISCORD_WEBHOOK`).
+
+**Fix** (the one `supabase/MIGRATIONS.md` prescribes — "renumbering the file's timestamp to
+after the head"): `git mv` to `20261012120000_player_club_affiliations.sql`, keeping it ahead
+of the guardian file so authorship order survives. Pure rename, 0 content lines changed;
+updated the stale version in its own header and in the `clubAffiliations.ts` comment. Safe
+because the file had never been applied to any database, so no `schema_migrations` row points
+at the old version. Pending set is now `20261012120000`, `20261027120000` — both above the
+remote head, ascending, which is exactly the condition that was failing.
+
+**Next:** merge the PR → the run should apply both migrations → then regenerate
+`web/src/types/supabase.ts` (it is already stale: missing `schedule_order`,
+`playoff_seeding`, `double_elim_final`, `platform_fee_*`, `schedule_locked_at`,
+`first_events_included`, `resend_audience_id`) → then PR #1176 (guardian UX) is testable on
+TEST against a real table. **Hold #1176 until this one is in.**
+
+## 2026-10-28 — Regenerated the Supabase types; they were 30 tables behind, and catching up broke the build (#1179, PR)
+After PR #1178 unwedged the pipeline and both migrations applied to TEST, regenerated
+`web/src/types/supabase.ts` — the step `supabase/MIGRATIONS.md` asks for after every apply and
+which had been skipped for long enough that the committed file was **2,326 lines against the
+schema's 3,240**.
+
+Generated against **TEST explicitly** (`gen types typescript --project-id mvkhdsauaqqjehxdnbuf`),
+not `--linked`: on a locally linked machine `--linked` resolves to **PROD**, which is a different
+schema. Same generator shape as the committed file (`__InternalSupabase`, `Relationships`,
+`CompositeTypes` all present), so this is a content catch-up, not a format churn.
+
+**Thirty tables, views and functions were missing**, whole features among them: `account_credits`
+/ `account_credit_balance` / `redeem_account_credit`, `campaigns` / `campaign_events` /
+`record_campaign_event` / the three `campaign_report*`, `contact_broadcasts` /
+`contact_broadcast_recipients`, `organization_contacts`, `manual_payments`, `pbcom_push_ledger` /
+`pbcom_push_state`, `merge_players` / `merge_events` (+ previews), `tournament_setups` /
+`save_setup_by_token`, `sweep_stale_pending_regs`, `tournament_registration_counts`, the three
+`public_tournament_*` RPCs, and the two applied today — `player_club_affiliations` and
+`player_guardians` with `add_dependent`, `is_guardian_of` and
+`event_registrations.registered_by_player_id`. Plus `schedule_order`, `playoff_seeding`,
+`double_elim_final`, `schedule_locked_at`, `first_events_included`, `resend_audience_id`.
+
+**The catch-up broke typecheck, which is the point of doing it.** Two errors, both from the same
+cause: `BracketView`, `EventConsolePage` and `PublicTournamentPage` each defined
+`matches.Row & { bracket?, slot_key?, label?, if_necessary?, feeds_*? }` by hand, back when those
+columns did not exist in the generated row. Now they do — `bracket` as the real `match_bracket`
+enum, `if_necessary` as non-null `boolean`, `feeds_winner_side` as the column's own `string` —
+and because BracketView narrowed `feeds_winner_side` to `"a" | "b"` while the console left it
+alone, TypeScript held the two `MatchRow`s to be unrelated types (TS2322 + TS2719).
+
+Fixed by deleting the hand-written re-declarations in all three files: the generated row IS the
+type now. `BracketView` exports its `MatchRow` and `PublicTournamentPage` imports it rather than
+deriving an identical alias beside it. Net −10 lines of hand-written code. Every call site only
+compares these fields (`=== "a"`), so nothing behavioural changed.
+
+**Verified:** typecheck clean (0 errors), build ✅, **415/415 vitest in 36 files** ✅, lint at the
+unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
+
+**Worth a card, not done here:** `feeds_winner_side` / `feeds_loser_side` are plain `text` in the
+database, so the hand-written `"a" | "b"` narrowing was the only thing typing them. Dropping it
+is correct — the code now matches the column — but the honest fix is a DB enum so the generated
+type carries the constraint. That is a migration, not a types change.
+
+---
+
+## 2026-10-28 — Register a youth from the register form (#1182)
+
+Ron opened the register form on TEST and asked where the option to register a youth was.
+It wasn't there. The guardian flow (#1169) shipped on 2026-10-27 and needs **no organizer
+setting** — no org flag, no tournament flag, no event flag; `add_dependent()` asks only that
+you be signed in with a player profile. But the "Registering for" chooser rendered only when
+`registrants.length > 1`, so a parent with nobody on file saw nothing. The capability was
+always on and completely invisible until you had already found **My family** on your profile.
+`player_guardians` had 0 rows on TEST — nobody had found it.
+
+**The change.** The chooser now renders whenever the register form is open, and carries an
+**Add a youth…** entry after the family names. Choosing it opens the name/DOB form in place;
+saving adds the child, selects them, and drops you back into the registration you were already
+filling in. The rest of the form stands down while that step is open, so the panel never shows
+two submit buttons.
+
+Also: an age-capped bracket the parent has aged out of used to replace Register with a link to
+the profile page. It now shows **Register a child** and opens the form — that juniors case is
+the sharpest form of the same bug, and it was being sent to another screen to solve it.
+
+**Reuse, not a copy (D-0049).** The add-a-child form moved out of `ProfilePage` into
+`components/AddChildForm.tsx` with a `variant="page" | "inline"` prop, and both hosts mount the
+one file. `Field` / `FieldRow` moved alongside it into `components/Field.tsx`. ProfilePage lost
+its three field states, its busy flag and its submit handler — net **−156 / +115** lines.
+
+**Verified** on the local offline stack (`scripts/offline.sh`), signed in as the seeded
+director, at **390 × 844**: chooser present with zero children; add-a-youth opens inline; saving
+creates an account-less player plus a live `player_guardians` link and selects them; cancel
+restores the previous pick and the partner step; the child then appears under My family, and the
+juniors card flips from "Not eligible" to Register. No horizontal scroll (scrollWidth 390).
+typecheck ✅, build ✅, **421/421 vitest in 36 files** ✅, lint at the unchanged `origin/main`
+baseline (35 problems / 31 errors / 4 warnings — identical with the change stashed).
+
+**Not done:** the date of birth is still required to add a child. It is the only required input
+on the youth path and it is not a setting, but the eligibility rule already degrades gracefully
+without one ("needs a date of birth on file", and only where an event has an age bound), so
+making it optional is a client-only change worth its own card.
+
+**Design gate: three rounds, two of them mine.** The first FAIL was the aged-out juniors CTA
+opening the register form on the parent — a registrant the card had already established nobody
+could satisfy — under advice that said "Pick a different event", which is the #1182 dead end
+moved one tap deeper rather than closed. The second FAIL was a regression from fixing the
+first: keying the new copy on *the event having an age bound* offered "add a youth" on a 40+
+bracket, where every registrant that advice can produce fails the same gate, and on a
+skill-bounded juniors bracket it refused the child the parent had just created and told them to
+add a youth again. Both now hang off whether a child could actually enter — no adult minimum
+age — and the refusal panel additionally off the refusal being the age one. PASSed on
+`43d3bf1228f54fbc`, no findings, rendered and clicked at 390×844 and 1280×800.
+
+**Filed, not fixed:** #1183 — nothing anywhere can set a dependent's skill rating *or gender*,
+so a skill-bounded or single-gender bracket opens a path a child cannot finish. The gate's
+judgement was that the fix is that missing screen, not a narrower gate here, since gating on it
+would hide the youth path from most real divisions. This branch owes an honest refusal, and has
+one.
+
+---
+
+## 2026-10-29 — Adding a child asks for an optional email address (#1186)
+
+**Why.** Ron, on the youth path shipped the day before: *"Signing up a minor should ask for
+an optional email address."* Nothing on that path asked for one, so every child created by
+`add_dependent()` landed with `email` null — and `players.email` is the only address the
+platform has for a registrant. `cancel-tournament` and `notify-registration-change` both skip
+a row without one ("no email address"), and **no edge function reads `player_guardians`**, so
+a child's notice is not redirected to their guardian; it is simply never sent. A parent
+putting their own address on the child's row is the intended shape, not a workaround:
+`players.email` is deliberately soft-unique (indexed, no unique constraint) precisely so a
+parent and child can share one.
+
+**What changed.** One optional field on `AddChildForm`, so both mounts — My family on the
+profile page and the register form's "Registering for" chooser — get it off the one file
+(D-0049, no second copy). `type="email"` leaves the format check to the browser. A **Use my
+address** control fills the guardian's own address in one press and hides itself once the box
+holds it. The stored address shows on the family row, which is the only place a parent can
+see that it saved. The My family intro copy, which promised "they need no email address",
+now says the address is optional and yours will do.
+
+**No migration.** The address is a second write, not a new `add_dependent()` argument: the
+guardian migration's `players update by self or related org` policy already has an
+`is_guardian_of()` branch built for a guardian maintaining a dependent's profile, with a
+`with check` that pins `auth_user_id` to null. Using it beats widening a `SECURITY DEFINER`
+function, and keeps this a single UX PR with no DB/UX ordering to get wrong. The cost is that
+the pair isn't atomic — so `addDependent` returns `emailError` separately from `error`, and
+the form answers it by keeping the child, withdrawing Save (pressing it again would add a
+second child) and offering Continue.
+
+**Verified** on the local offline stack (`scripts/offline.sh`), signed in as the seeded
+director, at **390 × 844**, in both mounts: field present and labelled `(optional)`; Use my
+address fills and then hides; saving with an address puts it on the child's row and shows it
+under My family; saving blank behaves exactly as before, no warning; an invalid address is
+refused by the browser and the form does not submit; parent and child end up sharing one
+address with the child still account-less; from the register card the new child is selected
+as the registrant and the registration carries on. The partial-failure branch was exercised
+for real by failing `PATCH /rest/v1/players` in the page. No horizontal scroll (scrollWidth
+390 = clientWidth 390). typecheck ✅, build ✅, **421/421 vitest in 36 files** ✅, lint at the
+unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
+
+**Not done.** There is still no screen that edits a dependent's address after the fact — the
+same missing screen as #1183 (rating and gender). The partial-failure copy therefore points
+at remove-and-re-add, which exists, rather than at an edit page that does not.
+
+### #1186 addendum — what the design gate changed, and the hole it found
+
+**Five rounds, four of them FAIL (9 findings).** Worth recording because the shape of the
+work changed under them, and because three of the four failures were defects in my own
+previous fix rather than in the original field.
+
+1. **FAIL `b360bd17b84c43f4`** (5) — the half-saved panel spliced the raw PostgREST message
+   into a parent-facing sentence (*"new row violates row-level security policy for table
+   players"*); it named remove-and-re-add while offering only Continue; continuing ended in
+   the green "is on your family list", claiming a write that hadn't landed; "Use my address"
+   was 91.5 × 14.5 against the 44px rule; and it sat inside the field's wrapping `<label>`,
+   so the input's accessible name swallowed the control's text and the whole helper
+   sentence.
+2. **FAIL `f1f73d465f7987ec`** (2) — both the same mistake in two places: the outcome was
+   reported by the **host**, which renders it where the person isn't. On the event card the
+   link pointed at a profile section 1176px below where it lands, which couldn't set an
+   address anyway; on the profile the panel raised 651px above a viewport parked at the foot
+   of a long list, so the press produced nothing visible.
+3. **FAIL `19255dcb78104c1c`** (2) — defects in the round-2 fix. The new row editor wrote
+   whatever it was handed: a blank draft stored `''`, rendering *"10 years old ·"* with a
+   dangling separator and hiding the "No email address" line the change exists to show; and
+   its input sat outside any form, so `type="email"` did nothing and `notanemail` saved —
+   on the mount whose whole job is repairing a missing address.
+4. **FAIL `5cd4b4a73f03fbbc`** (1) — with a row editor open near the foot of the list the
+   family card showed two filled buttons a screenful apart.
+5. **PASS `8b07300dcb0300ea`**, no findings.
+
+**The hole it found is the reason this is bigger than one field.** A dependent's address was
+**write-once-or-never**: the add form was the only thing that ever set one, so a parent who
+skipped it, mistyped it, or hit the failed write had nowhere to go — which is why every
+round kept producing copy that named a screen that didn't exist. So the family row now
+carries the fact and the fix: the line under each name ends with the address or **No email
+address**, and the row has an inline **Add an email address** / **Change email address**
+editor saving through `setDependentEmail`. Clearing is a supported move storing `NULL`, the
+row reads the column through one helper so an `''` written earlier still renders as missing,
+and the editor is a real `<form>` so it refuses exactly what the add form refuses.
+
+**Carried forward, not fixed here** (both recorded in the PASS verdict as repo-wide, not
+this change): the focus ring is the browser's own `rgb(229,151,0)` at **2.4:1**, under
+D-0157's 3:1 floor, and the shared `inputStyle` is 39px against the 44px rule. Citing either
+would fail every UI change in the repo; both want a sweep of their own.
+
+---
+
+## 2026-10-29 — #1183: a guardian can record a child's rating and gender
+
+**The gap this closes.** A child added through My family had a name and a date of birth and
+nothing else, and **nothing anywhere could give them more**: the rating pickers on the
+profile page write the signed-in player's own columns, the add form collects no gender, and
+no screen a parent can reach writes a dependent's. So every division with a skill range
+refused the child *"no doubles self-rating on file"* and every boys'/girls' bracket refused
+them *"men's event"* — the youth path finished only on open-skill, mixed and open events,
+which is a minority of real divisions. #1182 made the youth path discoverable and #1186 made
+its address repairable; this is the last of the three, and the one that makes the path
+actually finish.
+
+**No migration.** Self-ratings are columns on the player row (`self_rating_doubles` /
+`_mixed` / `_singles`), not rows in `player_ratings` — that table is for external feeds with
+their own `as_of` dates. Gender is a column too. The guardian migration's `players update by
+self or related org` policy has an `is_guardian_of()` arm that is row-level over every
+column but `auth_user_id`, which its `with check` pins to null, so all of this rides the
+policy the address write already uses. And `enforce_event_eligibility()` reads
+`players where id = new.player_id` — the **registrant**, i.e. the child — so what a parent
+records is exactly what the server checks. Verified by negative test: a `PATCH` of a player
+outside the family returns `[]` and writes nothing.
+
+**What changed.**
+
+- The family row's muted line now carries what a bracket checks — `Doubles 3.5 · Mixed
+  doubles 4.5 · Female`, or **No rating yet** — with an inline **Add a rating and gender** /
+  **Change rating and gender** editor holding rating, gender and the date of birth, saved in
+  one write (`setDependentProfile`) so a parent cannot end up with half of it stored.
+- A missing rating is **named**; a missing gender is **not**. Gender is optional by design
+  and only a boys'/girls' bracket reads it, so nagging for it would ask every parent to
+  answer a question almost none of them need.
+- The date of birth is in that editor because the add form is the only thing that ever set
+  one and the register card already told parents to fix it here. Its "a date of birth is
+  needed" rule is now one function both mounts call, so the row editor cannot quietly
+  accept a blank the add form insists on.
+
+**Reuse (D-0049).** The three-picker rating group and the gender option list were each
+duplicated between the player's own profile and the organizer's player page, and
+`ratingRowLabelStyle` existed twice with identical bodies. Both are now one component
+(`RatingFields`, `GenderSelect`) mounted three ways, and the duplicate style is gone.
+`RatingPicker` was already shared and needed only a `fill` prop: its six chips want 316px
+and the family panel offers 312 at 390px wide, which dropped "5.0" onto a line of its own.
+
+**Advice that works (checklist 17).** `profileGaps(player, event)` answers two questions
+where the rule lives — which blanks this person can fill, and whether filling them is
+*enough*. A rating merely out of range and a gender set to the other one are not blanks, so
+they get "pick a different event" rather than a promise the same gate would refuse. Eight
+tests cover it, including an adult on a 40+ bracket with no rating, where the advice must
+stay silent.
+
+**One pre-existing dead end fixed because this change makes it wrong.** On an 18-and-under
+**boys'** bracket an adult with no gender on file was offered *"Set your gender to
+register"* — setting it leaves them refused on age. The aged-out **Register a child** route
+is now checked first, and the profile link appears only when `profileGaps` says the blanks
+it names would clear the refusal.
+
+**Verified** on the local offline stack at 390 × 844: the editor saves rating + gender +
+date of birth (confirmed in `psql`), rehydrates from stored values, refuses a cleared date
+of birth with the add form's own words, reports a forced 503 honestly and retries clean, and
+the row's summary updates with no re-fetch. A girls', 3.0–4.0, 18-and-under bracket
+registered the child through the ordinary register form with no organizer — `pending_payment`,
+`registered_by_player_id` set. The organizer's player page still renders and writes through
+the shared controls. 435 tests, typecheck, build; lint one error **below** the `origin/main`
+baseline (34/30 vs 35/31).
+
+**Design gate — three rounds (FAIL, PASS, and one more because the PASS left a hole).**
+
+1. **FAIL `41d300fa0dc6a08b`** (3), all in this branch's own new surface, and two of them
+   defects in my own additions. The `fill` branch set `padding: 0` *before*
+   `padding: "0 10px"`, so it was overridden: every chip in the per-child editor kept 10px
+   each side inside the 46px it had been given, leaving a 23px content box, and all 18 split
+   their value across two lines ("2." over "5"). Saving collapsed a ~420px editor with no
+   confirmation and left the row that changed 192px above the viewport, so Save and Cancel
+   left the screen identical. And the refusal panel's advice was flat prose while the same
+   component's collapsed card rendered the identical sentence as a link with `?return=`.
+2. **PASS `e20fb357889c8257`**, 0 findings — chips one row at 46.2 × 46 with a 43px content
+   box, the saved row marked and scrolled to centre, the panel advice a 44px link inheriting
+   the panel's ink at 6.8:1.
+3. **Round 3 `1849389893dc347b`** — the PASS round's nit (the `Saved` mark was never
+   cleared, so it sat above a reopened editor and outlived a Cancel; every open and close now
+   goes through one closer), plus a defect that only appeared once the last branch could be
+   *rendered*: the collapsed card's "fix it and come back" link was **18px** tall and set
+   never to wrap, and in the state that renders it the card has no Register button, so that
+   link is its only action. Now 44px and wrapping — its label names however many blanks the
+   player is missing, and "Add a rating and a gender to register" is wider than a 390px card.
+
+**What the gate could not see for two rounds, and why.** No fixture event paired a skill or
+gender bound with **no age cap**, so an adult always landed on the aged-out "Register a
+child" route and the self-gap branch never rendered — both critics graded it from code and
+said so. Adding such an event locally is what exposed the 18px link. A fixture event with a
+skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in here.
