@@ -197,16 +197,23 @@ export async function addDependent(args: {
 
 // The address write on its own, so a form that got half of the pair can retry
 // THAT half rather than the whole call — repeating addDependent would add a
-// second child. The policy branch is the same one described above; citext, so
-// the stored value compares case-insensitively and there is nothing to
-// lower-case here.
+// second child, and a row that already exists only needs its address set.
+// The policy branch is the same one described above; citext, so the stored
+// value compares case-insensitively and there is nothing to lower-case here.
+//
+// A blank draft stores NULL, not "". Every reader of this column treats the
+// absence of an address as "nobody to email" and nothing treats "" that way:
+// an empty string would render as a dangling separator, defeat the "No email
+// address" line the family row shows, and look like an address to code that
+// only checks for null. So clearing the field is a supported move with one
+// representation, rather than a second kind of empty.
 export async function setDependentEmail(
   dependentPlayerId: string,
   email: string,
 ): Promise<{ error: string | null }> {
   const { error } = await supabase
     .from("players")
-    .update({ email: email.trim() })
+    .update({ email: email.trim() || null })
     .eq("id", dependentPlayerId);
   return { error: error?.message ?? null };
 }

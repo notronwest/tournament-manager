@@ -263,6 +263,10 @@ export default function ProfilePage() {
     setAddChildOpen(false);
   };
 
+  // The guardian's own address, for the one-press fill in both the add form
+  // and the row editor.
+  const myEmail = (existingPlayer?.email ?? "").trim();
+
   // Saves one row's address in place. The row is where the person is looking
   // and where the fact lives, so there is no panel for this: the line under
   // the name changes from "No email address" to the address itself.
@@ -276,6 +280,9 @@ export default function ProfilePage() {
       setEmailRowError("That didn\u2019t save. Try again in a moment.");
       return;
     }
+    // Mirrors what setDependentEmail just wrote: blank is an absent address,
+    // never an empty string, so the row reads "No email address" rather than a
+    // dangling separator.
     const stored = emailDraft.trim() || null;
     setDependents((prev) =>
       prev.map((x) =>
@@ -988,10 +995,22 @@ export default function ProfilePage() {
                           {age == null
                             ? "No date of birth yet"
                             : `${age} year${age === 1 ? "" : "s"} old`}
-                          {` · ${d.player.email ?? "No email address"}`}
+                          {` · ${dependentEmail(d) ?? "No email address"}`}
                         </div>
                         {editing ? (
-                          <div
+                          // A real <form>, not a div with a button: this is
+                          // the same field as the one in AddChildForm and it
+                          // has to refuse the same values. type="email" alone
+                          // does nothing outside a form, so a loose input here
+                          // would write "notanemail" through — on the mount
+                          // that exists to REPAIR a missing address, which is
+                          // the one that can least afford to be the lax one.
+                          // It also makes the phone keyboard's Go key work.
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void onSaveRowEmail(d);
+                            }}
                             style={{
                               display: "flex",
                               flexWrap: "wrap",
@@ -1010,8 +1029,7 @@ export default function ProfilePage() {
                               style={{ ...inputStyle, flex: "1 1 180px", minWidth: 0 }}
                             />
                             <button
-                              type="button"
-                              onClick={() => void onSaveRowEmail(d)}
+                              type="submit"
                               disabled={emailBusy}
                               style={emailBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
                             >
@@ -1024,27 +1042,46 @@ export default function ProfilePage() {
                                 setEmailRowError(null);
                               }}
                               disabled={emailBusy}
-                              style={ctaSecondaryStyle}
+                              style={
+                                emailBusy
+                                  ? { ...ctaSecondaryStyle, opacity: 0.6, cursor: "not-allowed" }
+                                  : ctaSecondaryStyle
+                              }
                             >
                               Cancel
                             </button>
+                            {/* The same one-press fill as the add form. This
+                                is the repair path, so it is the place a parent
+                                is most likely to be reaching for their own
+                                address. */}
+                            {myEmail &&
+                              emailDraft.trim().toLowerCase() !== myEmail.toLowerCase() && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEmailDraft(myEmail)}
+                                  disabled={emailBusy}
+                                  style={inlineActionStyle}
+                                >
+                                  Use my address
+                                </button>
+                              )}
                             {emailRowError && (
                               <div style={{ ...statusPanelStyle("danger"), fontSize: 12 }}>
                                 {emailRowError}
                               </div>
                             )}
-                          </div>
+                          </form>
                         ) : (
                           <button
                             type="button"
                             onClick={() => {
                               setEditingEmailFor(d.linkId);
-                              setEmailDraft(d.player.email ?? "");
+                              setEmailDraft(dependentEmail(d) ?? "");
                               setEmailRowError(null);
                             }}
                             style={inlineActionStyle}
                           >
-                            {d.player.email
+                            {dependentEmail(d)
                               ? `Change email address`
                               : `Add an email address`}
                           </button>
@@ -1074,7 +1111,7 @@ export default function ProfilePage() {
               <AddChildForm
                 variant="page"
                 guardianPlayerId={myPlayerId}
-                guardianEmail={existingPlayer?.email ?? null}
+                guardianEmail={myEmail || null}
                 onAdded={onChildAdded}
                 onCancel={() => {
                   setAddChildOpen(false);
@@ -1318,6 +1355,14 @@ const jumpLinkStyle: CSSProperties = {
   color: courtBlue,
   textDecoration: "underline",
 };
+
+// The one reading of "this child has an address". A row written before blank
+// meant NULL can hold "", and an empty string is not an address: it would
+// render as a dangling separator, hide the "No email address" line, and look
+// present to anything that only checks for null.
+function dependentEmail(d: Dependent): string | null {
+  return (d.player.email ?? "").trim() || null;
+}
 
 // A family row: the name/age column wraps above the action on a narrow
 // screen rather than being squeezed to nothing (DESIGN_PREFERENCES).

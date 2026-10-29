@@ -152,7 +152,7 @@ export function AddChildForm({
       // family list doesn't need a second read to catch up.
       const withEmail: Dependent = {
         ...dependent,
-        player: { ...dependent.player, email: email.trim() },
+        player: { ...dependent.player, email: email.trim() || null },
       };
       clear();
       onAdded(withEmail);
