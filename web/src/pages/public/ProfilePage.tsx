@@ -362,7 +362,10 @@ export default function ProfilePage() {
   };
 
   // One editor open in this card at a time: two forms would mean two submit
-  // buttons, and the card is supposed to have one obvious action.
+  // buttons, and the card is supposed to have one obvious action. Every path
+  // that opens or closes a row editor goes through here, which is also what
+  // drops a stale "Saved" — left to the openers, the mark sat above the form
+  // that had just reopened and outlived a Cancel.
   const closeRowEditors = () => {
     setEditingEmailFor(null);
     setEmailRowError(null);
@@ -1136,15 +1139,13 @@ export default function ProfilePage() {
                             <button
                               type="button"
                               onClick={() => {
+                                closeRowEditors();
                                 setEditingProfileFor(d.linkId);
                                 setProfileDraft({
                                   dob: d.player.dob ?? "",
                                   gender: d.player.gender ?? "",
                                   ...ratingValuesOf(d.player),
                                 });
-                                setProfileRowError(null);
-                                setEditingEmailFor(null);
-                                setEmailRowError(null);
                                 setAddChildOpen(false);
                               }}
                               style={inlineActionStyle}
@@ -1156,11 +1157,9 @@ export default function ProfilePage() {
                             <button
                               type="button"
                               onClick={() => {
+                                closeRowEditors();
                                 setEditingEmailFor(d.linkId);
                                 setEmailDraft(dependentEmail(d) ?? "");
-                                setEmailRowError(null);
-                                setEditingProfileFor(null);
-                                setProfileRowError(null);
                                 // One thing open in this card at a time: two
                                 // forms would mean two submit buttons, and the
                                 // card is supposed to have one obvious action.
@@ -1258,10 +1257,7 @@ export default function ProfilePage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setEditingEmailFor(null);
-                                setEmailRowError(null);
-                              }}
+                              onClick={closeRowEditors}
                               disabled={emailBusy}
                               style={
                                 emailBusy
@@ -1358,10 +1354,7 @@ export default function ProfilePage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setEditingProfileFor(null);
-                                  setProfileRowError(null);
-                                }}
+                                onClick={closeRowEditors}
                                 disabled={profileBusy}
                                 style={
                                   profileBusy

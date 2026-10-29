@@ -3589,10 +3589,18 @@ function Pill({
 // The "fix it and come back" link offered beside a refusal. Same treatment
 // the unset-gender case has always had; shared so the two cannot drift.
 const notEligibleLinkStyle: CSSProperties = {
+  // In this state the card has no Register button, so this link IS its
+  // action and carries the 44px height rather than the 18px a bare line of
+  // text measured. It wraps, too: the label now names however many blanks
+  // the player is missing, and "Add a rating and a gender to register" is
+  // wider than a 390px card.
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 44,
   fontSize: 12,
   color: courtBlue,
   textDecoration: "underline",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
 };
 
 // The chooser's add-a-youth entry (#1182). A sentinel option value rather
