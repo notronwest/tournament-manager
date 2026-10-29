@@ -93,9 +93,14 @@ function chipStyle(
 ): CSSProperties {
   const base: CSSProperties = {
     minWidth: dim,
-    ...(fill ? { flex: "1 1 0", padding: 0 } : null),
+    // Filling shares the row, so the chip's own side padding is what pushes
+    // it back over the width it was given: at 312px a 46px chip with 10px
+    // each side leaves a 23px content box and "2.5" wraps to "2." / "5".
+    // The value never splits — hence the nowrap below as well.
+    ...(fill ? { flex: "1 1 0" } : null),
     height: dim,
-    padding: "0 10px",
+    padding: fill ? 0 : "0 10px",
+    whiteSpace: "nowrap",
     border: `1.5px solid ${rule}`,
     borderRadius: 9,
     background: "#fff",

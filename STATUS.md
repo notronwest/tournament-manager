@@ -3143,3 +3143,70 @@ and the editor is a real `<form>` so it refuses exactly what the add form refuse
 this change): the focus ring is the browser's own `rgb(229,151,0)` at **2.4:1**, under
 D-0157's 3:1 floor, and the shared `inputStyle` is 39px against the 44px rule. Citing either
 would fail every UI change in the repo; both want a sweep of their own.
+
+---
+
+## 2026-10-29 — #1183: a guardian can record a child's rating and gender
+
+**The gap this closes.** A child added through My family had a name and a date of birth and
+nothing else, and **nothing anywhere could give them more**: the rating pickers on the
+profile page write the signed-in player's own columns, the add form collects no gender, and
+no screen a parent can reach writes a dependent's. So every division with a skill range
+refused the child *"no doubles self-rating on file"* and every boys'/girls' bracket refused
+them *"men's event"* — the youth path finished only on open-skill, mixed and open events,
+which is a minority of real divisions. #1182 made the youth path discoverable and #1186 made
+its address repairable; this is the last of the three, and the one that makes the path
+actually finish.
+
+**No migration.** Self-ratings are columns on the player row (`self_rating_doubles` /
+`_mixed` / `_singles`), not rows in `player_ratings` — that table is for external feeds with
+their own `as_of` dates. Gender is a column too. The guardian migration's `players update by
+self or related org` policy has an `is_guardian_of()` arm that is row-level over every
+column but `auth_user_id`, which its `with check` pins to null, so all of this rides the
+policy the address write already uses. And `enforce_event_eligibility()` reads
+`players where id = new.player_id` — the **registrant**, i.e. the child — so what a parent
+records is exactly what the server checks. Verified by negative test: a `PATCH` of a player
+outside the family returns `[]` and writes nothing.
+
+**What changed.**
+
+- The family row's muted line now carries what a bracket checks — `Doubles 3.5 · Mixed
+  doubles 4.5 · Female`, or **No rating yet** — with an inline **Add a rating and gender** /
+  **Change rating and gender** editor holding rating, gender and the date of birth, saved in
+  one write (`setDependentProfile`) so a parent cannot end up with half of it stored.
+- A missing rating is **named**; a missing gender is **not**. Gender is optional by design
+  and only a boys'/girls' bracket reads it, so nagging for it would ask every parent to
+  answer a question almost none of them need.
+- The date of birth is in that editor because the add form is the only thing that ever set
+  one and the register card already told parents to fix it here. Its "a date of birth is
+  needed" rule is now one function both mounts call, so the row editor cannot quietly
+  accept a blank the add form insists on.
+
+**Reuse (D-0049).** The three-picker rating group and the gender option list were each
+duplicated between the player's own profile and the organizer's player page, and
+`ratingRowLabelStyle` existed twice with identical bodies. Both are now one component
+(`RatingFields`, `GenderSelect`) mounted three ways, and the duplicate style is gone.
+`RatingPicker` was already shared and needed only a `fill` prop: its six chips want 316px
+and the family panel offers 312 at 390px wide, which dropped "5.0" onto a line of its own.
+
+**Advice that works (checklist 17).** `profileGaps(player, event)` answers two questions
+where the rule lives — which blanks this person can fill, and whether filling them is
+*enough*. A rating merely out of range and a gender set to the other one are not blanks, so
+they get "pick a different event" rather than a promise the same gate would refuse. Eight
+tests cover it, including an adult on a 40+ bracket with no rating, where the advice must
+stay silent.
+
+**One pre-existing dead end fixed because this change makes it wrong.** On an 18-and-under
+**boys'** bracket an adult with no gender on file was offered *"Set your gender to
+register"* — setting it leaves them refused on age. The aged-out **Register a child** route
+is now checked first, and the profile link appears only when `profileGaps` says the blanks
+it names would clear the refusal.
+
+**Verified** on the local offline stack at 390 × 844: the editor saves rating + gender +
+date of birth (confirmed in `psql`), rehydrates from stored values, refuses a cleared date
+of birth with the add form's own words, reports a forced 503 honestly and retries clean, and
+the row's summary updates with no re-fetch. A girls', 3.0–4.0, 18-and-under bracket
+registered the child through the ordinary register form with no organizer — `pending_payment`,
+`registered_by_player_id` set. The organizer's player page still renders and writes through
+the shared controls. 435 tests, typecheck, build; lint one error **below** the `origin/main`
+baseline (34/30 vs 35/31).

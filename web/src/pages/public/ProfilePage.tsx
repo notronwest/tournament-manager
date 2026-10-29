@@ -50,6 +50,7 @@ import {
   panelStyle,
   rule,
   statusPanelStyle,
+  successFg,
 } from "../../lib/publicTheme";
 
 type Player = Database["public"]["Tables"]["players"]["Row"];
@@ -74,6 +75,11 @@ const emptyProfileDraft: DependentProfileDraft = {
   mixed: null,
   singles: null,
 };
+
+// The row's DOM id, so a save can scroll the row it changed back into view.
+function familyRowId(linkId: string): string {
+  return `family-row-${linkId}`;
+}
 
 // Whether this player has any self-rating at all, which is what decides
 // whether the row's control offers to add one or to change it.
@@ -183,6 +189,12 @@ export default function ProfilePage() {
   const [profileDraft, setProfileDraft] = useState<DependentProfileDraft>(emptyProfileDraft);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileRowError, setProfileRowError] = useState<string | null>(null);
+  // Which row just saved, so the collapse is not the only thing that happens.
+  // A row editor is tall — the rating one runs to about 420px — so closing it
+  // scrolls the row that changed well up the page, and Save and Cancel left
+  // the screen looking identical. The row says "Saved" and is brought back
+  // into view; the summary line beside it is the actual confirmation.
+  const [savedRowFor, setSavedRowFor] = useState<string | null>(null);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [familyAdded, setFamilyAdded] = useState<string | null>(null);
   const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
@@ -333,6 +345,20 @@ export default function ProfilePage() {
     );
     setEditingEmailFor(null);
     setEmailDraft("");
+    confirmRowSaved(d.linkId);
+  };
+
+  // Bring the row that just changed back under the person's eyes and mark it,
+  // because the editor that collapsed was taller than the row it leaves
+  // behind. Scrolling is best-effort: jsdom and older browsers have no
+  // scrollIntoView, and a confirmation that throws would be worse than one
+  // that does not move the page.
+  const confirmRowSaved = (linkId: string) => {
+    setSavedRowFor(linkId);
+    requestAnimationFrame(() => {
+      const row = document.getElementById(familyRowId(linkId));
+      row?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    });
   };
 
   // One editor open in this card at a time: two forms would mean two submit
@@ -342,6 +368,7 @@ export default function ProfilePage() {
     setEmailRowError(null);
     setEditingProfileFor(null);
     setProfileRowError(null);
+    setSavedRowFor(null);
   };
 
   // Saves one child's rating, gender and date of birth in place, in a single
@@ -393,6 +420,7 @@ export default function ProfilePage() {
       ),
     );
     setEditingProfileFor(null);
+    confirmRowSaved(d.linkId);
   };
 
   const onRemoveChild = async () => {
@@ -1037,7 +1065,7 @@ export default function ProfilePage() {
                   const editingProfile = editingProfileFor === d.linkId;
                   const childName = d.player.first_name?.trim() || playerName(d.player);
                   return (
-                    <div key={d.linkId} style={familyRowStyle}>
+                    <div key={d.linkId} id={familyRowId(d.linkId)} style={familyRowStyle}>
                       <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                         <div style={{ fontSize: 14, color: ink, fontWeight: 500 }}>
                           {playerName(d.player)}
@@ -1079,6 +1107,23 @@ export default function ProfilePage() {
                         >
                           {selfRatingSummary(d.player)}
                         </div>
+                        {/* Said on the row, next to the two lines a save
+                            changes, because the editor that collapsed was
+                            taller than what it left behind. Not a panel at
+                            the top of the card: on a long family list that
+                            renders where the person is not looking. */}
+                        {savedRowFor === d.linkId && (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: successFg,
+                              marginTop: 2,
+                            }}
+                          >
+                            Saved
+                          </div>
+                        )}
                         {!editingEmail && !editingProfile && (
                           <div
                             style={{

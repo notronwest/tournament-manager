@@ -1750,6 +1750,12 @@ function EventCard({
   const subjectGaps = subjectPlayer
     ? profileGaps(subjectPlayer, event, tournamentStartsAt)
     : { fields: [] as string[], coversEverything: false };
+  // Where the blanks get filled. One link for both places that name them —
+  // the collapsed card and the panel inside the open form — so the advice is
+  // reachable from wherever it is read, and comes back here afterwards.
+  const profileReturnLink = `/profile?return=${encodeURIComponent(
+    `/t/${orgSlug}/${tournamentSlug}`,
+  )}`;
   // Anyone in the family who qualifies. A juniors bracket is the case this
   // exists for: the parent never qualifies for it, so gating the Register
   // button on the parent alone would leave them no way to reach the chooser
@@ -3202,13 +3208,20 @@ function EventCard({
                   blanks, but only when filling them in is genuinely enough —
                   profileGaps answers both halves, so this card never names a
                   field the gate would refuse anyway. */}
-              {youthCanEnterByAge && refusedOnAge
-                ? addYouthClause
-                : subjectGaps.coversEverything
-                  ? registeringSomeoneElse
-                    ? `Add ${listPhrase(subjectGaps.fields)} for ${subjectPlayer?.first_name} under My family on your profile.`
-                    : `Add ${listPhrase(subjectGaps.fields)} on your profile.`
-                  : otherRegistrantClause}
+              {youthCanEnterByAge && refusedOnAge ? (
+                addYouthClause
+              ) : subjectGaps.coversEverything ? (
+                // A link, not prose: the same advice on the collapsed card is
+                // one, and naming a screen without offering it leaves the
+                // person to find My family down a long profile page.
+                <Link to={profileReturnLink} style={blockedAdviceLinkStyle}>
+                  {registeringSomeoneElse
+                    ? `Add ${listPhrase(subjectGaps.fields)} for ${subjectPlayer?.first_name} under My family on your profile →`
+                    : `Add ${listPhrase(subjectGaps.fields)} on your profile →`}
+                </Link>
+              ) : (
+                otherRegistrantClause
+              )}
             </div>
           )}
 
@@ -3612,6 +3625,21 @@ const subjectBlockedStyle: CSSProperties = {
   ...statusPanelStyle("danger"),
   marginBottom: 12,
   fontSize: 13,
+};
+
+// The refusal panel's next move, where the blanks it names can be filled.
+// Inherits the panel's own ink rather than the card's blue: this sits on the
+// danger wash, and that panel's text colour is the one already measured
+// against it. Carries the 44px height because it is this panel's primary
+// action, not a passing reference inside a line of metadata.
+const blockedAdviceLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 44,
+  color: "inherit",
+  fontWeight: 600,
+  textDecoration: "underline",
+  textUnderlineOffset: 2,
 };
 
 function partnerModeTileStyle(active: boolean): CSSProperties {
