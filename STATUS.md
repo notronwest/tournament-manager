@@ -5,6 +5,68 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-10-29 — Offline seed: the register card's branches, and one registered player
+
+**Seed data only — no migration, no app code.** `supabase/seed.sql` now builds
+the whole `youth-chooser-test` fixture that three design gradings in a row had
+to hand-build (or do without): a published WMPC tournament whose dates are
+relative to `now()`, six brackets, one registered pair, and an adult date of
+birth on the offline director.
+
+**What it unblocks for the design gate.** The register card's
+*"Add &lt;blanks&gt; to register →"* branch only renders when the signed-in adult
+has no eligible registrant AND every refusal is a blank on their own profile.
+Every bracket a critic could reach paired its rating bound with `max_age = 18`,
+and the aged-out check runs first — so the card always took the *"Register a
+child"* route and the branch went ungraded twice. The third grading reached it
+only by editing the local database by hand, and it turned out to carry a real
+defect (an 18px tap target where the card's only action lives, fixed in #1188).
+The six brackets now cover one card branch each, with no hand-editing:
+
+| Bracket | Bounds | Card renders |
+|---|---|---|
+| Juniors 18 & Under Doubles 4.5-5.0 | `max_age 18` + 4.5–5.0 | **Register a child** |
+| Juniors 18 & Under Doubles | `max_age 18` | **Register a child** |
+| Open Singles (no age limits) | none | **Register** |
+| Seniors 60+ Doubles 3.0-4.0 | `min_age 60` + 3.0–4.0 | plain refusal, **no link** (unfixable) |
+| Open Doubles 3.0-4.0 (no age cap) | 3.0–4.0, ages null | **Add a rating to register →** |
+| Women's Doubles 3.5-4.5 (no age cap) | 3.5–4.5 + `women`, ages null | **Add a rating and a gender to register →** |
+
+Verified live on the local stack at 390 × 844: both links measure **44px** high
+(144px and 223px wide), `scrollWidth == clientWidth` on the document.
+
+**The director's `dob` is now `1980-01-01`, and that is load-bearing.** With it
+null the parent was refused for a *blank* date of birth rather than for their
+*age*, so every juniors bracket offered a link to their own profile and the
+youth flow was unreachable from a fresh seed. Rating and gender stay blank on
+purpose — they are the blanks the advice names.
+
+**`/admin/players/:playerId` is reachable at last.** `admin-get-player` grants
+an org-scoped director access only to a player with a **non-deleted**
+registration in one of the org's own tournaments. The three regs that existed
+locally had all been soft-deleted by the pending-payment sweeper, so the page
+answered *"Not authorized to view this player."* for every id reachable
+offline, three gradings running. The seed now carries a confirmed doubles pair
+(Marta Kowalski + Dev Ramaswamy, full profiles, `status 'paid'` so the sweeper
+cannot take them) in the open 3.0–4.0 bracket. The page loads populated, with
+tournament history.
+
+**Found while verifying — a real defect, not a fixture gap, left for its own
+change:** that page's **Partner** column is permanently "—". `registered_by_player_id`
+(added by `20261027120000_guardian_registrations.sql`) is a second FK from
+`event_registrations` to `players`, so the partner-name lookup in
+`supabase/functions/admin-get-player/index.ts` (`select("id, players (…)")`)
+now fails with PostgREST `PGRST201` *"more than one relationship was found"* —
+and that query's error is never checked, so the name silently stays null.
+Confirmed against the local REST API. The fix is to disambiguate the embed
+(`players!event_registrations_player_id_fkey`) and check the error.
+
+**How to pick the fixtures up:** `seed.sql` runs on first boot of a fresh local
+database and on `supabase db reset` — `scripts/offline.sh` alone will not
+re-seed a volume that already exists. Run `supabase db reset` once (it wipes
+local data; `scripts/offline-backup.sh` first if there is anything there worth
+keeping).
+
 ## 2026-10-27 — Data: Loon Race Team org + 12/29 tournament seeded on PROD (draft)
 
 Built the **Loon Race Team** organizer org and its **Loon Race Team Pickleball

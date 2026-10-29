@@ -76,6 +76,30 @@ Leave the terminal window open for the event. Stopping the app
 stack keeps running so you can rerun `./scripts/offline.sh` at any point
 without losing anything.
 
+## Fixture data (and how to get the newest of it)
+
+`supabase/seed.sql` carries the local-only fixture: the
+`director@offline.local` login, and a published WMPC tournament
+(`/t/wmpc/youth-chooser-test`) whose six brackets each render one branch of the
+public register card — including the two with a rating bound and **no** age cap,
+which are the only way the card's *"Add a rating and a gender to register →"*
+advice can be rendered at all, and a registered doubles pair, without which
+`/admin/players/:playerId` refuses every id this account can reach. The design
+gate grades against these, so they are part of the runtime, not scratch data.
+
+The seed runs on **first boot of a fresh local database** and on
+`supabase db reset` — `./scripts/offline.sh` on an existing Docker volume will
+**not** re-seed it. After pulling a change to `seed.sql`:
+
+```
+./scripts/offline-backup.sh     # if the local DB holds anything worth keeping
+supabase db reset               # re-applies every migration, then seed.sql
+```
+
+`supabase db reset` wipes the local database. It never touches a hosted
+project — the CLI does not run `seed.sql` against a linked project, and
+`db push` does not execute it either.
+
 ## Durability
 
 - The local Postgres data lives in a Docker volume that **persists across
