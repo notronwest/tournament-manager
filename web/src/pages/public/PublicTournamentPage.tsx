@@ -1678,10 +1678,6 @@ function EventCard({
   // The add-a-youth step is open. It replaces the rest of the register form
   // while it is, so there is only ever one submit button on screen.
   const [addingChild, setAddingChild] = useState(false);
-  // A child was added from this card but the optional address didn't save and
-  // the parent carried on anyway (#1186). Held so the card can say so instead
-  // of dropping them silently into a registration that looks fully done.
-  const [childNoEmail, setChildNoEmail] = useState<string | null>(null);
   // Roster panel collapsed by default; toggled by the toggle bar.
   const [rosterOpen, setRosterOpen] = useState(false);
 
@@ -1831,9 +1827,6 @@ function EventCard({
       return;
     }
     onRequestFocus();
-    // A notice about a child added in an earlier pass doesn't belong to a
-    // registration being started now.
-    setChildNoEmail(null);
     setEditMode("register");
     // Default to the player when they qualify; otherwise to the first family
     // member who does, so opening a juniors bracket lands on the child rather
@@ -3122,21 +3115,6 @@ function EventCard({
               register form is where a parent should be able to find it rather
               than having to already know about the family list on their
               profile. */}
-          {editMode === "register" && childNoEmail && !addingChild && (
-            <div style={{ ...statusPanelStyle("warn"), fontSize: 13, marginBottom: 14 }}>
-              {childNoEmail} was added, but their email address didn&rsquo;t
-              save, so notices about this registration reach nobody. You can
-              carry on &mdash; or set it from{" "}
-              <Link
-                to={`/profile?return=${encodeURIComponent(`/t/${orgSlug}/${tournamentSlug}`)}`}
-                style={{ color: "inherit", fontWeight: 600 }}
-              >
-                My family on your profile
-              </Link>
-              .
-            </div>
-          )}
-
           {editMode === "register" && (
             <div style={{ marginBottom: 14 }}>
               <label
@@ -3159,9 +3137,6 @@ function EventCard({
                     return;
                   }
                   setAddingChild(false);
-                  // Picking someone else makes the notice about the child just
-                  // added no longer about this registration.
-                  setChildNoEmail(null);
                   setSubjectId(e.target.value);
                 }}
                 disabled={submitting}
@@ -3187,13 +3162,10 @@ function EventCard({
               variant="inline"
               guardianPlayerId={me.id}
               guardianEmail={me.email}
-              onAdded={(dependent, opts) => {
+              onAdded={(dependent) => {
                 onDependentAdded(dependent);
                 setSubjectId(dependent.player.id);
                 setAddingChild(false);
-                setChildNoEmail(
-                  opts?.emailMissing ? playerName(dependent.player) : null,
-                );
               }}
               onCancel={() => setAddingChild(false)}
             />

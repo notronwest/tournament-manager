@@ -43,9 +43,7 @@ export function AddChildForm({
   guardianEmail?: string | null;
   // Handed the new dependent so the host can fold it into its own family
   // list — and, on the register form, select the child as the registrant.
-  // emailMissing says the parent asked for an address and chose to carry on
-  // without it, so the host can say "added" without claiming it all worked.
-  onAdded: (dependent: Dependent, opts?: { emailMissing?: boolean }) => void;
+  onAdded: (dependent: Dependent) => void;
   onCancel: () => void;
   variant?: "page" | "inline";
 }) {
@@ -122,13 +120,14 @@ export function AddChildForm({
     onAdded(dependent);
   };
 
-  // The child exists; only the address is missing. The primary move is the
-  // one write that failed, retried on its own — that is a move this screen
-  // can actually perform, where "go and edit them somewhere" is not: no
-  // player-facing screen edits a dependent's address (an organizer can, from
-  // the admin player page; the parent-facing gap is the same missing screen
-  // as #1183). Carrying on is the secondary, and it is labelled for what it
-  // costs so the host can report it as something short of success.
+  // The child exists; only the address is missing. Both moves are offered
+  // here, where the person is standing, because a message rendered by the
+  // host afterwards lands somewhere else — at the top of a long family list,
+  // or on a card that cannot act on it. The primary is the one write that
+  // failed, retried on its own. The secondary is labelled for what it costs
+  // and that is the whole of the telling: the family row carries "No email
+  // address" from then on, and the control to set one, so nothing about this
+  // has to be remembered or repeated on another screen.
   if (savedWithoutEmail) {
     const dependent = savedWithoutEmail;
     const name = dependent.player.first_name ?? "Your child";
@@ -164,7 +163,7 @@ export function AddChildForm({
           <strong>{name} was added</strong>, but their email address
           didn&rsquo;t save. Without one, notices about their registration
           reach nobody.
-          {retryFailed && " That didn't work either — the save keeps failing."}
+          {retryFailed && " That didn\u2019t work either \u2014 the save keeps failing."}
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
@@ -180,7 +179,7 @@ export function AddChildForm({
             disabled={busy}
             onClick={() => {
               clear();
-              onAdded(dependent, { emailMissing: true });
+              onAdded(dependent);
             }}
             style={
               busy

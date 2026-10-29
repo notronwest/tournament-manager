@@ -21,6 +21,7 @@ import {
   fetchDependents,
   playerName,
   removeDependent,
+  setDependentEmail,
   type Dependent,
 } from "../../lib/guardians";
 import {
@@ -36,6 +37,7 @@ import {
   ink,
   inkMuted,
   inkSoft,
+  inlineActionStyle,
   inputStyle,
   pageH1Style,
   pageSubStyle,
@@ -130,7 +132,15 @@ export default function ProfilePage() {
   const [dependents, setDependents] = useState<Dependent[]>([]);
   const [familyLoading, setFamilyLoading] = useState(false);
   const [addChildOpen, setAddChildOpen] = useState(false);
-  const [familyAddedNoEmail, setFamilyAddedNoEmail] = useState(false);
+  // Inline per-row address editing (#1186). A dependent's address was
+  // write-once-or-never until this: the add form is the only thing that ever
+  // set one, so a parent who skipped it, mistyped it, or hit the half-saved
+  // state had nowhere to go. editingEmailFor holds the link id of the row
+  // being edited, which is also what keeps only one row open at a time.
+  const [editingEmailFor, setEditingEmailFor] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailRowError, setEmailRowError] = useState<string | null>(null);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [familyAdded, setFamilyAdded] = useState<string | null>(null);
   const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
@@ -243,18 +253,37 @@ export default function ProfilePage() {
   // What this page does once the shared form has made the child: fold them
   // into the family list and say so. The validation and the write itself live
   // in AddChildForm, which the register form mounts too.
-  const onChildAdded = (dependent: Dependent, opts?: { emailMissing?: boolean }) => {
+  const onChildAdded = (dependent: Dependent) => {
     setFamilyError(null);
     setFamilyRemoved(null);
     setDependents((prev) =>
       [...prev, dependent].sort((a, b) => playerName(a.player).localeCompare(playerName(b.player))),
     );
     setFamilyAdded(playerName(dependent.player));
-    // The parent asked for an address and carried on without it. "Added" is
-    // true, "it worked" is not, so the panel drops to a warning and names the
-    // one move this screen offers — the Remove control is on the row above.
-    setFamilyAddedNoEmail(opts?.emailMissing === true);
     setAddChildOpen(false);
+  };
+
+  // Saves one row's address in place. The row is where the person is looking
+  // and where the fact lives, so there is no panel for this: the line under
+  // the name changes from "No email address" to the address itself.
+  const onSaveRowEmail = async (d: Dependent) => {
+    setEmailRowError(null);
+    setEmailBusy(true);
+    const { error: setErr } = await setDependentEmail(d.player.id, emailDraft);
+    setEmailBusy(false);
+    if (setErr) {
+      console.error("set dependent email failed", setErr);
+      setEmailRowError("That didn\u2019t save. Try again in a moment.");
+      return;
+    }
+    const stored = emailDraft.trim() || null;
+    setDependents((prev) =>
+      prev.map((x) =>
+        x.linkId === d.linkId ? { ...x, player: { ...x.player, email: stored } } : x,
+      ),
+    );
+    setEditingEmailFor(null);
+    setEmailDraft("");
   };
 
   const onRemoveChild = async () => {
@@ -906,11 +935,9 @@ export default function ProfilePage() {
               <div style={statusPanelStyle("danger")}>{familyError}</div>
             )}
             {familyAdded && (
-              <div style={statusPanelStyle(familyAddedNoEmail ? "warn" : "success")}>
+              <div style={statusPanelStyle("success")}>
                 {familyAdded} is on your family list. You can register them from
                 any tournament page.
-                {familyAddedNoEmail &&
-                  " Their email address didn’t save, so notices about their registration reach nobody — remove them below and add them again to set one."}
               </div>
             )}
             {familyRemoved && (
@@ -936,15 +963,18 @@ export default function ProfilePage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {dependents.map((d) => {
                   const age = ageAt(d.player.dob);
+                  const editing = editingEmailFor === d.linkId;
                   return (
                     <div key={d.linkId} style={familyRowStyle}>
                       <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                         <div style={{ fontSize: 14, color: ink, fontWeight: 500 }}>
                           {playerName(d.player)}
                         </div>
-                        {/* Age, then the address if they have one (#1186) —
-                            the one place a parent can see that the optional
-                            email actually saved. overflowWrap so a long
+                        {/* Age, then the address — and "No email address"
+                            when there is none (#1186). The absence is the
+                            thing worth seeing: it means every notice about
+                            this child's registrations is skipped, and nothing
+                            else on the page says so. overflowWrap so a long
                             address wraps instead of widening the row past a
                             390px screen. */}
                         <div
@@ -958,8 +988,67 @@ export default function ProfilePage() {
                           {age == null
                             ? "No date of birth yet"
                             : `${age} year${age === 1 ? "" : "s"} old`}
-                          {d.player.email ? ` · ${d.player.email}` : ""}
+                          {` · ${d.player.email ?? "No email address"}`}
                         </div>
+                        {editing ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: 8,
+                              marginTop: 6,
+                            }}
+                          >
+                            <input
+                              type="email"
+                              value={emailDraft}
+                              onChange={(e) => setEmailDraft(e.target.value)}
+                              placeholder="you@example.com"
+                              aria-label={`Email address for ${playerName(d.player)}`}
+                              disabled={emailBusy}
+                              style={{ ...inputStyle, flex: "1 1 180px", minWidth: 0 }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void onSaveRowEmail(d)}
+                              disabled={emailBusy}
+                              style={emailBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+                            >
+                              {emailBusy ? "Saving…" : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingEmailFor(null);
+                                setEmailRowError(null);
+                              }}
+                              disabled={emailBusy}
+                              style={ctaSecondaryStyle}
+                            >
+                              Cancel
+                            </button>
+                            {emailRowError && (
+                              <div style={{ ...statusPanelStyle("danger"), fontSize: 12 }}>
+                                {emailRowError}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingEmailFor(d.linkId);
+                              setEmailDraft(d.player.email ?? "");
+                              setEmailRowError(null);
+                            }}
+                            style={inlineActionStyle}
+                          >
+                            {d.player.email
+                              ? `Change email address`
+                              : `Add an email address`}
+                          </button>
+                        )}
                       </div>
                       {/* Fixed-width slot so the remove control lines up down
                           the list whether or not a row ever gains a second
