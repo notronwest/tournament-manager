@@ -277,7 +277,11 @@ export function AddChildForm({
               type="button"
               onClick={() => setEmail(mine)}
               disabled={busy}
-              style={inlineActionStyle}
+              style={
+                busy
+                  ? { ...inlineActionStyle, opacity: 0.6, cursor: "not-allowed" }
+                  : inlineActionStyle
+              }
             >
               Use my address
             </button>

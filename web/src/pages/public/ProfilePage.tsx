@@ -1028,6 +1028,27 @@ export default function ProfilePage() {
                               disabled={emailBusy}
                               style={{ ...inputStyle, flex: "1 1 180px", minWidth: 0 }}
                             />
+                            {/* The same one-press fill as the add form, in
+                                the same place relative to the actions: field,
+                                then the shortcut that fills it, then what you
+                                do with it. This is the repair path, so it is
+                                where a parent is most likely to be reaching
+                                for their own address. */}
+                            {myEmail &&
+                              emailDraft.trim().toLowerCase() !== myEmail.toLowerCase() && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEmailDraft(myEmail)}
+                                  disabled={emailBusy}
+                                  style={
+                                    emailBusy
+                                      ? { ...inlineActionStyle, opacity: 0.6, cursor: "not-allowed" }
+                                      : inlineActionStyle
+                                  }
+                                >
+                                  Use my address
+                                </button>
+                              )}
                             <button
                               type="submit"
                               disabled={emailBusy}
@@ -1050,21 +1071,6 @@ export default function ProfilePage() {
                             >
                               Cancel
                             </button>
-                            {/* The same one-press fill as the add form. This
-                                is the repair path, so it is the place a parent
-                                is most likely to be reaching for their own
-                                address. */}
-                            {myEmail &&
-                              emailDraft.trim().toLowerCase() !== myEmail.toLowerCase() && (
-                                <button
-                                  type="button"
-                                  onClick={() => setEmailDraft(myEmail)}
-                                  disabled={emailBusy}
-                                  style={inlineActionStyle}
-                                >
-                                  Use my address
-                                </button>
-                              )}
                             {emailRowError && (
                               <div style={{ ...statusPanelStyle("danger"), fontSize: 12 }}>
                                 {emailRowError}
@@ -1078,6 +1084,10 @@ export default function ProfilePage() {
                               setEditingEmailFor(d.linkId);
                               setEmailDraft(dependentEmail(d) ?? "");
                               setEmailRowError(null);
+                              // One thing open in this card at a time: two
+                              // forms would mean two submit buttons, and the
+                              // card is supposed to have one obvious action.
+                              setAddChildOpen(false);
                             }}
                             style={inlineActionStyle}
                           >
@@ -1127,8 +1137,13 @@ export default function ProfilePage() {
                     setFamilyAdded(null);
                     setFamilyRemoved(null);
                     setFamilyError(null);
+                    setEditingEmailFor(null);
+                    setEmailRowError(null);
                   }}
-                  style={ctaPrimaryStyle}
+                  // Steps down while a row is being edited: that row's Save is
+                  // the card's one filled action, and on a long family list
+                  // the two are a screenful apart rather than a page apart.
+                  style={editingEmailFor ? ctaSecondaryStyle : ctaPrimaryStyle}
                 >
                   Add a child
                 </button>
