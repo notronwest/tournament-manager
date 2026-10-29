@@ -18,6 +18,11 @@ import {
 // - When min/max are passed (an event's eligibility range), a selected chip
 //   outside the range renders in a "warning" style so the player can see their
 //   rating won't qualify for that event.
+// - `fill` shares the row between the chips instead of letting the last one
+//   wrap alone. The six chips at their natural width need 316px and a panel
+//   on a 390px phone offers 312, so the default layout drops "5.0" onto a
+//   line of its own — which reads as a missing option rather than a tight
+//   fit. Filling keeps one row and every chip above the 44px target.
 export const RATING_SCALE = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0] as const;
 
 export function RatingPicker({
@@ -27,6 +32,7 @@ export function RatingPicker({
   min = null,
   max = null,
   size = "md",
+  fill = false,
   ariaLabel,
 }: {
   value: number | null;
@@ -36,6 +42,8 @@ export function RatingPicker({
   min?: number | null;
   max?: number | null;
   size?: "sm" | "md";
+  // Share the row between the chips rather than wrapping the last one.
+  fill?: boolean;
   ariaLabel?: string;
 }) {
   const scale: number[] =
@@ -65,7 +73,7 @@ export function RatingPicker({
             aria-checked={selected}
             disabled={disabled}
             onClick={() => onChange(selected ? null : v)}
-            style={chipStyle(selected, !!outOfRange, disabled, dim, fontSize)}
+            style={chipStyle(selected, !!outOfRange, disabled, dim, fontSize, fill)}
           >
             {v.toFixed(1)}
           </button>
@@ -81,11 +89,18 @@ function chipStyle(
   disabled: boolean,
   dim: number,
   fontSize: number,
+  fill: boolean,
 ): CSSProperties {
   const base: CSSProperties = {
     minWidth: dim,
+    // Filling shares the row, so the chip's own side padding is what pushes
+    // it back over the width it was given: at 312px a 46px chip with 10px
+    // each side leaves a 23px content box and "2.5" wraps to "2." / "5".
+    // The value never splits — hence the nowrap below as well.
+    ...(fill ? { flex: "1 1 0" } : null),
     height: dim,
-    padding: "0 10px",
+    padding: fill ? 0 : "0 10px",
+    whiteSpace: "nowrap",
     border: `1.5px solid ${rule}`,
     borderRadius: 9,
     background: "#fff",

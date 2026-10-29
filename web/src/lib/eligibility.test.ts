@@ -9,7 +9,7 @@
 // only enough to prove the gender branch is being read in isolation.
 import { describe, expect, it } from "vitest";
 import type { Database } from "../types/supabase";
-import { ageAt, checkEligibility } from "./eligibility";
+import { ageAt, checkEligibility, listPhrase, profileGaps } from "./eligibility";
 
 type Event = Database["public"]["Tables"]["events"]["Row"];
 type Player = Database["public"]["Tables"]["players"]["Row"];
@@ -162,5 +162,85 @@ describe("checkEligibility age gate (#1169)", () => {
     const thisYear = new Date().getUTCFullYear();
     expect(ageAt(`${thisYear - 30}-01-01`)).toBeGreaterThanOrEqual(29);
     expect(ageAt(null)).toBeNull();
+  });
+});
+
+// #1183 — the advice a refusal gives a guardian. The rule the design gate
+// cares about: never name a field whose filling the same gate would refuse
+// anyway (checklist 17).
+describe("profileGaps", () => {
+  const skillEvent = (min: number | null, max: number | null): Event =>
+    ({ ...event("open"), min_rating: min, max_rating: max }) as unknown as Event;
+  const bare = (over: Partial<Player> = {}): Player =>
+    ({
+      gender: null,
+      dob: "2015-06-01",
+      self_rating_doubles: null,
+      self_rating_mixed: null,
+      self_rating_singles: null,
+      ...over,
+    }) as unknown as Player;
+
+  it("names a missing rating, and says filling it is enough", () => {
+    const g = profileGaps(bare(), skillEvent(3, 4));
+    expect(g.fields).toEqual(["a rating"]);
+    expect(g.coversEverything).toBe(true);
+  });
+
+  it("stays silent about a rating that is merely out of range", () => {
+    // The fix is a different bracket. Telling this player to edit the number
+    // until it fits is advice the same gate refuses on the next bracket.
+    const g = profileGaps(bare({ self_rating_doubles: 4.5 }), skillEvent(3, 3.5));
+    expect(g.fields).toEqual([]);
+    expect(g.coversEverything).toBe(false);
+  });
+
+  it("names a missing gender for a single-gender bracket only", () => {
+    expect(profileGaps(bare(), event("women")).fields).toEqual(["a gender"]);
+    expect(profileGaps(bare(), event("mixed")).fields).toEqual([]);
+    expect(profileGaps(bare(), event("open")).fields).toEqual([]);
+  });
+
+  it("stays silent about a gender set to the other one", () => {
+    const g = profileGaps(bare({ gender: "F" }), event("men"));
+    expect(g.fields).toEqual([]);
+    expect(g.coversEverything).toBe(false);
+  });
+
+  it("names a missing date of birth only where an age bound reads it", () => {
+    expect(profileGaps(bare({ dob: null }), ageEvent(null, 18)).fields).toEqual([
+      "a date of birth",
+    ]);
+    expect(profileGaps(bare({ dob: null }), event("open")).fields).toEqual([]);
+  });
+
+  it("refuses to promise a fix when something unfixable is also wrong", () => {
+    // An adult on a 40+ bracket with no rating: filling the rating in would
+    // leave them refused on age, so the advice must not say so.
+    const adult = bare({ dob: "1995-06-01" });
+    const g = profileGaps(adult, { ...ageEvent(40, null), min_rating: 3, max_rating: 4 } as Event);
+    expect(g.fields).toEqual(["a rating"]);
+    expect(g.coversEverything).toBe(false);
+  });
+
+  it("gathers every blank at once", () => {
+    const g = profileGaps(bare({ dob: null }), {
+      ...event("women"),
+      min_rating: 3,
+      max_rating: 4,
+      min_age: null,
+      max_age: 18,
+    } as Event);
+    expect(g.fields).toEqual(["a rating", "a gender", "a date of birth"]);
+    expect(g.coversEverything).toBe(true);
+    expect(listPhrase(g.fields)).toBe("a rating, a gender and a date of birth");
+  });
+});
+
+describe("listPhrase", () => {
+  it("reads one, two and three items as a sentence", () => {
+    expect(listPhrase([])).toBe("");
+    expect(listPhrase(["a rating"])).toBe("a rating");
+    expect(listPhrase(["a rating", "a gender"])).toBe("a rating and a gender");
   });
 });

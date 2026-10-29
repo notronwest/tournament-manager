@@ -16,7 +16,12 @@ import { usePendingPayments, type PendingTournamentGroup } from "../../component
 import { formatUsd } from "../../lib/pricing";
 import { parseDescription } from "../../lib/descriptionBlocks";
 import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
-import { checkEligibility, eligibilityChips } from "../../lib/eligibility";
+import {
+  checkEligibility,
+  eligibilityChips,
+  listPhrase,
+  profileGaps,
+} from "../../lib/eligibility";
 import {
   asRegistrationInsert,
   fetchDependents,
@@ -1738,6 +1743,19 @@ function EventCard({
   // Only the age gate is fixable by choosing a younger person. A rating or a
   // gender refusal follows a brand-new child too, so those keep the old copy.
   const refusedOnAge = subjectReasons.some((r) => r.startsWith("needs age"));
+  // What the person looking at this card can go and fill in to clear the
+  // refusal — and whether filling it in is actually enough (#1183). Both
+  // questions are answered where the rule lives, so this card cannot promise
+  // a move the gate would refuse anyway.
+  const subjectGaps = subjectPlayer
+    ? profileGaps(subjectPlayer, event, tournamentStartsAt)
+    : { fields: [] as string[], coversEverything: false };
+  // Where the blanks get filled. One link for both places that name them —
+  // the collapsed card and the panel inside the open form — so the advice is
+  // reachable from wherever it is read, and comes back here afterwards.
+  const profileReturnLink = `/profile?return=${encodeURIComponent(
+    `/t/${orgSlug}/${tournamentSlug}`,
+  )}`;
   // Anyone in the family who qualifies. A juniors bracket is the case this
   // exists for: the parent never qualifies for it, so gating the Register
   // button on the parent alone would leave them no way to reach the chooser
@@ -2625,45 +2643,21 @@ function EventCard({
     if (!registrationOpen) return null;
     if (expanded) return null;
     if (me && !playerEligible && eligibleRegistrants.length === 0) {
-      // An UNSET gender on a single-gender event is fixable — point the
-      // player at their profile instead of a dead-end "Not eligible." A
-      // *set-but-wrong* gender (e.g. M on a women's event) stays a plain
-      // block: they've declared a gender, so this bracket isn't theirs.
-      const genderUnset = me.gender == null;
-      const isGenderedEvent =
-        event.gender === "men" || event.gender === "women";
-      if (genderUnset && isGenderedEvent) {
-        return (
-          <Link
-            to={`/profile?return=${encodeURIComponent(
-              `/t/${orgSlug}/${tournamentSlug}`,
-            )}`}
-            style={notEligibleLinkStyle}
-          >
-            Set your gender to register →
-          </Link>
-        );
-      }
-      // A missing date of birth is fixable in one screen, exactly like an
-      // unset gender — so it gets the same treatment rather than a grey line
-      // with no next move. The copy that explains it lives inside the
-      // register form, which this player can never open.
       const profileLink = `/profile?return=${encodeURIComponent(
         `/t/${orgSlug}/${tournamentSlug}`,
       )}`;
-      const needsDob = eligibilityReasons.some((r) => r.includes("date of birth"));
-      if (needsDob) {
-        return (
-          <Link to={profileLink} style={notEligibleLinkStyle}>
-            Add your date of birth to register →
-          </Link>
-        );
-      }
       // An age-capped bracket the player has aged out of is the juniors case:
       // the product CAN enter their child, and the only route to that is the
       // family list on their profile. Saying nothing here is what left a
       // parent staring at "Not eligible" on the one bracket this feature was
       // built for.
+      //
+      // This is checked FIRST, before the links that send a player to their
+      // own profile (#1183). On a boys' 18-and-under bracket an adult with no
+      // gender on file was offered "Set your gender to register", and setting
+      // it leaves them refused for their age — a link whose own destination
+      // cannot clear the refusal. Adding a child is the move whenever the
+      // parent has aged out and a child could enter, whatever else is blank.
       const agedOut =
         event.max_age != null &&
         eligibilityReasons.some((r) => r.startsWith("needs age"));
@@ -2704,6 +2698,19 @@ function EventCard({
               {someoneIn ? "Register another child" : "Register a child"}
             </button>
           </div>
+        );
+      }
+      // What the player themselves is missing, offered as the one link that
+      // clears it — but only when filling it in is genuinely enough. A gender
+      // set to the other one, or a rating outside the bracket's range, is not
+      // a blank to fill and gets the plain refusal below: a link that leads
+      // to a screen which cannot help is worse than no link.
+      const myGaps = profileGaps(me, event, tournamentStartsAt);
+      if (myGaps.coversEverything) {
+        return (
+          <Link to={profileLink} style={notEligibleLinkStyle}>
+            Add {listPhrase(myGaps.fields)} to register →
+          </Link>
         );
       }
       if (dependentsAlreadyIn.length > 0) {
@@ -3196,13 +3203,25 @@ function EventCard({
                   : "You can't enter this event"}
                 : {subjectReasons.join("; ")}.
               </strong>{" "}
-              {subjectReasons.some((r) => r.includes("date of birth"))
-                ? registeringSomeoneElse
-                  ? "Add their date of birth under My family on your profile."
-                  : "Add your date of birth on your profile."
-                : youthCanEnterByAge && refusedOnAge
-                  ? addYouthClause
-                  : otherRegistrantClause}
+              {/* Age first: when a younger registrant is the way through,
+                  that is the move, whatever else is also blank. Then the
+                  blanks, but only when filling them in is genuinely enough —
+                  profileGaps answers both halves, so this card never names a
+                  field the gate would refuse anyway. */}
+              {youthCanEnterByAge && refusedOnAge ? (
+                addYouthClause
+              ) : subjectGaps.coversEverything ? (
+                // A link, not prose: the same advice on the collapsed card is
+                // one, and naming a screen without offering it leaves the
+                // person to find My family down a long profile page.
+                <Link to={profileReturnLink} style={blockedAdviceLinkStyle}>
+                  {registeringSomeoneElse
+                    ? `Add ${listPhrase(subjectGaps.fields)} for ${subjectPlayer?.first_name} under My family on your profile →`
+                    : `Add ${listPhrase(subjectGaps.fields)} on your profile →`}
+                </Link>
+              ) : (
+                otherRegistrantClause
+              )}
             </div>
           )}
 
@@ -3570,10 +3589,18 @@ function Pill({
 // The "fix it and come back" link offered beside a refusal. Same treatment
 // the unset-gender case has always had; shared so the two cannot drift.
 const notEligibleLinkStyle: CSSProperties = {
+  // In this state the card has no Register button, so this link IS its
+  // action and carries the 44px height rather than the 18px a bare line of
+  // text measured. It wraps, too: the label now names however many blanks
+  // the player is missing, and "Add a rating and a gender to register" is
+  // wider than a 390px card.
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 44,
   fontSize: 12,
   color: courtBlue,
   textDecoration: "underline",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
 };
 
 // The chooser's add-a-youth entry (#1182). A sentinel option value rather
@@ -3606,6 +3633,21 @@ const subjectBlockedStyle: CSSProperties = {
   ...statusPanelStyle("danger"),
   marginBottom: 12,
   fontSize: 13,
+};
+
+// The refusal panel's next move, where the blanks it names can be filled.
+// Inherits the panel's own ink rather than the card's blue: this sits on the
+// danger wash, and that panel's text colour is the one already measured
+// against it. Carries the 44px height because it is this panel's primary
+// action, not a passing reference inside a line of metadata.
+const blockedAdviceLinkStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: 44,
+  color: "inherit",
+  fontWeight: 600,
+  textDecoration: "underline",
+  textUnderlineOffset: 2,
 };
 
 function partnerModeTileStyle(active: boolean): CSSProperties {

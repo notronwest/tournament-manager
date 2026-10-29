@@ -12,18 +12,22 @@ import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { recordSignupEvent, grantAccountCreditIfEligible } from "../../lib/campaignCapture";
 import type { Database } from "../../types/supabase";
-import { RatingPicker } from "../../components/RatingPicker";
+import { RatingFields } from "../../components/RatingFields";
+import { GenderSelect } from "../../components/GenderSelect";
 import { AddChildForm } from "../../components/AddChildForm";
 import { Field, FieldRow } from "../../components/Field";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { ageAt } from "../../lib/eligibility";
 import {
+  dependentDobError,
   fetchDependents,
   playerName,
   removeDependent,
   setDependentEmail,
+  setDependentProfile,
   type Dependent,
 } from "../../lib/guardians";
+import { ratingValuesOf, selfRatingSummary } from "../../lib/selfRatings";
 import {
   contentColStyle,
   courtRed,
@@ -46,10 +50,43 @@ import {
   panelStyle,
   rule,
   statusPanelStyle,
+  successFg,
 } from "../../lib/publicTheme";
 
 type Player = Database["public"]["Tables"]["players"]["Row"];
 type PlayerGender = Database["public"]["Enums"]["player_gender"];
+
+// What the per-child editor holds while it is open (#1183). "" is the
+// unset gender, the same sentinel the select uses on the profile form above,
+// and null is an unset rating — a rating can be cleared by tapping its
+// selected chip, so "nothing chosen" has to be representable.
+type DependentProfileDraft = {
+  dob: string;
+  gender: PlayerGender | "";
+  doubles: number | null;
+  mixed: number | null;
+  singles: number | null;
+};
+
+const emptyProfileDraft: DependentProfileDraft = {
+  dob: "",
+  gender: "",
+  doubles: null,
+  mixed: null,
+  singles: null,
+};
+
+// The row's DOM id, so a save can scroll the row it changed back into view.
+function familyRowId(linkId: string): string {
+  return `family-row-${linkId}`;
+}
+
+// Whether this player has any self-rating at all, which is what decides
+// whether the row's control offers to add one or to change it.
+function hasAnySelfRating(p: Player): boolean {
+  const v = ratingValuesOf(p);
+  return v.doubles != null || v.mixed != null || v.singles != null;
+}
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -141,6 +178,23 @@ export default function ProfilePage() {
   const [emailDraft, setEmailDraft] = useState("");
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailRowError, setEmailRowError] = useState<string | null>(null);
+  // Inline per-row rating, gender and date of birth (#1183). The same shape
+  // as the address editor above, for the same reason: a child added through
+  // the add form has a name and a date of birth and nothing else, and every
+  // skill-bounded or single-gender bracket refused them with no control the
+  // parent could reach. The date of birth is in here too because the one
+  // place that ever set it was the add form, and the register form already
+  // tells a parent to fix it here.
+  const [editingProfileFor, setEditingProfileFor] = useState<string | null>(null);
+  const [profileDraft, setProfileDraft] = useState<DependentProfileDraft>(emptyProfileDraft);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileRowError, setProfileRowError] = useState<string | null>(null);
+  // Which row just saved, so the collapse is not the only thing that happens.
+  // A row editor is tall — the rating one runs to about 420px — so closing it
+  // scrolls the row that changed well up the page, and Save and Cancel left
+  // the screen looking identical. The row says "Saved" and is brought back
+  // into view; the summary line beside it is the actual confirmation.
+  const [savedRowFor, setSavedRowFor] = useState<string | null>(null);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [familyAdded, setFamilyAdded] = useState<string | null>(null);
   const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
@@ -291,6 +345,85 @@ export default function ProfilePage() {
     );
     setEditingEmailFor(null);
     setEmailDraft("");
+    confirmRowSaved(d.linkId);
+  };
+
+  // Bring the row that just changed back under the person's eyes and mark it,
+  // because the editor that collapsed was taller than the row it leaves
+  // behind. Scrolling is best-effort: jsdom and older browsers have no
+  // scrollIntoView, and a confirmation that throws would be worse than one
+  // that does not move the page.
+  const confirmRowSaved = (linkId: string) => {
+    setSavedRowFor(linkId);
+    requestAnimationFrame(() => {
+      const row = document.getElementById(familyRowId(linkId));
+      row?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    });
+  };
+
+  // One editor open in this card at a time: two forms would mean two submit
+  // buttons, and the card is supposed to have one obvious action. Every path
+  // that opens or closes a row editor goes through here, which is also what
+  // drops a stale "Saved" — left to the openers, the mark sat above the form
+  // that had just reopened and outlived a Cancel.
+  const closeRowEditors = () => {
+    setEditingEmailFor(null);
+    setEmailRowError(null);
+    setEditingProfileFor(null);
+    setProfileRowError(null);
+    setSavedRowFor(null);
+  };
+
+  // Saves one child's rating, gender and date of birth in place, in a single
+  // write, so a parent who sets a rating and a gender together cannot end up
+  // with half of it stored.
+  const onSaveRowProfile = async (d: Dependent) => {
+    // The same rule the add form applies, from the same function: a row
+    // editor that accepted a blank would quietly undo what the add form
+    // insisted on.
+    const dobErr = dependentDobError(profileDraft.dob);
+    if (dobErr) {
+      setProfileRowError(dobErr);
+      return;
+    }
+    setProfileRowError(null);
+    setProfileBusy(true);
+    const values = {
+      dob: profileDraft.dob || null,
+      gender: profileDraft.gender || null,
+      doubles: profileDraft.doubles,
+      mixed: profileDraft.mixed,
+      singles: profileDraft.singles,
+    };
+    const { error: setErr } = await setDependentProfile(d.player.id, values);
+    setProfileBusy(false);
+    if (setErr) {
+      console.error("set dependent profile failed", setErr);
+      setProfileRowError("That didn’t save. Try again in a moment.");
+      return;
+    }
+    // Mirrors exactly what was written, so the row's summary line and the
+    // eligibility the register form computes both agree with the database
+    // without a re-fetch.
+    setDependents((prev) =>
+      prev.map((x) =>
+        x.linkId === d.linkId
+          ? {
+              ...x,
+              player: {
+                ...x.player,
+                dob: values.dob,
+                gender: values.gender,
+                self_rating_doubles: values.doubles,
+                self_rating_mixed: values.mixed,
+                self_rating_singles: values.singles,
+              },
+            }
+          : x,
+      ),
+    );
+    setEditingProfileFor(null);
+    confirmRowSaved(d.linkId);
   };
 
   const onRemoveChild = async () => {
@@ -780,17 +913,7 @@ export default function ProfilePage() {
             />
           </Field>
           <Field label="Gender">
-            <select
-              value={gender}
-              onChange={(e) => setGender(e.target.value as PlayerGender | "")}
-              style={inputStyle}
-              disabled={busy}
-            >
-              <option value="">—</option>
-              <option value="M">Male</option>
-              <option value="F">Female</option>
-              <option value="X">Other / prefer not to say</option>
-            </select>
+            <GenderSelect value={gender} onChange={setGender} disabled={busy} />
           </Field>
         </FieldRow>
 
@@ -810,44 +933,15 @@ export default function ProfilePage() {
           </Field>
         </FieldRow>
 
-        <div>
-          <div style={{ fontSize: 13, color: ink, marginBottom: 4 }}>
-            <strong>Self-reported rating</strong>{" "}
-            <span style={{ color: inkMuted }}>
-              (optional — helps organizers seed brackets; tap a level, tap
-              again to clear)
-            </span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 8 }}>
-            <div>
-              <div style={ratingRowLabelStyle}>Doubles (same-gender)</div>
-              <RatingPicker
-                value={ratingDoubles}
-                onChange={setRatingDoubles}
-                disabled={busy}
-                ariaLabel="Doubles self-rating"
-              />
-            </div>
-            <div>
-              <div style={ratingRowLabelStyle}>Mixed doubles</div>
-              <RatingPicker
-                value={ratingMixed}
-                onChange={setRatingMixed}
-                disabled={busy}
-                ariaLabel="Mixed doubles self-rating"
-              />
-            </div>
-            <div>
-              <div style={ratingRowLabelStyle}>Singles</div>
-              <RatingPicker
-                value={ratingSingles}
-                onChange={setRatingSingles}
-                disabled={busy}
-                ariaLabel="Singles self-rating"
-              />
-            </div>
-          </div>
-        </div>
+        <RatingFields
+          values={{ doubles: ratingDoubles, mixed: ratingMixed, singles: ratingSingles }}
+          onChange={(f, v) => {
+            if (f === "doubles") setRatingDoubles(v);
+            else if (f === "mixed") setRatingMixed(v);
+            else setRatingSingles(v);
+          }}
+          disabled={busy}
+        />
 
         {isFirstFill && (
           <div>
@@ -970,9 +1064,11 @@ export default function ProfilePage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {dependents.map((d) => {
                   const age = ageAt(d.player.dob);
-                  const editing = editingEmailFor === d.linkId;
+                  const editingEmail = editingEmailFor === d.linkId;
+                  const editingProfile = editingProfileFor === d.linkId;
+                  const childName = d.player.first_name?.trim() || playerName(d.player);
                   return (
-                    <div key={d.linkId} style={familyRowStyle}>
+                    <div key={d.linkId} id={familyRowId(d.linkId)} style={familyRowStyle}>
                       <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                         <div style={{ fontSize: 14, color: ink, fontWeight: 500 }}>
                           {playerName(d.player)}
@@ -997,7 +1093,110 @@ export default function ProfilePage() {
                             : `${age} year${age === 1 ? "" : "s"} old`}
                           {` · ${dependentEmail(d) ?? "No email address"}`}
                         </div>
-                        {editing ? (
+                        {/* What a bracket checks, on its own line: the rating
+                            decides whether this child can enter a skill-
+                            bounded division at all, which is most of them,
+                            and a missing one is why the register form refuses
+                            them. Gender appears only once set — it is
+                            optional by design and only a boys' or girls'
+                            bracket reads it. */}
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: inkMuted,
+                            marginTop: 2,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
+                          {selfRatingSummary(d.player)}
+                        </div>
+                        {/* Said on the row, next to the two lines a save
+                            changes, because the editor that collapsed was
+                            taller than what it left behind. Not a panel at
+                            the top of the card: on a long family list that
+                            renders where the person is not looking. */}
+                        {savedRowFor === d.linkId && (
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: successFg,
+                              marginTop: 2,
+                            }}
+                          >
+                            Saved
+                          </div>
+                        )}
+                        {!editingEmail && !editingProfile && (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: 16,
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                closeRowEditors();
+                                setEditingProfileFor(d.linkId);
+                                setProfileDraft({
+                                  dob: d.player.dob ?? "",
+                                  gender: d.player.gender ?? "",
+                                  ...ratingValuesOf(d.player),
+                                });
+                                setAddChildOpen(false);
+                              }}
+                              style={inlineActionStyle}
+                            >
+                              {hasAnySelfRating(d.player) || d.player.gender
+                                ? "Change rating and gender"
+                                : "Add a rating and gender"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                closeRowEditors();
+                                setEditingEmailFor(d.linkId);
+                                setEmailDraft(dependentEmail(d) ?? "");
+                                // One thing open in this card at a time: two
+                                // forms would mean two submit buttons, and the
+                                // card is supposed to have one obvious action.
+                                setAddChildOpen(false);
+                              }}
+                              style={inlineActionStyle}
+                            >
+                              {dependentEmail(d)
+                                ? `Change email address`
+                                : `Add an email address`}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {/* Fixed-width slot so the remove control lines up down
+                          the list whether or not a row ever gains a second
+                          indicator. */}
+                      <div style={familyActionSlotStyle}>
+                        <button
+                          type="button"
+                          onClick={() => setRemoveTarget(d)}
+                          aria-label={`Remove ${playerName(d.player)} from your family`}
+                          title={`Remove ${playerName(d.player)}`}
+                          style={familyRemoveButtonStyle}
+                        >
+                          <Trash2 size={16} aria-hidden="true" />
+                        </button>
+                      </div>
+                      {/* The open editor spans the row, under the name
+                          and the remove control, so a form carrying three
+                          rating scales gets the card's full width instead of
+                          the narrow name column. At 390px that is the
+                          difference between six chips on one line and an
+                          orphan level on a second. */}
+                      {(editingEmail || editingProfile) && (
+                        <div style={{ flexBasis: "100%", minWidth: 0 }}>
+                          {editingEmail ? (
                           // A real <form>, not a div with a button: this is
                           // the same field as the one in AddChildForm and it
                           // has to refuse the same values. type="email" alone
@@ -1058,10 +1257,7 @@ export default function ProfilePage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setEditingEmailFor(null);
-                                setEmailRowError(null);
-                              }}
+                              onClick={closeRowEditors}
                               disabled={emailBusy}
                               style={
                                 emailBusy
@@ -1077,40 +1273,107 @@ export default function ProfilePage() {
                               </div>
                             )}
                           </form>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingEmailFor(d.linkId);
-                              setEmailDraft(dependentEmail(d) ?? "");
-                              setEmailRowError(null);
-                              // One thing open in this card at a time: two
-                              // forms would mean two submit buttons, and the
-                              // card is supposed to have one obvious action.
-                              setAddChildOpen(false);
+                          ) : (
+                          // A real <form> for the same reason the address one
+                          // is: the date input's own constraints only bite
+                          // inside a form, and the phone keyboard's Go key
+                          // then submits.
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void onSaveRowProfile(d);
                             }}
-                            style={inlineActionStyle}
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 12,
+                              marginTop: 8,
+                            }}
                           >
-                            {dependentEmail(d)
-                              ? `Change email address`
-                              : `Add an email address`}
-                          </button>
-                        )}
-                      </div>
-                      {/* Fixed-width slot so the remove control lines up down
-                          the list whether or not a row ever gains a second
-                          indicator. */}
-                      <div style={familyActionSlotStyle}>
-                        <button
-                          type="button"
-                          onClick={() => setRemoveTarget(d)}
-                          aria-label={`Remove ${playerName(d.player)} from your family`}
-                          title={`Remove ${playerName(d.player)}`}
-                          style={familyRemoveButtonStyle}
-                        >
-                          <Trash2 size={16} aria-hidden="true" />
-                        </button>
-                      </div>
+                            <FieldRow>
+                              <Field label="Date of birth">
+                                <input
+                                  type="date"
+                                  value={profileDraft.dob}
+                                  onChange={(e) =>
+                                    setProfileDraft((p) => ({ ...p, dob: e.target.value }))
+                                  }
+                                  aria-label={`Date of birth for ${childName}`}
+                                  disabled={profileBusy}
+                                  style={inputStyle}
+                                />
+                              </Field>
+                              <Field label="Gender">
+                                <GenderSelect
+                                  value={profileDraft.gender}
+                                  onChange={(v) =>
+                                    setProfileDraft((p) => ({ ...p, gender: v }))
+                                  }
+                                  disabled={profileBusy}
+                                  ariaLabel={`Gender for ${childName}`}
+                                />
+                                <span style={{ fontSize: 12, color: inkMuted }}>
+                                  Only needed for a boys&rsquo; or girls&rsquo;
+                                  bracket. Everything else is open to any
+                                  answer, including none.
+                                </span>
+                              </Field>
+                            </FieldRow>
+                            <RatingFields
+                              variant="inline"
+                              ownerName={childName}
+                              values={{
+                                doubles: profileDraft.doubles,
+                                mixed: profileDraft.mixed,
+                                singles: profileDraft.singles,
+                              }}
+                              onChange={(f, v) =>
+                                setProfileDraft((p) => ({ ...p, [f]: v }))
+                              }
+                              disabled={profileBusy}
+                            />
+                            <span style={{ fontSize: 12, color: inkMuted }}>
+                              Most divisions have a skill range, so a rating is
+                              what lets {childName} be entered for one. Tap a
+                              level, tap it again to clear.
+                            </span>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                alignItems: "center",
+                                gap: 8,
+                              }}
+                            >
+                              <button
+                                type="submit"
+                                disabled={profileBusy}
+                                style={profileBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+                              >
+                                {profileBusy ? "Saving…" : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={closeRowEditors}
+                                disabled={profileBusy}
+                                style={
+                                  profileBusy
+                                    ? { ...ctaSecondaryStyle, opacity: 0.6, cursor: "not-allowed" }
+                                    : ctaSecondaryStyle
+                                }
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {profileRowError && (
+                              <div style={{ ...statusPanelStyle("danger"), fontSize: 12 }}>
+                                {profileRowError}
+                              </div>
+                            )}
+                          </form>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1137,13 +1400,16 @@ export default function ProfilePage() {
                     setFamilyAdded(null);
                     setFamilyRemoved(null);
                     setFamilyError(null);
-                    setEditingEmailFor(null);
-                    setEmailRowError(null);
+                    closeRowEditors();
                   }}
                   // Steps down while a row is being edited: that row's Save is
                   // the card's one filled action, and on a long family list
                   // the two are a screenful apart rather than a page apart.
-                  style={editingEmailFor ? ctaSecondaryStyle : ctaPrimaryStyle}
+                  style={
+                    editingEmailFor || editingProfileFor
+                      ? ctaSecondaryStyle
+                      : ctaPrimaryStyle
+                  }
                 >
                   Add a child
                 </button>
@@ -1330,13 +1596,6 @@ export default function ProfilePage() {
 // ─────────────────────────────────────────────────────────────────────
 // Helpers + small UI bits
 // ─────────────────────────────────────────────────────────────────────
-
-const ratingRowLabelStyle: CSSProperties = {
-  fontSize: 12.5,
-  fontWeight: 600,
-  color: inkSoft,
-  marginBottom: 8,
-};
 
 function Shell({ children }: { children: ReactNode }) {
   return (

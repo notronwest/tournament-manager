@@ -38,22 +38,10 @@ export function checkEligibility(
   const reasons: string[] = [];
 
   if (event.min_rating != null || event.max_rating != null) {
-    const isMixedDoubles = event.format === "doubles" && event.gender === "mixed";
-    const playerRating =
-      event.format === "singles"
-        ? player.self_rating_singles
-        : isMixedDoubles
-          ? player.self_rating_mixed
-          : player.self_rating_doubles;
+    const playerRating = selfRatingFor(player, event);
 
     if (playerRating == null) {
-      const formatLabel =
-        event.format === "singles"
-          ? "singles"
-          : isMixedDoubles
-            ? "mixed doubles"
-            : "doubles";
-      reasons.push(`no ${formatLabel} self-rating on file`);
+      reasons.push(`no ${ratingFormatLabel(event)} self-rating on file`);
     } else {
       const lo = event.min_rating;
       const hi = event.max_rating;
@@ -174,7 +162,10 @@ export function eligibilityChips(event: Event): string[] {
   return chips;
 }
 
-function formatRating(n: number): string {
+// Exported because the family list and the rating chips show the same
+// numbers; one reading of "3.50" → "3.5" keeps the bracket's bound and a
+// player's own rating from printing differently.
+export function formatRating(n: number): string {
   // Trim trailing zeroes so "3.50" → "3.5", but keep "3.0" → "3.0".
   const s = n.toString();
   return s.includes(".") ? s : `${s}.0`;
@@ -193,4 +184,64 @@ function ratingSourceLabel(
     case "self":
       return "Self-rated";
   }
+}
+
+// Which of the player's three self-rating columns this event reads. The
+// format/gender pairing is the rule itself, so it lives in one place: the
+// gate below and the "what is missing" answer above must never disagree
+// about which rating they are talking about.
+function selfRatingFor(player: Player, event: Event): number | null {
+  if (event.format === "singles") return player.self_rating_singles;
+  if (event.format === "doubles" && event.gender === "mixed") return player.self_rating_mixed;
+  return player.self_rating_doubles;
+}
+
+function ratingFormatLabel(event: Event): string {
+  if (event.format === "singles") return "singles";
+  if (event.format === "doubles" && event.gender === "mixed") return "mixed doubles";
+  return "doubles";
+}
+
+// What this player is missing that whoever is looking at the screen can
+// actually go and supply — the refusals that are a BLANK FIELD rather than a
+// mismatch, named in the words the form that fills them uses.
+//
+// A rating that is simply outside the bracket's range is NOT in here, and
+// neither is a gender that is set to the other one. The fix for those is a
+// different bracket; advising someone to edit the value until it fits is
+// advice the same gate rejects on the next bracket along, which is the defect
+// the design gate caught twice on the register form (#1182) — copy that named
+// a move the gate would refuse.
+//
+// `coversEverything` is the question the caller actually has: may I tell this
+// person that filling these fields will let them in? Only when every reason
+// the gate gave is one of these blanks. A 40+ bracket refusing an adult for
+// their age AND their missing rating is not fixable by filling the rating in,
+// so the advice there has to stay "pick a different event".
+export function profileGaps(
+  player: Player,
+  event: Event,
+  tournamentStartsAt?: string | null,
+): { fields: string[]; coversEverything: boolean } {
+  const fields: string[] = [];
+
+  if (event.min_rating != null || event.max_rating != null) {
+    if (selfRatingFor(player, event) == null) fields.push("a rating");
+  }
+  if ((event.gender === "men" || event.gender === "women") && player.gender == null) {
+    fields.push("a gender");
+  }
+  if ((event.min_age != null || event.max_age != null) && player.dob == null) {
+    fields.push("a date of birth");
+  }
+
+  const { reasons } = checkEligibility(player, event, tournamentStartsAt);
+  return { fields, coversEverything: fields.length > 0 && fields.length === reasons.length };
+}
+
+// "a rating", "a rating and a gender", "a rating, a gender and a date of
+// birth" — the gaps above, read as a sentence.
+export function listPhrase(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }

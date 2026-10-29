@@ -17,7 +17,12 @@
 // drift the moment one host's wording changed.
 import { useId, useState, type FormEvent } from "react";
 import { Field, FieldRow } from "./Field";
-import { addDependent, setDependentEmail, type Dependent } from "../lib/guardians";
+import {
+  addDependent,
+  dependentDobError,
+  setDependentEmail,
+  type Dependent,
+} from "../lib/guardians";
 import {
   ctaPrimaryDisabledStyle,
   ctaPrimaryStyle,
@@ -78,12 +83,12 @@ export function AddChildForm({
       setError("A first and last name are both needed.");
       return;
     }
-    if (!dob) {
-      // Not a database rule — the row would save without one. But a child
-      // added for a juniors bracket and no date of birth is a registration
-      // that will be refused later for a reason nobody can see here, so the
-      // field is required at the point where it is easy to supply.
-      setError("A date of birth is needed so age-restricted brackets can check it.");
+    // One rule, shared with the row editor on My family, so the two places a
+    // guardian can write a date of birth cannot disagree about whether one is
+    // needed (lib/guardians.ts).
+    const dobErr = dependentDobError(dob);
+    if (dobErr) {
+      setError(dobErr);
       return;
     }
 
