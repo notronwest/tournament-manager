@@ -891,7 +891,9 @@ export default function ProfilePage() {
           </h2>
           <p style={{ fontSize: 13, color: inkSoft, margin: "-8px 0 16px" }}>
             Add a child here and you can register and pay for them from your own
-            account. They need no email address and no account of their own.
+            account. They need no account of their own. An email address is
+            optional &mdash; yours will do, and it&rsquo;s where notices about
+            their registration go.
           </p>
 
           <div style={{ ...panelMutedStyle, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -933,10 +935,23 @@ export default function ProfilePage() {
                         <div style={{ fontSize: 14, color: ink, fontWeight: 500 }}>
                           {playerName(d.player)}
                         </div>
-                        <div style={{ fontSize: 12, color: inkMuted, marginTop: 2 }}>
+                        {/* Age, then the address if they have one (#1186) —
+                            the one place a parent can see that the optional
+                            email actually saved. overflowWrap so a long
+                            address wraps instead of widening the row past a
+                            390px screen. */}
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: inkMuted,
+                            marginTop: 2,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
                           {age == null
                             ? "No date of birth yet"
                             : `${age} year${age === 1 ? "" : "s"} old`}
+                          {d.player.email ? ` · ${d.player.email}` : ""}
                         </div>
                       </div>
                       {/* Fixed-width slot so the remove control lines up down
@@ -963,6 +978,7 @@ export default function ProfilePage() {
               <AddChildForm
                 variant="page"
                 guardianPlayerId={myPlayerId}
+                guardianEmail={existingPlayer?.email ?? null}
                 onAdded={onChildAdded}
                 onCancel={() => {
                   setAddChildOpen(false);

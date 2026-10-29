@@ -125,35 +125,78 @@ export async function fetchDependents(
 // should not want to: there is no insert policy on player_guardians, precisely
 // so a link can never be pointed at a player row that already existed.
 //
-// A child needs no email address: that is the point of the feature, and
-// nothing in this path asks for one.
+// A child needs no email address — a name and a date of birth are the whole
+// requirement, and that is the point of the feature. But one is worth asking
+// for (#1186): every message the platform sends a registrant is addressed from
+// players.email, and a row without one is skipped rather than redirected —
+// cancel-tournament and notify-registration-change both log "no email address"
+// and move on, and neither reads player_guardians. So a child with no address
+// is a child whose cancelled tournament nobody is told about. A guardian
+// putting their own address on the row is the intended shape: players.email is
+// deliberately soft-unique (indexed, no unique constraint) so a parent and
+// child can share one.
+//
+// The address is a SECOND write, not an argument to add_dependent(): the RPC's
+// signature is fixed and changing a SECURITY DEFINER function to carry one
+// more optional column would be a migration, where the guardian migration
+// already granted exactly this. Its "players update by self or related org"
+// policy has an is_guardian_of() branch built for a guardian maintaining a
+// dependent's profile, and its `with check` pins auth_user_id to null, so this
+// path cannot do anything the policy didn't already intend. The cost is that
+// the pair isn't atomic, which is what emailError reports.
 export async function addDependent(args: {
   guardianPlayerId: string;
   firstName: string;
   lastName: string;
   dob: string;
-}): Promise<{ dependent: Dependent | null; error: string | null }> {
+  email?: string | null;
+}): Promise<{
+  dependent: Dependent | null;
+  error: string | null;
+  // Set only when the child WAS created and the optional address was not
+  // stored. Distinct from error because the row exists: retrying the whole
+  // call would add a second child, so the caller's job is to report this, not
+  // to repeat itself.
+  emailError: string | null;
+}> {
   const { data: newId, error: rpcErr } = await untyped.rpc("add_dependent", {
     p_first_name: args.firstName,
     p_last_name: args.lastName,
     p_dob: args.dob,
   });
   if (rpcErr || !newId) {
-    return { dependent: null, error: rpcErr?.message ?? "Couldn't add that child." };
+    return {
+      dependent: null,
+      error: rpcErr?.message ?? "Couldn't add that child.",
+      emailError: null,
+    };
+  }
+
+  // citext, so the stored value compares case-insensitively and there is
+  // nothing to lower-case here. Blank is sent as no address at all.
+  const email = (args.email ?? "").trim();
+  let emailError: string | null = null;
+  if (email) {
+    const { error: emailErr } = await supabase
+      .from("players")
+      .update({ email })
+      .eq("id", newId as string);
+    emailError = emailErr?.message ?? null;
   }
 
   // Read the pair back rather than assembling it from the arguments, so the
-  // list shows what the database actually stored (trimmed names, the link id
-  // the remove action needs).
+  // list shows what the database actually stored (trimmed names, the address
+  // as citext kept it, the link id the remove action needs).
   const { dependents, error: readErr } = await fetchDependents(args.guardianPlayerId);
   const dependent = dependents.find((d) => d.player.id === (newId as string)) ?? null;
   if (!dependent) {
     return {
       dependent: null,
       error: readErr ?? "Added, but couldn't read the family list back. Reload to see them.",
+      emailError: null,
     };
   }
-  return { dependent, error: null };
+  return { dependent, error: null, emailError };
 }
 
 // Retires the link, not the player. The child's own row and any history stay

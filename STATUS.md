@@ -3055,3 +3055,49 @@ so a skill-bounded or single-gender bracket opens a path a child cannot finish. 
 judgement was that the fix is that missing screen, not a narrower gate here, since gating on it
 would hide the youth path from most real divisions. This branch owes an honest refusal, and has
 one.
+
+---
+
+## 2026-10-29 — Adding a child asks for an optional email address (#1186)
+
+**Why.** Ron, on the youth path shipped the day before: *"Signing up a minor should ask for
+an optional email address."* Nothing on that path asked for one, so every child created by
+`add_dependent()` landed with `email` null — and `players.email` is the only address the
+platform has for a registrant. `cancel-tournament` and `notify-registration-change` both skip
+a row without one ("no email address"), and **no edge function reads `player_guardians`**, so
+a child's notice is not redirected to their guardian; it is simply never sent. A parent
+putting their own address on the child's row is the intended shape, not a workaround:
+`players.email` is deliberately soft-unique (indexed, no unique constraint) precisely so a
+parent and child can share one.
+
+**What changed.** One optional field on `AddChildForm`, so both mounts — My family on the
+profile page and the register form's "Registering for" chooser — get it off the one file
+(D-0049, no second copy). `type="email"` leaves the format check to the browser. A **Use my
+address** control fills the guardian's own address in one press and hides itself once the box
+holds it. The stored address shows on the family row, which is the only place a parent can
+see that it saved. The My family intro copy, which promised "they need no email address",
+now says the address is optional and yours will do.
+
+**No migration.** The address is a second write, not a new `add_dependent()` argument: the
+guardian migration's `players update by self or related org` policy already has an
+`is_guardian_of()` branch built for a guardian maintaining a dependent's profile, with a
+`with check` that pins `auth_user_id` to null. Using it beats widening a `SECURITY DEFINER`
+function, and keeps this a single UX PR with no DB/UX ordering to get wrong. The cost is that
+the pair isn't atomic — so `addDependent` returns `emailError` separately from `error`, and
+the form answers it by keeping the child, withdrawing Save (pressing it again would add a
+second child) and offering Continue.
+
+**Verified** on the local offline stack (`scripts/offline.sh`), signed in as the seeded
+director, at **390 × 844**, in both mounts: field present and labelled `(optional)`; Use my
+address fills and then hides; saving with an address puts it on the child's row and shows it
+under My family; saving blank behaves exactly as before, no warning; an invalid address is
+refused by the browser and the form does not submit; parent and child end up sharing one
+address with the child still account-less; from the register card the new child is selected
+as the registrant and the registration carries on. The partial-failure branch was exercised
+for real by failing `PATCH /rest/v1/players` in the page. No horizontal scroll (scrollWidth
+390 = clientWidth 390). typecheck ✅, build ✅, **421/421 vitest in 36 files** ✅, lint at the
+unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
+
+**Not done.** There is still no screen that edits a dependent's address after the fact — the
+same missing screen as #1183 (rating and gender). The partial-failure copy therefore points
+at remove-and-re-add, which exists, rather than at an edit page that does not.
