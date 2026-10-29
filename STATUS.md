@@ -3101,3 +3101,45 @@ unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
 **Not done.** There is still no screen that edits a dependent's address after the fact — the
 same missing screen as #1183 (rating and gender). The partial-failure copy therefore points
 at remove-and-re-add, which exists, rather than at an edit page that does not.
+
+### #1186 addendum — what the design gate changed, and the hole it found
+
+**Five rounds, four of them FAIL (9 findings).** Worth recording because the shape of the
+work changed under them, and because three of the four failures were defects in my own
+previous fix rather than in the original field.
+
+1. **FAIL `b360bd17b84c43f4`** (5) — the half-saved panel spliced the raw PostgREST message
+   into a parent-facing sentence (*"new row violates row-level security policy for table
+   players"*); it named remove-and-re-add while offering only Continue; continuing ended in
+   the green "is on your family list", claiming a write that hadn't landed; "Use my address"
+   was 91.5 × 14.5 against the 44px rule; and it sat inside the field's wrapping `<label>`,
+   so the input's accessible name swallowed the control's text and the whole helper
+   sentence.
+2. **FAIL `f1f73d465f7987ec`** (2) — both the same mistake in two places: the outcome was
+   reported by the **host**, which renders it where the person isn't. On the event card the
+   link pointed at a profile section 1176px below where it lands, which couldn't set an
+   address anyway; on the profile the panel raised 651px above a viewport parked at the foot
+   of a long list, so the press produced nothing visible.
+3. **FAIL `19255dcb78104c1c`** (2) — defects in the round-2 fix. The new row editor wrote
+   whatever it was handed: a blank draft stored `''`, rendering *"10 years old ·"* with a
+   dangling separator and hiding the "No email address" line the change exists to show; and
+   its input sat outside any form, so `type="email"` did nothing and `notanemail` saved —
+   on the mount whose whole job is repairing a missing address.
+4. **FAIL `5cd4b4a73f03fbbc`** (1) — with a row editor open near the foot of the list the
+   family card showed two filled buttons a screenful apart.
+5. **PASS `8b07300dcb0300ea`**, no findings.
+
+**The hole it found is the reason this is bigger than one field.** A dependent's address was
+**write-once-or-never**: the add form was the only thing that ever set one, so a parent who
+skipped it, mistyped it, or hit the failed write had nowhere to go — which is why every
+round kept producing copy that named a screen that didn't exist. So the family row now
+carries the fact and the fix: the line under each name ends with the address or **No email
+address**, and the row has an inline **Add an email address** / **Change email address**
+editor saving through `setDependentEmail`. Clearing is a supported move storing `NULL`, the
+row reads the column through one helper so an `''` written earlier still renders as missing,
+and the editor is a real `<form>` so it refuses exactly what the add form refuses.
+
+**Carried forward, not fixed here** (both recorded in the PASS verdict as repo-wide, not
+this change): the focus ring is the browser's own `rgb(229,151,0)` at **2.4:1**, under
+D-0157's 3:1 floor, and the shared `inputStyle` is 39px against the 44px rule. Citing either
+would fail every UI change in the repo; both want a sweep of their own.
