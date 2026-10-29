@@ -3055,3 +3055,91 @@ so a skill-bounded or single-gender bracket opens a path a child cannot finish. 
 judgement was that the fix is that missing screen, not a narrower gate here, since gating on it
 would hide the youth path from most real divisions. This branch owes an honest refusal, and has
 one.
+
+---
+
+## 2026-10-29 — Adding a child asks for an optional email address (#1186)
+
+**Why.** Ron, on the youth path shipped the day before: *"Signing up a minor should ask for
+an optional email address."* Nothing on that path asked for one, so every child created by
+`add_dependent()` landed with `email` null — and `players.email` is the only address the
+platform has for a registrant. `cancel-tournament` and `notify-registration-change` both skip
+a row without one ("no email address"), and **no edge function reads `player_guardians`**, so
+a child's notice is not redirected to their guardian; it is simply never sent. A parent
+putting their own address on the child's row is the intended shape, not a workaround:
+`players.email` is deliberately soft-unique (indexed, no unique constraint) precisely so a
+parent and child can share one.
+
+**What changed.** One optional field on `AddChildForm`, so both mounts — My family on the
+profile page and the register form's "Registering for" chooser — get it off the one file
+(D-0049, no second copy). `type="email"` leaves the format check to the browser. A **Use my
+address** control fills the guardian's own address in one press and hides itself once the box
+holds it. The stored address shows on the family row, which is the only place a parent can
+see that it saved. The My family intro copy, which promised "they need no email address",
+now says the address is optional and yours will do.
+
+**No migration.** The address is a second write, not a new `add_dependent()` argument: the
+guardian migration's `players update by self or related org` policy already has an
+`is_guardian_of()` branch built for a guardian maintaining a dependent's profile, with a
+`with check` that pins `auth_user_id` to null. Using it beats widening a `SECURITY DEFINER`
+function, and keeps this a single UX PR with no DB/UX ordering to get wrong. The cost is that
+the pair isn't atomic — so `addDependent` returns `emailError` separately from `error`, and
+the form answers it by keeping the child, withdrawing Save (pressing it again would add a
+second child) and offering Continue.
+
+**Verified** on the local offline stack (`scripts/offline.sh`), signed in as the seeded
+director, at **390 × 844**, in both mounts: field present and labelled `(optional)`; Use my
+address fills and then hides; saving with an address puts it on the child's row and shows it
+under My family; saving blank behaves exactly as before, no warning; an invalid address is
+refused by the browser and the form does not submit; parent and child end up sharing one
+address with the child still account-less; from the register card the new child is selected
+as the registrant and the registration carries on. The partial-failure branch was exercised
+for real by failing `PATCH /rest/v1/players` in the page. No horizontal scroll (scrollWidth
+390 = clientWidth 390). typecheck ✅, build ✅, **421/421 vitest in 36 files** ✅, lint at the
+unchanged `origin/main` baseline (35 problems / 31 errors / 4 warnings).
+
+**Not done.** There is still no screen that edits a dependent's address after the fact — the
+same missing screen as #1183 (rating and gender). The partial-failure copy therefore points
+at remove-and-re-add, which exists, rather than at an edit page that does not.
+
+### #1186 addendum — what the design gate changed, and the hole it found
+
+**Five rounds, four of them FAIL (9 findings).** Worth recording because the shape of the
+work changed under them, and because three of the four failures were defects in my own
+previous fix rather than in the original field.
+
+1. **FAIL `b360bd17b84c43f4`** (5) — the half-saved panel spliced the raw PostgREST message
+   into a parent-facing sentence (*"new row violates row-level security policy for table
+   players"*); it named remove-and-re-add while offering only Continue; continuing ended in
+   the green "is on your family list", claiming a write that hadn't landed; "Use my address"
+   was 91.5 × 14.5 against the 44px rule; and it sat inside the field's wrapping `<label>`,
+   so the input's accessible name swallowed the control's text and the whole helper
+   sentence.
+2. **FAIL `f1f73d465f7987ec`** (2) — both the same mistake in two places: the outcome was
+   reported by the **host**, which renders it where the person isn't. On the event card the
+   link pointed at a profile section 1176px below where it lands, which couldn't set an
+   address anyway; on the profile the panel raised 651px above a viewport parked at the foot
+   of a long list, so the press produced nothing visible.
+3. **FAIL `19255dcb78104c1c`** (2) — defects in the round-2 fix. The new row editor wrote
+   whatever it was handed: a blank draft stored `''`, rendering *"10 years old ·"* with a
+   dangling separator and hiding the "No email address" line the change exists to show; and
+   its input sat outside any form, so `type="email"` did nothing and `notanemail` saved —
+   on the mount whose whole job is repairing a missing address.
+4. **FAIL `5cd4b4a73f03fbbc`** (1) — with a row editor open near the foot of the list the
+   family card showed two filled buttons a screenful apart.
+5. **PASS `8b07300dcb0300ea`**, no findings.
+
+**The hole it found is the reason this is bigger than one field.** A dependent's address was
+**write-once-or-never**: the add form was the only thing that ever set one, so a parent who
+skipped it, mistyped it, or hit the failed write had nowhere to go — which is why every
+round kept producing copy that named a screen that didn't exist. So the family row now
+carries the fact and the fix: the line under each name ends with the address or **No email
+address**, and the row has an inline **Add an email address** / **Change email address**
+editor saving through `setDependentEmail`. Clearing is a supported move storing `NULL`, the
+row reads the column through one helper so an `''` written earlier still renders as missing,
+and the editor is a real `<form>` so it refuses exactly what the add form refuses.
+
+**Carried forward, not fixed here** (both recorded in the PASS verdict as repo-wide, not
+this change): the focus ring is the browser's own `rgb(229,151,0)` at **2.4:1**, under
+D-0157's 3:1 floor, and the shared `inputStyle` is 39px against the 44px rule. Citing either
+would fail every UI change in the repo; both want a sweep of their own.

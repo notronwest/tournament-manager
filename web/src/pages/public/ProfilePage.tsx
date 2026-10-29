@@ -21,6 +21,7 @@ import {
   fetchDependents,
   playerName,
   removeDependent,
+  setDependentEmail,
   type Dependent,
 } from "../../lib/guardians";
 import {
@@ -36,6 +37,7 @@ import {
   ink,
   inkMuted,
   inkSoft,
+  inlineActionStyle,
   inputStyle,
   pageH1Style,
   pageSubStyle,
@@ -130,6 +132,15 @@ export default function ProfilePage() {
   const [dependents, setDependents] = useState<Dependent[]>([]);
   const [familyLoading, setFamilyLoading] = useState(false);
   const [addChildOpen, setAddChildOpen] = useState(false);
+  // Inline per-row address editing (#1186). A dependent's address was
+  // write-once-or-never until this: the add form is the only thing that ever
+  // set one, so a parent who skipped it, mistyped it, or hit the half-saved
+  // state had nowhere to go. editingEmailFor holds the link id of the row
+  // being edited, which is also what keeps only one row open at a time.
+  const [editingEmailFor, setEditingEmailFor] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailRowError, setEmailRowError] = useState<string | null>(null);
   const [familyError, setFamilyError] = useState<string | null>(null);
   const [familyAdded, setFamilyAdded] = useState<string | null>(null);
   const [familyRemoved, setFamilyRemoved] = useState<string | null>(null);
@@ -250,6 +261,36 @@ export default function ProfilePage() {
     );
     setFamilyAdded(playerName(dependent.player));
     setAddChildOpen(false);
+  };
+
+  // The guardian's own address, for the one-press fill in both the add form
+  // and the row editor.
+  const myEmail = (existingPlayer?.email ?? "").trim();
+
+  // Saves one row's address in place. The row is where the person is looking
+  // and where the fact lives, so there is no panel for this: the line under
+  // the name changes from "No email address" to the address itself.
+  const onSaveRowEmail = async (d: Dependent) => {
+    setEmailRowError(null);
+    setEmailBusy(true);
+    const { error: setErr } = await setDependentEmail(d.player.id, emailDraft);
+    setEmailBusy(false);
+    if (setErr) {
+      console.error("set dependent email failed", setErr);
+      setEmailRowError("That didn\u2019t save. Try again in a moment.");
+      return;
+    }
+    // Mirrors what setDependentEmail just wrote: blank is an absent address,
+    // never an empty string, so the row reads "No email address" rather than a
+    // dangling separator.
+    const stored = emailDraft.trim() || null;
+    setDependents((prev) =>
+      prev.map((x) =>
+        x.linkId === d.linkId ? { ...x, player: { ...x.player, email: stored } } : x,
+      ),
+    );
+    setEditingEmailFor(null);
+    setEmailDraft("");
   };
 
   const onRemoveChild = async () => {
@@ -891,7 +932,9 @@ export default function ProfilePage() {
           </h2>
           <p style={{ fontSize: 13, color: inkSoft, margin: "-8px 0 16px" }}>
             Add a child here and you can register and pay for them from your own
-            account. They need no email address and no account of their own.
+            account. They need no account of their own. An email address is
+            optional &mdash; yours will do, and it&rsquo;s where notices about
+            their registration go.
           </p>
 
           <div style={{ ...panelMutedStyle, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -927,17 +970,132 @@ export default function ProfilePage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 {dependents.map((d) => {
                   const age = ageAt(d.player.dob);
+                  const editing = editingEmailFor === d.linkId;
                   return (
                     <div key={d.linkId} style={familyRowStyle}>
                       <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                         <div style={{ fontSize: 14, color: ink, fontWeight: 500 }}>
                           {playerName(d.player)}
                         </div>
-                        <div style={{ fontSize: 12, color: inkMuted, marginTop: 2 }}>
+                        {/* Age, then the address — and "No email address"
+                            when there is none (#1186). The absence is the
+                            thing worth seeing: it means every notice about
+                            this child's registrations is skipped, and nothing
+                            else on the page says so. overflowWrap so a long
+                            address wraps instead of widening the row past a
+                            390px screen. */}
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: inkMuted,
+                            marginTop: 2,
+                            overflowWrap: "anywhere",
+                          }}
+                        >
                           {age == null
                             ? "No date of birth yet"
                             : `${age} year${age === 1 ? "" : "s"} old`}
+                          {` · ${dependentEmail(d) ?? "No email address"}`}
                         </div>
+                        {editing ? (
+                          // A real <form>, not a div with a button: this is
+                          // the same field as the one in AddChildForm and it
+                          // has to refuse the same values. type="email" alone
+                          // does nothing outside a form, so a loose input here
+                          // would write "notanemail" through — on the mount
+                          // that exists to REPAIR a missing address, which is
+                          // the one that can least afford to be the lax one.
+                          // It also makes the phone keyboard's Go key work.
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              void onSaveRowEmail(d);
+                            }}
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: 8,
+                              marginTop: 6,
+                            }}
+                          >
+                            <input
+                              type="email"
+                              value={emailDraft}
+                              onChange={(e) => setEmailDraft(e.target.value)}
+                              placeholder="you@example.com"
+                              aria-label={`Email address for ${playerName(d.player)}`}
+                              disabled={emailBusy}
+                              style={{ ...inputStyle, flex: "1 1 180px", minWidth: 0 }}
+                            />
+                            {/* The same one-press fill as the add form, in
+                                the same place relative to the actions: field,
+                                then the shortcut that fills it, then what you
+                                do with it. This is the repair path, so it is
+                                where a parent is most likely to be reaching
+                                for their own address. */}
+                            {myEmail &&
+                              emailDraft.trim().toLowerCase() !== myEmail.toLowerCase() && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEmailDraft(myEmail)}
+                                  disabled={emailBusy}
+                                  style={
+                                    emailBusy
+                                      ? { ...inlineActionStyle, opacity: 0.6, cursor: "not-allowed" }
+                                      : inlineActionStyle
+                                  }
+                                >
+                                  Use my address
+                                </button>
+                              )}
+                            <button
+                              type="submit"
+                              disabled={emailBusy}
+                              style={emailBusy ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
+                            >
+                              {emailBusy ? "Saving…" : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingEmailFor(null);
+                                setEmailRowError(null);
+                              }}
+                              disabled={emailBusy}
+                              style={
+                                emailBusy
+                                  ? { ...ctaSecondaryStyle, opacity: 0.6, cursor: "not-allowed" }
+                                  : ctaSecondaryStyle
+                              }
+                            >
+                              Cancel
+                            </button>
+                            {emailRowError && (
+                              <div style={{ ...statusPanelStyle("danger"), fontSize: 12 }}>
+                                {emailRowError}
+                              </div>
+                            )}
+                          </form>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingEmailFor(d.linkId);
+                              setEmailDraft(dependentEmail(d) ?? "");
+                              setEmailRowError(null);
+                              // One thing open in this card at a time: two
+                              // forms would mean two submit buttons, and the
+                              // card is supposed to have one obvious action.
+                              setAddChildOpen(false);
+                            }}
+                            style={inlineActionStyle}
+                          >
+                            {dependentEmail(d)
+                              ? `Change email address`
+                              : `Add an email address`}
+                          </button>
+                        )}
                       </div>
                       {/* Fixed-width slot so the remove control lines up down
                           the list whether or not a row ever gains a second
@@ -963,6 +1121,7 @@ export default function ProfilePage() {
               <AddChildForm
                 variant="page"
                 guardianPlayerId={myPlayerId}
+                guardianEmail={myEmail || null}
                 onAdded={onChildAdded}
                 onCancel={() => {
                   setAddChildOpen(false);
@@ -978,8 +1137,13 @@ export default function ProfilePage() {
                     setFamilyAdded(null);
                     setFamilyRemoved(null);
                     setFamilyError(null);
+                    setEditingEmailFor(null);
+                    setEmailRowError(null);
                   }}
-                  style={ctaPrimaryStyle}
+                  // Steps down while a row is being edited: that row's Save is
+                  // the card's one filled action, and on a long family list
+                  // the two are a screenful apart rather than a page apart.
+                  style={editingEmailFor ? ctaSecondaryStyle : ctaPrimaryStyle}
                 >
                   Add a child
                 </button>
@@ -1206,6 +1370,14 @@ const jumpLinkStyle: CSSProperties = {
   color: courtBlue,
   textDecoration: "underline",
 };
+
+// The one reading of "this child has an address". A row written before blank
+// meant NULL can hold "", and an empty string is not an address: it would
+// render as a dangling separator, hide the "No email address" line, and look
+// present to anything that only checks for null.
+function dependentEmail(d: Dependent): string | null {
+  return (d.player.email ?? "").trim() || null;
+}
 
 // A family row: the name/age column wraps above the action on a narrow
 // screen rather than being squeezed to nothing (DESIGN_PREFERENCES).

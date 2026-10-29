@@ -2065,9 +2065,12 @@ function EventCard({
     // accepting their invite — no new outbound invite, no
     // duplicate. Mirrors the logic in the legacy /register page.
     // Only for the player's OWN registration: the lookup keys on the
-    // signed-in user's email, which is the guardian's, not the dependent's. A
-    // dependent has no email by design, so there is no inbound invite of
-    // theirs to find, and matching the guardian's would pair the wrong person.
+    // signed-in user's email, which is the guardian's, not the dependent's, so
+    // matching it while acting for a child would pair the wrong person. Note
+    // the reason is the `!actingForDependent` guard and not that a dependent
+    // has no address — since #1186 a child may have one, and it may be the
+    // guardian's own (players.email is soft-unique precisely so a parent and
+    // child can share one). The guard is what keeps that from mattering.
     let inboundInviteId: string | null = null;
     if (isDoubles && !actingForDependent && resolvedPartnerId && user?.email) {
       const { data: inbound } = await supabase
@@ -3158,6 +3161,7 @@ function EventCard({
             <AddChildForm
               variant="inline"
               guardianPlayerId={me.id}
+              guardianEmail={me.email}
               onAdded={(dependent) => {
                 onDependentAdded(dependent);
                 setSubjectId(dependent.player.id);
