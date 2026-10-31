@@ -4124,6 +4124,52 @@ reading), D-0049, D-0071 (every clause above is a hook, a guard or a required ch
 (the new required-check step is host-independent, network-free and credential-free, and
 measured). Pillar 5 `docs/design-system.md`, Pillar 2 `docs/change-discipline.md`.
 
+### D-0264 — A hold on a page is enforced by a switch, never by withholding the branch; a held promotion stands the deploy-lag alarm down for 14 days
+
+*2026-10-31 · scope: `infrastructure/heartbeat/**` · source: daemon#1106 — the watchdog's deploy-lag alarm on third-shot-academy escalated after 72h. Measured 2026-10-31: production is 88 commits behind main (33 that ship code), and the only open promotions are third-shot-academy#724 (opened 2026-10-22, its own title "HELD — do not merge") and #727 (the Archive alone, whose ship_prod approval Ron DENIED 2026-10-29). Ron's words of 2026-10-27, on the three public Archive pages: "lets not publicize 3 yet." every review-gate pass on #724 since 2026-10-22 (thirteen) escalated the same PR for the same reason.*
+
+**Decision.** Ron holding *one piece* of a release is a decision about that piece. It is never a
+decision to freeze everything else merged behind it, and the fleet must not let the first turn
+silently into the second.
+
+1. **A hold is carried by a switch in the code, not by keeping `main` unpromoted.** When the owner
+   holds a page or feature that is already on `main` (D-0007: `main` is TEST), the held thing is put
+   behind a switch that is **on for TEST and off for PROD** — a build-time environment value the
+   repo already distinguishes, never a new secret — so the next promotion carries everything else and
+   the held thing ships dark. Publishing it later is a one-value change that is itself a promotion
+   (stop list row 3), so the owner's word is still the only thing that turns it on.
+
+2. **A promotion PR that the owner has held carries the label `held`**, and its body quotes his words
+   and their date. The label is applied by whoever recorded the hold — never inferred from a title.
+   An owner's *denied* promotion (a `ship_prod` approval answered no) is **closed**, not left open:
+   an open PR that has been refused is a second copy of a question already answered.
+
+3. **The deploy-lag alarm stands down for a held promotion for 14 days, then alarms with a
+   different sentence.** A `held` promotion younger than `PROMOTE_HELD_D` (14 days) is logged, not
+   alarmed — the owner has answered; asking him again every 15 minutes is noise, and the 24h tier
+   would put a ledger line in front of him for a question he already settled. Past 14 days it alarms
+   as `held-stale`: *the held work is still blocking everything behind it on main — put it behind a
+   switch (D-0264 rule 1) and promote the rest.* A held promotion is therefore never a permanent mute;
+   the clock is the PR's age, so re-labelling cannot reset it.
+
+4. **The un-held 72h rule is unchanged** (daemon#734): an open, un-held promotion older than
+   PROMOTE_WAIT_H still alarms "merge it or close it".
+
+**Why.** On third-shot-academy the hold on three pages became, by default, a hold on 33 code
+commits, including a 44-file fix for the class of bug that broke the lesson write-up. Nobody chose
+that. The alarm was right that something was stuck and wrong about whose move it was: it told the
+owner to merge or close a PR he had already answered, and the Reviewer re-escalated the same
+held PR thirteen times. The fault is in the shape — held content sharing a branch with everything
+else, with no switch between them.
+
+**Forbids.**
+- Holding a page by leaving a promotion PR open indefinitely (rule 1).
+- Inferring a hold from a PR title or body text; only the `held` label counts (rule 2).
+- A hold that mutes deploy-lag with no end date, or a clock that restarts when the label is
+  re-applied (rule 3).
+- Narrowing a promotion by cherry-picking around held content on `production` — it forks the two
+  branches and the next full promotion re-carries the held thing. The switch is the only way round.
+
 ## Proposed (not binding yet)
 
 _None._
