@@ -66,6 +66,11 @@ export default function OrgUsersPage() {
   const [search, setSearch] = useState("");
   const [showRoleHelp, setShowRoleHelp] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  // A row action's outcome belongs IN the row: at 390px the page-top banner
+  // can sit hundreds of pixels above the control that was just pressed, so a
+  // refusal reads as "nothing happened". Removals are the exception -- their
+  // row is gone by then, so that one result goes to the banner.
+  const [rowNote, setRowNote] = useState<{ userId: string; tone: "success" | "danger"; text: string } | null>(null);
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
   const [ownerTarget, setOwnerTarget] = useState<OrgMember | null>(null);
 
@@ -97,6 +102,12 @@ export default function OrgUsersPage() {
     };
   }, [org, canManage, reloadKey]);
 
+  // A refusal can outlive its row: if the row was already gone server-side,
+  // the resync drops it and the note would have nowhere to render. Fall the
+  // note back to the page-level slot in exactly that case.
+  const orphanNote =
+    rowNote && !(members ?? []).some((m) => m.userId === rowNote.userId) ? rowNote : null;
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return members ?? [];
@@ -121,17 +132,22 @@ export default function OrgUsersPage() {
 
   const run = async (
     fn: () => Promise<OrgMember[]>,
-    userId: string | null,
+    userId: string,
     success: string,
+    // true when the row won't be there to carry the result (a removal).
+    resultAtPageLevel = false,
   ) => {
     setActionMsg(null);
     setActionErr(null);
+    setRowNote(null);
     setBusyUserId(userId);
     try {
       setMembers(await fn());
-      setActionMsg(success);
+      if (resultAtPageLevel) setActionMsg(success);
+      else setRowNote({ userId, tone: "success", text: success });
     } catch (e) {
-      setActionErr((e as { message?: string })?.message ?? "Something went wrong.");
+      const text = (e as { message?: string })?.message ?? "Something went wrong.";
+      setRowNote({ userId, tone: "danger", text });
       // The server may have refused for a reason the list explains — resync.
       reload();
     } finally {
@@ -210,6 +226,14 @@ export default function OrgUsersPage() {
           {actionErr}
         </div>
       )}
+      {orphanNote && (
+        <div
+          style={{ ...statusPanelStyle(orphanNote.tone), marginTop: 20 }}
+          role={orphanNote.tone === "danger" ? "alert" : "status"}
+        >
+          {orphanNote.text}
+        </div>
+      )}
       {loadError && (
         <div style={{ ...statusPanelStyle("danger"), marginTop: 20 }} role="alert">
           {loadError}
@@ -217,7 +241,7 @@ export default function OrgUsersPage() {
       )}
 
       {showAdd && (
-        <div style={{ ...panelStyle, marginTop: 20 }}>
+        <div style={{ ...panelMutedStyle, marginTop: 20 }}>
           <h2 style={{ fontSize: 16, color: ink, margin: "0 0 4px" }}>Add a person</h2>
           <p style={{ fontSize: 13, color: inkMuted, margin: "0 0 16px", lineHeight: 1.5 }}>
             They need an account on the site first — access is granted to a login, so have
@@ -235,7 +259,7 @@ export default function OrgUsersPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !addDisabled) void onAdd();
                 }}
-                style={inputStyle}
+                style={tapInputStyle}
               />
             </label>
             <label style={{ flex: "0 1 160px", minWidth: 0 }}>
@@ -243,7 +267,7 @@ export default function OrgUsersPage() {
               <select
                 value={addRole}
                 onChange={(e) => setAddRole(e.target.value as OrgRole)}
-                style={inputStyle}
+                style={tapInputStyle}
               >
                 {ORG_ROLES.filter((r) => r !== "owner" || canManageOwners).map((r) => (
                   <option key={r} value={r}>
@@ -287,7 +311,7 @@ export default function OrgUsersPage() {
           {showRoleHelp ? "▾" : "▸"} What can each role do?
         </button>
         {showRoleHelp && (
-          <div style={{ ...panelMutedStyle, marginTop: 8 }}>
+          <div style={{ ...panelStyle, marginTop: 8 }}>
             {ORG_ROLES.map((r) => (
               <div key={r} style={{ marginBottom: r === "staff" ? 0 : 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: ink, marginBottom: 2 }}>
@@ -319,7 +343,7 @@ export default function OrgUsersPage() {
                   value={search}
                   placeholder="Name or email"
                   onChange={(e) => setSearch(e.target.value)}
-                  style={inputStyle}
+                  style={tapInputStyle}
                 />
               </label>
             </div>
@@ -340,6 +364,7 @@ export default function OrgUsersPage() {
                 isSelf={m.userId === user?.id}
                 canManageOwners={canManageOwners}
                 busy={busyUserId === m.userId}
+                note={rowNote?.userId === m.userId ? rowNote : null}
                 onRoleChange={onRoleChange}
                 onRemove={() => setRemoveTarget(m)}
               />
@@ -369,6 +394,7 @@ export default function OrgUsersPage() {
               () => removeOrgMember(org.id, m.userId),
               m.userId,
               `${memberName(m)} no longer has access to ${org.name}.`,
+              true,
             );
           }}
         />
@@ -406,6 +432,7 @@ function MemberRow({
   isSelf,
   canManageOwners,
   busy,
+  note,
   onRoleChange,
   onRemove,
 }: {
@@ -413,6 +440,7 @@ function MemberRow({
   isSelf: boolean;
   canManageOwners: boolean;
   busy: boolean;
+  note: { tone: "success" | "danger"; text: string } | null;
   onRoleChange: (m: OrgMember, next: OrgRole) => void;
   onRemove: () => void;
 }) {
@@ -422,7 +450,9 @@ function MemberRow({
   const roleOptions = ORG_ROLES.filter((r) => r !== "owner" || canManageOwners);
 
   return (
-    <div style={{ ...panelStyle, padding: 16, opacity: busy ? 0.6 : 1 }}>
+    // panelMutedStyle (white), not the cream panel: muted meta text and the
+    // red Remove action both fall under the contrast floor on cream.
+    <div style={{ ...panelMutedStyle, padding: 16, opacity: busy ? 0.6 : 1 }}>
       <div
         style={{
           display: "flex",
@@ -479,12 +509,7 @@ function MemberRow({
                 disabled={busy}
                 aria-label={`Role for ${memberName(member)}`}
                 onChange={(e) => onRoleChange(member, e.target.value as OrgRole)}
-                style={{
-                  ...inputStyle,
-                  width: "auto",
-                  padding: "8px 10px",
-                  minHeight: 44,
-                }}
+                style={{ ...tapInputStyle, width: "auto", padding: "8px 10px" }}
               >
                 {roleOptions.map((r) => (
                   <option key={r} value={r}>
@@ -506,9 +531,22 @@ function MemberRow({
           </div>
         )}
       </div>
+
+      {note && (
+        <div
+          style={{ ...statusPanelStyle(note.tone), marginTop: 12, fontSize: 13 }}
+          role={note.tone === "danger" ? "alert" : "status"}
+        >
+          {note.text}
+        </div>
+      )}
     </div>
   );
 }
+
+// The shared input token is 39px tall; every field on this page carries the
+// 44px tap floor instead, same as the row controls.
+const tapInputStyle = { ...inputStyle, minHeight: 44 } as const;
 
 const labelStyle = {
   display: "block",

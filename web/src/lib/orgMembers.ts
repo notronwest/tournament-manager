@@ -34,7 +34,7 @@ export const ROLE_BLURBS: Record<OrgRole, string> = {
   admin:
     "Full access to tournaments, players, venues, email and payment settings. Can add or remove admins and staff.",
   staff:
-    "Can run tournaments day to day — brackets, scores, check-in. Can't change payment settings or manage who has access.",
+    "Can run tournaments day to day — brackets, scores, check-in. Can’t change payment settings or manage who has access.",
 };
 
 export function memberName(m: OrgMember): string {
@@ -96,9 +96,9 @@ function friendly(code: string): string {
     case "last_owner":
       return "This is the only owner. Make someone else an owner first.";
     case "cannot_change_self":
-      return "You can't change your own role. Ask another owner or admin to do it.";
+      return "You can’t change your own role. Ask another owner or admin to do it.";
     case "not_a_member":
-      return "That person no longer has access — the list has moved on. Reload the page.";
+      return "That person’s access had already changed somewhere else. The list is up to date now.";
     case "forbidden":
       return "You need to be an owner or admin of this organization to manage access.";
     case "unauthenticated":
