@@ -95,6 +95,32 @@ promote-to-owner behind a confirm, and remove behind a confirm. Typecheck and
 production build clean; lint at the repo's baseline (31 pre-existing errors,
 none new).
 
+**Four design gate rounds, and what each one caught.** Worth recording,
+because none of the four was a taste call and three were invisible in the
+diff:
+
+1. **Contrast.** The rows and the Add panel sat on the cream panel, where the
+   muted meta text (4.20:1) and the red Remove action (4.12:1) fall under the
+   4.5 floor. Both moved to the white panel; the role explainer keeps the cream
+   so the stack still reads.
+2. **Where a result lands.** A row action's outcome rendered only in a page-top
+   banner, measured 271px above the viewport when acting on the third row at
+   390px — so a refusal read as "nothing happened". Results now render inside
+   the row, falling back to the page slot only when the resync has removed that
+   row, and every result panel scrolls itself into view.
+3. **The chip the white row left behind.** The "You" chip kept its own cream
+   fill, so the fix for round 1 missed it (4.20:1). Outlined on white now, 8.04:1.
+4. **A row headed by an email.** A login with no player profile is a supported
+   state, so the heading can be an email — one unbreakable token in a bold span,
+   which ran 380px out of a 324px card at 390px. Clipped, not scrolled, so no
+   page-overflow check saw it. It wraps now, and the row no longer prints the
+   same address twice.
+
+Three smaller things came with those rounds: this page's own form fields now
+carry the 44px tap floor the row controls already had, granting owner from the
+Add form asks the same question the row's picker asks, and a refusal about an
+address clears when you type a different one.
+
 **Next.** Merge opens the page on TEST. Worth considering after that: inviting
 someone who has no account yet (the onboarding function already sends a branded
 login link to a player, so the pieces exist), and an audit-log line per role
