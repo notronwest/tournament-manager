@@ -272,7 +272,10 @@ export default function OrgUsersPage() {
                 value={addEmail}
                 autoComplete="off"
                 placeholder="them@example.com"
-                onChange={(e) => setAddEmail(e.target.value)}
+                onChange={(e) => {
+                  setAddEmail(e.target.value);
+                  if (actionErr) setActionErr(null);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !addDisabled) onAddSubmit();
                 }}
@@ -373,7 +376,7 @@ export default function OrgUsersPage() {
               : ""}
           </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {visible.map((m) => (
               <MemberRow
                 key={m.userId}
@@ -483,6 +486,7 @@ function MemberRow({
   // An owner's row is owner-only territory; your own row is nobody's to edit
   // here (the server refuses it too) so there's no way to lock yourself out.
   const locked = isSelf || (member.role === "owner" && !canManageOwners);
+  const heading = memberName(member);
   const roleOptions = ORG_ROLES.filter((r) => r !== "owner" || canManageOwners);
 
   return (
@@ -500,8 +504,11 @@ function MemberRow({
       >
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: ink }}>
-              {memberName(member)}
+            {/* An account with no player profile has no name, and its email
+                becomes the heading — one unbreakable token that runs out of
+                the card at 390px unless it is allowed to break. */}
+            <span style={{ fontSize: 15, fontWeight: 700, color: ink, wordBreak: "break-word" }}>
+              {heading}
             </span>
             <span style={pillStyle}>{ROLE_LABELS[member.role]}</span>
             {isSelf && (
@@ -522,7 +529,9 @@ function MemberRow({
               </span>
             )}
           </div>
-          {member.email && (
+          {/* Skipped when the email IS the heading, rather than printing the
+              same address twice. */}
+          {member.email && heading !== member.email && (
             <div style={{ fontSize: 13, color: inkSoft, marginTop: 4, wordBreak: "break-word" }}>
               {member.email}
             </div>
