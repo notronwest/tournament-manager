@@ -404,6 +404,13 @@ export default function AdminLayout() {
           <SideLink to={`/admin/${org.slug}/locations`} onNavigate={closeDrawer}>Venues</SideLink>
           <SideLink to={`/admin/${org.slug}/contacts`} end onNavigate={closeDrawer}>Contacts</SideLink>
           <SideLink to={`/admin/${org.slug}/email`} onNavigate={closeDrawer}>Email</SideLink>
+          {/* Managing people is an admin-or-above job (the edge function
+              refuses staff outright), so don't offer staff the door. */}
+          {(role === "owner" || role === "admin") && (
+            <SideLink to={`/admin/${org.slug}/settings/users`} onNavigate={closeDrawer}>
+              Users and Roles
+            </SideLink>
+          )}
           <SideLink to={`/admin/${org.slug}/settings/stripe`} onNavigate={closeDrawer}>
             Stripe Connect
           </SideLink>
