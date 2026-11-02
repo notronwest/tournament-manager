@@ -18,8 +18,7 @@ import {
   ink,
   inkSoft,
   inkMuted,
-  cream,
-  creamDeep,
+  rule,
   bodyFontStack,
   pageH1Style,
   pageSubStyle,
@@ -62,6 +61,7 @@ export default function OrgUsersPage() {
   // Admin is the common case — someone helping run the org, not a site owner.
   const [addRole, setAddRole] = useState<OrgRole>("admin");
   const [addBusy, setAddBusy] = useState(false);
+  const [ownerAddPending, setOwnerAddPending] = useState(false);
 
   const [search, setSearch] = useState("");
   const [showRoleHelp, setShowRoleHelp] = useState(false);
@@ -124,7 +124,7 @@ export default function OrgUsersPage() {
         <h1 style={pageH1Style}>Users and Roles</h1>
         <div style={{ ...statusPanelStyle("info"), marginTop: 16 }}>
           Owners and admins manage who has access to {org.name}. Ask one of them to change
-          someone's role.
+          someone’s role.
         </div>
       </div>
     );
@@ -153,6 +153,14 @@ export default function OrgUsersPage() {
     } finally {
       setBusyUserId(null);
     }
+  };
+
+  // Granting owner is a hand-over whichever door it comes through, so the Add
+  // form asks the same question the row's Role picker does.
+  const onAddSubmit = () => {
+    if (!addEmail.trim()) return;
+    if (addRole === "owner") setOwnerAddPending(true);
+    else void onAdd();
   };
 
   const onAdd = async () => {
@@ -217,17 +225,26 @@ export default function OrgUsersPage() {
       </div>
 
       {actionMsg && (
-        <div style={{ ...statusPanelStyle("success"), marginTop: 20 }} role="status">
+        <div
+          ref={scrollIntoView}
+          style={{ ...statusPanelStyle("success"), marginTop: 20 }}
+          role="status"
+        >
           {actionMsg}
         </div>
       )}
       {actionErr && (
-        <div style={{ ...statusPanelStyle("danger"), marginTop: 20 }} role="alert">
+        <div
+          ref={scrollIntoView}
+          style={{ ...statusPanelStyle("danger"), marginTop: 20 }}
+          role="alert"
+        >
           {actionErr}
         </div>
       )}
       {orphanNote && (
         <div
+          ref={scrollIntoView}
           style={{ ...statusPanelStyle(orphanNote.tone), marginTop: 20 }}
           role={orphanNote.tone === "danger" ? "alert" : "status"}
         >
@@ -257,7 +274,7 @@ export default function OrgUsersPage() {
                 placeholder="them@example.com"
                 onChange={(e) => setAddEmail(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !addDisabled) void onAdd();
+                  if (e.key === "Enter" && !addDisabled) onAddSubmit();
                 }}
                 style={tapInputStyle}
               />
@@ -282,7 +299,7 @@ export default function OrgUsersPage() {
               type="button"
               style={addDisabled ? ctaPrimaryDisabledStyle : ctaPrimaryStyle}
               disabled={addDisabled}
-              onClick={() => void onAdd()}
+              onClick={onAddSubmit}
             >
               {addBusy ? "Adding…" : "Add"}
             </button>
@@ -400,6 +417,25 @@ export default function OrgUsersPage() {
         />
       )}
 
+      {ownerAddPending && (
+        <ConfirmModal
+          title="Add this person as an owner?"
+          destructive={false}
+          body={
+            <>
+              <strong>{addEmail.trim()}</strong> will get full access to {org.name}, including
+              adding and removing other owners — you included.
+            </>
+          }
+          confirmLabel="Add as owner"
+          onCancel={() => setOwnerAddPending(false)}
+          onConfirm={async () => {
+            setOwnerAddPending(false);
+            await onAdd();
+          }}
+        />
+      )}
+
       {ownerTarget && (
         <ConfirmModal
           title="Make this person an owner?"
@@ -469,12 +505,15 @@ function MemberRow({
             </span>
             <span style={pillStyle}>{ROLE_LABELS[member.role]}</span>
             {isSelf && (
+              // Outlined on the row's own white, not a cream chip: the cream
+              // fill put this label under the contrast floor once the row
+              // moved to white, and a second filled chip competed with the
+              // role pill beside it.
               <span
                 style={{
                   fontSize: 11,
-                  color: inkMuted,
-                  background: cream,
-                  border: `1px solid ${creamDeep}`,
+                  color: inkSoft,
+                  border: `1px solid ${rule}`,
                   borderRadius: 3,
                   padding: "2px 6px",
                 }}
@@ -534,6 +573,7 @@ function MemberRow({
 
       {note && (
         <div
+          ref={scrollIntoView}
           style={{ ...statusPanelStyle(note.tone), marginTop: 12, fontSize: 13 }}
           role={note.tone === "danger" ? "alert" : "status"}
         >
@@ -554,6 +594,14 @@ const labelStyle = {
   color: inkMuted,
   marginBottom: 4,
 } as const;
+
+// A row can re-sort out from under the pointer when its role changes, and a
+// page-level banner sits at the top of a list that may be long. Either way the
+// thing the person needs to read can land off-screen, so every result panel
+// brings itself into view as it mounts.
+function scrollIntoView(el: HTMLDivElement | null) {
+  el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
