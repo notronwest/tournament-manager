@@ -5,6 +5,39 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-03 — His machine is a domain-joined corporate laptop; stop and decide
+
+**The block is enforced by someone else's IT department, and neither end can
+change it.** Attempting to reclassify the Tailscale adapter failed with: the
+category *"cannot be changed from `DomainAuthenticated`"* and *"user initiated
+changes ... are being prevented due to the Group Policy setting 'Network List
+Manager Policies'"*. That is Active Directory. The Windows box is joined to a
+corporate domain, its firewall runs under the centrally-managed Domain profile,
+and the outbound block on the tunnel adapter is policy, not misconfiguration.
+
+**Do not engineer around this.** Disabling the adapter filter, adding firewall
+exceptions or otherwise defeating the Group Policy would be circumventing an
+employer's security controls on a machine the club does not own. The legitimate
+routes are: he uses a personal machine, or he gets his own IT to permit it.
+
+**This is now the second signal in one session**, and they compound. The GitHub
+account offered for access (`stephenferland-bot`) was created minutes before the
+request with no repositories, no published key and a display name that does not
+match the person. And the device he wants to connect from is controlled,
+monitored and patched by an employer with no relationship to the club. The club
+mini is the always-on machine that runs live club services.
+
+**State of play, unchanged and correct:** no GitHub access was granted anywhere
+(the single invitation was revoked before acceptance). The `sferland` account
+exists on the mini and is sound but has never been logged into. He is a member
+of the tailnet under an allow-all rule, so his corporate laptop is currently
+*permitted* to reach every device on it — it simply cannot, because of his own
+employer's firewall.
+
+**Next:** decide whether to suspend his tailnet membership until he is on a
+personal machine, and whether the allow-all rule should be narrowed regardless.
+Both are open.
+
 ## 2026-11-03 — Both ends check out; his Windows adapter is where traffic dies
 
 **The tailnet path between the two machines is proven good.** From the mini,
