@@ -5,6 +5,52 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-03 — A second developer: repo invite out, mini account staged
+
+**Access provisioning, not code.** A second developer is joining; the ask was a
+GitHub grant plus a login on the club Mac mini.
+
+**GitHub.** There is no organization — the repos are personal, so access is a
+per-repo collaborator invite rather than org membership. `stephenferland-bot`
+was invited to this repo with `push` (invitation `341329728`, pending
+acceptance). The two private repos he might also want (`wmpc-meta`,
+`third-shot-academy`) were **deliberately held** — see the flag below. His SSH
+key cannot be installed from here: GitHub binds keys to the owning account, so
+he adds it himself at github.com/settings/keys.
+
+**Flag raised, unresolved at wrap.** The account `stephenferland-bot` was
+created 2026-11-03 16:19 UTC — minutes before the request — has zero public
+repos, no SSH key published, a display name (`STThomian`) that does not match
+the person, and a `-bot` suffix. That may be exactly intended (an agent account,
+or one spun up for this work), but it is not the signature of an established
+personal account, and this fleet exposed instructor names on a public repo six
+days ago. Hence: public product repo yes, private club-data repos pending an
+explicit yes.
+
+**Mac mini.** `wmpcMacMini1` was reachable over SSH; real accounts were just
+`notronwest` (501) and `wmpcpickleball` (502), both admins. Account creation
+needs a password-bearing `sudo`, which an agent does not take — so the work is
+staged as a script at `/Users/notronwest/add-sferland.sh` on the mini
+(syntax-checked, idempotent, not yet run), run by hand with
+`ssh -t wmpcmacmini1.local 'sudo /bin/sh /Users/notronwest/add-sferland.sh'`.
+
+It creates `sferland` (UID 503, `/bin/zsh`) as a **standard, non-admin** account,
+installs the supplied `ssh-ed25519` key at `~/.ssh/authorized_keys` (700/600,
+owned by him), sets a random initial password into a root-only file at
+`/var/root/sferland-initial-password.txt`, and adds him to
+`com.apple.access_ssh`.
+
+**That last step is the non-obvious one.** Remote Login on the mini is
+**admin-only** — the ACL group carries no user members, only a nested group
+whose GUID resolves to GID 80 (`admin`). A standard account therefore cannot SSH
+in at all until it is an explicit member. The script *adds* a user member and
+leaves the nested admin group intact, so `notronwest` and `wmpcpickleball` keep
+their access; do not "clean up" that group by replacing its contents.
+
+**Next:** run the one-liner, then verify `sferland` can actually authenticate
+with that key (as him from a machine holding the private half, or from the auth
+log). Then decide the two private repos.
+
 ## 2026-10-29 — Offline seed: the register card's branches, and one registered player
 
 **Seed data only — no migration, no app code.** `supabase/seed.sql` now builds
