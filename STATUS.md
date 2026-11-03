@@ -5,6 +5,22 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-03 — Correction: the tournament invite was revoked, no access granted
+
+**Supersedes the entry below.** The `push` invitation to `stephenferland-bot`
+(`341329728`) was **deleted before acceptance** — he never held access to this
+repo, and the collaborator list is back to `notronwest` alone. Access to this
+product is not wanted yet.
+
+So **all three** repos are now held, not just the two private ones. The
+reasoning in the entry below about the account itself (created minutes before
+the request, no key published, `-bot` suffix, mismatched display name) stands
+and is worth re-reading before anyone grants this account anything.
+
+**Still staged and untouched:** the Mac mini account script at
+`/Users/notronwest/add-sferland.sh`. It has not been run — no account exists on
+the mini either. Whether the mini login should also wait is open.
+
 ## 2026-11-03 — A second developer: repo invite out, mini account staged
 
 **Access provisioning, not code.** A second developer is joining; the ask was a
