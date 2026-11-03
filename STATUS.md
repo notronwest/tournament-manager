@@ -5,6 +5,36 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-03 — Mini account is live; the tailnet policy is what blocks him
+
+**The account exists now.** The staged script was run and `sferland` is a real
+standard account on the club mini. Verified from this laptop: `ssh` to
+`sferland@100.116.142.120` over the tailnet reaches sshd and is refused with
+`Permission denied (publickey,password,keyboard-interactive)` — which is the
+*correct* refusal, since this machine does not hold his private key. Account,
+home directory, key file and remote-login membership are all good.
+
+**His failure is a different thing entirely, and the distinction matters.** From
+his Windows box he gets `connect to host 100.116.142.120 port 22: Permission
+denied` — that is a *connect*-stage refusal, before SSH negotiates anything.
+Tailscale returns that shape when its access rules drop the flow. Port 22 is
+open and answering from an `ron@`-owned node (`nc` succeeds), so sshd and the
+account are not the problem; the tailnet policy is.
+
+**He was added as a tailnet USER, not a device share.** `tailscale status` shows
+node `stephens` (Windows, `100.90.13.66`) owned by `stephenferland@gmail.com`
+inside the same tailnet (`tail82abc6`), with `ShareeNode: None`. So the earlier
+advice to share the single device was not what happened — he is a second member
+of the tailnet and appears in its device list. The fix is a narrow rule scoping
+him to port 22 on the mini, which also keeps him off the laptops and phones.
+
+**Still true:** no GitHub access of any kind — all three repos remain held, and
+the revoked invitation was never accepted.
+
+**Next:** add the access rule, have him retry, then confirm from his side. Open
+question is whether he should stay a tailnet member or be converted to a
+single-device share.
+
 ## 2026-11-03 — Correction: the tournament invite was revoked, no access granted
 
 **Supersedes the entry below.** The `push` invitation to `stephenferland-bot`
