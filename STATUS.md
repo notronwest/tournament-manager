@@ -5,6 +5,40 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-03 — Both ends check out; his Windows adapter is where traffic dies
+
+**The tailnet path between the two machines is proven good.** From the mini,
+`tailscale ping 100.90.13.66` returns 3/3 pongs via the New York relay
+(61-166ms, no direct connection established). His node is `active; relay "nyc"`.
+So the two nodes reach each other at the Tailscale layer.
+
+**The mini accepts SSH over the tailnet.** From this laptop, `nc` to
+`100.116.142.120:22` succeeds and `ssh sferland@…` returns a clean publickey
+refusal. Note the asymmetry worth remembering: this laptop holds a **direct**
+path (same LAN, `10.0.0.203:41641`) while his is **relayed**, so this test did
+not exercise relayed inbound specifically.
+
+**His side fails at the OS, not at Tailscale.** `Test-NetConnection` routes
+correctly (`InterfaceAlias: Tailscale`, `SourceAddress: 100.90.13.66`) but both
+`TcpTestSucceeded` and `PingSucceeded` are False, with ICMP status 11050
+(`IP_GENERAL_FAILURE`). Crucially, `tailscale ping` is answered by tailscaled
+itself and never crosses the Windows TUN adapter — so it passing while ICMP and
+TCP both fail points at the adapter or something filtering it, not the tunnel.
+
+**Most likely cause, matching the original `WSAEACCES` error:** Windows Defender
+Firewall has classified the Tailscale adapter as a **Public** network, which
+blocks outbound on it. Second candidate is third-party endpoint security.
+
+**Next on his machine, elevated PowerShell:**
+`Get-NetConnectionProfile -InterfaceAlias Tailscale`, then
+`Set-NetConnectionProfile -InterfaceAlias Tailscale -NetworkCategory Private`.
+If that does not do it, check what antivirus is installed and allow `ssh.exe`
+plus the Tailscale adapter.
+
+**Unresolved and worth deciding:** he is a tailnet member under an allow-all
+rule, so his machine is permitted to reach every device on the tailnet — both
+laptops and both phones — not just the mini.
+
 ## 2026-11-03 — Correction: the tailnet is NOT blocking him; the block is on his Windows box
 
 **The entry below blamed the tailnet policy. That was wrong — do not act on
