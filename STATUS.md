@@ -5,6 +5,35 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-03 — Correction: the tailnet is NOT blocking him; the block is on his Windows box
+
+**The entry below blamed the tailnet policy. That was wrong — do not act on
+it.** The policy file was read directly: it uses a `grants` block (not the older
+`acls` shape) and its only active rule is `{"src": ["*"], "dst": ["*"], "ip":
+["*"]}` — allow all connections. Nothing in it refuses him. No policy edit is
+needed, and the rule drafted in the entry below should not be added.
+
+**Tailscale SSH is also off**, so port 22 on the mini is plain sshd, not
+intercepted. Confirmed on the machine: `RunSSH: False`, `ShieldsUp: False`, and
+no SSH host keys in its node state. That rules out the second theory too — the
+`ssh` block in the policy (which allows `autogroup:member` to `autogroup:self`
+only) governs Tailscale SSH and is simply not in the path here.
+
+**So the refusal is local to his Windows machine.** On Windows, a connect-stage
+`Permission denied` is Winsock error 10013 (`WSAEACCES`) — a socket blocked by
+access permissions, which in practice means endpoint security software or a
+firewall outbound rule stopping `ssh.exe`. It is not a remote rejection; a
+tailnet-side drop would time out instead.
+
+**What is proven good:** the account on the mini, its key file, remote-login
+membership, sshd listening, and tailnet reachability from an owner node
+(`nc` to port 22 succeeds; `ssh sferland@…` returns a clean publickey refusal).
+
+**Next:** he runs `tailscale status`, `tailscale ping 100.116.142.120` and
+`Test-NetConnection 100.116.142.120 -Port 22` on his side. If the ping succeeds
+and the port test fails, it is his security software and the fix is an outbound
+allowance for `ssh.exe` there.
+
 ## 2026-11-03 — Mini account is live; the tailnet policy is what blocks him
 
 **The account exists now.** The staged script was run and `sferland` is a real
