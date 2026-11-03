@@ -5,6 +5,43 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-03 — NordVPN is the likely cause; the "corporate laptop" read was wrong
+
+**Correction to the entry below, which overstated its evidence.** That entry
+concluded the Windows box is domain-joined and centrally managed. The error it
+relied on does not establish that. `Set-NetConnectionProfile` prints *"Unable to
+set the NetworkCategory due to **one of the following possible reasons**"* and
+then lists three: PowerShell not elevated; the category cannot be changed from
+`DomainAuthenticated`; Group Policy. It is an OR-list, not a finding. His prompt
+(`PS C:\Users\steph>`) shows an ordinary window — he opened an elevated one
+earlier with `Start-Process powershell -Verb RunAs` but typed into the original.
+**Not elevated is the simplest explanation and fits what is on screen.** The
+trust concern raised there rested partly on the domain reading and should be
+discounted accordingly; the separate observation about the day-old account
+stands on its own evidence.
+
+**New information: he is running NordVPN.** That is a far better fit for every
+symptom seen so far:
+
+- Its **kill switch** blocks all traffic outside its own tunnel, which is
+  precisely the `WSAEACCES` / connect-stage *Permission denied* from the first
+  screenshot.
+- It installs its own tunnel adapter (NordLynx) and **captures the default
+  route**, so packets for `100.x` can be swallowed before reaching Tailscale.
+- **Threat Protection** filters traffic independently of the Windows firewall.
+- It explains the exact pattern observed: `tailscale ping` succeeds (answered
+  inside tailscaled, never crossing the adapter) while OS-level ICMP and TCP
+  both fail.
+
+Two VPN tunnels on one machine is a well-known conflict and does not need a
+corporate policy to produce this.
+
+**Next, in order:** fully **quit** NordVPN (disconnect alone can leave the kill
+switch armed), then retry the SSH. If it connects, the durable fix is NordVPN
+split-tunnelling with the Tailscale adapter or `ssh.exe` excluded. Only if it
+still fails is the network-profile command worth retrying, and then in a window
+whose title bar reads **Administrator:**.
+
 ## 2026-11-03 — His machine is a domain-joined corporate laptop; stop and decide
 
 **The block is enforced by someone else's IT department, and neither end can
