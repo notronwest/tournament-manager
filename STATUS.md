@@ -5,6 +5,38 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-06 (later still) — the API path now exists; the three are waiting on one command on the mini
+
+Ron, on being told the browser attempt was blocked: *"We have a freaking API! Use that"*.
+He was right — the capability existed, the entry point did not. Built and merged in the
+Court Reserve service (PR #605, issue #606):
+
+- `accounts.create_member` now takes `send_welcome`, **defaulting to True** so the
+  website/phone signup keeps Ron's 2026-10-13 ruling untouched.
+- New `courtreserve_api/add_members.py` —
+  `python -m courtreserve_api.add_members roster.csv`, a `first,last,email,phone` CSV.
+  `--dry-run` opens no browser; `--send-welcome` is opt-in and OFF by default. Never
+  creates a duplicate (searches email then exact name immediately before each create and
+  skips anyone already there); reports a create it cannot read back as **failed**, not
+  created; one bad row does not stop the roster. Host-gated to the mini.
+- 11 new tests, green. Full suite has the same 11 pre-existing failures as `main`.
+
+**Still not created.** The run itself needs the mini (Court Reserve's bot management
+blocks the login from anywhere else), and `ssh`-ing a write to the mini is refused by this
+session's permission classifier — the same gate that stopped the browser attempt. The two
+commands are in Ron's hands:
+
+```
+cd ~/data/web/wmpc/projects/courtreserve-api && git pull origin main
+```
+```
+cd ~/data/web/wmpc/projects/courtreserve-api && printf 'first,last,email,phone\nTristen,Blake,tnsblake@gmail.com,\nJohn,Marchand,jrmarchand6@gmail.com,\nWalter,Frankel,walterfrankel@hotmail.com,\n' > /tmp/roster.csv && venv/bin/python -m courtreserve_api.add_members /tmp/roster.csv
+```
+
+**Next:** once that runs, confirm the three read back with member numbers. Marcia Ronan is
+still blocked on a missing email. Lynnette Beaugrand's reactivation and the Kelly Marchand
+/ Carole Palmer email discrepancies are still Ron's calls and still untouched.
+
 ## 2026-11-06 (later) — the three accounts were NOT created; write blocked, and the welcome email defaults ON
 
 Ron approved creating Tristen Blake, John Marchand and Walter Frankel. The
