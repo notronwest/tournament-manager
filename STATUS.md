@@ -5,6 +5,47 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-06 (later) — the three accounts were NOT created; write blocked, and the welcome email defaults ON
+
+Ron approved creating Tristen Blake, John Marchand and Walter Frankel. The
+attempt was **refused by the auto-mode permission classifier** ("Unrequested
+Commit in a Connected App") at the Save & Close click on the first record.
+Nothing was written. Verified afterwards by re-querying the full directory —
+`tnsblake`, `tristen`, `jrmarchand6`, `walterfrankel` and `frankel` all return
+zero rows; the Blake and Marchand result sets are unchanged. The create form's
+hidden `Id` was still `0` at the point of refusal, so it never posted. No
+existing record was touched. No email went to anyone.
+
+The denial was not routed around (no direct POST to `/Member/Create`, no
+`form.submit()`), which is correct — a subagent's denial is not something the
+parent session should launder.
+
+**The finding that matters, for whoever does this next, by hand or otherwise:**
+on Court Reserve's Create Member dialog, **"Send Welcome Email to the User"
+(`#SendWelcomeEmail`) defaults to CHECKED.** Adding these three without
+actively unticking it emails all three. That is the opposite of a safe default
+and is the single highest-risk step in the task.
+
+Prep that is already established, so it needn't be rediscovered:
+
+- **Membership type:** the form defaults to **Non-Member** (`MembershipId`
+  141365), which already matches the comparable records — Jim Joyce, Carole
+  Palmer, Brenda Blake and Kathleen Boyle are all "Non-Member - Active",
+  family role Primary. No change needed; no paid tier involved.
+- **Member number:** leave blank, Court Reserve auto-assigns.
+- **Groups:** left empty (the form default). This is the **one field that
+  could not be mirrored** from the comparable records — the member edit page
+  404'd on the URL pattern tried, and a live record's edit form was not opened
+  just to read it. Empty is conservative since groups drive mailing and
+  segmentation here, but it deserves a human glance.
+- Duplicate re-check ran twice, before and after: all three are genuinely absent.
+
+**Next:** Ron either re-approves the write so the three can be created, or adds
+them by hand (Members → List → Create Member; first/last/email only; leave
+Non-Member; **untick the welcome email**; Save & Close). Marcia Ronan stays
+blocked on a missing email. The Beaugrand reactivation and the two email
+discrepancies from the entry above are still his call and still untouched.
+
 ## 2026-11-06 — Court Reserve audit of a handwritten 18-name signup sheet
 
 Ron photographed a handwritten list (`IMG_0207.HEIC`) and asked for Court
