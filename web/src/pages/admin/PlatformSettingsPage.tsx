@@ -112,6 +112,13 @@ export default function PlatformSettingsPage() {
   // The name behind platform_settings.updated_by, when there is one. Null
   // leaves the "by …" clause off entirely rather than printing an id.
   const [savedByName, setSavedByName] = useState<string | null>(null);
+  // "Last saved" is relative, so it has to be recomputed as time passes —
+  // rendered once it would read "just now" on an open page indefinitely.
+  const [, setNowTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setNowTick((n) => n + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
   const [savingDefault, setSavingDefault] = useState(false);
   const [defaultSaveError, setDefaultSaveError] = useState<string | null>(null);
   const [defaultSavedAt, setDefaultSavedAt] = useState<string | null>(null);
@@ -291,7 +298,9 @@ export default function PlatformSettingsPage() {
       return;
     }
     setOrgs((prev) => (prev ?? []).map((o) => (o.id === orgId ? (data as OrgRow) : o)));
-    setEditingOrgId(null);
+    // Only the row that saved closes. Page-wide, this discarded whatever the
+    // operator had typed in a row they opened while the save was in flight.
+    setEditingOrgId((prev) => (prev === orgId ? null : prev));
     setOrgSavedId(orgId);
   };
 
@@ -323,7 +332,7 @@ export default function PlatformSettingsPage() {
     setSearchHits((prev) =>
       prev ? { q: prev.q, rows: prev.rows.map((t) => (t.id === saved.id ? saved : t)) } : null,
     );
-    setEditingTournamentId(null);
+    setEditingTournamentId((prev) => (prev === tournamentId ? null : prev));
     setTournamentSavedId(saved.id);
   };
 
@@ -460,10 +469,12 @@ export default function PlatformSettingsPage() {
           {/* Who last saved it is named or not mentioned — a truncated
               account id is not a person, and printing one asks the reader to
               go and look something up. */}
-          <p style={{ fontSize: 12, color: inkSoft, marginTop: 12 }}>
-            Last saved {relativeWhen(settings.updated_at)}
-            {savedByName ? ` by ${savedByName}` : ""}
-          </p>
+          {!defaultSavedAt && (
+            <p style={{ fontSize: 12, color: inkSoft, marginTop: 12 }}>
+              Last saved {relativeWhen(settings.updated_at)}
+              {savedByName ? ` by ${savedByName}` : ""}
+            </p>
+          )}
         </div>
       )}
 
