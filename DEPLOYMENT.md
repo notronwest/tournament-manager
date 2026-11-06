@@ -95,6 +95,19 @@ which means the frontend can deploy while the schema silently doesn't.
 `migration-lint.yml` gates PRs on duplicate versions. An out-of-order timestamp
 fails closed and wedges the pipeline.
 
+**The Supabase CLI is PINNED to `2.105.0`** in `migrations.yml`,
+`edge-functions.yml` and `db-backup.yml` — not `latest`. CLI 3.x dropped the
+`[inbucket]` section `supabase/config.toml` still declares, so on 2026-11-06,
+the day 3.0.0 shipped, every one of those jobs began failing with
+"`[inbucket] in supabase/config.toml is no longer supported. Use [local_smtp]
+instead`" and migrations stopped reaching TEST. Renaming the section is not a
+free fix in the other direction: CLI 2.x rejects `[local_smtp]` (`invalid
+keys: local_smtp`), so the rename breaks `supabase start` on every machine
+still on 2.x — the offline tournament laptop among them, where that same
+section being wrong has already cost a venue. **To unpin:** get every machine
+onto 3.x, then rename the section and restore `version: latest` in the same
+change.
+
 **Scheduled jobs live in the database, not in CI.** `pg_cron` (enabled by
 migration `20260914200000`) runs `sweep-stale-pending-regs` every 5 minutes on
 whichever project the migration applied to — there is no external cron and no
