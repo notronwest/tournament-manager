@@ -77,6 +77,55 @@ them by hand (Members → List → Create Member; first/last/email only; leave
 Non-Member; **untick the welcome email**; Save & Close). Marcia Ronan stays
 blocked on a missing email. The Beaugrand reactivation and the two email
 discrepancies from the entry above are still his call and still untouched.
+## 2026-11-06 — Three-level platform fee shipped to review; the deploy pipeline had been dead since 28 Oct
+
+Supersedes the entry below, which was written before the design gate ran.
+
+**Open for your merge: [#1201](https://github.com/notronwest/tournament-manager/pull/1201)** (UX). The DB half, [#1195](https://github.com/notronwest/tournament-manager/pull/1195), is merged and applied to TEST.
+
+### The pipeline was broken and nothing said so
+
+`supabase/setup-cli` was on `version: latest`. CLI **3.0.0** dropped the `[inbucket]` section `supabase/config.toml` still declares, so from the day it shipped every migrations / edge-functions / db-backup run died at the same line. **Last green migration run: 2026-10-28.** Everything merged since looked merged and did nothing to the schema. Found only because #1195's migration did not reach TEST.
+
+Pinned to `2.105.0` in [#1199](https://github.com/notronwest/tournament-manager/pull/1199), merged, and `migrations.yml` re-run on `main` — the one stranded migration applied, nothing else was pending. Renaming the section is **not** the fix on its own: CLI 2.x rejects `[local_smtp]` just as hard (verified here), so the rename breaks `supabase start` on every machine still on 2.x, the offline tournament laptop among them. `DEPLOYMENT.md` records the pin and the exit condition.
+
+### The design gate ran nine times and found 13 things
+
+All by rendering and measuring the running app. Verdicts for every pass are committed under `.design/verdicts/`; the certifying one is `9b54fcc224a03a71.md` — **PASS, 0 findings**.
+
+**The last five findings were in my own fixes**, each in a path the previous round had not walked. Worth recording as a pattern, not an apology:
+
+| Round | Found | Caused by |
+|---|---|---|
+| 1 | 8, incl. the only button on the page below the fold at 390px (831/876 in an 844 viewport) | the original work |
+| 2 | a refusal landing on the wrong row, or nowhere | page-level state in the original work |
+| 3 | PASS | — |
+| 4 | — (2 notes) | — |
+| 5 | result panels moved below the button now put the RESULT off-screen (845/913 success, 845/955 refusal) | round 4's fix |
+| 6 | clearing a tournament's rate succeeded silently | a path five passes never tested — all had set a rate IN, never taken one OUT |
+| 7 | the scroll keyed on message TEXT, so a repeated identical refusal never pulled | round 6's fix |
+| 8 | attempt counter restarted per mount while the pulled-set lived for the page load | round 7's fix |
+| 9 | PASS | — |
+
+The two that would have hurt a real operator:
+
+1. **A refused save read as a success.** Postgres answers a refused write by updating ZERO rows, which `.single()` turns into PGRST116 / HTTP 406 — *not* a "row-level security" string. Matching on the policy wording would have dropped the likeliest failure onto the generic fallback. Every branch now says the fee is **unchanged**; `platformFeeDisplay.test.ts` pins that none leaks a table name.
+2. **A save that failed while you were on another tab reported nothing at all** — the tab change cleared it before it rendered. Cleared only once rendered now.
+
+### The security bug in the DB half
+
+The existing per-tournament fee guard called `is_platform_admin()` from inside a **SECURITY DEFINER** trigger, where `current_user` is the function's OWNER. The privileged-role test the new guard needed would therefore have been true for **every caller, an ordinary org owner included** — they could have zeroed the platform's cut on their own org. Caught by running it, not reading it: the definer version returned `may_set = t` for a plain org owner. Both guards are SECURITY INVOKER now and share `may_set_platform_fee()`.
+
+### Left as tickets, deliberately
+
+- [#1200](https://github.com/notronwest/tournament-manager/issues/1200) — every text box on the site has a 1.35:1 border. **Six** verdicts wrote this down and moved on; it is the shared input token, so a fix here diverges this form from every other screen.
+- [#1202](https://github.com/notronwest/tournament-manager/issues/1202) — a refusal whose row has been filtered out mid-flight is silent. The success path already handles this; the failure path needs the mirror.
+- `organizations.platform_fee_*` is readable by whoever can read the org row, the same exposure `tournaments.platform_fee_*` has had since July. Writes locked, reads not.
+
+### For the next session
+
+`CHECKLIST.md` has no item for **unsolicited motion** — four critics in a row inferred one by analogy, and the sharpest instance was a 516px page jump. D-0018 says a rule four critics infer identically is a rule and belongs in the file. Same for #19b's tab-bar question, now asked twice.
+
 ## 2026-11-06 — Platform fee gets a middle level (org) and a real three-level UI
 
 Ron: *"Make the Platform fee settings be available per tournament... 1. Set
