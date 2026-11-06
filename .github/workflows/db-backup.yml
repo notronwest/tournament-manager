@@ -70,7 +70,18 @@ jobs:
           echo "stamp=$(date -u +%Y%m%d-%H%M%SZ)" >> "$GITHUB_OUTPUT"
 
       - uses: supabase/setup-cli@v1
-        with: { version: latest }
+        # PINNED, not `latest`. Supabase CLI 3.x dropped the `[inbucket]` section
+        # this repo's supabase/config.toml still declares, so `latest` started
+        # failing every job here with "[inbucket] ... is no longer supported.
+        # Use [local_smtp] instead" the moment 3.0.0 shipped — on 2026-11-06 that
+        # silently stopped migrations reaching TEST. The rename is NOT a free fix:
+        # CLI 2.x rejects `[local_smtp]` just as hard ("invalid keys: local_smtp"),
+        # so renaming the section breaks `supabase start` on every machine still on
+        # 2.x — including the offline tournament laptop, where that exact section
+        # being wrong has already cost a venue (see config.toml's own comment).
+        # Pin here until every machine is on 3.x, then rename the section and move
+        # this back to `latest` in the SAME change.
+        with: { version: 2.105.0 }
 
       - name: Dump ${{ steps.cfg.outputs.env }}
         env:
