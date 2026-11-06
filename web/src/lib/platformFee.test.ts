@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeChargeCents,
   computePlatformFeeCents,
+  resolvePlatformFee,
 } from "../../../supabase/functions/_shared/platformFee";
 
 describe("platform fee is unaffected by a checkout donation (#378)", () => {
@@ -49,5 +50,82 @@ describe("platform fee is unaffected by a checkout donation (#378)", () => {
     expect(computeChargeCents(subtotalCents, 2500)).toBe(9500);
     expect(computeChargeCents(subtotalCents, -500)).toBe(subtotalCents);
     expect(computeChargeCents(subtotalCents, NaN)).toBe(subtotalCents);
+  });
+});
+
+// ── Three-level resolution ────────────────────────────────────────────────
+// The platform fee can be set on the tournament, on its organization, or
+// globally; the most specific one set wins. Same module create-payment-intent
+// charges with AND the platform-fee admin UI previews with, so these cases
+// pin the number Stripe is handed.
+describe("three-level platform-fee resolution", () => {
+  const GLOBAL = { platform_fee_bps: 300, platform_fee_fixed_cents: 30 };
+  const ORG = { platform_fee_bps: 500, platform_fee_fixed_cents: 50 };
+  const TOURNAMENT = { platform_fee_bps: 100, platform_fee_fixed_cents: 10 };
+  const UNSET = { platform_fee_bps: null, platform_fee_fixed_cents: null };
+
+  it("falls back to the global default when neither override is set", () => {
+    expect(resolvePlatformFee(UNSET, UNSET, GLOBAL)).toEqual({
+      feeBps: 300,
+      feeFixedCents: 30,
+      source: "default",
+    });
+  });
+
+  it("an organization override beats the global default for its tournaments", () => {
+    expect(resolvePlatformFee(UNSET, ORG, GLOBAL)).toEqual({
+      feeBps: 500,
+      feeFixedCents: 50,
+      source: "organization",
+    });
+  });
+
+  it("a tournament override beats its organization's", () => {
+    expect(resolvePlatformFee(TOURNAMENT, ORG, GLOBAL)).toEqual({
+      feeBps: 100,
+      feeFixedCents: 10,
+      source: "tournament",
+    });
+  });
+
+  it("a tournament override beats the global default with no org override", () => {
+    expect(resolvePlatformFee(TOURNAMENT, UNSET, GLOBAL)).toEqual({
+      feeBps: 100,
+      feeFixedCents: 10,
+      source: "tournament",
+    });
+  });
+
+  it("a zero override is an override, not an absence — a free org stays free", () => {
+    const FREE = { platform_fee_bps: 0, platform_fee_fixed_cents: 0 };
+    expect(resolvePlatformFee(UNSET, FREE, GLOBAL)).toEqual({
+      feeBps: 0,
+      feeFixedCents: 0,
+      source: "organization",
+    });
+    expect(resolvePlatformFee(FREE, ORG, GLOBAL)).toEqual({
+      feeBps: 0,
+      feeFixedCents: 0,
+      source: "tournament",
+    });
+  });
+
+  it("charges nothing rather than guessing when the global row is missing", () => {
+    expect(resolvePlatformFee(UNSET, UNSET, null)).toEqual({
+      feeBps: 0,
+      feeFixedCents: 0,
+      source: "default",
+    });
+    expect(resolvePlatformFee(undefined, undefined, undefined)).toEqual({
+      feeBps: 0,
+      feeFixedCents: 0,
+      source: "default",
+    });
+  });
+
+  it("resolves then computes — the number Stripe gets for a $50 registration", () => {
+    const { feeBps, feeFixedCents } = resolvePlatformFee(UNSET, ORG, GLOBAL);
+    // 5% of $50 (250) + $0.50 (50)
+    expect(computePlatformFeeCents(5000, feeBps, feeFixedCents)).toBe(300);
   });
 });
