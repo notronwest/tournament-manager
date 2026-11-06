@@ -28,6 +28,7 @@ import {
 } from "../../components/PlatformFeeEditor";
 import {
   formatFeeShort,
+  nextSaveAttempt,
   platformFeeSaveMessage,
   type PlatformFeeValue,
 } from "../../lib/platformFeeDisplay";
@@ -122,9 +123,13 @@ export default function PlatformSettingsPage() {
   // The name behind platform_settings.updated_by, when there is one. Null
   // leaves the "by …" clause off entirely rather than printing an id.
   const [savedByName, setSavedByName] = useState<string | null>(null);
-  // Bumped once per save attempt, at any level. Only its distinctness
-  // matters: it is what tells a repeated refusal from the one before it.
-  const attemptRef = useRef(0);
+  // Which refusals have actually been on the operator's screen. A refusal
+  // that landed while they were on another tab has told them nothing, so
+  // leaving the tab must not throw it away — only a seen one is cleared.
+  const seenFailures = useRef(new Set<number>());
+  const markSeen = useCallback((attempt: number) => {
+    seenFailures.current.add(attempt);
+  }, []);
   // "Last saved" is relative, so it has to be recomputed as time passes —
   // rendered once it would read "just now" on an open page indefinitely.
   const [, setNowTick] = useState(0);
@@ -295,7 +300,7 @@ export default function PlatformSettingsPage() {
     if (error) {
       setDefaultSaveError({
         message: platformFeeSaveMessage(error),
-        attempt: ++attemptRef.current,
+        attempt: nextSaveAttempt(),
       });
       return;
     }
@@ -330,7 +335,7 @@ export default function PlatformSettingsPage() {
       setOrgRowError({
         id: orgId,
         message: platformFeeSaveMessage(error),
-        attempt: ++attemptRef.current,
+        attempt: nextSaveAttempt(),
       });
       // Leave the editor as the operator left it — open with their draft if
       // they are still there, shut if they closed it. The row carries the
@@ -362,7 +367,7 @@ export default function PlatformSettingsPage() {
       setTournamentRowError({
         id: tournamentId,
         message: platformFeeSaveMessage(error),
-        attempt: ++attemptRef.current,
+        attempt: nextSaveAttempt(),
       });
       return;
     }
@@ -493,12 +498,15 @@ export default function PlatformSettingsPage() {
         tabs={FEE_TABS}
         value={tab}
         onChange={(next) => {
-          // A refusal belongs to the attempt that caused it. Leaving the tab
-          // ends that, rather than leaving an undated failure waiting below
-          // the fold for whoever comes back.
-          setDefaultSaveError(null);
-          setOrgRowError(null);
-          setTournamentRowError(null);
+          // A refusal the operator has READ ends when they leave the tab, so
+          // it is not parked below the fold for whoever comes back. One they
+          // have not — a late answer that landed while they were elsewhere —
+          // survives, because clearing it means the save reported nothing at
+          // all.
+          const seen = seenFailures.current;
+          setDefaultSaveError((e) => (e && seen.has(e.attempt) ? null : e));
+          setOrgRowError((e) => (e && seen.has(e.attempt) ? null : e));
+          setTournamentRowError((e) => (e && seen.has(e.attempt) ? null : e));
           setTab(next);
         }}
         idPrefix="platform-fee"
@@ -530,6 +538,7 @@ export default function PlatformSettingsPage() {
               saving={savingDefault}
               error={defaultSaveError?.message ?? null}
               errorAt={defaultSaveError?.attempt ?? null}
+              onErrorShown={markSeen}
               savedAt={defaultSavedAt}
               onSave={(next) => void saveDefault(next)}
             />
@@ -587,6 +596,7 @@ export default function PlatformSettingsPage() {
                   saving={orgRowBusyId === org.id}
                   error={orgRowError?.id === org.id ? orgRowError.message : null}
                   errorAt={orgRowError?.id === org.id ? orgRowError.attempt : null}
+                  onErrorShown={markSeen}
                   savedAt={orgSaved?.id === org.id ? orgSaved.at : null}
                   onToggle={() => {
                     setOrgRowError(null);
@@ -675,7 +685,10 @@ export default function PlatformSettingsPage() {
                     error={
                       tournamentRowError?.id === t.id ? tournamentRowError.message : null
                     }
-                    errorAt={tournamentRowError?.id === t.id ? tournamentRowError.attempt : null}
+                    errorAt={
+                      tournamentRowError?.id === t.id ? tournamentRowError.attempt : null
+                    }
+                    onErrorShown={markSeen}
                     savedAt={tournamentSaved?.id === t.id ? tournamentSaved.at : null}
                     onToggle={() => {
                       setTournamentRowError(null);
@@ -794,6 +807,7 @@ function FeeRow({
   saving,
   error,
   errorAt,
+  onErrorShown,
   savedAt,
   onToggle,
   onSave,
@@ -812,6 +826,7 @@ function FeeRow({
   saving: boolean;
   error: string | null;
   errorAt: number | null;
+  onErrorShown: (attempt: number) => void;
   // When this row last saved, or null. Shown on the ROW, not inside the
   // editor, because saving collapses the editor — and when the saved value
   // equals the inherited one the badge is the only other thing that moves.
@@ -860,7 +875,11 @@ function FeeRow({
           the operator closed the row still has to reach them, and on the row
           they acted on. */}
       {error && !open && (
-        <ResultPanel tone="danger" pullKey={`${idPrefix}-row-err-${errorAt}`}>
+        <ResultPanel
+          tone="danger"
+          pullKey={`${idPrefix}-row-err-${errorAt}`}
+          onShown={errorAt === null ? undefined : () => onErrorShown(errorAt)}
+        >
           {error}
         </ResultPanel>
       )}
@@ -875,6 +894,7 @@ function FeeRow({
             saving={saving}
             error={error}
             errorAt={errorAt}
+            onErrorShown={onErrorShown}
             onSave={onSave}
           />
         </div>

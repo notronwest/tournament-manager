@@ -53,3 +53,15 @@ export function platformFeeSaveMessage(err: SaveFailure | string): string {
   }
   return "That fee wasn't saved. The fee is unchanged; try again, and if it keeps failing take a note of what you were setting.";
 }
+
+// Save attempts are numbered for the life of the PAGE, not of a mount, and
+// the number is what tells a repeated refusal from the one before it.
+//
+// A per-mount counter restarting at 0 collided with the keys of an earlier
+// visit to the screen: leave, come back, and the first few refusals were
+// taken for ones already shown and never scrolled into view — the same bug
+// as keying on the message text, with a number that was also not unique.
+let attemptSeq = 0;
+export function nextSaveAttempt(): number {
+  return ++attemptSeq;
+}

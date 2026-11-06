@@ -36,6 +36,7 @@ export function PlatformFeeEditor({
   saving = false,
   error = null,
   errorAt = null,
+  onErrorShown,
   savedAt = null,
   onSave,
 }: {
@@ -57,6 +58,9 @@ export function PlatformFeeEditor({
   // the pull on the attempt, or the second one lands below the fold in
   // silence, and the commonest real refusal repeats its words exactly.
   errorAt?: number | null;
+  // Told when the refusal has actually been rendered, so the page can tell
+  // an outcome the operator saw from one that never reached them.
+  onErrorShown?: (attempt: number) => void;
   savedAt?: string | null;
   // null clears the override and goes back to inheriting.
   onSave: (next: PlatformFeeValue) => void;
@@ -279,7 +283,11 @@ export function PlatformFeeEditor({
           below the button on a phone IS below the fold. Position alone fixed
           one of those two and caused the other. */}
       {error && (
-        <ResultPanel tone="danger" pullKey={`${idPrefix}-err-${errorAt}`}>
+        <ResultPanel
+          tone="danger"
+          pullKey={`${idPrefix}-err-${errorAt}`}
+          onShown={errorAt === null || !onErrorShown ? undefined : () => onErrorShown(errorAt)}
+        >
           {error}
         </ResultPanel>
       )}
@@ -335,20 +343,27 @@ const fieldErrorStyle = {
 // the scroll belongs to the save and nothing else.
 const pulled = new Set<string>();
 
+
 export function ResultPanel({
   tone,
   pullKey,
+  onShown,
   children,
 }: {
   tone: "success" | "danger";
   // Identifies the save this panel is reporting. Omit it and the panel never
   // moves the page.
   pullKey?: string;
+  // Fired the first time this panel is actually rendered, so a caller can
+  // tell an outcome the operator has seen from one that never reached them.
+  onShown?: () => void;
   children: ReactNode;
 }) {
   const pull = useCallback(
     (node: HTMLDivElement | null) => {
-      if (!node || !pullKey || pulled.has(pullKey)) return;
+      if (!node) return;
+      onShown?.();
+      if (!pullKey || pulled.has(pullKey)) return;
       pulled.add(pullKey);
       // Deferred: a ref callback runs during the commit, before the browser
       // has laid the page out, and the scroll is a silent no-op there —
@@ -364,7 +379,7 @@ export function ResultPanel({
         node.scrollIntoView({ block: "nearest", behavior: "auto" });
       }, 0);
     },
-    [pullKey],
+    [pullKey, onShown],
   );
   return (
     <div
