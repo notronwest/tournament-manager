@@ -22,7 +22,11 @@ import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
 import { PlatformFeeEditor, FeeSourceBadge } from "../../components/PlatformFeeEditor";
-import { formatFeeShort, type PlatformFeeValue } from "../../lib/platformFeeDisplay";
+import {
+  formatFeeShort,
+  platformFeeSaveMessage,
+  type PlatformFeeValue,
+} from "../../lib/platformFeeDisplay";
 import {
   resolvePlatformFee,
   type ResolvedPlatformFee,
@@ -36,7 +40,6 @@ import {
   breadcrumbLinkStyle,
   pageH1Style,
   pageSubStyle,
-  sectionH2Style,
   panelMutedStyle,
   ctaSecondaryStyle,
   inputStyle,
@@ -75,6 +78,11 @@ type TournamentRow = FeeColumns & {
 const TOURNAMENT_SEARCH_LIMIT = 20;
 const MIN_SEARCH_CHARS = 2;
 
+// A read that fails says what is missing and what to do, in the page's own
+// words — never the database's.
+const LOAD_FAILED = "Couldn't load the fees. Nothing has changed; reload the page to try again.";
+const SEARCH_FAILED = "Couldn't search tournaments. Reload the page and try again.";
+
 export default function PlatformSettingsPage() {
   const { user } = useAuth();
   const isPlatformAdmin = usePlatformAdmin();
@@ -84,6 +92,9 @@ export default function PlatformSettingsPage() {
   // ── Global default ──────────────────────────────────────────────────
   const [settings, setSettings] = useState<PlatformSettingsRow | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  // The name behind platform_settings.updated_by, when there is one. Null
+  // leaves the "by …" clause off entirely rather than printing an id.
+  const [savedByName, setSavedByName] = useState<string | null>(null);
   const [savingDefault, setSavingDefault] = useState(false);
   const [defaultSaveError, setDefaultSaveError] = useState<string | null>(null);
   const [defaultSavedAt, setDefaultSavedAt] = useState<string | null>(null);
@@ -95,6 +106,10 @@ export default function PlatformSettingsPage() {
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
   const [orgRowBusy, setOrgRowBusy] = useState(false);
   const [orgRowError, setOrgRowError] = useState<string | null>(null);
+  // Which row last saved, so the row itself says so. A row that saves a
+  // value equal to the one it inherited otherwise changes nothing visible
+  // except a badge that may be off-screen by then.
+  const [orgSavedId, setOrgSavedId] = useState<string | null>(null);
 
   // ── Tournaments ─────────────────────────────────────────────────────
   // The default view is only the tournaments that HAVE a rate of their own — a
@@ -109,6 +124,7 @@ export default function PlatformSettingsPage() {
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [tournamentRowBusy, setTournamentRowBusy] = useState(false);
   const [tournamentRowError, setTournamentRowError] = useState<string | null>(null);
+  const [tournamentSavedId, setTournamentSavedId] = useState<string | null>(null);
 
   const defaultFee = useMemo(
     () => ({
@@ -155,12 +171,24 @@ export default function PlatformSettingsPage() {
           .order("starts_at", { ascending: false }),
       ]);
       if (cancelled) return;
-      if (s.error) setSettingsError(s.error.message);
+      if (s.error) setSettingsError(LOAD_FAILED);
       else setSettings(s.data as PlatformSettingsRow);
-      if (o.error) setOrgsError(o.error.message);
+      if (o.error) setOrgsError(LOAD_FAILED);
       else setOrgs(o.data as OrgRow[]);
-      if (t.error) setTournamentsError(t.error.message);
+      if (t.error) setTournamentsError(LOAD_FAILED);
       else setOverriddenTournaments(t.data as TournamentRow[]);
+
+      const savedBy = (s.data as PlatformSettingsRow | null)?.updated_by;
+      if (savedBy) {
+        const { data: who } = await supabase
+          .from("players")
+          .select("first_name, last_name")
+          .eq("auth_user_id", savedBy)
+          .maybeSingle();
+        if (cancelled) return;
+        const name = [who?.first_name, who?.last_name].filter(Boolean).join(" ").trim();
+        setSavedByName(name === "" ? null : name);
+      }
     })();
     return () => {
       cancelled = true;
@@ -182,7 +210,7 @@ export default function PlatformSettingsPage() {
           .order("starts_at", { ascending: false })
           .limit(TOURNAMENT_SEARCH_LIMIT);
         if (cancelled) return;
-        if (error) setTournamentsError(error.message);
+        if (error) setTournamentsError(SEARCH_FAILED);
         else setSearchHits({ q, rows: data as TournamentRow[] });
       })();
     }, 250);
@@ -211,7 +239,7 @@ export default function PlatformSettingsPage() {
       .single();
     setSavingDefault(false);
     if (error) {
-      setDefaultSaveError(error.message);
+      setDefaultSaveError(platformFeeSaveMessage(error));
       return;
     }
     setSettings(data as PlatformSettingsRow);
@@ -232,11 +260,12 @@ export default function PlatformSettingsPage() {
       .single();
     setOrgRowBusy(false);
     if (error) {
-      setOrgRowError(error.message);
+      setOrgRowError(platformFeeSaveMessage(error));
       return;
     }
     setOrgs((prev) => (prev ?? []).map((o) => (o.id === orgId ? (data as OrgRow) : o)));
     setEditingOrgId(null);
+    setOrgSavedId(orgId);
   };
 
   const saveTournamentFee = async (tournamentId: string, next: PlatformFeeValue) => {
@@ -253,7 +282,7 @@ export default function PlatformSettingsPage() {
       .single();
     setTournamentRowBusy(false);
     if (error) {
-      setTournamentRowError(error.message);
+      setTournamentRowError(platformFeeSaveMessage(error));
       return;
     }
     const saved = data as TournamentRow;
@@ -267,6 +296,7 @@ export default function PlatformSettingsPage() {
       prev ? { q: prev.q, rows: prev.rows.map((t) => (t.id === saved.id ? saved : t)) } : null,
     );
     setEditingTournamentId(null);
+    setTournamentSavedId(saved.id);
   };
 
   // ── Gates ───────────────────────────────────────────────────────────
@@ -338,14 +368,17 @@ export default function PlatformSettingsPage() {
       </div>
 
       <h1 style={{ ...pageH1Style, marginTop: 0, marginBottom: 8 }}>Platform fees</h1>
+      {/* One lede, carrying both jobs it has to do: say what the page is for,
+          and name all three things it lets you set with live counts, so
+          standing at the top you can say what this page does without
+          scrolling. It replaced a second paragraph AND the per-tab heading
+          and sub that repeated it — 460px of header stack was pushing the
+          only button below the fold at 390x844. */}
       <p style={{ ...pageSubStyle, marginTop: 0, marginBottom: 8, maxWidth: 620 }}>
         The platform's cut of each registration, taken from the organizer's payout. Set a fee
-        for everyone, for one organizer, or for a single tournament — the most specific one
-        wins.
+        for everyone, for one organizer, or for one tournament — the most specific wins.
       </p>
-      {/* The three jobs and where each stands, named at the top, so standing
-          here you can say what this page lets you do without scrolling. */}
-      <p style={{ fontSize: 13, color: inkSoft, marginTop: 0, marginBottom: 20 }}>
+      <p style={{ fontSize: 13, color: inkSoft, marginTop: 0, marginBottom: 16 }}>
         Default now{" "}
         <strong style={{ color: ink }}>
           {formatFeeShort(defaultFee.bps, defaultFee.fixedCents)}
@@ -375,12 +408,9 @@ export default function PlatformSettingsPage() {
           id="platform-fee-panel-default"
           aria-labelledby="platform-fee-tab-default"
         >
-          <h2 style={{ ...sectionH2Style, marginTop: 24, marginBottom: 8 }}>
-            The fee every organizer gets
-          </h2>
           <p style={sectionSubStyle}>
-            Applies to every tournament that sets no fee of its own and whose organizer sets
-            none either. Changing it moves all of those at once.
+            Every tournament that sets no fee of its own, and whose organizer sets none
+            either. Changing it moves all of them at once.
           </p>
           <div style={{ ...panelMutedStyle, padding: 16 }}>
             <PlatformFeeEditor
@@ -399,9 +429,12 @@ export default function PlatformSettingsPage() {
               onSave={(next) => void saveDefault(next)}
             />
           </div>
+          {/* Who last saved it is named or not mentioned — a truncated
+              account id is not a person, and printing one asks the reader to
+              go and look something up. */}
           <p style={{ fontSize: 12, color: inkSoft, marginTop: 12 }}>
             Last saved {new Date(settings.updated_at).toLocaleString()}
-            {settings.updated_by ? ` by ${settings.updated_by.slice(0, 8)}…` : ""}
+            {savedByName ? ` by ${savedByName}` : ""}
           </p>
         </div>
       )}
@@ -409,12 +442,9 @@ export default function PlatformSettingsPage() {
       {/* ── Organizers ───────────────────────────────────────────────── */}
       {tab === "orgs" && (
         <div role="tabpanel" id="platform-fee-panel-orgs" aria-labelledby="platform-fee-tab-orgs">
-          <h2 style={{ ...sectionH2Style, marginTop: 24, marginBottom: 8 }}>
-            One organizer's rate
-          </h2>
           <p style={sectionSubStyle}>
-            Find an organizer and set the fee every one of their tournaments inherits. A
-            tournament that sets its own fee keeps it.
+            Set the fee every one of an organizer's tournaments inherits. A tournament that
+            sets its own fee keeps it.
           </p>
 
           <input
@@ -451,12 +481,13 @@ export default function PlatformSettingsPage() {
                   inheritedFee={defaultFee}
                   saving={orgRowBusy}
                   error={orgRowError}
+                  saved={orgSavedId === org.id}
                   onToggle={() => {
                     setOrgRowError(null);
+                    setOrgSavedId(null);
                     setEditingOrgId(editingOrgId === org.id ? null : org.id);
                   }}
                   onSave={(next) => void saveOrgFee(org.id, next)}
-                  onCancel={() => setEditingOrgId(null)}
                 />
               ))
             ))}
@@ -470,11 +501,8 @@ export default function PlatformSettingsPage() {
           id="platform-fee-panel-tournaments"
           aria-labelledby="platform-fee-tab-tournaments"
         >
-          <h2 style={{ ...sectionH2Style, marginTop: 24, marginBottom: 8 }}>
-            One tournament's rate
-          </h2>
           <p style={sectionSubStyle}>
-            Tournaments that set their own fee are listed below — set the fee on any of them, or
+            Tournaments that set their own fee are listed here — set the fee on any of them, or
             search to give another tournament one.
           </p>
 
@@ -529,12 +557,13 @@ export default function PlatformSettingsPage() {
                     inheritedFee={{ bps: inherited.feeBps, fixedCents: inherited.feeFixedCents }}
                     saving={tournamentRowBusy}
                     error={tournamentRowError}
+                    saved={tournamentSavedId === t.id}
                     onToggle={() => {
                       setTournamentRowError(null);
+                      setTournamentSavedId(null);
                       setEditingTournamentId(editingTournamentId === t.id ? null : t.id);
                     }}
                     onSave={(next) => void saveTournamentFee(t.id, next)}
-                    onCancel={() => setEditingTournamentId(null)}
                   />
                 );
               })}
@@ -580,8 +609,8 @@ const emptyStyle = {
 const sectionSubStyle = {
   fontSize: 13,
   color: inkSoft,
-  marginTop: 0,
-  marginBottom: 16,
+  marginTop: 16,
+  marginBottom: 12,
   maxWidth: 560,
 };
 
@@ -645,9 +674,9 @@ function FeeRow({
   inheritedFee,
   saving,
   error,
+  saved,
   onToggle,
   onSave,
-  onCancel,
 }: {
   // Which list this row is in — decides whether the fee's origin is worth
   // naming (see the meta line) and nothing else.
@@ -662,9 +691,12 @@ function FeeRow({
   inheritedFee: { bps: number; fixedCents: number };
   saving: boolean;
   error: string | null;
+  // This row saved a moment ago. Shown on the ROW, not inside the editor,
+  // because saving collapses the editor — and when the saved value equals
+  // the inherited one the badge is the only other thing that moves.
+  saved: boolean;
   onToggle: () => void;
   onSave: (next: PlatformFeeValue) => void;
-  onCancel: () => void;
 }) {
   return (
     <div style={{ ...panelMutedStyle, padding: 16, marginBottom: 8 }}>
@@ -696,6 +728,11 @@ function FeeRow({
           </button>
         </div>
       </div>
+      {saved && !open && (
+        <div style={{ ...statusPanelStyle("success"), marginTop: 12, fontSize: 13 }}>
+          Saved just now — this fee applies to the next registration taken.
+        </div>
+      )}
       {open && (
         <div style={editorWellStyle}>
           <PlatformFeeEditor
@@ -707,7 +744,6 @@ function FeeRow({
             saving={saving}
             error={error}
             onSave={onSave}
-            onCancel={onCancel}
           />
         </div>
       )}

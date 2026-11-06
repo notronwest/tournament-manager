@@ -8,17 +8,18 @@
 // create-payment-intent charges with, so the number shown here is the number
 // Stripe is handed.
 import { useState } from "react";
+import { Check } from "lucide-react";
 import { computePlatformFeeCents } from "../../../supabase/functions/_shared/platformFee";
 import { formatFeeShort, type PlatformFeeValue } from "../lib/platformFeeDisplay";
 import {
   ink,
   inkSoft,
   inkMuted,
+  rule,
   courtBlue,
   panelStyle,
   ctaPrimaryStyle,
   ctaPrimaryDisabledStyle,
-  ctaSecondaryStyle,
   inputStyle,
   statusPanelStyle,
   dangerFg,
@@ -36,7 +37,6 @@ export function PlatformFeeEditor({
   error = null,
   savedAt = null,
   onSave,
-  onCancel,
 }: {
   // Unique per mount — several editors can be open on one page.
   idPrefix: string;
@@ -55,7 +55,6 @@ export function PlatformFeeEditor({
   savedAt?: string | null;
   // null clears the override and goes back to inheriting.
   onSave: (next: PlatformFeeValue) => void;
-  onCancel?: () => void;
 }) {
   const canInherit = inheritLabel !== undefined;
   // "custom" vs "inherit" is the first choice, so the two number fields only
@@ -132,10 +131,25 @@ export function PlatformFeeEditor({
                   // #d1d5db: a control's resting edge needs 3:1 against the
                   // surface behind it (D-0157) and #d1d5db on white is 1.5:1.
                   borderColor: active ? "#2563eb" : inkMuted,
+                  borderWidth: active ? 2 : 1,
+                  // Keep the text in the same place whichever tile is chosen:
+                  // the second border pixel comes out of the padding.
+                  padding: active ? "9px 11px" : "10px 12px",
+                  fontWeight: active ? 600 : 500,
                   color: active ? "#1e40af" : ink,
                 }}
               >
-                {m === "inherit" ? `Use ${inheritLabel}` : "Set a custom fee"}
+                {/* Which tile is chosen must survive greyscale and
+                    colour-blindness, so the tick — not the blue — is what
+                    carries it (D-0157: never meaning by colour alone).
+                    Darkening the inactive border to inkMuted for the
+                    resting-edge floor left the two blues 1.07:1 apart. */}
+                <span style={tileInnerStyle}>
+                  <span style={tileGlyphSlotStyle} aria-hidden="true">
+                    {active && <Check size={16} strokeWidth={3} />}
+                  </span>
+                  <span>{m === "inherit" ? `Use ${inheritLabel}` : "Set a custom fee"}</span>
+                </span>
               </button>
             );
           })}
@@ -161,12 +175,15 @@ export function PlatformFeeEditor({
                 style={{
                   ...inputStyle,
                   minHeight: 44,
-                  borderColor: percentStr !== "" && !percentValid ? dangerFg : undefined,
+                  // Explicit, never undefined: React writes "" for an
+                  // undefined value, which strips inputStyle's border
+                  // shorthand and leaves the browser's default grey.
+                  borderColor: percentValid ? rule : dangerFg,
                 }}
               />
               <span style={{ fontSize: 14, color: inkSoft }}>%</span>
             </div>
-            {percentStr !== "" && !percentValid && (
+            {!percentValid && (
               <p style={fieldErrorStyle}>Enter a value between 0 and 100.</p>
             )}
           </div>
@@ -188,11 +205,11 @@ export function PlatformFeeEditor({
                 style={{
                   ...inputStyle,
                   minHeight: 44,
-                  borderColor: fixedStr !== "" && !fixedValid ? dangerFg : undefined,
+                  borderColor: fixedValid ? rule : dangerFg,
                 }}
               />
             </div>
-            {fixedStr !== "" && !fixedValid && (
+            {!fixedValid && (
               <p style={fieldErrorStyle}>Enter a value of 0 or more.</p>
             )}
           </div>
@@ -207,13 +224,16 @@ export function PlatformFeeEditor({
         <div style={{ fontSize: 13, color: ink }}>
           Platform fee <strong>{previewKnown ? `$${(feeCents / 100).toFixed(2)}` : "—"}</strong>
           {previewKnown && (
-            <span style={{ color: inkMuted, fontSize: 12 }}>
+            <span style={{ color: inkSoft, fontSize: 12 }}>
               {" "}
               ({formatFeeShort(previewBps, previewFixed)})
             </span>
           )}
         </div>
-        <div style={{ fontSize: 12, color: inkMuted, marginTop: 4 }}>
+        {/* inkSoft, not inkMuted: this sits on the cream panel, where
+            inkMuted measures 4.20:1 — under the 4.5:1 floor — and this line
+            is the only place the page says what the organizer keeps. */}
+        <div style={{ fontSize: 12, color: inkSoft, marginTop: 4 }}>
           Organizer receives {previewKnown ? `$${((SAMPLE_CENTS - feeCents) / 100).toFixed(2)}` : "—"}
         </div>
       </div>
@@ -221,7 +241,7 @@ export function PlatformFeeEditor({
       {error && <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }}>{error}</div>}
       {savedAt && (
         <div style={{ ...statusPanelStyle("success"), marginBottom: 12 }}>
-          Saved at {new Date(savedAt).toLocaleTimeString()}.
+          Saved just now.
         </div>
       )}
 
@@ -236,17 +256,10 @@ export function PlatformFeeEditor({
             minHeight: 44,
           }}
         >
-          {saving ? "Saving…" : mode === "inherit" && canInherit ? "Use the inherited fee" : "Save fee"}
+          {saving ? "Saving…" : mode === "inherit" && canInherit ? `Use ${inheritLabel}` : "Save fee"}
         </button>
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            style={{ ...ctaSecondaryStyle, fontSize: 13, padding: "10px 18px", minHeight: 44 }}
-          >
-            Cancel
-          </button>
-        )}
+        {/* No Cancel here: a row already carries "Close" in its header, and
+            two verbs 300px apart doing one thing makes a reader check. */}
       </div>
     </div>
   );
@@ -270,6 +283,22 @@ const fieldErrorStyle = {
   margin: "4px 0 0",
   fontSize: 12,
   color: dangerFg,
+};
+
+// A fixed slot for the tick so the two tiles' labels line up whether or not
+// the tile is the chosen one.
+const tileInnerStyle = {
+  display: "flex" as const,
+  alignItems: "flex-start" as const,
+  gap: 6,
+};
+
+const tileGlyphSlotStyle = {
+  width: 16,
+  flexShrink: 0,
+  display: "inline-flex" as const,
+  alignItems: "center" as const,
+  height: 18,
 };
 
 const choiceTileStyle = {
