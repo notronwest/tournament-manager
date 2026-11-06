@@ -3792,3 +3792,8 @@ gender bound with **no age cap**, so an adult always landed on the aged-out "Reg
 child" route and the self-gap branch never rendered — both critics graded it from code and
 said so. Adding such an event locally is what exposed the 18px link. A fixture event with a
 skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in here.
+
+## 2026-11-06 — #1197 rework (PR #1201): phone check added
+- Reviewer gate asked for a 390×844 case on `/admin/platform` (D-0047). Added to `web/e2e/mobile/audit.spec.ts` (Organizers tab, row editor open: no overflow, `Save fee` in viewport, ≥44px targets). Seeds a dedicated platform admin `e2e-platform@wmpc.test`.
+- Not run green: needs the E2E test-DB secrets, and the regression workflow targets deployed TEST, which lacks this screen until merge. Typecheck + lint on changed files clean.
+- Next: reviewer re-reviews on push; first nightly after merge is the real run of the new case.
