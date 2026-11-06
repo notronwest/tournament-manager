@@ -35,6 +35,7 @@ export function PlatformFeeEditor({
   inheritedFee,
   saving = false,
   error = null,
+  errorAt = null,
   savedAt = null,
   onSave,
 }: {
@@ -52,6 +53,10 @@ export function PlatformFeeEditor({
   inheritedFee?: { bps: number; fixedCents: number };
   saving?: boolean;
   error?: string | null;
+  // When the refusal happened. Two identical refusals are two events — key
+  // the pull on the attempt, or the second one lands below the fold in
+  // silence, and the commonest real refusal repeats its words exactly.
+  errorAt?: number | null;
   savedAt?: string | null;
   // null clears the override and goes back to inheriting.
   onSave: (next: PlatformFeeValue) => void;
@@ -274,7 +279,7 @@ export function PlatformFeeEditor({
           below the button on a phone IS below the fold. Position alone fixed
           one of those two and caused the other. */}
       {error && (
-        <ResultPanel tone="danger" pullKey={`${idPrefix}-err-${error}`}>
+        <ResultPanel tone="danger" pullKey={`${idPrefix}-err-${errorAt}`}>
           {error}
         </ResultPanel>
       )}

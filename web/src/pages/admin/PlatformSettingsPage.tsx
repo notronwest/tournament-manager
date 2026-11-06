@@ -82,6 +82,10 @@ type TournamentRow = FeeColumns & {
 const TOURNAMENT_SEARCH_LIMIT = 20;
 const MIN_SEARCH_CHARS = 2;
 
+// A failed save, with the attempt it came from. `at` is what makes a retry
+// of the SAME refusal a new event rather than a repeat of the old one.
+type SaveFailureState = { message: string; at: number };
+
 // A read that fails says what is missing and what to do, in the page's own
 // words — never the database's.
 // Recent is relative, older is absolute — a save ten seconds ago reading as
@@ -124,7 +128,9 @@ export default function PlatformSettingsPage() {
     return () => clearInterval(t);
   }, []);
   const [savingDefault, setSavingDefault] = useState(false);
-  const [defaultSaveError, setDefaultSaveError] = useState<string | null>(null);
+  // Errors carry the attempt they belong to, not just their words: two
+  // identical refusals are two events, and each has to announce itself.
+  const [defaultSaveError, setDefaultSaveError] = useState<SaveFailureState | null>(null);
   const [defaultSavedAt, setDefaultSavedAt] = useState<string | null>(null);
 
   // ── Organizers ──────────────────────────────────────────────────────
@@ -139,7 +145,9 @@ export default function PlatformSettingsPage() {
   // reads as success. Each row owns its own outcome, and renders it on the
   // row rather than inside the editor, which may be shut by then.
   const [orgRowBusyId, setOrgRowBusyId] = useState<string | null>(null);
-  const [orgRowError, setOrgRowError] = useState<{ id: string; message: string } | null>(null);
+  const [orgRowError, setOrgRowError] = useState<(SaveFailureState & { id: string }) | null>(
+    null,
+  );
   const [orgSaved, setOrgSaved] = useState<{ id: string; at: string } | null>(null);
 
   // ── Tournaments ─────────────────────────────────────────────────────
@@ -154,10 +162,9 @@ export default function PlatformSettingsPage() {
   const [searchHits, setSearchHits] = useState<{ q: string; rows: TournamentRow[] } | null>(null);
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [tournamentRowBusyId, setTournamentRowBusyId] = useState<string | null>(null);
-  const [tournamentRowError, setTournamentRowError] = useState<{
-    id: string;
-    message: string;
-  } | null>(null);
+  const [tournamentRowError, setTournamentRowError] = useState<
+    (SaveFailureState & { id: string }) | null
+  >(null);
   // The name rides along because a cleared rate drops the row out of this
   // list — the save then has nothing to render on, and a confirmation has to
   // say which tournament it is about.
@@ -281,7 +288,7 @@ export default function PlatformSettingsPage() {
       .single();
     setSavingDefault(false);
     if (error) {
-      setDefaultSaveError(platformFeeSaveMessage(error));
+      setDefaultSaveError({ message: platformFeeSaveMessage(error), at: Date.now() });
       return;
     }
     setSettings(data as PlatformSettingsRow);
@@ -312,7 +319,7 @@ export default function PlatformSettingsPage() {
       .single();
     setOrgRowBusyId(null);
     if (error) {
-      setOrgRowError({ id: orgId, message: platformFeeSaveMessage(error) });
+      setOrgRowError({ id: orgId, message: platformFeeSaveMessage(error), at: Date.now() });
       // Leave the editor as the operator left it — open with their draft if
       // they are still there, shut if they closed it. The row carries the
       // refusal either way.
@@ -340,7 +347,11 @@ export default function PlatformSettingsPage() {
       .single();
     setTournamentRowBusyId(null);
     if (error) {
-      setTournamentRowError({ id: tournamentId, message: platformFeeSaveMessage(error) });
+      setTournamentRowError({
+        id: tournamentId,
+        message: platformFeeSaveMessage(error),
+        at: Date.now(),
+      });
       return;
     }
     const saved = data as TournamentRow;
@@ -469,7 +480,15 @@ export default function PlatformSettingsPage() {
       <SectionTabs
         tabs={FEE_TABS}
         value={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          // A refusal belongs to the attempt that caused it. Leaving the tab
+          // ends that, rather than leaving an undated failure waiting below
+          // the fold for whoever comes back.
+          setDefaultSaveError(null);
+          setOrgRowError(null);
+          setTournamentRowError(null);
+          setTab(next);
+        }}
         idPrefix="platform-fee"
         ariaLabel="Platform fee levels"
       />
@@ -497,7 +516,8 @@ export default function PlatformSettingsPage() {
                 fixedCents: settings.platform_fee_fixed_cents,
               }}
               saving={savingDefault}
-              error={defaultSaveError}
+              error={defaultSaveError?.message ?? null}
+              errorAt={defaultSaveError?.at ?? null}
               savedAt={defaultSavedAt}
               onSave={(next) => void saveDefault(next)}
             />
@@ -554,6 +574,7 @@ export default function PlatformSettingsPage() {
                   inheritedFee={defaultFee}
                   saving={orgRowBusyId === org.id}
                   error={orgRowError?.id === org.id ? orgRowError.message : null}
+                  errorAt={orgRowError?.id === org.id ? orgRowError.at : null}
                   savedAt={orgSaved?.id === org.id ? orgSaved.at : null}
                   onToggle={() => {
                     setOrgRowError(null);
@@ -642,6 +663,7 @@ export default function PlatformSettingsPage() {
                     error={
                       tournamentRowError?.id === t.id ? tournamentRowError.message : null
                     }
+                    errorAt={tournamentRowError?.id === t.id ? tournamentRowError.at : null}
                     savedAt={tournamentSaved?.id === t.id ? tournamentSaved.at : null}
                     onToggle={() => {
                       setTournamentRowError(null);
@@ -759,6 +781,7 @@ function FeeRow({
   inheritedFee,
   saving,
   error,
+  errorAt,
   savedAt,
   onToggle,
   onSave,
@@ -776,6 +799,7 @@ function FeeRow({
   inheritedFee: { bps: number; fixedCents: number };
   saving: boolean;
   error: string | null;
+  errorAt: number | null;
   // When this row last saved, or null. Shown on the ROW, not inside the
   // editor, because saving collapses the editor — and when the saved value
   // equals the inherited one the badge is the only other thing that moves.
@@ -816,14 +840,18 @@ function FeeRow({
         </div>
       </div>
       {savedAt && !open && (
-        <ResultPanel tone="success">
+        <ResultPanel tone="success" pullKey={`${idPrefix}-row-ok-${savedAt}`}>
           Saved {relativeWhen(savedAt)} — this fee applies to the next registration taken.
         </ResultPanel>
       )}
       {/* Outside the `open` guard on purpose: a refusal that arrives after
           the operator closed the row still has to reach them, and on the row
           they acted on. */}
-      {error && !open && <ResultPanel tone="danger">{error}</ResultPanel>}
+      {error && !open && (
+        <ResultPanel tone="danger" pullKey={`${idPrefix}-row-err-${errorAt}`}>
+          {error}
+        </ResultPanel>
+      )}
       {open && (
         <div style={editorWellStyle}>
           <PlatformFeeEditor
@@ -834,6 +862,7 @@ function FeeRow({
             inheritedFee={inheritedFee}
             saving={saving}
             error={error}
+            errorAt={errorAt}
             onSave={onSave}
           />
         </div>
