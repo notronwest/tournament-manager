@@ -77,6 +77,100 @@ them by hand (Members → List → Create Member; first/last/email only; leave
 Non-Member; **untick the welcome email**; Save & Close). Marcia Ronan stays
 blocked on a missing email. The Beaugrand reactivation and the two email
 discrepancies from the entry above are still his call and still untouched.
+## 2026-11-06 — Platform fee gets a middle level (org) and a real three-level UI
+
+Ron: *"Make the Platform fee settings be available per tournament... 1. Set
+it as a default across the board 2. pick an org and set it for all
+tournaments and then 3. override any tournament."*
+
+Two of the three levels already existed in the schema and only one had a UI.
+`platform_settings` (global, since `20260608130000`) had the fee form at
+`/admin/platform`; `tournaments.platform_fee_*` (since `20260702170000`) was
+reachable only by hand-written SQL — the archive entry for it literally says
+`update tournaments set platform_fee_bps=…`. The **organization** level did
+not exist at all.
+
+### What shipped (two PRs, DB first)
+
+**DB** — `supabase/migrations/20261106120000_org_platform_fee_override.sql`:
+nullable `organizations.platform_fee_bps` / `platform_fee_fixed_cents`,
+both-or-neither + range checks mirroring the two levels either side, and a
+BEFORE trigger restricting those columns to callers `may_set_platform_fee()`
+allows.
+
+**A real security bug was found and fixed in the same migration.** The
+tournament guard from `20260702170000` ran `is_platform_admin()` from inside
+a **SECURITY DEFINER** trigger. Inside a definer function `current_user` is
+the function's OWNER (`postgres`), so the privileged-role test
+(`current_user in ('postgres','service_role','supabase_admin')`) that the new
+guard needed would have been **true for every caller, an ordinary org owner
+included** — they could have zeroed the platform's cut on their own org.
+Caught by actually running it against a local stack, not by reading it: the
+definer version returned `may_set = t` for a plain org owner. Both guards are
+now SECURITY **INVOKER** and share `may_set_platform_fee()`.
+
+Local verification (`psql` against the running local Supabase stack, each
+case in a savepoint): half-set override refused by the check constraint;
+`bps = 10001` refused by the range check; org owner refused by the trigger;
+same user, once in `platform_admins`, allowed; `service_role` allowed; the
+file re-applied cleanly (idempotent DDL).
+
+**UX** — `/admin/platform` is now "Platform fees" with three tabs:
+
+| Tab | What it sets | Default view |
+|---|---|---|
+| Default | `platform_settings` | the form (unchanged behaviour) |
+| Organizers | `organizations.platform_fee_*` | every org, searchable, effective fee + Inherited/Custom badge |
+| Tournaments | `tournaments.platform_fee_*` | only the tournaments that set their own; search finds the rest |
+
+Resolution is `resolvePlatformFee()` in
+`supabase/functions/_shared/platformFee.ts` — tournament → organization →
+default, most specific wins. **`create-payment-intent` now calls it** in
+place of its own inlined tournament-or-default branch, which is what makes
+the organization level take effect at checkout at all. The admin UI previews
+through the same module, so the fee a row shows is the fee Stripe is handed.
+A **zero rate is an override, not an absence**: a free organizer stays free
+when the default moves. Seven resolution cases pinned in
+`web/src/lib/platformFee.test.ts` (10 tests in that file, 442 across the
+suite, all green).
+
+Reuse (D-0049): one `PlatformFeeEditor` mounted three times via a
+`variant` prop — inputs, validation, inherit/override choice tiles and the
+$50 worked example have a single implementation. One `FeeRow` serves both
+lists; `level` only decides whether the fee's origin is worth naming (on an
+organizer's own row, "from the organizer" would be telling them their rate
+is their rate).
+
+### Verified
+
+390×844 against the local stack with populated fixtures: all three levels
+saved and cleared; the tournament inherit tile named the organizer by name
+("Use Granite State Pickleball Association's rate") and previewed $4.25 on
+it; long org names wrap rather than squeezing the name column; no horizontal
+scroll (`scrollWidth` 390); no console errors. Typecheck, build and lint
+clean — lint errors 31 on this branch vs 33 on `main`, because the old page's
+two went away.
+
+The inactive choice-tile border is `inkMuted`, not the `#d1d5db` that
+`docs/DESIGN_PREFERENCES.md` prescribes: a control's resting edge needs 3:1
+(D-0157) and `#d1d5db` on white is 1.5:1. Worth deciding whether the
+preferences doc should change rather than every call site working around it.
+
+### Known gap, not fixed here
+
+`organizations.platform_fee_*` is readable by whoever can read the org row —
+the same exposure `tournaments.platform_fee_*` has had since July. Writes are
+locked down; reads are not. Flagged, not changed, because narrowing it is a
+column-level RLS job across both tables and a decision of its own.
+
+### Types
+
+Regenerated from the local stack after applying the migration and the delta
+applied by hand to `web/src/types/supabase.ts` — a full overwrite would have
+been a regression, because the CLI on this machine (2.105.0) emits older
+generics and drops `__InternalSupabase` versus what is committed. The diff
+against a clean local generate is exactly the two columns (Row/Insert/Update)
+plus `may_set_platform_fee`.
 
 ## 2026-11-06 — Court Reserve audit of a handwritten 18-name signup sheet
 
