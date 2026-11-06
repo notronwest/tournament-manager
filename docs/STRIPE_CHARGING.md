@@ -107,14 +107,43 @@ SECURITY DEFINER.
 
 ## Decisions (RESOLVED 2026-06-08)
 
-1. **Platform fee — no-code admin setting.** Stored in the
-   `platform_settings` singleton table (`platform_fee_bps` +
-   `platform_fee_fixed_cents`), editable by the site super-admin via a
-   platform settings UI — NOT an env var. The edge function reads it via
-   service_role. `application_fee_amount = round(total * bps / 10000) +
-   fixed`. Migration drafted: `20260608130000_platform_settings.sql`
-   (adds the table + an `is_platform_admin()` helper). UI tracked as a
-   separate Builder story.
+1. **Platform fee — no-code admin setting, resolved over three levels.**
+   Never an env var; always a row a platform admin edits at
+   `/admin/platform`. `application_fee_amount = round(subtotal * bps /
+   10000) + fixed`, computed on the registration subtotal only (a
+   checkout donation is never taxed — #378).
+
+   The rate comes from the most specific level that is set:
+
+   | Level | Columns | Set when |
+   |---|---|---|
+   | Tournament | `tournaments.platform_fee_bps` / `_fixed_cents` | both non-null |
+   | Organization | `organizations.platform_fee_bps` / `_fixed_cents` | both non-null |
+   | Default | `platform_settings.platform_fee_bps` / `_fixed_cents` | always (singleton) |
+
+   A level is set only with BOTH columns non-null (a check constraint
+   enforces both-or-neither), so **0% + $0.00 is a real override, not an
+   absence** — a free organizer stays free when the default moves.
+
+   `resolvePlatformFee()` in `supabase/functions/_shared/platformFee.ts`
+   is the single implementation of that precedence:
+   `create-payment-intent` charges with it and the admin UI previews with
+   it, so the rate an admin sees is the rate Stripe is handed. Its cases
+   are pinned in `web/src/lib/platformFee.test.ts`.
+
+   **Who may write a fee column.** `may_set_platform_fee()` — a platform
+   admin, or a privileged DB role (`service_role` / `postgres`, which
+   bypass RLS anyway). Enforced by a BEFORE trigger on both
+   `organizations` and `tournaments`, so an ORG admin cannot zero the
+   platform's cut on their own org. Those functions and triggers are
+   deliberately SECURITY **INVOKER**: inside a SECURITY DEFINER function
+   `current_user` is the function's owner, which made the privileged-role
+   test true for everybody.
+
+   Migrations: `20260608130000_platform_settings.sql` (the singleton +
+   `is_platform_admin()`), `20260702170000_tournament_platform_fee_override.sql`
+   (the tournament level), `20261106120000_org_platform_fee_override.sql`
+   (the organization level, and the invoker fix on both guards).
 2. **Charging path: Payment Element (in-page).** Confirmed. Not Stripe
    Checkout hosted pages.
 3. **Secrets** (Ron sets):

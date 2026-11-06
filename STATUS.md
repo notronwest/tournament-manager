@@ -77,6 +77,149 @@ them by hand (Members → List → Create Member; first/last/email only; leave
 Non-Member; **untick the welcome email**; Save & Close). Marcia Ronan stays
 blocked on a missing email. The Beaugrand reactivation and the two email
 discrepancies from the entry above are still his call and still untouched.
+## 2026-11-06 — Three-level platform fee shipped to review; the deploy pipeline had been dead since 28 Oct
+
+Supersedes the entry below, which was written before the design gate ran.
+
+**Open for your merge: [#1201](https://github.com/notronwest/tournament-manager/pull/1201)** (UX). The DB half, [#1195](https://github.com/notronwest/tournament-manager/pull/1195), is merged and applied to TEST.
+
+### The pipeline was broken and nothing said so
+
+`supabase/setup-cli` was on `version: latest`. CLI **3.0.0** dropped the `[inbucket]` section `supabase/config.toml` still declares, so from the day it shipped every migrations / edge-functions / db-backup run died at the same line. **Last green migration run: 2026-10-28.** Everything merged since looked merged and did nothing to the schema. Found only because #1195's migration did not reach TEST.
+
+Pinned to `2.105.0` in [#1199](https://github.com/notronwest/tournament-manager/pull/1199), merged, and `migrations.yml` re-run on `main` — the one stranded migration applied, nothing else was pending. Renaming the section is **not** the fix on its own: CLI 2.x rejects `[local_smtp]` just as hard (verified here), so the rename breaks `supabase start` on every machine still on 2.x, the offline tournament laptop among them. `DEPLOYMENT.md` records the pin and the exit condition.
+
+### The design gate ran nine times and found 13 things
+
+All by rendering and measuring the running app. Verdicts for every pass are committed under `.design/verdicts/`; the certifying one is `9b54fcc224a03a71.md` — **PASS, 0 findings**.
+
+**The last five findings were in my own fixes**, each in a path the previous round had not walked. Worth recording as a pattern, not an apology:
+
+| Round | Found | Caused by |
+|---|---|---|
+| 1 | 8, incl. the only button on the page below the fold at 390px (831/876 in an 844 viewport) | the original work |
+| 2 | a refusal landing on the wrong row, or nowhere | page-level state in the original work |
+| 3 | PASS | — |
+| 4 | — (2 notes) | — |
+| 5 | result panels moved below the button now put the RESULT off-screen (845/913 success, 845/955 refusal) | round 4's fix |
+| 6 | clearing a tournament's rate succeeded silently | a path five passes never tested — all had set a rate IN, never taken one OUT |
+| 7 | the scroll keyed on message TEXT, so a repeated identical refusal never pulled | round 6's fix |
+| 8 | attempt counter restarted per mount while the pulled-set lived for the page load | round 7's fix |
+| 9 | PASS | — |
+
+The two that would have hurt a real operator:
+
+1. **A refused save read as a success.** Postgres answers a refused write by updating ZERO rows, which `.single()` turns into PGRST116 / HTTP 406 — *not* a "row-level security" string. Matching on the policy wording would have dropped the likeliest failure onto the generic fallback. Every branch now says the fee is **unchanged**; `platformFeeDisplay.test.ts` pins that none leaks a table name.
+2. **A save that failed while you were on another tab reported nothing at all** — the tab change cleared it before it rendered. Cleared only once rendered now.
+
+### The security bug in the DB half
+
+The existing per-tournament fee guard called `is_platform_admin()` from inside a **SECURITY DEFINER** trigger, where `current_user` is the function's OWNER. The privileged-role test the new guard needed would therefore have been true for **every caller, an ordinary org owner included** — they could have zeroed the platform's cut on their own org. Caught by running it, not reading it: the definer version returned `may_set = t` for a plain org owner. Both guards are SECURITY INVOKER now and share `may_set_platform_fee()`.
+
+### Left as tickets, deliberately
+
+- [#1200](https://github.com/notronwest/tournament-manager/issues/1200) — every text box on the site has a 1.35:1 border. **Six** verdicts wrote this down and moved on; it is the shared input token, so a fix here diverges this form from every other screen.
+- [#1202](https://github.com/notronwest/tournament-manager/issues/1202) — a refusal whose row has been filtered out mid-flight is silent. The success path already handles this; the failure path needs the mirror.
+- `organizations.platform_fee_*` is readable by whoever can read the org row, the same exposure `tournaments.platform_fee_*` has had since July. Writes locked, reads not.
+
+### For the next session
+
+`CHECKLIST.md` has no item for **unsolicited motion** — four critics in a row inferred one by analogy, and the sharpest instance was a 516px page jump. D-0018 says a rule four critics infer identically is a rule and belongs in the file. Same for #19b's tab-bar question, now asked twice.
+
+## 2026-11-06 — Platform fee gets a middle level (org) and a real three-level UI
+
+Ron: *"Make the Platform fee settings be available per tournament... 1. Set
+it as a default across the board 2. pick an org and set it for all
+tournaments and then 3. override any tournament."*
+
+Two of the three levels already existed in the schema and only one had a UI.
+`platform_settings` (global, since `20260608130000`) had the fee form at
+`/admin/platform`; `tournaments.platform_fee_*` (since `20260702170000`) was
+reachable only by hand-written SQL — the archive entry for it literally says
+`update tournaments set platform_fee_bps=…`. The **organization** level did
+not exist at all.
+
+### What shipped (two PRs, DB first)
+
+**DB** — `supabase/migrations/20261106120000_org_platform_fee_override.sql`:
+nullable `organizations.platform_fee_bps` / `platform_fee_fixed_cents`,
+both-or-neither + range checks mirroring the two levels either side, and a
+BEFORE trigger restricting those columns to callers `may_set_platform_fee()`
+allows.
+
+**A real security bug was found and fixed in the same migration.** The
+tournament guard from `20260702170000` ran `is_platform_admin()` from inside
+a **SECURITY DEFINER** trigger. Inside a definer function `current_user` is
+the function's OWNER (`postgres`), so the privileged-role test
+(`current_user in ('postgres','service_role','supabase_admin')`) that the new
+guard needed would have been **true for every caller, an ordinary org owner
+included** — they could have zeroed the platform's cut on their own org.
+Caught by actually running it against a local stack, not by reading it: the
+definer version returned `may_set = t` for a plain org owner. Both guards are
+now SECURITY **INVOKER** and share `may_set_platform_fee()`.
+
+Local verification (`psql` against the running local Supabase stack, each
+case in a savepoint): half-set override refused by the check constraint;
+`bps = 10001` refused by the range check; org owner refused by the trigger;
+same user, once in `platform_admins`, allowed; `service_role` allowed; the
+file re-applied cleanly (idempotent DDL).
+
+**UX** — `/admin/platform` is now "Platform fees" with three tabs:
+
+| Tab | What it sets | Default view |
+|---|---|---|
+| Default | `platform_settings` | the form (unchanged behaviour) |
+| Organizers | `organizations.platform_fee_*` | every org, searchable, effective fee + Inherited/Custom badge |
+| Tournaments | `tournaments.platform_fee_*` | only the tournaments that set their own; search finds the rest |
+
+Resolution is `resolvePlatformFee()` in
+`supabase/functions/_shared/platformFee.ts` — tournament → organization →
+default, most specific wins. **`create-payment-intent` now calls it** in
+place of its own inlined tournament-or-default branch, which is what makes
+the organization level take effect at checkout at all. The admin UI previews
+through the same module, so the fee a row shows is the fee Stripe is handed.
+A **zero rate is an override, not an absence**: a free organizer stays free
+when the default moves. Seven resolution cases pinned in
+`web/src/lib/platformFee.test.ts` (10 tests in that file, 442 across the
+suite, all green).
+
+Reuse (D-0049): one `PlatformFeeEditor` mounted three times via a
+`variant` prop — inputs, validation, inherit/override choice tiles and the
+$50 worked example have a single implementation. One `FeeRow` serves both
+lists; `level` only decides whether the fee's origin is worth naming (on an
+organizer's own row, "from the organizer" would be telling them their rate
+is their rate).
+
+### Verified
+
+390×844 against the local stack with populated fixtures: all three levels
+saved and cleared; the tournament inherit tile named the organizer by name
+("Use Granite State Pickleball Association's rate") and previewed $4.25 on
+it; long org names wrap rather than squeezing the name column; no horizontal
+scroll (`scrollWidth` 390); no console errors. Typecheck, build and lint
+clean — lint errors 31 on this branch vs 33 on `main`, because the old page's
+two went away.
+
+The inactive choice-tile border is `inkMuted`, not the `#d1d5db` that
+`docs/DESIGN_PREFERENCES.md` prescribes: a control's resting edge needs 3:1
+(D-0157) and `#d1d5db` on white is 1.5:1. Worth deciding whether the
+preferences doc should change rather than every call site working around it.
+
+### Known gap, not fixed here
+
+`organizations.platform_fee_*` is readable by whoever can read the org row —
+the same exposure `tournaments.platform_fee_*` has had since July. Writes are
+locked down; reads are not. Flagged, not changed, because narrowing it is a
+column-level RLS job across both tables and a decision of its own.
+
+### Types
+
+Regenerated from the local stack after applying the migration and the delta
+applied by hand to `web/src/types/supabase.ts` — a full overwrite would have
+been a regression, because the CLI on this machine (2.105.0) emits older
+generics and drops `__InternalSupabase` versus what is committed. The diff
+against a clean local generate is exactly the two columns (Row/Insert/Update)
+plus `may_set_platform_fee`.
 
 ## 2026-11-06 — Court Reserve audit of a handwritten 18-name signup sheet
 
@@ -3649,3 +3792,8 @@ gender bound with **no age cap**, so an adult always landed on the aged-out "Reg
 child" route and the self-gap branch never rendered — both critics graded it from code and
 said so. Adding such an event locally is what exposed the 18px link. A fixture event with a
 skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in here.
+
+## 2026-11-06 — #1197 rework (PR #1201): phone check added
+- Reviewer gate asked for a 390×844 case on `/admin/platform` (D-0047). Added to `web/e2e/mobile/audit.spec.ts` (Organizers tab, row editor open: no overflow, `Save fee` in viewport, ≥44px targets). Seeds a dedicated platform admin `e2e-platform@wmpc.test`.
+- Not run green: needs the E2E test-DB secrets, and the regression workflow targets deployed TEST, which lacks this screen until merge. Typecheck + lint on changed files clean.
+- Next: reviewer re-reviews on push; first nightly after merge is the real run of the new case.
