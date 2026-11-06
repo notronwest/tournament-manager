@@ -136,7 +136,7 @@ export default function PlatformSettingsPage() {
   // row rather than inside the editor, which may be shut by then.
   const [orgRowBusyId, setOrgRowBusyId] = useState<string | null>(null);
   const [orgRowError, setOrgRowError] = useState<{ id: string; message: string } | null>(null);
-  const [orgSavedId, setOrgSavedId] = useState<string | null>(null);
+  const [orgSaved, setOrgSaved] = useState<{ id: string; at: string } | null>(null);
 
   // ── Tournaments ─────────────────────────────────────────────────────
   // The default view is only the tournaments that HAVE a rate of their own — a
@@ -154,7 +154,9 @@ export default function PlatformSettingsPage() {
     id: string;
     message: string;
   } | null>(null);
-  const [tournamentSavedId, setTournamentSavedId] = useState<string | null>(null);
+  const [tournamentSaved, setTournamentSaved] = useState<{ id: string; at: string } | null>(
+    null,
+  );
 
   const defaultFee = useMemo(
     () => ({
@@ -279,7 +281,7 @@ export default function PlatformSettingsPage() {
   const saveOrgFee = async (orgId: string, next: PlatformFeeValue) => {
     setOrgRowBusyId(orgId);
     setOrgRowError(null);
-    setOrgSavedId(null);
+    setOrgSaved(null);
     const { data, error } = await supabase
       .from("organizations")
       .update({
@@ -301,13 +303,13 @@ export default function PlatformSettingsPage() {
     // Only the row that saved closes. Page-wide, this discarded whatever the
     // operator had typed in a row they opened while the save was in flight.
     setEditingOrgId((prev) => (prev === orgId ? null : prev));
-    setOrgSavedId(orgId);
+    setOrgSaved({ id: orgId, at: new Date().toISOString() });
   };
 
   const saveTournamentFee = async (tournamentId: string, next: PlatformFeeValue) => {
     setTournamentRowBusyId(tournamentId);
     setTournamentRowError(null);
-    setTournamentSavedId(null);
+    setTournamentSaved(null);
     const { data, error } = await supabase
       .from("tournaments")
       .update({
@@ -333,7 +335,7 @@ export default function PlatformSettingsPage() {
       prev ? { q: prev.q, rows: prev.rows.map((t) => (t.id === saved.id ? saved : t)) } : null,
     );
     setEditingTournamentId((prev) => (prev === tournamentId ? null : prev));
-    setTournamentSavedId(saved.id);
+    setTournamentSaved({ id: saved.id, at: new Date().toISOString() });
   };
 
   // ── Gates ───────────────────────────────────────────────────────────
@@ -469,12 +471,10 @@ export default function PlatformSettingsPage() {
           {/* Who last saved it is named or not mentioned — a truncated
               account id is not a person, and printing one asks the reader to
               go and look something up. */}
-          {!defaultSavedAt && (
-            <p style={{ fontSize: 12, color: inkSoft, marginTop: 12 }}>
-              Last saved {relativeWhen(settings.updated_at)}
-              {savedByName ? ` by ${savedByName}` : ""}
-            </p>
-          )}
+          <p style={{ fontSize: 12, color: inkSoft, marginTop: 12 }}>
+            Last saved {relativeWhen(settings.updated_at)}
+            {savedByName ? ` by ${savedByName}` : ""}
+          </p>
         </div>
       )}
 
@@ -520,10 +520,10 @@ export default function PlatformSettingsPage() {
                   inheritedFee={defaultFee}
                   saving={orgRowBusyId === org.id}
                   error={orgRowError?.id === org.id ? orgRowError.message : null}
-                  saved={orgSavedId === org.id}
+                  savedAt={orgSaved?.id === org.id ? orgSaved.at : null}
                   onToggle={() => {
                     setOrgRowError(null);
-                    setOrgSavedId(null);
+                    setOrgSaved(null);
                     setEditingOrgId(editingOrgId === org.id ? null : org.id);
                   }}
                   onSave={(next) => void saveOrgFee(org.id, next)}
@@ -598,10 +598,10 @@ export default function PlatformSettingsPage() {
                     error={
                       tournamentRowError?.id === t.id ? tournamentRowError.message : null
                     }
-                    saved={tournamentSavedId === t.id}
+                    savedAt={tournamentSaved?.id === t.id ? tournamentSaved.at : null}
                     onToggle={() => {
                       setTournamentRowError(null);
-                      setTournamentSavedId(null);
+                      setTournamentSaved(null);
                       setEditingTournamentId(editingTournamentId === t.id ? null : t.id);
                     }}
                     onSave={(next) => void saveTournamentFee(t.id, next)}
@@ -715,7 +715,7 @@ function FeeRow({
   inheritedFee,
   saving,
   error,
-  saved,
+  savedAt,
   onToggle,
   onSave,
 }: {
@@ -732,10 +732,12 @@ function FeeRow({
   inheritedFee: { bps: number; fixedCents: number };
   saving: boolean;
   error: string | null;
-  // This row saved a moment ago. Shown on the ROW, not inside the editor,
-  // because saving collapses the editor — and when the saved value equals
-  // the inherited one the badge is the only other thing that moves.
-  saved: boolean;
+  // When this row last saved, or null. Shown on the ROW, not inside the
+  // editor, because saving collapses the editor — and when the saved value
+  // equals the inherited one the badge is the only other thing that moves.
+  // A timestamp, not a flag: "just now" written into the markup stays "just
+  // now" for as long as the page is open.
+  savedAt: string | null;
   onToggle: () => void;
   onSave: (next: PlatformFeeValue) => void;
 }) {
@@ -769,9 +771,9 @@ function FeeRow({
           </button>
         </div>
       </div>
-      {saved && !open && (
+      {savedAt && !open && (
         <div style={{ ...statusPanelStyle("success"), marginTop: 12, fontSize: 13 }}>
-          Saved just now — this fee applies to the next registration taken.
+          Saved {relativeWhen(savedAt)} — this fee applies to the next registration taken.
         </div>
       )}
       {/* Outside the `open` guard on purpose: a refusal that arrives after

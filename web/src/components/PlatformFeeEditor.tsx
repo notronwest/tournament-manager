@@ -238,13 +238,6 @@ export function PlatformFeeEditor({
         </div>
       </div>
 
-      {error && <div style={{ ...statusPanelStyle("danger"), marginBottom: 12 }}>{error}</div>}
-      {savedAt && (
-        <div style={{ ...statusPanelStyle("success"), marginBottom: 12 }}>
-          Saved just now.
-        </div>
-      )}
-
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
         <button
           type="button"
@@ -261,6 +254,17 @@ export function PlatformFeeEditor({
         {/* No Cancel here: a row already carries "Close" in its header, and
             two verbs 300px apart doing one thing makes a reader check. */}
       </div>
+
+      {/* Both panels sit BELOW the button, never above it. Rendered above,
+          a confirmation pushed the only button on the page off the bottom of
+          a 390x844 screen the moment it appeared — and the eye is already at
+          the button, which is what was just pressed. */}
+      {error && <div style={{ ...statusPanelStyle("danger"), marginTop: 12 }}>{error}</div>}
+      {savedAt && (
+        <div style={{ ...statusPanelStyle("success"), marginTop: 12 }}>
+          Saved — this fee applies to the next registration taken.
+        </div>
+      )}
     </div>
   );
 }
