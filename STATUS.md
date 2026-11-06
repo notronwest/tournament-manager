@@ -5,6 +5,58 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-06 — Court Reserve audit of a handwritten 18-name signup sheet
+
+Ron photographed a handwritten list (`IMG_0207.HEIC`) and asked for Court
+Reserve accounts to be built for anyone on it who does not already have one.
+He excluded seven by name: Fawn Ouellette, Francis Smith, Mark Anibel,
+Heather, Liz, Hilary, Marilyn Weinstein. That left eleven to check.
+
+**No accounts were created this session** — he asked to confirm the list
+first, and the answer is pending.
+
+The member-lookup tool on the club MCP server is **down**: every call returns
+`password authentication failed for user "postgres"`. Worth fixing or at least
+noting; the audit below had to go through the Court Reserve admin UI instead
+(read-only, members list with `filter=all` so inactive records are included).
+
+**Result — 7 of 11 already exist, 4 do not.**
+
+| Name on paper | Email on paper | In CR? | CR record |
+|---|---|---|---|
+| Brenda Blake | blakebt1@gmail.com | yes | 6433444, exact match, active |
+| Kate Boyle | kboyle112@gmail.com | yes | 8716911 as **Kathleen** Boyle, same email, active |
+| Tristen Blake | tnsblake@gmail.com | **no** | — |
+| John Marchand | jrmarchand6@gmail.com | **no** | — |
+| Kelly Marchand | kmarchand61@gmail.com | yes | 8749792, email on file is `kmarchand6@` — **one digit off** |
+| Lynette Beaugrand | mrsbeaugrand61@gmail.com | yes | 6920729 as **Lynnette**, email matches, **INACTIVE** |
+| Jim Joyce | jim.joyce50@gmail.com | yes | 8965940, exact match, active |
+| Linda Levy | levy@plymouth.edu | yes | 8716736, exact match, active |
+| Marcia Ronan | *(none written)* | **no** | — |
+| Carole Palmer | cpalmer465@gmail.com | yes | 10747697, email on file is `carolepalmer62@` — **different mailbox** |
+| Walter Frankel | walterfrankel@hotmail.com | **no** | — |
+
+Three need a human decision rather than a new account:
+
+- **Lynnette Beaugrand** exists but is inactive — reactivate, do not re-create.
+- **Kelly Marchand** — `kmarchand6@` (CR) vs `kmarchand61@` (paper). One is a
+  typo; confirm which before anything is sent to her.
+- **Carole Palmer** — `carolepalmer62@` (CR) vs `cpalmer465@` (paper). Two
+  genuinely different mailboxes, not a typo. Only one Palmer in the directory,
+  so almost certainly her second address, but confirm.
+
+Transcription notes worth keeping: Linda Levy's address really is
+`levy@plymouth.edu` with no first initial (a Plymouth State address, so
+`llevy@` is plausible but is **not** what the paper says — and CR already
+stores it as written, which corroborates the paper). John Marchand's is
+`jrmarchand6@` with a single trailing 6, unlike the `61` suffix his wife and
+Lynnette both use.
+
+**Next:** waiting on Ron's go-ahead to create the three that have emails —
+Tristen Blake, John Marchand, Walter Frankel. Marcia Ronan has no email
+anywhere on the sheet and Court Reserve requires one, so she is blocked until
+he supplies it. The three discrepancies above are his call, not a build step.
+
 ## 2026-11-03 — NordVPN is the likely cause; the "corporate laptop" read was wrong
 
 **Correction to the entry below, which overstated its evidence.** That entry
