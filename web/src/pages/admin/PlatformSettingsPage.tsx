@@ -80,6 +80,23 @@ const MIN_SEARCH_CHARS = 2;
 
 // A read that fails says what is missing and what to do, in the page's own
 // words — never the database's.
+// Recent is relative, older is absolute — a save ten seconds ago reading as
+// a wall-clock time with seconds makes the reader do arithmetic to answer
+// "was that me, just now?".
+function relativeWhen(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "just now";
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 const LOAD_FAILED = "Couldn't load the fees. Nothing has changed; reload the page to try again.";
 const SEARCH_FAILED = "Couldn't search tournaments. Reload the page and try again.";
 
@@ -104,11 +121,14 @@ export default function PlatformSettingsPage() {
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [orgSearch, setOrgSearch] = useState("");
   const [editingOrgId, setEditingOrgId] = useState<string | null>(null);
-  const [orgRowBusy, setOrgRowBusy] = useState(false);
-  const [orgRowError, setOrgRowError] = useState<string | null>(null);
-  // Which row last saved, so the row itself says so. A row that saves a
-  // value equal to the one it inherited otherwise changes nothing visible
-  // except a badge that may be off-screen by then.
+  // Busy, failed and saved are all held BY ROW ID, never page-wide. A save
+  // outlives the editor that started it: close that row, or open another,
+  // before the response lands and page-level state puts the answer on the
+  // wrong row or on no row at all — and after an explicit Save, silence
+  // reads as success. Each row owns its own outcome, and renders it on the
+  // row rather than inside the editor, which may be shut by then.
+  const [orgRowBusyId, setOrgRowBusyId] = useState<string | null>(null);
+  const [orgRowError, setOrgRowError] = useState<{ id: string; message: string } | null>(null);
   const [orgSavedId, setOrgSavedId] = useState<string | null>(null);
 
   // ── Tournaments ─────────────────────────────────────────────────────
@@ -122,8 +142,11 @@ export default function PlatformSettingsPage() {
   // typed now?" is derived rather than synced by a second state write.
   const [searchHits, setSearchHits] = useState<{ q: string; rows: TournamentRow[] } | null>(null);
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
-  const [tournamentRowBusy, setTournamentRowBusy] = useState(false);
-  const [tournamentRowError, setTournamentRowError] = useState<string | null>(null);
+  const [tournamentRowBusyId, setTournamentRowBusyId] = useState<string | null>(null);
+  const [tournamentRowError, setTournamentRowError] = useState<{
+    id: string;
+    message: string;
+  } | null>(null);
   const [tournamentSavedId, setTournamentSavedId] = useState<string | null>(null);
 
   const defaultFee = useMemo(
@@ -247,8 +270,9 @@ export default function PlatformSettingsPage() {
   };
 
   const saveOrgFee = async (orgId: string, next: PlatformFeeValue) => {
-    setOrgRowBusy(true);
+    setOrgRowBusyId(orgId);
     setOrgRowError(null);
+    setOrgSavedId(null);
     const { data, error } = await supabase
       .from("organizations")
       .update({
@@ -258,9 +282,12 @@ export default function PlatformSettingsPage() {
       .eq("id", orgId)
       .select("id, slug, name, platform_fee_bps, platform_fee_fixed_cents")
       .single();
-    setOrgRowBusy(false);
+    setOrgRowBusyId(null);
     if (error) {
-      setOrgRowError(platformFeeSaveMessage(error));
+      setOrgRowError({ id: orgId, message: platformFeeSaveMessage(error) });
+      // Leave the editor as the operator left it — open with their draft if
+      // they are still there, shut if they closed it. The row carries the
+      // refusal either way.
       return;
     }
     setOrgs((prev) => (prev ?? []).map((o) => (o.id === orgId ? (data as OrgRow) : o)));
@@ -269,8 +296,9 @@ export default function PlatformSettingsPage() {
   };
 
   const saveTournamentFee = async (tournamentId: string, next: PlatformFeeValue) => {
-    setTournamentRowBusy(true);
+    setTournamentRowBusyId(tournamentId);
     setTournamentRowError(null);
+    setTournamentSavedId(null);
     const { data, error } = await supabase
       .from("tournaments")
       .update({
@@ -280,9 +308,9 @@ export default function PlatformSettingsPage() {
       .eq("id", tournamentId)
       .select("id, slug, name, organization_id, platform_fee_bps, platform_fee_fixed_cents")
       .single();
-    setTournamentRowBusy(false);
+    setTournamentRowBusyId(null);
     if (error) {
-      setTournamentRowError(platformFeeSaveMessage(error));
+      setTournamentRowError({ id: tournamentId, message: platformFeeSaveMessage(error) });
       return;
     }
     const saved = data as TournamentRow;
@@ -433,7 +461,7 @@ export default function PlatformSettingsPage() {
               account id is not a person, and printing one asks the reader to
               go and look something up. */}
           <p style={{ fontSize: 12, color: inkSoft, marginTop: 12 }}>
-            Last saved {new Date(settings.updated_at).toLocaleString()}
+            Last saved {relativeWhen(settings.updated_at)}
             {savedByName ? ` by ${savedByName}` : ""}
           </p>
         </div>
@@ -479,8 +507,8 @@ export default function PlatformSettingsPage() {
                   idPrefix={`org-${org.id}`}
                   inheritLabel="the default"
                   inheritedFee={defaultFee}
-                  saving={orgRowBusy}
-                  error={orgRowError}
+                  saving={orgRowBusyId === org.id}
+                  error={orgRowError?.id === org.id ? orgRowError.message : null}
                   saved={orgSavedId === org.id}
                   onToggle={() => {
                     setOrgRowError(null);
@@ -555,8 +583,10 @@ export default function PlatformSettingsPage() {
                         : "the default"
                     }
                     inheritedFee={{ bps: inherited.feeBps, fixedCents: inherited.feeFixedCents }}
-                    saving={tournamentRowBusy}
-                    error={tournamentRowError}
+                    saving={tournamentRowBusyId === t.id}
+                    error={
+                      tournamentRowError?.id === t.id ? tournamentRowError.message : null
+                    }
                     saved={tournamentSavedId === t.id}
                     onToggle={() => {
                       setTournamentRowError(null);
@@ -732,6 +762,12 @@ function FeeRow({
         <div style={{ ...statusPanelStyle("success"), marginTop: 12, fontSize: 13 }}>
           Saved just now — this fee applies to the next registration taken.
         </div>
+      )}
+      {/* Outside the `open` guard on purpose: a refusal that arrives after
+          the operator closed the row still has to reach them, and on the row
+          they acted on. */}
+      {error && !open && (
+        <div style={{ ...statusPanelStyle("danger"), marginTop: 12, fontSize: 13 }}>{error}</div>
       )}
       {open && (
         <div style={editorWellStyle}>

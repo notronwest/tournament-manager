@@ -55,9 +55,22 @@ up to desktop. Never desktop-first-then-shrink. Most WMPC users are on phones.
   selections that swap form content should look like selections. Render as
   compact icon-plus-label tiles in a 2-column grid (`display: grid`,
   `gridTemplateColumns: "1fr 1fr"`, `gap: 8`). Each tile: `padding: "8px 10px"`,
-  `borderRadius: 6`, 1px border. **Inactive** = `#fff` background, `#d1d5db`
-  border, `#444` text. **Active** = `#eff6ff` background, `#2563eb` border,
-  `#1e40af` text. Use a Lucide icon (sized 18px) plus a short label —
+  `borderRadius: 6`. **Inactive** = `#fff` background, `inkMuted #6b7280`
+  1px border, `ink` text. **Active** = `#eff6ff` background, `#2563eb` 2px
+  border, `#1e40af` text, weight 600, **and a Lucide `Check` glyph in the
+  tile** — with the active padding dropped by 1px (`9px 11px`) so the second
+  border pixel comes out of the padding and the label does not shift.
+
+  *Corrected 2026-11-06.* This block used to prescribe a `#d1d5db` inactive
+  border and distinguish the chosen tile by colour alone. Both are wrong:
+  `#d1d5db` on white is **1.5:1**, under the 3:1 a control's resting edge
+  needs, and darkening it to `inkMuted` for that floor leaves the two tiles
+  **1.07:1** apart — so in greyscale, or to a red-green/blue-blind reader,
+  which tile is chosen becomes unreadable. The tick, the border weight and
+  the font weight are what carry the selection; the blue only reinforces it.
+  Found by the design gate on the platform-fee screen. The established
+  instance (`partnerModeTileStyle` in `PublicTournamentPage.tsx`) still has
+  the old values and is due the same fix. Use a Lucide icon (sized 18px) plus a short label —
   consider semantic accuracy when picking the icon (e.g. `HandHelping` for
   "I need a partner," NOT `Search` — that user isn't searching). Wrap in
   `role="radiogroup"`; give each tile `role="radio"` + `aria-checked` so the
