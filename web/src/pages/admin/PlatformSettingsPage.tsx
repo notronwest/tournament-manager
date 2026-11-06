@@ -16,7 +16,7 @@
 // Writes are gated in the database as well as here: a trigger refuses a
 // platform-fee column to anyone who is not a platform admin, so an org admin
 // cannot zero the platform's cut on their own org.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
@@ -82,9 +82,11 @@ type TournamentRow = FeeColumns & {
 const TOURNAMENT_SEARCH_LIMIT = 20;
 const MIN_SEARCH_CHARS = 2;
 
-// A failed save, with the attempt it came from. `at` is what makes a retry
-// of the SAME refusal a new event rather than a repeat of the old one.
-type SaveFailureState = { message: string; at: number };
+// A failed save, with the attempt it came from. `attempt` is what makes a
+// retry of the SAME refusal a new event rather than a repeat of the old
+// one — a counter rather than a clock, because the number is never shown
+// and only has to differ (and a clock reads as impure here).
+type SaveFailureState = { message: string; attempt: number };
 
 // A read that fails says what is missing and what to do, in the page's own
 // words — never the database's.
@@ -120,6 +122,9 @@ export default function PlatformSettingsPage() {
   // The name behind platform_settings.updated_by, when there is one. Null
   // leaves the "by …" clause off entirely rather than printing an id.
   const [savedByName, setSavedByName] = useState<string | null>(null);
+  // Bumped once per save attempt, at any level. Only its distinctness
+  // matters: it is what tells a repeated refusal from the one before it.
+  const attemptRef = useRef(0);
   // "Last saved" is relative, so it has to be recomputed as time passes —
   // rendered once it would read "just now" on an open page indefinitely.
   const [, setNowTick] = useState(0);
@@ -288,7 +293,10 @@ export default function PlatformSettingsPage() {
       .single();
     setSavingDefault(false);
     if (error) {
-      setDefaultSaveError({ message: platformFeeSaveMessage(error), at: Date.now() });
+      setDefaultSaveError({
+        message: platformFeeSaveMessage(error),
+        attempt: ++attemptRef.current,
+      });
       return;
     }
     setSettings(data as PlatformSettingsRow);
@@ -319,7 +327,11 @@ export default function PlatformSettingsPage() {
       .single();
     setOrgRowBusyId(null);
     if (error) {
-      setOrgRowError({ id: orgId, message: platformFeeSaveMessage(error), at: Date.now() });
+      setOrgRowError({
+        id: orgId,
+        message: platformFeeSaveMessage(error),
+        attempt: ++attemptRef.current,
+      });
       // Leave the editor as the operator left it — open with their draft if
       // they are still there, shut if they closed it. The row carries the
       // refusal either way.
@@ -350,7 +362,7 @@ export default function PlatformSettingsPage() {
       setTournamentRowError({
         id: tournamentId,
         message: platformFeeSaveMessage(error),
-        at: Date.now(),
+        attempt: ++attemptRef.current,
       });
       return;
     }
@@ -517,7 +529,7 @@ export default function PlatformSettingsPage() {
               }}
               saving={savingDefault}
               error={defaultSaveError?.message ?? null}
-              errorAt={defaultSaveError?.at ?? null}
+              errorAt={defaultSaveError?.attempt ?? null}
               savedAt={defaultSavedAt}
               onSave={(next) => void saveDefault(next)}
             />
@@ -574,7 +586,7 @@ export default function PlatformSettingsPage() {
                   inheritedFee={defaultFee}
                   saving={orgRowBusyId === org.id}
                   error={orgRowError?.id === org.id ? orgRowError.message : null}
-                  errorAt={orgRowError?.id === org.id ? orgRowError.at : null}
+                  errorAt={orgRowError?.id === org.id ? orgRowError.attempt : null}
                   savedAt={orgSaved?.id === org.id ? orgSaved.at : null}
                   onToggle={() => {
                     setOrgRowError(null);
@@ -663,7 +675,7 @@ export default function PlatformSettingsPage() {
                     error={
                       tournamentRowError?.id === t.id ? tournamentRowError.message : null
                     }
-                    errorAt={tournamentRowError?.id === t.id ? tournamentRowError.at : null}
+                    errorAt={tournamentRowError?.id === t.id ? tournamentRowError.attempt : null}
                     savedAt={tournamentSaved?.id === t.id ? tournamentSaved.at : null}
                     onToggle={() => {
                       setTournamentRowError(null);
