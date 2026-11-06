@@ -158,9 +158,15 @@ export default function PlatformSettingsPage() {
     id: string;
     message: string;
   } | null>(null);
-  const [tournamentSaved, setTournamentSaved] = useState<{ id: string; at: string } | null>(
-    null,
-  );
+  // The name rides along because a cleared rate drops the row out of this
+  // list — the save then has nothing to render on, and a confirmation has to
+  // say which tournament it is about.
+  const [tournamentSaved, setTournamentSaved] = useState<{
+    id: string;
+    at: string;
+    name: string;
+    cleared: boolean;
+  } | null>(null);
 
   const defaultFee = useMemo(
     () => ({
@@ -348,7 +354,12 @@ export default function PlatformSettingsPage() {
       prev ? { q: prev.q, rows: prev.rows.map((t) => (t.id === saved.id ? saved : t)) } : null,
     );
     setEditingTournamentId((prev) => (prev === tournamentId ? null : prev));
-    setTournamentSaved({ id: saved.id, at: new Date().toISOString() });
+    setTournamentSaved({
+      id: saved.id,
+      at: new Date().toISOString(),
+      name: saved.name,
+      cleared: saved.platform_fee_bps === null,
+    });
   };
 
   // ── Gates ───────────────────────────────────────────────────────────
@@ -403,6 +414,8 @@ export default function PlatformSettingsPage() {
   // Searching replaces the list of tournaments that set their own fee. null
   // means "still waiting" — results that answer an older query are not shown
   // as if they answered this one.
+  // A save whose row is no longer on screen — the list it was in dropped it
+  // when its own rate went away, or a search is showing something else.
   const trimmedTournamentQuery = tournamentSearch.trim();
   const isSearching = trimmedTournamentQuery.length >= MIN_SEARCH_CHARS;
   const tournamentList = isSearching
@@ -410,6 +423,10 @@ export default function PlatformSettingsPage() {
       ? searchHits.rows
       : null
     : overriddenTournaments;
+  const orphanSaved =
+    tournamentSaved && !(tournamentList ?? []).some((t) => t.id === tournamentSaved.id)
+      ? tournamentSaved
+      : null;
 
   return (
     <main style={shellStyle}>
@@ -438,11 +455,15 @@ export default function PlatformSettingsPage() {
         {" · "}
         {customOrgCount === 0
           ? "no organizer has their own rate"
-          : `${customOrgCount} organizer${customOrgCount === 1 ? "" : "s"} with their own rate`}
+          : customOrgCount === 1
+            ? "1 organizer with their own rate"
+            : `${customOrgCount} organizers with their own rate`}
         {" · "}
         {overrideCount === 0
           ? "no tournament sets its own"
-          : `${overrideCount} tournament${overrideCount === 1 ? "" : "s"} set their own`}
+          : overrideCount === 1
+            ? "1 tournament sets its own"
+            : `${overrideCount} tournaments set their own`}
       </p>
 
       <SectionTabs
@@ -568,6 +589,16 @@ export default function PlatformSettingsPage() {
           />
 
           {tournamentsError && <div style={statusPanelStyle("danger")}>{tournamentsError}</div>}
+          {/* A tournament that goes back to its inherited rate leaves this
+              list, taking the row that would have confirmed the save with
+              it. Without this the screen just loses a row, and the only
+              trace is the counter in the lede ticking down. */}
+          {orphanSaved && (
+            <ResultPanel tone="success" pullKey={`orphan-${orphanSaved.at}`}>
+              Saved {relativeWhen(orphanSaved.at)} — {orphanSaved.name} now follows{" "}
+              {orphanSaved.cleared ? "its organizer or the default" : "its own rate"}.
+            </ResultPanel>
+          )}
           {!tournamentsError && tournamentList === null && (
             <div style={loadingRowStyle}>
               {isSearching ? "Searching tournaments…" : "Loading tournaments…"}

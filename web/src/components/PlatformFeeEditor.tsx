@@ -273,9 +273,13 @@ export function PlatformFeeEditor({
           moment it appeared — and ResultPanel pulls itself into view, because
           below the button on a phone IS below the fold. Position alone fixed
           one of those two and caused the other. */}
-      {error && <ResultPanel tone="danger">{error}</ResultPanel>}
+      {error && (
+        <ResultPanel tone="danger" pullKey={`${idPrefix}-err-${error}`}>
+          {error}
+        </ResultPanel>
+      )}
       {savedAt && !touched && (
-        <ResultPanel tone="success">
+        <ResultPanel tone="success" pullKey={`${idPrefix}-ok-${savedAt}`}>
           Saved — this fee applies to the next registration taken.
         </ResultPanel>
       )}
@@ -315,44 +319,62 @@ const fieldErrorStyle = {
 // `block: "nearest"` is the whole point: a panel already in view does not
 // move the page (no scroll yanked out from under the reader), and one below
 // the fold is brought up by the minimum needed. The scroll margin is what
-// stops "the minimum" being flush against the bottom edge, where the panel
-// measured 779-844 in an 844 viewport and read as cut off.
+// stops "the minimum" being flush against the bottom edge, and it is sized
+// to carry the audit line that follows the panel, not just the panel.
+//
+// `pullKey` is what keeps the page still the rest of the time. A panel
+// re-mounts for reasons that are NOT the reader asking for anything —
+// clearing the organizer search re-renders the list, switching tabs and
+// back rebuilds it — and scrolling on each of those moves the page under
+// someone who did not act. One pull per key, remembered across remounts, so
+// the scroll belongs to the save and nothing else.
+const pulled = new Set<string>();
+
 export function ResultPanel({
   tone,
+  pullKey,
   children,
 }: {
   tone: "success" | "danger";
+  // Identifies the save this panel is reporting. Omit it and the panel never
+  // moves the page.
+  pullKey?: string;
   children: ReactNode;
 }) {
-  // Deferred, not called straight from the ref: a ref callback runs during
-  // the commit, before the browser has laid the page out, and the scroll was
-  // silently a no-op there — measured scrollY 0 with the panel at 845 in an
-  // 844 viewport, while the identical call a moment later moved it to
-  // 755-820. A timeout rather than requestAnimationFrame, because rAF does
-  // not fire while the tab is in the background and the result would then be
-  // left off-screen for whoever comes back to it.
-  // "auto", not "smooth": a smooth scroll is a scroll ANIMATION, and the
-  // re-render that follows a save landing cancelled it — the success panel
-  // scrolled and the failure panel, one render further along, did not, which
-  // is the one that must never be missed. An instant move is also the right
-  // feel here; the reader just tapped, and the answer should already be
-  // there.
-  const pull = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return;
-    setTimeout(() => {
-      node.scrollIntoView({ block: "nearest", behavior: "auto" });
-    }, 0);
-  }, []);
+  const pull = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node || !pullKey || pulled.has(pullKey)) return;
+      pulled.add(pullKey);
+      // Deferred: a ref callback runs during the commit, before the browser
+      // has laid the page out, and the scroll is a silent no-op there —
+      // measured scrollY 0 with the panel at 845 in an 844 viewport. A
+      // timeout rather than requestAnimationFrame, because rAF does not fire
+      // in a background tab and the result would be left off-screen for
+      // whoever comes back to it.
+      setTimeout(() => {
+        // "auto", not "smooth": a smooth scroll is an ANIMATION, and the
+        // re-render after a save cancelled it — the success panel scrolled
+        // and the failure panel, one render further along, did not, which is
+        // the one that must never be missed.
+        node.scrollIntoView({ block: "nearest", behavior: "auto" });
+      }, 0);
+    },
+    [pullKey],
+  );
   return (
     <div
       ref={pull}
-      role="status"
-      aria-live="polite"
+      // A refusal interrupts; a confirmation does not. The rest of this
+      // repo's save errors are alerts, and this one is no different.
+      role={tone === "danger" ? "alert" : "status"}
+      aria-live={tone === "danger" ? "assertive" : "polite"}
       style={{
         ...statusPanelStyle(tone),
         marginTop: 12,
         fontSize: 13,
-        scrollMarginBlock: 24,
+        // Deep enough to carry the "Last saved … by …" line that follows the
+        // panel on the default tab; at 24 it left that line 5px under.
+        scrollMarginBlock: 56,
       }}
     >
       {children}
