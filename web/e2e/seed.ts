@@ -167,6 +167,15 @@ async function main() {
   // specs) load for her. Public/self-service flows don't need this.
   await ensureOrgMember(org.id, await authUserIdFor("e2e-organizer@wmpc.test"), "owner");
 
+  // A platform admin for the /admin/platform phone spec. Its own user — making
+  // Olive one would give every organizer spec implicit access to every org.
+  await ensurePlayer("e2e-platform@wmpc.test", "Plato", "Platform");
+  const platformUserId = await authUserIdFor("e2e-platform@wmpc.test");
+  const padmin = await db
+    .from("platform_admins")
+    .upsert({ user_id: platformUserId }, { onConflict: "user_id" });
+  if (padmin.error) throw new Error(`seed: platform admin — ${padmin.error.message}`);
+
   // 5. Cancel-flow fixture (#9): a pending reg for Pam WITH a picked partner
   //    (Pat) — cancelling then pops the "drop your partner" confirm step.
   //    Reset first (the cancel test removes the reg) so every run starts clean;
