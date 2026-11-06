@@ -21,7 +21,11 @@ import { Link } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../auth/AuthProvider";
 import { usePlatformAdmin } from "../../hooks/usePlatformAdmin";
-import { PlatformFeeEditor, FeeSourceBadge } from "../../components/PlatformFeeEditor";
+import {
+  PlatformFeeEditor,
+  FeeSourceBadge,
+  ResultPanel,
+} from "../../components/PlatformFeeEditor";
 import {
   formatFeeShort,
   platformFeeSaveMessage,
@@ -276,6 +280,15 @@ export default function PlatformSettingsPage() {
     }
     setSettings(data as PlatformSettingsRow);
     setDefaultSavedAt((data as PlatformSettingsRow).updated_at);
+    // Re-resolve, or the audit line keeps the PREVIOUS admin's name against
+    // a save you just made.
+    const { data: me } = await supabase
+      .from("players")
+      .select("first_name, last_name")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+    const myName = [me?.first_name, me?.last_name].filter(Boolean).join(" ").trim();
+    setSavedByName(myName === "" ? null : myName);
   };
 
   const saveOrgFee = async (orgId: string, next: PlatformFeeValue) => {
@@ -772,16 +785,14 @@ function FeeRow({
         </div>
       </div>
       {savedAt && !open && (
-        <div style={{ ...statusPanelStyle("success"), marginTop: 12, fontSize: 13 }}>
+        <ResultPanel tone="success">
           Saved {relativeWhen(savedAt)} — this fee applies to the next registration taken.
-        </div>
+        </ResultPanel>
       )}
       {/* Outside the `open` guard on purpose: a refusal that arrives after
           the operator closed the row still has to reach them, and on the row
           they acted on. */}
-      {error && !open && (
-        <div style={{ ...statusPanelStyle("danger"), marginTop: 12, fontSize: 13 }}>{error}</div>
-      )}
+      {error && !open && <ResultPanel tone="danger">{error}</ResultPanel>}
       {open && (
         <div style={editorWellStyle}>
           <PlatformFeeEditor

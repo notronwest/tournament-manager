@@ -7,7 +7,7 @@
 // It previews with computePlatformFeeCents, the same function
 // create-payment-intent charges with, so the number shown here is the number
 // Stripe is handed.
-import { useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
 import { computePlatformFeeCents } from "../../../supabase/functions/_shared/platformFee";
 import { formatFeeShort, type PlatformFeeValue } from "../lib/platformFeeDisplay";
@@ -63,6 +63,10 @@ export function PlatformFeeEditor({
   const [mode, setMode] = useState<"inherit" | "custom">(
     value === null && canInherit ? "inherit" : "custom",
   );
+  // A save's confirmation says the fee on screen is the one that will be
+  // charged. Edit the fields afterwards and that stops being true, so the
+  // first keystroke retires it.
+  const [touched, setTouched] = useState(false);
   const [percentStr, setPercentStr] = useState(() =>
     value ? (value.bps / 100).toFixed(2) : inheritedFee ? (inheritedFee.bps / 100).toFixed(2) : "0.00",
   );
@@ -123,7 +127,10 @@ export function PlatformFeeEditor({
                 type="button"
                 role="radio"
                 aria-checked={active}
-                onClick={() => setMode(m)}
+                onClick={() => {
+                  setTouched(true);
+                  setMode(m);
+                }}
                 style={{
                   ...choiceTileStyle,
                   background: active ? "#eff6ff" : "#fff",
@@ -171,7 +178,10 @@ export function PlatformFeeEditor({
                 max="100"
                 step="0.01"
                 value={percentStr}
-                onChange={(e) => setPercentStr(e.target.value)}
+                onChange={(e) => {
+                  setTouched(true);
+                  setPercentStr(e.target.value);
+                }}
                 style={{
                   ...inputStyle,
                   minHeight: 44,
@@ -201,7 +211,10 @@ export function PlatformFeeEditor({
                 min="0"
                 step="0.01"
                 value={fixedStr}
-                onChange={(e) => setFixedStr(e.target.value)}
+                onChange={(e) => {
+                  setTouched(true);
+                  setFixedStr(e.target.value);
+                }}
                 style={{
                   ...inputStyle,
                   minHeight: 44,
@@ -255,15 +268,16 @@ export function PlatformFeeEditor({
             two verbs 300px apart doing one thing makes a reader check. */}
       </div>
 
-      {/* Both panels sit BELOW the button, never above it. Rendered above,
-          a confirmation pushed the only button on the page off the bottom of
-          a 390x844 screen the moment it appeared — and the eye is already at
-          the button, which is what was just pressed. */}
-      {error && <div style={{ ...statusPanelStyle("danger"), marginTop: 12 }}>{error}</div>}
-      {savedAt && (
-        <div style={{ ...statusPanelStyle("success"), marginTop: 12 }}>
+      {/* Both panels sit BELOW the button — rendered above, a confirmation
+          pushed the page's only button off the bottom of a 390x844 screen the
+          moment it appeared — and ResultPanel pulls itself into view, because
+          below the button on a phone IS below the fold. Position alone fixed
+          one of those two and caused the other. */}
+      {error && <ResultPanel tone="danger">{error}</ResultPanel>}
+      {savedAt && !touched && (
+        <ResultPanel tone="success">
           Saved — this fee applies to the next registration taken.
-        </div>
+        </ResultPanel>
       )}
     </div>
   );
@@ -288,6 +302,63 @@ const fieldErrorStyle = {
   fontSize: 12,
   color: dangerFg,
 };
+
+// A save's outcome, which pulls itself into view when it appears.
+//
+// Panels sit below the save button so they cannot push it off screen — but
+// on a 390x844 phone the button is already near the fold, so "below the
+// button" lands below it: a successful default save rendered at 845-913 in
+// an 844 viewport, leaving the screen byte-identical to before the tap, and
+// a REFUSED one at 845-955. A result nobody sees is worse on the refusal
+// path than on the success path, because unchanged-looking reads as fine.
+//
+// `block: "nearest"` is the whole point: a panel already in view does not
+// move the page (no scroll yanked out from under the reader), and one below
+// the fold is brought up by the minimum needed. The scroll margin is what
+// stops "the minimum" being flush against the bottom edge, where the panel
+// measured 779-844 in an 844 viewport and read as cut off.
+export function ResultPanel({
+  tone,
+  children,
+}: {
+  tone: "success" | "danger";
+  children: ReactNode;
+}) {
+  // Deferred, not called straight from the ref: a ref callback runs during
+  // the commit, before the browser has laid the page out, and the scroll was
+  // silently a no-op there — measured scrollY 0 with the panel at 845 in an
+  // 844 viewport, while the identical call a moment later moved it to
+  // 755-820. A timeout rather than requestAnimationFrame, because rAF does
+  // not fire while the tab is in the background and the result would then be
+  // left off-screen for whoever comes back to it.
+  // "auto", not "smooth": a smooth scroll is a scroll ANIMATION, and the
+  // re-render that follows a save landing cancelled it — the success panel
+  // scrolled and the failure panel, one render further along, did not, which
+  // is the one that must never be missed. An instant move is also the right
+  // feel here; the reader just tapped, and the answer should already be
+  // there.
+  const pull = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    setTimeout(() => {
+      node.scrollIntoView({ block: "nearest", behavior: "auto" });
+    }, 0);
+  }, []);
+  return (
+    <div
+      ref={pull}
+      role="status"
+      aria-live="polite"
+      style={{
+        ...statusPanelStyle(tone),
+        marginTop: 12,
+        fontSize: 13,
+        scrollMarginBlock: 24,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 // A fixed slot for the tick so the two tiles' labels line up whether or not
 // the tile is the chosen one.
