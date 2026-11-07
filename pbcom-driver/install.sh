@@ -11,20 +11,33 @@
 #   4. prints the remaining one-time human steps (set PBCOM-PUSH-HOST, do the
 #      one-time PB.com login, add PBCOM_DISCORD_WEBHOOK).
 #
+# Runs ONLY from the release clone (~/data/web/wmpc/releases/tournament-manager/
+# pbcom-driver) — a commit the release tool has approved — never from a working
+# checkout that tracks main. Anywhere else it refuses before touching anything.
+#
 # It does NOT start a push on load (RunAtLoad=false) and does NOT designate this
 # host as the driver — that is the committed PBCOM-PUSH-HOST fact, set by hand.
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd -P)"
+
+# 0) release-clone guard ───────────────────────────────────────────────────────
+# The jobs below drive a live public site. They must be bound to an approved
+# commit, so refuse unless this script sits in the release clone.
+RELEASE_DIR="$HOME/data/web/wmpc/releases/tournament-manager/pbcom-driver"
+RELEASE_REAL="$(cd "$RELEASE_DIR" 2>/dev/null && pwd -P || true)"
+if [ -z "$RELEASE_REAL" ] || [ "$HERE" != "$RELEASE_REAL" ]; then
+  echo "REFUSING: install.sh must run from the release clone, not from here." >&2
+  echo "  running from: $HERE" >&2
+  echo "  required:     $RELEASE_DIR" >&2
+  echo "  A checkout that tracks main would put unreleased code behind a live PB.com account." >&2
+  exit 3
+fi
 cd "$HERE"
 
-LABEL="com.wmpc.pbcom-push"
-PLIST_SRC="$HERE/deploy/com.wmpc.pbcom-push.plist"
 LA_DIR="$HOME/Library/LaunchAgents"
-PLIST_DST="$LA_DIR/$LABEL.plist"
 LOG_DIR="$HOME/.local/state/wmpc-pbcom"
-RUN_SH="$HERE/deploy/pbcom-push.sh"
 
 echo "== pbcom-driver install =="
 echo "checkout: $HERE"
@@ -48,19 +61,34 @@ else
   echo "   SUPABASE_SERVICE_ROLE_KEY, PBCOM_PROFILE_DIR, PBCOM_DISCORD_WEBHOOK)."
 fi
 
-# 3) launchd job ───────────────────────────────────────────────────────────────
+# 3) launchd jobs ──────────────────────────────────────────────────────────────
 mkdir -p "$LA_DIR" "$LOG_DIR"
-echo "-- installing launchd job $LABEL (~every 150s, RunAtLoad=false)"
-# Rewrite the example path + log paths in the committed plist to this machine's.
-sed \
-  -e "s#/PATH/TO/tournament-manager/pbcom-driver/deploy/pbcom-push.sh#$RUN_SH#g" \
-  -e "s#/Users/notronwest/.local/state/wmpc-pbcom#$LOG_DIR#g" \
-  "$PLIST_SRC" > "$PLIST_DST"
 
-# Reload cleanly (unload first so a re-run refreshes the definition).
-launchctl unload "$PLIST_DST" 2>/dev/null || true
-launchctl load "$PLIST_DST"
-echo "   loaded $PLIST_DST (logs → $LOG_DIR/push.{out,err}.log)"
+# install_job <label> <script-name> — rewrite the example path + log paths in the
+# committed plist to this machine's, then reload cleanly (unload first so a re-run
+# refreshes the definition). Neither job fires on load (RunAtLoad=false).
+install_job() {
+  local label="$1" script="$2"
+  local src="$HERE/deploy/$label.plist" dst="$LA_DIR/$label.plist"
+  echo "-- installing launchd job $label (RunAtLoad=false)"
+  sed \
+    -e "s#/PATH/TO/tournament-manager/pbcom-driver/deploy/$script#$HERE/deploy/$script#g" \
+    -e "s#/Users/notronwest/.local/state/wmpc-pbcom#$LOG_DIR#g" \
+    "$src" > "$dst"
+  launchctl unload "$dst" 2>/dev/null || true
+  launchctl load "$dst"
+  echo "   loaded $dst"
+}
+install_job com.wmpc.pbcom-push pbcom-push.sh
+install_job com.wmpc.pbcom-score-pull pbcom-score-pull.sh
+echo "   logs -> $LOG_DIR/{push,score-pull}.{out,err}.log"
+
+# The old hand-placed pull job (label com.wmpc.pbcom-pull) fetched and force-reset
+# a checkout to main every 5 minutes. It must never be loaded again.
+if launchctl list 2>/dev/null | grep -q 'com\.wmpc\.pbcom-pull$'; then
+  echo "WARNING: the retired job com.wmpc.pbcom-pull is loaded. Unload it and delete its plist:" >&2
+  echo "  launchctl unload ~/Library/LaunchAgents/com.wmpc.pbcom-pull.plist" >&2
+fi
 
 # 4) remaining human steps ─────────────────────────────────────────────────────
 cat <<EOF
@@ -78,6 +106,6 @@ cat <<EOF
 4. Confirm the binding config exists (PBCOM_BINDING_PATH; see binding.example.json)
    mapping each B&E tournament to its PB.com eid.
 
-The launchd job is loaded but will NO-OP until PBCOM-PUSH-HOST names this host and
+The launchd jobs are loaded but will NO-OP until PBCOM-PUSH-HOST names this host and
 .env is filled. It never fires on load. See DEPLOYMENT.md + AUTO-PUSH-PRNOTES.md.
 EOF

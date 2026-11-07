@@ -69,6 +69,11 @@ targets:
 | `edge-functions` | push to `main`/`production` under `supabase/functions/**` | that branch's Supabase project |
 | `organizer-custom-domains` | hand-wired per domain | that organizer's domain, e.g. `pickleballangels.com` |
 
+The PB.com results driver (`pbcom-driver/`) is a separate shape, documented in
+[`pbcom-driver/DEPLOYMENT.md`](./pbcom-driver/DEPLOYMENT.md): it ships to the club
+Mac mini only, from the **release clone**, via the root `setup.sh` / `verify.sh` /
+`RELEASE-LINKS`. Branch routing deploys none of it, and this file's routing is unchanged.
+
 ## Targets
 
 ### web — cloudflare-pages
