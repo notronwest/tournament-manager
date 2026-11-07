@@ -1,0 +1,9 @@
+# Machine-local state the release clone shares with the live install.
+# One path per line, relative to the repo root. `dir/` is a directory
+# (created in the shared checkout if absent); anything else is a file that must
+# already exist there.
+# state/ carries the pbcom-pull.lock / pbcom-link.lock singleton locks: the code
+# takes them from REPO_ROOT, so this link is what keeps that protection.
+pbcom-driver/.env
+pbcom-driver/state/
+pbcom-driver/binding.json

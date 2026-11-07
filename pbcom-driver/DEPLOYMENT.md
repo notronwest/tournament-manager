@@ -5,7 +5,7 @@ This module ships in **two independent shapes** — do not confuse them:
 1. **The driver (code) → mac-mini-launchd.** Playwright drives a real Chrome on the
    club's residential IP, so it cannot run in an edge function or on a datacenter IP
    (headless trips PB.com's WebForms bot-management). It runs as a launchd job on the
-   club Mac mini, installed by `install.sh`. **Branch routing deploys NONE of this** —
+   club Mac mini, installed by `install.sh` from the **release clone**. **Branch routing deploys NONE of this** —
    pushing to `main` ships the web app / edge functions to TEST and deploys *nothing*
    for `pbcom-driver`.
 2. **The ledger schema (`supabase/migrations/…_pbcom_push_ledger.sql`) → branch routing.**
@@ -32,7 +32,7 @@ branches:
 targets:
   - name: pbcom-push-poll
     kind: mac-mini-launchd
-    trigger: launchd com.wmpc.pbcom-push, StartInterval 150s, RunAtLoad=false; installed by pbcom-driver/install.sh on the mini
+    trigger: launchd com.wmpc.pbcom-push, StartInterval 150s, RunAtLoad=false; installed by pbcom-driver/install.sh (via the root setup.sh) from the release clone on the mini
     source: pbcom-driver/deploy/pbcom-push.sh -> npx tsx src/cli.ts poll
     env: PROD (drives the org's live PB.com account; reads the tournament-manager DB; writes the push ledger/state tables)
     url: n/a — drives pickleballbrackets.com; no inbound endpoint
@@ -72,8 +72,8 @@ targets:
     rollback: redeploy the prior version; writes are idempotent (score+winner+status) and standings/medals recompute on read, so no data to unwind
   - name: pbcom-score-pull (REVERSE poller)
     kind: mac-mini-launchd
-    trigger: launchd every ~5 min on the mini (`poll-scores`); shares the PBCOM-PUSH-HOST singleton + a SEPARATE pbcom-pull.lock. (Standing launchd install is a follow-up; run on demand today.)
-    source: pbcom-driver -> npx tsx src/cli.ts poll-scores
+    trigger: launchd com.wmpc.pbcom-score-pull, StartInterval 300s, RunAtLoad=false; installed by pbcom-driver/install.sh from the release clone; shares the PBCOM-PUSH-HOST singleton + a SEPARATE pbcom-pull.lock
+    source: pbcom-driver/deploy/pbcom-score-pull.sh -> npx tsx src/cli.ts poll-scores
     env: PROD (reads the PUBLIC PB.com results API with NO login; writes B&E via the record-pbcom-score edge fn using the service role)
     url: reads pickleballtournaments.com public API; writes {SUPABASE_URL}/functions/v1/record-pbcom-score
     host: the club Mac mini ONLY; gated on the committed PBCOM-PUSH-HOST fact (wmpcMacMini1)
@@ -82,13 +82,30 @@ targets:
     rollback: stop the job — nothing is lost; writes are idempotent + fail-closed (an unmatched completed PB match is Discord-alerted, never written)
 ```
 
-## The one per-machine bootstrap (mini only)
+## How it ships now — the release clone (D-0293)
 
-`pbcom-driver/install.sh` is the single per-machine step (safe to re-run; reconcile
-may call it): `npm ci`, create `.env` from the template if missing (never overwrites),
-install + load the launchd plist (path + log paths rewritten for the machine), then
-print the remaining human steps. It does **not** designate the host or start a push on
-load. See `AUTO-PUSH-PRNOTES.md` for the exact sequence.
+The driver runs **only** from the release clone at
+`~/data/web/wmpc/releases/tournament-manager/pbcom-driver`, a checkout of a commit the
+release tool has approved. It never runs from a working checkout that tracks `main`.
+
+- `install.sh` **refuses** (exit 3, before touching anything) unless it sits in that
+  path. The release tool reaches it through the repo-root `setup.sh`
+  (`WMPC_RELEASE_NONINTERACTIVE=1`, stdin closed), then runs the root `verify.sh`.
+- Root `RELEASE-LINKS` links the machine-local state into the clone from the shared
+  checkout: `pbcom-driver/.env`, `pbcom-driver/state/`, `pbcom-driver/binding.json`.
+  The pull job takes its lock from `state/`, so the link keeps the singleton protection.
+- `install.sh` loads two launchd jobs, both `RunAtLoad=false`:
+  `com.wmpc.pbcom-push` (forward, ~150s) and `com.wmpc.pbcom-score-pull` (reverse, ~300s).
+  Neither fetches, pulls or resets anything; new code arrives only by a new release.
+- **The old hand-placed `com.wmpc.pbcom-pull` must never be loaded again.** It lived in
+  no file in this repo and force-reset a checkout to `origin/main` every five minutes
+  before writing to PB.com, so a merge here went live within five minutes. `install.sh`
+  warns if it is loaded. Unload it with `launchctl unload` and delete its plist.
+
+`install.sh` is safe to re-run: `npm ci`, create `.env` from the template if missing
+(never overwrites), install + load the plists (paths rewritten for the machine), print
+the remaining human steps. It does **not** designate the host or start a push on load.
+See `AUTO-PUSH-PRNOTES.md` for the first-run sequence.
 
 ## What does NOT ship from here
 

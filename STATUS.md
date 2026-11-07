@@ -5,6 +5,17 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-06 (Builder, #1204) — the PB.com results push binds to a released commit
+
+`pbcom-driver/install.sh` refuses (exit 3) unless it runs from
+`~/data/web/wmpc/releases/tournament-manager/pbcom-driver`. Added the release contract
+files at the root (`setup.sh`, `verify.sh`, `RELEASE-LINKS`) and committed the score-pull
+job (`com.wmpc.pbcom-score-pull`, 300s, RunAtLoad=false, no fetch/reset) so the old
+hand-placed `com.wmpc.pbcom-pull` is not needed and must not be loaded. Docs updated.
+`verify.sh` skips three test files that assert "not the push host", which fail on the mini
+itself (also red on main). Nothing loaded on the mini; Pages/Supabase routing untouched.
+Next: Ron's merge, then the release tool.
+
 ## 2026-11-06 (later still) — the API path now exists; the three are waiting on one command on the mini
 
 Ron, on being told the browser attempt was blocked: *"We have a freaking API! Use that"*.
