@@ -497,6 +497,81 @@ their access; do not "clean up" that group by replacing its contents.
 **Next:** run the one-liner, then verify `sferland` can actually authenticate
 with that key (as him from a machine holding the private half, or from the auth
 log). Then decide the two private repos.
+## 2026-11-02 — Users and Roles: a screen for org access, replacing hand-run SQL
+
+**What landed.** A new org-scoped page at `/admin/:orgSlug/settings/users`
+("Users and Roles" in the sidebar, deliberately separate from Contacts) that
+lists everyone with a login on the org, changes their role, removes access, and
+adds someone by email. Until now the only way to make someone an org admin was
+an `insert into organization_members` in the Supabase SQL editor.
+
+**Why an edge function and not a table read.** `organization_members` holds
+`user_id` and nothing human-readable; the emails live in `auth.users`, which the
+browser client cannot read at all. So the whole surface goes through a new
+`admin-org-members` function (list / add / set_role / remove) using
+`service_role`, authorized to org owner+admin or platform admin — same shape as
+`admin-unregistered-users`. Three guard rails live there, not in the UI, so a
+hand-rolled request can't get round them:
+
+- only an **owner** (or platform admin) may grant or revoke `owner`
+- the **last owner** can't be demoted or removed
+- **nobody edits their own row** — no self-lockout, no self-promotion
+
+Adding is additive only: an email that is already a member returns
+`already_member` rather than silently changing their role behind an "Add"
+button. An email with no account returns `no_account`, which the page says in
+plain language ("Ask them to sign in to the site once, then add them here") —
+membership points at a login row, so there is nothing to grant before that.
+
+**Staff never see the door.** The sidebar link is gated to owner/admin and the
+page itself renders an explanation instead of controls; the function refuses
+staff outright. No schema change, no migration — the table and its RLS policy
+("members managed by admins") already said all of this.
+
+**Seed rows the gate needed.** `supabase/seed.sql` gained three more local
+logins, for the same reason as the youth fixture rows on 2026-10-29: with only
+the director seeded, the director's own row is deliberately locked, so the page
+renders with *no controls at all* and there is nothing to grade. Now there's an
+admin who has signed in (the "Last signed in" line), a staff member who never
+has (its counterpart), and an account with no membership — the one input that
+makes the "Add a person" form succeed rather than only ever refuse.
+
+**Verified** against the local stack at 390px and at desktop width: add refused
+for an unknown email, add accepted for the seeded non-member, role change,
+promote-to-owner behind a confirm, and remove behind a confirm. Typecheck and
+production build clean; lint at the repo's baseline (31 pre-existing errors,
+none new).
+
+**Four design gate rounds, and what each one caught.** Worth recording,
+because none of the four was a taste call and three were invisible in the
+diff:
+
+1. **Contrast.** The rows and the Add panel sat on the cream panel, where the
+   muted meta text (4.20:1) and the red Remove action (4.12:1) fall under the
+   4.5 floor. Both moved to the white panel; the role explainer keeps the cream
+   so the stack still reads.
+2. **Where a result lands.** A row action's outcome rendered only in a page-top
+   banner, measured 271px above the viewport when acting on the third row at
+   390px — so a refusal read as "nothing happened". Results now render inside
+   the row, falling back to the page slot only when the resync has removed that
+   row, and every result panel scrolls itself into view.
+3. **The chip the white row left behind.** The "You" chip kept its own cream
+   fill, so the fix for round 1 missed it (4.20:1). Outlined on white now, 8.04:1.
+4. **A row headed by an email.** A login with no player profile is a supported
+   state, so the heading can be an email — one unbreakable token in a bold span,
+   which ran 380px out of a 324px card at 390px. Clipped, not scrolled, so no
+   page-overflow check saw it. It wraps now, and the row no longer prints the
+   same address twice.
+
+Three smaller things came with those rounds: this page's own form fields now
+carry the 44px tap floor the row controls already had, granting owner from the
+Add form asks the same question the row's picker asks, and a refusal about an
+address clears when you type a different one.
+
+**Next.** Merge opens the page on TEST. Worth considering after that: inviting
+someone who has no account yet (the onboarding function already sends a branded
+login link to a player, so the pieces exist), and an audit-log line per role
+change.
 
 ## 2026-10-29 — Offline seed: the register card's branches, and one registered player
 
