@@ -1388,6 +1388,8 @@ export type Database = {
           deleted_at: string | null
           id: string
           name: string
+          platform_fee_bps: number | null
+          platform_fee_fixed_cents: number | null
           resend_audience_id: string | null
           slug: string
           stripe_account_id: string | null
@@ -1400,6 +1402,8 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name: string
+          platform_fee_bps?: number | null
+          platform_fee_fixed_cents?: number | null
           resend_audience_id?: string | null
           slug: string
           stripe_account_id?: string | null
@@ -1412,6 +1416,8 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           name?: string
+          platform_fee_bps?: number | null
+          platform_fee_fixed_cents?: number | null
           resend_audience_id?: string | null
           slug?: string
           stripe_account_id?: string | null
@@ -2738,6 +2744,7 @@ export type Database = {
           waitlist_position: number
         }[]
       }
+      may_set_platform_fee: { Args: never; Returns: boolean }
       merge_events: {
         Args: {
           p_new_name?: string

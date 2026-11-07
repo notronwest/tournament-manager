@@ -51,18 +51,42 @@ up to desktop. Never desktop-first-then-shrink. Most WMPC users are on phones.
 - **Court grid.** `.tcm-courts-grid` skips the 3-column breakpoint on
   purpose so exactly 4 courts render as a clean 2×2 (see `index.css`). That's
   layout, not a shared rule.
-- **Choice tiles for mode selection** (2026-06-05). Buttons are for actions;
-  selections that swap form content should look like selections. Render as
-  compact icon-plus-label tiles in a 2-column grid (`display: grid`,
-  `gridTemplateColumns: "1fr 1fr"`, `gap: 8`). Each tile: `padding: "8px 10px"`,
-  `borderRadius: 6`, 1px border. **Inactive** = `#fff` background, `#d1d5db`
-  border, `#444` text. **Active** = `#eff6ff` background, `#2563eb` border,
-  `#1e40af` text. Use a Lucide icon (sized 18px) plus a short label —
-  consider semantic accuracy when picking the icon (e.g. `HandHelping` for
-  "I need a partner," NOT `Search` — that user isn't searching). Wrap in
-  `role="radiogroup"`; give each tile `role="radio"` + `aria-checked` so the
-  selection semantics reach screen readers. The established instance is the
-  "I have a partner / I need a partner" picker in `PublicTournamentPage.tsx`
-  (look for `partnerModeTileStyle`). Prior segmented-control approach (PR #58
-  v1) was rejected — even with shared borders the segments still read as
-  action buttons.
+- **Choice tiles for mode selection** (2026-06-05, corrected 2026-11-06).
+  Buttons are for actions; selections that swap form content should look like
+  selections. Render as compact tiles in a 2-column grid (`display: grid`,
+  `gridTemplateColumns: "1fr 1fr"`, `gap: 8`), `borderRadius: 6`.
+
+  | | Inactive | Active |
+  |---|---|---|
+  | background | `#fff` | `#eff6ff` |
+  | border | `inkMuted #6b7280`, 1px | `#2563eb`, **2px** |
+  | text | `ink` | `#1e40af` |
+  | weight | 500 | **600** |
+  | padding | `10px 12px` | `9px 11px` |
+  | glyph | — | a Lucide **`Check`** (16px, `strokeWidth: 3`) |
+
+  The active padding is 1px tighter on each side so the second border pixel
+  comes out of the padding and **the label does not shift** when you choose a
+  tile. Reserve a fixed-width slot for the glyph in both states so the labels
+  line up. Each tile is ≥ 44px tall. Wrap the pair in `role="radiogroup"`;
+  give each tile `role="radio"` + `aria-checked` so the selection reaches
+  screen readers. Where a tile carries its own meaning-bearing icon as well,
+  size it 18px and pick it for semantic accuracy (e.g. `HandHelping` for "I
+  need a partner," NOT `Search` — that user isn't searching).
+
+  **What changed, and why it matters.** This block used to prescribe a
+  `#d1d5db` inactive border and distinguish the chosen tile by colour alone.
+  Both are wrong. `#d1d5db` on white is **1.5:1**, under the 3:1 a control's
+  resting edge needs; and darkening it to `inkMuted` to clear that floor
+  leaves the two borders **1.07:1** apart, so in greyscale — or to a
+  red-green or blue-blind reader — the chosen tile becomes unreadable. The
+  tick, the border weight and the font weight carry the selection; the blue
+  only reinforces it. Caught by the design gate on the platform-fee screen.
+
+  The reference instance is the platform-fee screen's inherit/custom pair
+  (`PlatformFeeEditor.tsx`). The older "I have a partner / I need a partner"
+  picker (`partnerModeTileStyle` in `PublicTournamentPage.tsx`) still carries
+  the superseded values and is due the same fix; five other local copies of
+  this pattern exist, and a shared `ChoiceTile` would retire all of them.
+  Prior segmented-control approach (PR #58 v1) was rejected — even with
+  shared borders the segments still read as action buttons.

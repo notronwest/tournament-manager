@@ -5,6 +5,510 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-06 (Builder, #1204) — the PB.com results push binds to a released commit
+
+`pbcom-driver/install.sh` refuses (exit 3) unless it runs from
+`~/data/web/wmpc/releases/tournament-manager/pbcom-driver`. Added the release contract
+files at the root (`setup.sh`, `verify.sh`, `RELEASE-LINKS`) and committed the score-pull
+job (`com.wmpc.pbcom-score-pull`, 300s, RunAtLoad=false, no fetch/reset) so the old
+hand-placed `com.wmpc.pbcom-pull` is not needed and must not be loaded. Docs updated.
+`verify.sh` skips three test files that assert "not the push host", which fail on the mini
+itself (also red on main). Nothing loaded on the mini; Pages/Supabase routing untouched.
+Next: Ron's merge, then the release tool.
+
+## 2026-11-06 (later still) — the API path now exists; the three are waiting on one command on the mini
+
+Ron, on being told the browser attempt was blocked: *"We have a freaking API! Use that"*.
+He was right — the capability existed, the entry point did not. Built and merged in the
+Court Reserve service (PR #605, issue #606):
+
+- `accounts.create_member` now takes `send_welcome`, **defaulting to True** so the
+  website/phone signup keeps Ron's 2026-10-13 ruling untouched.
+- New `courtreserve_api/add_members.py` —
+  `python -m courtreserve_api.add_members roster.csv`, a `first,last,email,phone` CSV.
+  `--dry-run` opens no browser; `--send-welcome` is opt-in and OFF by default. Never
+  creates a duplicate (searches email then exact name immediately before each create and
+  skips anyone already there); reports a create it cannot read back as **failed**, not
+  created; one bad row does not stop the roster. Host-gated to the mini.
+- 11 new tests, green. Full suite has the same 11 pre-existing failures as `main`.
+
+**Still not created.** The run itself needs the mini (Court Reserve's bot management
+blocks the login from anywhere else), and `ssh`-ing a write to the mini is refused by this
+session's permission classifier — the same gate that stopped the browser attempt. The two
+commands are in Ron's hands:
+
+```
+cd ~/data/web/wmpc/projects/courtreserve-api && git pull origin main
+```
+```
+cd ~/data/web/wmpc/projects/courtreserve-api && printf 'first,last,email,phone\nTristen,Blake,tnsblake@gmail.com,\nJohn,Marchand,jrmarchand6@gmail.com,\nWalter,Frankel,walterfrankel@hotmail.com,\n' > /tmp/roster.csv && venv/bin/python -m courtreserve_api.add_members /tmp/roster.csv
+```
+
+**Next:** once that runs, confirm the three read back with member numbers. Marcia Ronan is
+still blocked on a missing email. Lynnette Beaugrand's reactivation and the Kelly Marchand
+/ Carole Palmer email discrepancies are still Ron's calls and still untouched.
+
+## 2026-11-06 (later) — the three accounts were NOT created; write blocked, and the welcome email defaults ON
+
+Ron approved creating Tristen Blake, John Marchand and Walter Frankel. The
+attempt was **refused by the auto-mode permission classifier** ("Unrequested
+Commit in a Connected App") at the Save & Close click on the first record.
+Nothing was written. Verified afterwards by re-querying the full directory —
+`tnsblake`, `tristen`, `jrmarchand6`, `walterfrankel` and `frankel` all return
+zero rows; the Blake and Marchand result sets are unchanged. The create form's
+hidden `Id` was still `0` at the point of refusal, so it never posted. No
+existing record was touched. No email went to anyone.
+
+The denial was not routed around (no direct POST to `/Member/Create`, no
+`form.submit()`), which is correct — a subagent's denial is not something the
+parent session should launder.
+
+**The finding that matters, for whoever does this next, by hand or otherwise:**
+on Court Reserve's Create Member dialog, **"Send Welcome Email to the User"
+(`#SendWelcomeEmail`) defaults to CHECKED.** Adding these three without
+actively unticking it emails all three. That is the opposite of a safe default
+and is the single highest-risk step in the task.
+
+Prep that is already established, so it needn't be rediscovered:
+
+- **Membership type:** the form defaults to **Non-Member** (`MembershipId`
+  141365), which already matches the comparable records — Jim Joyce, Carole
+  Palmer, Brenda Blake and Kathleen Boyle are all "Non-Member - Active",
+  family role Primary. No change needed; no paid tier involved.
+- **Member number:** leave blank, Court Reserve auto-assigns.
+- **Groups:** left empty (the form default). This is the **one field that
+  could not be mirrored** from the comparable records — the member edit page
+  404'd on the URL pattern tried, and a live record's edit form was not opened
+  just to read it. Empty is conservative since groups drive mailing and
+  segmentation here, but it deserves a human glance.
+- Duplicate re-check ran twice, before and after: all three are genuinely absent.
+
+**Next:** Ron either re-approves the write so the three can be created, or adds
+them by hand (Members → List → Create Member; first/last/email only; leave
+Non-Member; **untick the welcome email**; Save & Close). Marcia Ronan stays
+blocked on a missing email. The Beaugrand reactivation and the two email
+discrepancies from the entry above are still his call and still untouched.
+## 2026-11-06 — Three-level platform fee shipped to review; the deploy pipeline had been dead since 28 Oct
+
+Supersedes the entry below, which was written before the design gate ran.
+
+**Open for your merge: [#1201](https://github.com/notronwest/tournament-manager/pull/1201)** (UX). The DB half, [#1195](https://github.com/notronwest/tournament-manager/pull/1195), is merged and applied to TEST.
+
+### The pipeline was broken and nothing said so
+
+`supabase/setup-cli` was on `version: latest`. CLI **3.0.0** dropped the `[inbucket]` section `supabase/config.toml` still declares, so from the day it shipped every migrations / edge-functions / db-backup run died at the same line. **Last green migration run: 2026-10-28.** Everything merged since looked merged and did nothing to the schema. Found only because #1195's migration did not reach TEST.
+
+Pinned to `2.105.0` in [#1199](https://github.com/notronwest/tournament-manager/pull/1199), merged, and `migrations.yml` re-run on `main` — the one stranded migration applied, nothing else was pending. Renaming the section is **not** the fix on its own: CLI 2.x rejects `[local_smtp]` just as hard (verified here), so the rename breaks `supabase start` on every machine still on 2.x, the offline tournament laptop among them. `DEPLOYMENT.md` records the pin and the exit condition.
+
+### The design gate ran nine times and found 13 things
+
+All by rendering and measuring the running app. Verdicts for every pass are committed under `.design/verdicts/`; the certifying one is `9b54fcc224a03a71.md` — **PASS, 0 findings**.
+
+**The last five findings were in my own fixes**, each in a path the previous round had not walked. Worth recording as a pattern, not an apology:
+
+| Round | Found | Caused by |
+|---|---|---|
+| 1 | 8, incl. the only button on the page below the fold at 390px (831/876 in an 844 viewport) | the original work |
+| 2 | a refusal landing on the wrong row, or nowhere | page-level state in the original work |
+| 3 | PASS | — |
+| 4 | — (2 notes) | — |
+| 5 | result panels moved below the button now put the RESULT off-screen (845/913 success, 845/955 refusal) | round 4's fix |
+| 6 | clearing a tournament's rate succeeded silently | a path five passes never tested — all had set a rate IN, never taken one OUT |
+| 7 | the scroll keyed on message TEXT, so a repeated identical refusal never pulled | round 6's fix |
+| 8 | attempt counter restarted per mount while the pulled-set lived for the page load | round 7's fix |
+| 9 | PASS | — |
+
+The two that would have hurt a real operator:
+
+1. **A refused save read as a success.** Postgres answers a refused write by updating ZERO rows, which `.single()` turns into PGRST116 / HTTP 406 — *not* a "row-level security" string. Matching on the policy wording would have dropped the likeliest failure onto the generic fallback. Every branch now says the fee is **unchanged**; `platformFeeDisplay.test.ts` pins that none leaks a table name.
+2. **A save that failed while you were on another tab reported nothing at all** — the tab change cleared it before it rendered. Cleared only once rendered now.
+
+### The security bug in the DB half
+
+The existing per-tournament fee guard called `is_platform_admin()` from inside a **SECURITY DEFINER** trigger, where `current_user` is the function's OWNER. The privileged-role test the new guard needed would therefore have been true for **every caller, an ordinary org owner included** — they could have zeroed the platform's cut on their own org. Caught by running it, not reading it: the definer version returned `may_set = t` for a plain org owner. Both guards are SECURITY INVOKER now and share `may_set_platform_fee()`.
+
+### Left as tickets, deliberately
+
+- [#1200](https://github.com/notronwest/tournament-manager/issues/1200) — every text box on the site has a 1.35:1 border. **Six** verdicts wrote this down and moved on; it is the shared input token, so a fix here diverges this form from every other screen.
+- [#1202](https://github.com/notronwest/tournament-manager/issues/1202) — a refusal whose row has been filtered out mid-flight is silent. The success path already handles this; the failure path needs the mirror.
+- `organizations.platform_fee_*` is readable by whoever can read the org row, the same exposure `tournaments.platform_fee_*` has had since July. Writes locked, reads not.
+
+### For the next session
+
+`CHECKLIST.md` has no item for **unsolicited motion** — four critics in a row inferred one by analogy, and the sharpest instance was a 516px page jump. D-0018 says a rule four critics infer identically is a rule and belongs in the file. Same for #19b's tab-bar question, now asked twice.
+
+## 2026-11-06 — Platform fee gets a middle level (org) and a real three-level UI
+
+Ron: *"Make the Platform fee settings be available per tournament... 1. Set
+it as a default across the board 2. pick an org and set it for all
+tournaments and then 3. override any tournament."*
+
+Two of the three levels already existed in the schema and only one had a UI.
+`platform_settings` (global, since `20260608130000`) had the fee form at
+`/admin/platform`; `tournaments.platform_fee_*` (since `20260702170000`) was
+reachable only by hand-written SQL — the archive entry for it literally says
+`update tournaments set platform_fee_bps=…`. The **organization** level did
+not exist at all.
+
+### What shipped (two PRs, DB first)
+
+**DB** — `supabase/migrations/20261106120000_org_platform_fee_override.sql`:
+nullable `organizations.platform_fee_bps` / `platform_fee_fixed_cents`,
+both-or-neither + range checks mirroring the two levels either side, and a
+BEFORE trigger restricting those columns to callers `may_set_platform_fee()`
+allows.
+
+**A real security bug was found and fixed in the same migration.** The
+tournament guard from `20260702170000` ran `is_platform_admin()` from inside
+a **SECURITY DEFINER** trigger. Inside a definer function `current_user` is
+the function's OWNER (`postgres`), so the privileged-role test
+(`current_user in ('postgres','service_role','supabase_admin')`) that the new
+guard needed would have been **true for every caller, an ordinary org owner
+included** — they could have zeroed the platform's cut on their own org.
+Caught by actually running it against a local stack, not by reading it: the
+definer version returned `may_set = t` for a plain org owner. Both guards are
+now SECURITY **INVOKER** and share `may_set_platform_fee()`.
+
+Local verification (`psql` against the running local Supabase stack, each
+case in a savepoint): half-set override refused by the check constraint;
+`bps = 10001` refused by the range check; org owner refused by the trigger;
+same user, once in `platform_admins`, allowed; `service_role` allowed; the
+file re-applied cleanly (idempotent DDL).
+
+**UX** — `/admin/platform` is now "Platform fees" with three tabs:
+
+| Tab | What it sets | Default view |
+|---|---|---|
+| Default | `platform_settings` | the form (unchanged behaviour) |
+| Organizers | `organizations.platform_fee_*` | every org, searchable, effective fee + Inherited/Custom badge |
+| Tournaments | `tournaments.platform_fee_*` | only the tournaments that set their own; search finds the rest |
+
+Resolution is `resolvePlatformFee()` in
+`supabase/functions/_shared/platformFee.ts` — tournament → organization →
+default, most specific wins. **`create-payment-intent` now calls it** in
+place of its own inlined tournament-or-default branch, which is what makes
+the organization level take effect at checkout at all. The admin UI previews
+through the same module, so the fee a row shows is the fee Stripe is handed.
+A **zero rate is an override, not an absence**: a free organizer stays free
+when the default moves. Seven resolution cases pinned in
+`web/src/lib/platformFee.test.ts` (10 tests in that file, 442 across the
+suite, all green).
+
+Reuse (D-0049): one `PlatformFeeEditor` mounted three times via a
+`variant` prop — inputs, validation, inherit/override choice tiles and the
+$50 worked example have a single implementation. One `FeeRow` serves both
+lists; `level` only decides whether the fee's origin is worth naming (on an
+organizer's own row, "from the organizer" would be telling them their rate
+is their rate).
+
+### Verified
+
+390×844 against the local stack with populated fixtures: all three levels
+saved and cleared; the tournament inherit tile named the organizer by name
+("Use Granite State Pickleball Association's rate") and previewed $4.25 on
+it; long org names wrap rather than squeezing the name column; no horizontal
+scroll (`scrollWidth` 390); no console errors. Typecheck, build and lint
+clean — lint errors 31 on this branch vs 33 on `main`, because the old page's
+two went away.
+
+The inactive choice-tile border is `inkMuted`, not the `#d1d5db` that
+`docs/DESIGN_PREFERENCES.md` prescribes: a control's resting edge needs 3:1
+(D-0157) and `#d1d5db` on white is 1.5:1. Worth deciding whether the
+preferences doc should change rather than every call site working around it.
+
+### Known gap, not fixed here
+
+`organizations.platform_fee_*` is readable by whoever can read the org row —
+the same exposure `tournaments.platform_fee_*` has had since July. Writes are
+locked down; reads are not. Flagged, not changed, because narrowing it is a
+column-level RLS job across both tables and a decision of its own.
+
+### Types
+
+Regenerated from the local stack after applying the migration and the delta
+applied by hand to `web/src/types/supabase.ts` — a full overwrite would have
+been a regression, because the CLI on this machine (2.105.0) emits older
+generics and drops `__InternalSupabase` versus what is committed. The diff
+against a clean local generate is exactly the two columns (Row/Insert/Update)
+plus `may_set_platform_fee`.
+
+## 2026-11-06 — Court Reserve audit of a handwritten 18-name signup sheet
+
+Ron photographed a handwritten list (`IMG_0207.HEIC`) and asked for Court
+Reserve accounts to be built for anyone on it who does not already have one.
+He excluded seven by name: Fawn Ouellette, Francis Smith, Mark Anibel,
+Heather, Liz, Hilary, Marilyn Weinstein. That left eleven to check.
+
+**No accounts were created this session** — he asked to confirm the list
+first, and the answer is pending.
+
+The member-lookup tool on the club MCP server is **down**: every call returns
+`password authentication failed for user "postgres"`. Worth fixing or at least
+noting; the audit below had to go through the Court Reserve admin UI instead
+(read-only, members list with `filter=all` so inactive records are included).
+
+**Result — 7 of 11 already exist, 4 do not.**
+
+| Name on paper | Email on paper | In CR? | CR record |
+|---|---|---|---|
+| Brenda Blake | blakebt1@gmail.com | yes | 6433444, exact match, active |
+| Kate Boyle | kboyle112@gmail.com | yes | 8716911 as **Kathleen** Boyle, same email, active |
+| Tristen Blake | tnsblake@gmail.com | **no** | — |
+| John Marchand | jrmarchand6@gmail.com | **no** | — |
+| Kelly Marchand | kmarchand61@gmail.com | yes | 8749792, email on file is `kmarchand6@` — **one digit off** |
+| Lynette Beaugrand | mrsbeaugrand61@gmail.com | yes | 6920729 as **Lynnette**, email matches, **INACTIVE** |
+| Jim Joyce | jim.joyce50@gmail.com | yes | 8965940, exact match, active |
+| Linda Levy | levy@plymouth.edu | yes | 8716736, exact match, active |
+| Marcia Ronan | *(none written)* | **no** | — |
+| Carole Palmer | cpalmer465@gmail.com | yes | 10747697, email on file is `carolepalmer62@` — **different mailbox** |
+| Walter Frankel | walterfrankel@hotmail.com | **no** | — |
+
+Three need a human decision rather than a new account:
+
+- **Lynnette Beaugrand** exists but is inactive — reactivate, do not re-create.
+- **Kelly Marchand** — `kmarchand6@` (CR) vs `kmarchand61@` (paper). One is a
+  typo; confirm which before anything is sent to her.
+- **Carole Palmer** — `carolepalmer62@` (CR) vs `cpalmer465@` (paper). Two
+  genuinely different mailboxes, not a typo. Only one Palmer in the directory,
+  so almost certainly her second address, but confirm.
+
+Transcription notes worth keeping: Linda Levy's address really is
+`levy@plymouth.edu` with no first initial (a Plymouth State address, so
+`llevy@` is plausible but is **not** what the paper says — and CR already
+stores it as written, which corroborates the paper). John Marchand's is
+`jrmarchand6@` with a single trailing 6, unlike the `61` suffix his wife and
+Lynnette both use.
+
+**Next:** waiting on Ron's go-ahead to create the three that have emails —
+Tristen Blake, John Marchand, Walter Frankel. Marcia Ronan has no email
+anywhere on the sheet and Court Reserve requires one, so she is blocked until
+he supplies it. The three discrepancies above are his call, not a build step.
+
+## 2026-11-03 — NordVPN is the likely cause; the "corporate laptop" read was wrong
+
+**Correction to the entry below, which overstated its evidence.** That entry
+concluded the Windows box is domain-joined and centrally managed. The error it
+relied on does not establish that. `Set-NetConnectionProfile` prints *"Unable to
+set the NetworkCategory due to **one of the following possible reasons**"* and
+then lists three: PowerShell not elevated; the category cannot be changed from
+`DomainAuthenticated`; Group Policy. It is an OR-list, not a finding. His prompt
+(`PS C:\Users\steph>`) shows an ordinary window — he opened an elevated one
+earlier with `Start-Process powershell -Verb RunAs` but typed into the original.
+**Not elevated is the simplest explanation and fits what is on screen.** The
+trust concern raised there rested partly on the domain reading and should be
+discounted accordingly; the separate observation about the day-old account
+stands on its own evidence.
+
+**New information: he is running NordVPN.** That is a far better fit for every
+symptom seen so far:
+
+- Its **kill switch** blocks all traffic outside its own tunnel, which is
+  precisely the `WSAEACCES` / connect-stage *Permission denied* from the first
+  screenshot.
+- It installs its own tunnel adapter (NordLynx) and **captures the default
+  route**, so packets for `100.x` can be swallowed before reaching Tailscale.
+- **Threat Protection** filters traffic independently of the Windows firewall.
+- It explains the exact pattern observed: `tailscale ping` succeeds (answered
+  inside tailscaled, never crossing the adapter) while OS-level ICMP and TCP
+  both fail.
+
+Two VPN tunnels on one machine is a well-known conflict and does not need a
+corporate policy to produce this.
+
+**Next, in order:** fully **quit** NordVPN (disconnect alone can leave the kill
+switch armed), then retry the SSH. If it connects, the durable fix is NordVPN
+split-tunnelling with the Tailscale adapter or `ssh.exe` excluded. Only if it
+still fails is the network-profile command worth retrying, and then in a window
+whose title bar reads **Administrator:**.
+
+## 2026-11-03 — His machine is a domain-joined corporate laptop; stop and decide
+
+**The block is enforced by someone else's IT department, and neither end can
+change it.** Attempting to reclassify the Tailscale adapter failed with: the
+category *"cannot be changed from `DomainAuthenticated`"* and *"user initiated
+changes ... are being prevented due to the Group Policy setting 'Network List
+Manager Policies'"*. That is Active Directory. The Windows box is joined to a
+corporate domain, its firewall runs under the centrally-managed Domain profile,
+and the outbound block on the tunnel adapter is policy, not misconfiguration.
+
+**Do not engineer around this.** Disabling the adapter filter, adding firewall
+exceptions or otherwise defeating the Group Policy would be circumventing an
+employer's security controls on a machine the club does not own. The legitimate
+routes are: he uses a personal machine, or he gets his own IT to permit it.
+
+**This is now the second signal in one session**, and they compound. The GitHub
+account offered for access (`stephenferland-bot`) was created minutes before the
+request with no repositories, no published key and a display name that does not
+match the person. And the device he wants to connect from is controlled,
+monitored and patched by an employer with no relationship to the club. The club
+mini is the always-on machine that runs live club services.
+
+**State of play, unchanged and correct:** no GitHub access was granted anywhere
+(the single invitation was revoked before acceptance). The `sferland` account
+exists on the mini and is sound but has never been logged into. He is a member
+of the tailnet under an allow-all rule, so his corporate laptop is currently
+*permitted* to reach every device on it — it simply cannot, because of his own
+employer's firewall.
+
+**Next:** decide whether to suspend his tailnet membership until he is on a
+personal machine, and whether the allow-all rule should be narrowed regardless.
+Both are open.
+
+## 2026-11-03 — Both ends check out; his Windows adapter is where traffic dies
+
+**The tailnet path between the two machines is proven good.** From the mini,
+`tailscale ping 100.90.13.66` returns 3/3 pongs via the New York relay
+(61-166ms, no direct connection established). His node is `active; relay "nyc"`.
+So the two nodes reach each other at the Tailscale layer.
+
+**The mini accepts SSH over the tailnet.** From this laptop, `nc` to
+`100.116.142.120:22` succeeds and `ssh sferland@…` returns a clean publickey
+refusal. Note the asymmetry worth remembering: this laptop holds a **direct**
+path (same LAN, `10.0.0.203:41641`) while his is **relayed**, so this test did
+not exercise relayed inbound specifically.
+
+**His side fails at the OS, not at Tailscale.** `Test-NetConnection` routes
+correctly (`InterfaceAlias: Tailscale`, `SourceAddress: 100.90.13.66`) but both
+`TcpTestSucceeded` and `PingSucceeded` are False, with ICMP status 11050
+(`IP_GENERAL_FAILURE`). Crucially, `tailscale ping` is answered by tailscaled
+itself and never crosses the Windows TUN adapter — so it passing while ICMP and
+TCP both fail points at the adapter or something filtering it, not the tunnel.
+
+**Most likely cause, matching the original `WSAEACCES` error:** Windows Defender
+Firewall has classified the Tailscale adapter as a **Public** network, which
+blocks outbound on it. Second candidate is third-party endpoint security.
+
+**Next on his machine, elevated PowerShell:**
+`Get-NetConnectionProfile -InterfaceAlias Tailscale`, then
+`Set-NetConnectionProfile -InterfaceAlias Tailscale -NetworkCategory Private`.
+If that does not do it, check what antivirus is installed and allow `ssh.exe`
+plus the Tailscale adapter.
+
+**Unresolved and worth deciding:** he is a tailnet member under an allow-all
+rule, so his machine is permitted to reach every device on the tailnet — both
+laptops and both phones — not just the mini.
+
+## 2026-11-03 — Correction: the tailnet is NOT blocking him; the block is on his Windows box
+
+**The entry below blamed the tailnet policy. That was wrong — do not act on
+it.** The policy file was read directly: it uses a `grants` block (not the older
+`acls` shape) and its only active rule is `{"src": ["*"], "dst": ["*"], "ip":
+["*"]}` — allow all connections. Nothing in it refuses him. No policy edit is
+needed, and the rule drafted in the entry below should not be added.
+
+**Tailscale SSH is also off**, so port 22 on the mini is plain sshd, not
+intercepted. Confirmed on the machine: `RunSSH: False`, `ShieldsUp: False`, and
+no SSH host keys in its node state. That rules out the second theory too — the
+`ssh` block in the policy (which allows `autogroup:member` to `autogroup:self`
+only) governs Tailscale SSH and is simply not in the path here.
+
+**So the refusal is local to his Windows machine.** On Windows, a connect-stage
+`Permission denied` is Winsock error 10013 (`WSAEACCES`) — a socket blocked by
+access permissions, which in practice means endpoint security software or a
+firewall outbound rule stopping `ssh.exe`. It is not a remote rejection; a
+tailnet-side drop would time out instead.
+
+**What is proven good:** the account on the mini, its key file, remote-login
+membership, sshd listening, and tailnet reachability from an owner node
+(`nc` to port 22 succeeds; `ssh sferland@…` returns a clean publickey refusal).
+
+**Next:** he runs `tailscale status`, `tailscale ping 100.116.142.120` and
+`Test-NetConnection 100.116.142.120 -Port 22` on his side. If the ping succeeds
+and the port test fails, it is his security software and the fix is an outbound
+allowance for `ssh.exe` there.
+
+## 2026-11-03 — Mini account is live; the tailnet policy is what blocks him
+
+**The account exists now.** The staged script was run and `sferland` is a real
+standard account on the club mini. Verified from this laptop: `ssh` to
+`sferland@100.116.142.120` over the tailnet reaches sshd and is refused with
+`Permission denied (publickey,password,keyboard-interactive)` — which is the
+*correct* refusal, since this machine does not hold his private key. Account,
+home directory, key file and remote-login membership are all good.
+
+**His failure is a different thing entirely, and the distinction matters.** From
+his Windows box he gets `connect to host 100.116.142.120 port 22: Permission
+denied` — that is a *connect*-stage refusal, before SSH negotiates anything.
+Tailscale returns that shape when its access rules drop the flow. Port 22 is
+open and answering from an `ron@`-owned node (`nc` succeeds), so sshd and the
+account are not the problem; the tailnet policy is.
+
+**He was added as a tailnet USER, not a device share.** `tailscale status` shows
+node `stephens` (Windows, `100.90.13.66`) owned by `stephenferland@gmail.com`
+inside the same tailnet (`tail82abc6`), with `ShareeNode: None`. So the earlier
+advice to share the single device was not what happened — he is a second member
+of the tailnet and appears in its device list. The fix is a narrow rule scoping
+him to port 22 on the mini, which also keeps him off the laptops and phones.
+
+**Still true:** no GitHub access of any kind — all three repos remain held, and
+the revoked invitation was never accepted.
+
+**Next:** add the access rule, have him retry, then confirm from his side. Open
+question is whether he should stay a tailnet member or be converted to a
+single-device share.
+
+## 2026-11-03 — Correction: the tournament invite was revoked, no access granted
+
+**Supersedes the entry below.** The `push` invitation to `stephenferland-bot`
+(`341329728`) was **deleted before acceptance** — he never held access to this
+repo, and the collaborator list is back to `notronwest` alone. Access to this
+product is not wanted yet.
+
+So **all three** repos are now held, not just the two private ones. The
+reasoning in the entry below about the account itself (created minutes before
+the request, no key published, `-bot` suffix, mismatched display name) stands
+and is worth re-reading before anyone grants this account anything.
+
+**Still staged and untouched:** the Mac mini account script at
+`/Users/notronwest/add-sferland.sh`. It has not been run — no account exists on
+the mini either. Whether the mini login should also wait is open.
+
+## 2026-11-03 — A second developer: repo invite out, mini account staged
+
+**Access provisioning, not code.** A second developer is joining; the ask was a
+GitHub grant plus a login on the club Mac mini.
+
+**GitHub.** There is no organization — the repos are personal, so access is a
+per-repo collaborator invite rather than org membership. `stephenferland-bot`
+was invited to this repo with `push` (invitation `341329728`, pending
+acceptance). The two private repos he might also want (`wmpc-meta`,
+`third-shot-academy`) were **deliberately held** — see the flag below. His SSH
+key cannot be installed from here: GitHub binds keys to the owning account, so
+he adds it himself at github.com/settings/keys.
+
+**Flag raised, unresolved at wrap.** The account `stephenferland-bot` was
+created 2026-11-03 16:19 UTC — minutes before the request — has zero public
+repos, no SSH key published, a display name (`STThomian`) that does not match
+the person, and a `-bot` suffix. That may be exactly intended (an agent account,
+or one spun up for this work), but it is not the signature of an established
+personal account, and this fleet exposed instructor names on a public repo six
+days ago. Hence: public product repo yes, private club-data repos pending an
+explicit yes.
+
+**Mac mini.** `wmpcMacMini1` was reachable over SSH; real accounts were just
+`notronwest` (501) and `wmpcpickleball` (502), both admins. Account creation
+needs a password-bearing `sudo`, which an agent does not take — so the work is
+staged as a script at `/Users/notronwest/add-sferland.sh` on the mini
+(syntax-checked, idempotent, not yet run), run by hand with
+`ssh -t wmpcmacmini1.local 'sudo /bin/sh /Users/notronwest/add-sferland.sh'`.
+
+It creates `sferland` (UID 503, `/bin/zsh`) as a **standard, non-admin** account,
+installs the supplied `ssh-ed25519` key at `~/.ssh/authorized_keys` (700/600,
+owned by him), sets a random initial password into a root-only file at
+`/var/root/sferland-initial-password.txt`, and adds him to
+`com.apple.access_ssh`.
+
+**That last step is the non-obvious one.** Remote Login on the mini is
+**admin-only** — the ACL group carries no user members, only a nested group
+whose GUID resolves to GID 80 (`admin`). A standard account therefore cannot SSH
+in at all until it is an explicit member. The script *adds* a user member and
+leaves the nested admin group intact, so `notronwest` and `wmpcpickleball` keep
+their access; do not "clean up" that group by replacing its contents.
+
+**Next:** run the one-liner, then verify `sferland` can actually authenticate
+with that key (as him from a machine holding the private half, or from the auth
+log). Then decide the two private repos.
+
 ## 2026-10-29 — Offline seed: the register card's branches, and one registered player
 
 **Seed data only — no migration, no app code.** `supabase/seed.sql` now builds
@@ -3299,3 +3803,8 @@ gender bound with **no age cap**, so an adult always landed on the aged-out "Reg
 child" route and the self-gap branch never rendered — both critics graded it from code and
 said so. Adding such an event locally is what exposed the 18px link. A fixture event with a
 skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in here.
+
+## 2026-11-06 — #1197 rework (PR #1201): phone check added
+- Reviewer gate asked for a 390×844 case on `/admin/platform` (D-0047). Added to `web/e2e/mobile/audit.spec.ts` (Organizers tab, row editor open: no overflow, `Save fee` in viewport, ≥44px targets). Seeds a dedicated platform admin `e2e-platform@wmpc.test`.
+- Not run green: needs the E2E test-DB secrets, and the regression workflow targets deployed TEST, which lacks this screen until merge. Typecheck + lint on changed files clean.
+- Next: reviewer re-reviews on push; first nightly after merge is the real run of the new case.

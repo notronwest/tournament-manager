@@ -25,8 +25,10 @@
 // coupon, then by any available account credit (#1102, D-0077 §2, coupon
 // first). The platform fee drives the Connect split.
 //
-// Platform fee is read from the platform_settings table (no-code,
-// editable by the site super-admin), not from an env var.
+// Platform fee is resolved over three levels — the tournament's own
+// override, then its organization's, then the platform_settings global
+// default — all no-code and editable by the site super-admin, never an
+// env var. resolvePlatformFee (_shared/platformFee.ts) is that precedence.
 //
 // Required secrets:
 //   STRIPE_SECRET_KEY                  — already set for Connect.
@@ -37,7 +39,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 // @ts-expect-error remote import resolved at runtime by Deno
 import Stripe from "npm:stripe@14.21.0";
-import { computeChargeCents, computePlatformFeeCents } from "../_shared/platformFee.ts";
+import {
+  computeChargeCents,
+  computePlatformFeeCents,
+  resolvePlatformFee,
+} from "../_shared/platformFee.ts";
 
 // At-checkout donation add-on (#378). Same bounds as the standalone
 // create-donation-intent flow, for the same reason: a sane floor against
@@ -123,7 +129,7 @@ Deno.serve(async (req: Request) => {
     // no entry_fee_cents — the total comes from compute_checkout_total.)
     const { data: tournament, error: tErr } = await admin
       .from("tournaments")
-      .select("id, organization_id, status, accepts_donations, platform_fee_bps, platform_fee_fixed_cents, organizations!inner(slug, stripe_account_id, stripe_account_status)")
+      .select("id, organization_id, status, accepts_donations, platform_fee_bps, platform_fee_fixed_cents, organizations!inner(slug, stripe_account_id, stripe_account_status, platform_fee_bps, platform_fee_fixed_cents)")
       .eq("slug", tournamentSlug)
       .single();
     if (tErr || !tournament) return json({ error: "tournament_not_found" }, 404);
@@ -310,27 +316,21 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── 4. Platform fee (Connect direct charge) ─────────────────────
-    // Per-tournament override wins when set (both columns non-null);
-    // otherwise fall back to the platform_settings global default. Both
-    // are edited no-code by platform admins (per-tournament in the wizard,
-    // global on /admin/platform), NOT env vars.
-    let feeBps: number;
-    let feeFixed: number;
-    if (
-      tournament.platform_fee_bps !== null &&
-      tournament.platform_fee_fixed_cents !== null
-    ) {
-      feeBps = tournament.platform_fee_bps;
-      feeFixed = tournament.platform_fee_fixed_cents;
-    } else {
-      const { data: settings } = await admin
-        .from("platform_settings")
-        .select("platform_fee_bps, platform_fee_fixed_cents")
-        .eq("id", true)
-        .single();
-      feeBps = settings?.platform_fee_bps ?? 0;
-      feeFixed = settings?.platform_fee_fixed_cents ?? 0;
-    }
+    // Three levels, most specific wins: this tournament's override, then
+    // this organization's, then the global default. All three are edited
+    // no-code by platform admins on /admin/platform, NOT env vars.
+    // resolvePlatformFee is shared with that UI so the rate an admin sees
+    // previewed is the rate Stripe is handed here.
+    const { data: settings } = await admin
+      .from("platform_settings")
+      .select("platform_fee_bps, platform_fee_fixed_cents")
+      .eq("id", true)
+      .single();
+    const { feeBps, feeFixedCents: feeFixed } = resolvePlatformFee(
+      tournament,
+      org,
+      settings,
+    );
     // Computed on totalCents (registration subtotal) ONLY — never on
     // chargeCents, so an at-checkout donation (#378) is always fee-free.
     const platformFeeCents = computePlatformFeeCents(totalCents, feeBps, feeFixed);

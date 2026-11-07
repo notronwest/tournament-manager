@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.wmpc.pbcom-score-pull</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <!-- EXAMPLE path — the installer rewrites this to the checkout's real path.
+         Do not hardcode a machine path in a committed plist. -->
+    <string>/PATH/TO/tournament-manager/pbcom-driver/deploy/pbcom-score-pull.sh</string>
+  </array>
+  <!-- Every ~5 min: reads PB.com's public results and writes only the delta back
+       to B&E. A no-op on every host except PBCOM-PUSH-HOST. -->
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <!-- Do not fire on load: reinstalling must not kick off a PB.com pull. -->
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/notronwest/.local/state/wmpc-pbcom/score-pull.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/notronwest/.local/state/wmpc-pbcom/score-pull.err.log</string>
+</dict>
+</plist>

@@ -80,6 +80,23 @@ async function assertColumnNotCollapsed(
 }
 
 test.describe("mobile audit — layout assertions", () => {
+  // ── Platform fee screen (#1197): the Organizers tab with a row editor open.
+  //    "Save fee" sat below the fold at 390 once; it must be reachable, on-screen
+  //    and a ≥44px target, and the page must not scroll sideways.
+  test("platform fees — Organizers row editor usable", async ({ page }, ti) => {
+    await loginAs(page, SEED.platformAdminEmail);
+    await page.goto("/admin/platform");
+    await page.locator("#platform-fee-tab-orgs").click();
+    const setFee = page.getByRole("button", { name: "Set fee" }).first();
+    await expect(setFee, "an organizer row is listed").toBeVisible();
+    await assertCtaUsable(page, setFee, "Set fee");
+    await setFee.click();
+    await snap(page, ti, "platform-fees-organizers-editor");
+
+    await assertNoPageOverflow(page, "platform fees");
+    await assertCtaUsable(page, page.getByRole("button", { name: /^(Save fee|Use )/ }), "Save fee");
+  });
+
   // ── Populated checkout: the 1fr/320px grid must stack, and the pay button
   //    must not be clipped off the right edge. This is the spec that fails on
   //    the pre-fix checkout layout and passes after the responsive fix.
