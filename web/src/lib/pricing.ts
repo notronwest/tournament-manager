@@ -23,6 +23,13 @@
 // best deal across their picks, which matches what
 // PickleballBrackets does and matches what most players would do
 // in their heads.
+//
+// Override picks are NOT part of that ordering. They are charged
+// their flat fee and are never candidates for the "first" slot, so
+// exactly one tier-priced pick still pays the entry fee however the
+// override is priced. Ranking them together meant a premium override
+// (one priced above the first-event fee) took the top slot and the
+// entry fee was never charged at all.
 
 import type { Database } from "../types/supabase";
 
@@ -78,9 +85,11 @@ export type LineItem = {
 
 /**
  * Compute the running total + per-event line items for a set of
- * selected events. Ordering is by stand-alone fullPrice DESC, so
- * the player always pays their highest fee at the "first event"
- * rate and gets the additional-event rate on everything else.
+ * selected events. The NON-OVERRIDE picks are ordered by stand-alone
+ * fullPrice DESC, so the player always pays their highest tier-priced
+ * fee at the "first event" rate and gets the additional-event rate on
+ * everything else. Override picks are charged their flat fee and take
+ * no part in that ordering.
  *
  * Returns line items in the order the caller passed them in (not
  * sorted), so a UI rendering them inline next to their event row
@@ -109,22 +118,37 @@ export function computeLineItems(
     ev,
     tiers: priceTiers(ev, rates),
   }));
-  const sortedDesc = [...tagged].sort(
-    (a, b) => b.tiers.fullPrice - a.tiers.fullPrice,
-  );
+  // Rank ONLY the non-override picks. An override is a flat charge that sits
+  // OUTSIDE the entry-fee ordering — it is never a candidate for "first".
+  //
+  // Ranking everything together was a money bug. An override priced ABOVE the
+  // tier's first-event fee sorted to position 0, took the "override" label,
+  // and then no other pick could satisfy `i === 0` — so the entry fee went
+  // uncharged on the whole registration. With a tier of first $50 / additional
+  // $20, a $90 premium pick plus one adult bracket billed $110 instead of
+  // $140. An override priced BELOW the first-event fee never sorted to the top
+  // and so always priced correctly; that case keeps its existing numbers.
+  //
+  // MUST mirror compute_checkout_total, whose window is
+  // `partition by (override_cents > 0)` for exactly this reason.
+  const sortedDesc = tagged
+    .filter((t) => t.ev.event_fee_cents <= 0)
+    .sort((a, b) => b.tiers.fullPrice - a.tiers.fullPrice);
 
   // Classify each event's tier by where it fell in the sort.
-  // Overrides keep their own "override" label regardless.
-  // How many events the entry fee covers (min 1). The top pick is the "first"
-  // event; the next (included-1) picks are $0 "included"; the rest "additional".
+  // How many events the entry fee covers (min 1). The top non-override pick is
+  // the "first" event; the next (included-1) picks are $0 "included"; the rest
+  // "additional".
   // MUST mirror compute_checkout_total's rn<=first_events_included rule.
   const included = Math.max(1, rates.firstEventsIncluded ?? 1);
   const tierByEventId = new Map<string, LineItem["tier"]>();
-  sortedDesc.forEach((t, i) => {
-    const hasOverride = t.ev.event_fee_cents > 0;
-    if (hasOverride) {
+  for (const t of tagged) {
+    if (t.ev.event_fee_cents > 0) {
       tierByEventId.set(t.ev.id, "override");
-    } else if (i === 0 && !alreadyHasPaidEvent) {
+    }
+  }
+  sortedDesc.forEach((t, i) => {
+    if (i === 0 && !alreadyHasPaidEvent) {
       tierByEventId.set(t.ev.id, "first");
     } else if (i < included && !alreadyHasPaidEvent) {
       tierByEventId.set(t.ev.id, "included");

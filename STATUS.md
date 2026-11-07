@@ -5,6 +5,34 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-07 — a premium per-event fee cancelled the entry fee (#1206, PRs #1207 + the screen)
+
+An event with its own fee (`events.event_fee_cents > 0`) is a flat charge that replaces the
+tier for that event. Both pricing implementations ranked **all** of a player's picks together,
+so an override priced **above** the tier's first-event fee took rank 1, was labelled
+`override`, and left the `rn = 1` / `i === 0` branch unreachable — **no pick was charged the
+entry fee at all**. Screen and server agreed on the wrong number, so checkout looked fine.
+
+- **Fix, both sides:** rank only the non-override picks. In the database,
+  `partition by (override_cents > 0)`; on the screen, filter before the sort. An override
+  keeps its flat fee and sits outside the entry-fee ordering.
+- **Shipped as two PRs, database first** (#1207 then the screen), so the server is correct
+  before the screen is and no window exists where the screen promises more than the card pays.
+- **Proven on a real local stack**, before and after in one rolled-back transaction, against a
+  $50.00 / $20.00 tier: `premium $90 + adult` $110.00 → **$140.00**; `+ 2 adults` $130.00 →
+  **$160.00**; `premium + kids + 2 adults` $155.00 → **$185.00**. Unchanged: `adult + adult`
+  $70.00, `kids $25 + adult` $75.00, `premium` alone $90.00. The database's "after" column
+  equals the screen's test expectations basket for basket — that agreement is the AC.
+- **16 tests** in the new `web/src/lib/pricing.test.ts` (the module had none). The 7 that pin
+  the fix were run against the pre-fix code first and fail there; the 9 regression guards pass
+  on both, which is what a guard should do.
+- **Nothing was mischarged.** Production has one event with its own fee — a kids bracket at
+  $35.00 against first-event tiers of $55.00 and $45.00 — below both, so it always priced
+  correctly, and none of the 78 payment line items touches it. Correctness fix, not an incident.
+- **Pre-existing, not touched:** `npm run lint` reports 31 errors on `main` and the same 31 on
+  these branches — none in the changed files. Worth its own card.
+- Next: merge #1207, then the screen PR.
+
 ## 2026-11-06 (Builder, #1204) — the PB.com results push binds to a released commit
 
 `pbcom-driver/install.sh` refuses (exit 3) unless it runs from
