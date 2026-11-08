@@ -5,18 +5,18 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
-## 2026-11-07 — the browser tests never ran: runner pinned, and a non-run now says so (#1210, PR #1211)
+## 2026-11-07 — the browser tests never ran: runner pinned, a non-run now says so, and 12 hidden failures surfaced (#1210 → PR #1211; #1213 opened)
 
 Ron: "Fix the smoke test" — his go-ahead, and the build-route gate's stated exception, so this
-built in-session rather than going to Mr. Robot's lane.
+built in-session rather than going to Mr. Robot's lane. **PR #1211 merged to `main`.**
 
 **The defect.** `post-deploy-smoke.yml` and `regression.yml` ran on `ubuntu-latest`. GitHub
 moved that label to Ubuntu 26.04; Playwright 1.60 ships no chromium for it, so
 `playwright install --with-deps chromium` exits 1 **before any test runs**: `ERROR: Playwright
 does not support chromium on ubuntu26.04-x64`. Four consecutive nightly runs died there
-(2026-11-06 16:43 and 22:07, 2026-11-07 15:38 and 20:54, all on `main`, all at the install
-step), and on 2026-11-07 it took the **production** post-deploy smoke with it on the night of
-the real promotion — PROD shipped unsmoked.
+(2026-11-06 16:43 and 22:07, 2026-11-07 15:38 and 20:54, all `main`, all at the install step),
+and on 2026-11-07 it took the **production** post-deploy smoke with it on the night of the real
+promotion — PROD shipped unsmoked.
 
 **Part 1 — runners pinned to `ubuntu-24.04`**, reason and unpin exit condition inline at each
 `runs-on` and in `DEPLOYMENT.md`, beside the Supabase CLI pin recorded there the day before for
@@ -24,31 +24,40 @@ the same class of break. Not a Playwright bump: that is the unpin, later, and it
 
 **Part 2 — the reporting, which is why this went unnoticed for three days.** Checked the step
 lists rather than assuming: the nightly's Discord step **ran and succeeded on every failed
-night**, so the alert was firing all along — it was simply *wrong about what it was reporting*,
-posting "a previously-fixed behavior may have regressed" when no test had run at all. That sent
-any reader hunting a regression that did not exist while zero coverage stayed hidden. A skipped
-suite now says it did not run. The production smoke, separately, reported **nothing at all**;
-it now posts on any non-pass and names which of three stages broke — deploy never served /
-browser would not install (**no test ran**) / a public page is broken — and with no webhook set
-it annotates the run rather than passing quietly.
+night**, so the alert fired all along — it was simply *wrong about what it reported*, posting "a
+previously-fixed behavior may have regressed" when no test had run. That sent any reader hunting
+a regression that did not exist while zero coverage stayed hidden. A skipped suite now says it
+did not run. The production smoke, separately, reported **nothing at all**; it now posts on any
+non-pass and names which of three stages broke — deploy never served / browser would not install
+(**no test ran**) / a public page is broken — and with no webhook set it annotates the run
+rather than passing quietly.
+
+**Proven by a run, not by the diff** (run `42430247031`, branch, against TEST): install
+**success** (was failure), seed **success** (was skipped), suite **ran 6.2 minutes** (was
+skipped) → `12 failed, 3 flaky, 1 skipped, 48 passed`. The pin's claim was narrow — browsers
+install, tests execute — and it is met. The suite is **not green** and the PR does not say it is.
+
+**The 12 failures are what was hidden, filed as #1213** (pre-existing: no test had run since
+2026-11-05 and #1211 touched no app code). Triage order recorded there, led by
+`strict mode violation: getByRole('radiogroup', { name: /doubles self-rating/i }) resolved to 2
+elements` on the admin rating picker — a selector that used to match once is the shape of a real
+regression. Two others are **test data, not app bugs**: the public recap and credit-landing
+smokes render their empty states correctly ("This recap isn't available", "This offer isn't
+available") because the fixtures aren't there. That matters because **the production smoke runs
+that same spec** — production's own run of it passed on 2026-10-29, so this is not a prediction
+it will go red, but it is the first thing to check if it does.
 
 **Deliberately not done:** no shared notifier extracted (four workflows post via inline `curl`;
-extracting one is worth a card, but folding a four-workflow refactor into a CI repair makes the
-repair the hard part to review); `@playwright/test` not bumped; nothing merged to `production`
-and nothing promoted.
+worth a card, but a four-workflow refactor inside a CI repair makes the repair the hard part to
+review); `@playwright/test` not bumped; nothing merged to `production` and nothing promoted.
 
-**In flight at the time of writing:** the nightly suite was dispatched against the branch (run
-`42430247031`) to prove the browsers install and the tests execute — a workflow file that reads
-correctly is not proof. Result goes on the PR as a comment before merge. The suite may now
-surface genuine test failures hidden for days; that is a different outcome from "cannot install
-chromium" and will be reported as what it is.
-
-**Still open:** the pin lands on `main`, so the **production** smoke stays broken until a
-promotion carries these workflows to `production` — next promotion's job, Ron's call.
+**Still open:** the pin and the new reporting are on `main`, so the **production** smoke stays
+broken until a promotion carries these workflows to `production` — next promotion's job, Ron's
+call. And #1213's 12 failures.
 
 **Pattern, not three fixes.** Third silent-check failure this week, all the same shape — green
 or quiet, therefore assumed fine: the CLI `latest` break that stopped migrations reaching TEST
-for nine days behind green merges, this browser-suite break, and a production smoke that told
+for nine days behind green merges; this browser-suite break; a production smoke that told
 nobody. The generalisation — *a check that cannot run must not be able to look like a check that
 passed* — belongs in a convention and is written nowhere yet.
 
