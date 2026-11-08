@@ -113,6 +113,27 @@ section being wrong has already cost a venue. **To unpin:** get every machine
 onto 3.x, then rename the section and restore `version: latest` in the same
 change.
 
+**The browser-test runners are PINNED to `ubuntu-24.04`** in
+`post-deploy-smoke.yml` and `regression.yml` — not `ubuntu-latest`. GitHub moved
+`ubuntu-latest` to Ubuntu 26.04, for which Playwright 1.60 ships no chromium
+build, so `npx playwright install --with-deps chromium` exits 1 before a single
+test runs: `ERROR: Playwright does not support chromium on ubuntu26.04-x64`. The
+nightly browser suite had been failing that way since at least 2026-11-05, and on
+2026-11-07 it took the **production post-deploy smoke** with it — a promotion
+merged, deployed and migrated with its automated smoke never executed, leaving
+hand checks as that deploy's only verification. **To unpin:** wait for a
+Playwright release that supports 26.04, bump `@playwright/test` to it, then
+restore `ubuntu-latest` in the same change.
+
+**A failed production smoke now says so.** `post-deploy-smoke.yml` reports to
+`DISCORD_WEBHOOK` whenever its smoke step does not pass, and names which stage
+broke, because the three mean different things: the deploy never started serving,
+the test browser would not install (**production shipped unsmoked — no test ran**),
+or a public page is genuinely broken. Before 2026-11-07 this job reported nothing,
+so it went red on the night of a real promotion and the only reason anyone knew was
+that someone went and looked. With no webhook set it annotates the run instead of
+passing quietly.
+
 **Scheduled jobs live in the database, not in CI.** `pg_cron` (enabled by
 migration `20260914200000`) runs `sweep-stale-pending-regs` every 5 minutes on
 whichever project the migration applied to — there is no external cron and no
