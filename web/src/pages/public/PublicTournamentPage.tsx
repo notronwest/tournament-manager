@@ -721,6 +721,26 @@ export default function PublicTournamentPage({
     (!tournament.registration_opens_at ||
       new Date(tournament.registration_opens_at) <= new Date());
 
+  // The start-times and live-results buttons are hidden until each page has
+  // something on it, so a player never taps through to an empty screen.
+  // The two conditions are deliberately NOT the same:
+  //   * Start times is the question players ask the WEEK BEFORE, so it appears
+  //     as soon as any bracket has a published time — waiting for play to begin
+  //     would surface the link only after it stopped being useful.
+  //   * Live results has nothing to show until a bracket is actually under way,
+  //     so it waits for a match to be in progress or finished.
+  // "Under way" is read from the MATCHES, not from events.status: a bracket can
+  // sit at 'ready' with a full draw generated and no ball struck, and the live
+  // results page itself decides what to show the same way (a game counts once
+  // it is in progress or completed). Reading the same signal keeps the button
+  // and the page it opens from disagreeing.
+  const hasPublishedStartTimes = events.some(
+    (e) => e.scheduled_start_at !== null,
+  );
+  const hasPlayStarted = Array.from(matchesByEvent.values()).some((ms) =>
+    ms.some((m) => m.status === "in_progress" || m.status === "completed"),
+  );
+
   // Active pricing tier drives the prominent "to register" headline
   // in the CTA box below. The model we lead with: the registration
   // fee gets you into your first event; each additional event adds
@@ -1042,50 +1062,56 @@ export default function PublicTournamentPage({
           }}
         >
           {/* Start times — the question every player asks the week of the
-              tournament, so it gets a real button, not a text link. */}
-          <Link
-            to={`/t/${orgSlug}/${tournamentSlug}/start-times`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              minHeight: 44,
-              padding: "10px 18px",
-              borderRadius: 999,
-              background: ink,
-              color: courtYellow,
-              fontFamily: headingFontStack,
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              textDecoration: "none",
-            }}
-          >
-            🕘 Start times
-          </Link>
-          {/* Live results — standings and scores as the brackets run. */}
-          <Link
-            to={`/t/${orgSlug}/${tournamentSlug}/results`}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              minHeight: 44,
-              padding: "10px 18px",
-              borderRadius: 999,
-              background: ink,
-              color: courtYellow,
-              fontFamily: headingFontStack,
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-              textDecoration: "none",
-            }}
-          >
-            🏆 Live results
-          </Link>
+              tournament, so it gets a real button, not a text link. Hidden
+              until at least one bracket has a published time. */}
+          {hasPublishedStartTimes && (
+            <Link
+              to={`/t/${orgSlug}/${tournamentSlug}/start-times`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                minHeight: 44,
+                padding: "10px 18px",
+                borderRadius: 999,
+                background: ink,
+                color: courtYellow,
+                fontFamily: headingFontStack,
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                textDecoration: "none",
+              }}
+            >
+              🕘 Start times
+            </Link>
+          )}
+          {/* Live results — standings and scores as the brackets run. Hidden
+              until a bracket is actually under way. */}
+          {hasPlayStarted && (
+            <Link
+              to={`/t/${orgSlug}/${tournamentSlug}/results`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                minHeight: 44,
+                padding: "10px 18px",
+                borderRadius: 999,
+                background: ink,
+                color: courtYellow,
+                fontFamily: headingFontStack,
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                textDecoration: "none",
+              }}
+            >
+              🏆 Live results
+            </Link>
+          )}
           <Link
             to={`/t/${orgSlug}/${tournamentSlug}/contact`}
             style={{
