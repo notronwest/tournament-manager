@@ -4030,3 +4030,8 @@ skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in 
 - Reviewer gate asked for a 390×844 case on `/admin/platform` (D-0047). Added to `web/e2e/mobile/audit.spec.ts` (Organizers tab, row editor open: no overflow, `Save fee` in viewport, ≥44px targets). Seeds a dedicated platform admin `e2e-platform@wmpc.test`.
 - Not run green: needs the E2E test-DB secrets, and the regression workflow targets deployed TEST, which lacks this screen until merge. Typecheck + lint on changed files clean.
 - Next: reviewer re-reviews on push; first nightly after merge is the real run of the new case.
+
+## 2026-11-08 — #1218 bracket own-price display (Builder)
+- Branch `feature/issue-1218-bracket-own-price`: bracket card Pill, header line, pricing-panel section, and `own price` line-item label on register/checkout. Display only; pricing math untouched. Helper `bracketsWithOwnPrice` + tests in `pricing.test.ts`.
+- Pricing panel/toggle now also appears for single-tier tournaments that have an own-price bracket.
+- Next: design-gate verdict, push, open PR, move card to In Review (board moves were rate-limited earlier).
