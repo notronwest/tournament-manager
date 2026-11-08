@@ -16,7 +16,13 @@ on:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: GitHub moved `latest` to Ubuntu 26.04, for which
+    # Playwright 1.60 ships no chromium build, so `playwright install` exits 1 and
+    # the job fails before running a single test. It failed that way unnoticed from
+    # at least 2026-11-05, and on 2026-11-07 it took the production post-deploy
+    # smoke with it — a promotion deployed with its smoke never executed. Unpin once
+    # a Playwright release supports 26.04 and this repo is on it (see DEPLOYMENT.md).
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
