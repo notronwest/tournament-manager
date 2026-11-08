@@ -18,6 +18,7 @@ export const SEED = {
   orgSlug: "e2e-test",
   tournamentSlug: "e2e-regression-cup",
   organizerEmail: "e2e-organizer@wmpc.test",
+  platformAdminEmail: "e2e-platform@wmpc.test",
   playerEmail: "e2e-player@wmpc.test",
   partnerName: "Pat Partner", // the picked partner on the seeded pending reg
   doublesEventName: "E2E Mixed Doubles 3.5",

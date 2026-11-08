@@ -26,3 +26,66 @@ export function computeChargeCents(
 ): number {
   return subtotalCents + Math.max(0, Math.trunc(donationCents) || 0);
 }
+
+// ── Three-level fee resolution ────────────────────────────────────────────
+//
+// A platform fee can be set at three levels; the most specific one that is
+// set wins. Both columns of a level are set together (a DB check constraint
+// enforces both-or-neither), so a level is "set" when its bps is non-null.
+//
+//   tournament override  →  organization override  →  global default
+//
+// This is the ONLY implementation of that precedence: create-payment-intent
+// charges with it and the platform-fee admin UI previews with it, so the
+// number an admin sees is the number Stripe gets.
+
+export type PlatformFeeSource = "tournament" | "organization" | "default";
+
+export type PlatformFeeLevel = {
+  platform_fee_bps: number | null;
+  platform_fee_fixed_cents: number | null;
+} | null | undefined;
+
+export type ResolvedPlatformFee = {
+  feeBps: number;
+  feeFixedCents: number;
+  // Which level supplied the number — drives the "Custom" / "Inherited"
+  // labelling in the admin UI and the audit trail on the payment.
+  source: PlatformFeeSource;
+};
+
+export function resolvePlatformFee(
+  tournament: PlatformFeeLevel,
+  organization: PlatformFeeLevel,
+  platformDefault: PlatformFeeLevel,
+): ResolvedPlatformFee {
+  if (
+    tournament?.platform_fee_bps !== null &&
+    tournament?.platform_fee_bps !== undefined &&
+    tournament.platform_fee_fixed_cents !== null &&
+    tournament.platform_fee_fixed_cents !== undefined
+  ) {
+    return {
+      feeBps: tournament.platform_fee_bps,
+      feeFixedCents: tournament.platform_fee_fixed_cents,
+      source: "tournament",
+    };
+  }
+  if (
+    organization?.platform_fee_bps !== null &&
+    organization?.platform_fee_bps !== undefined &&
+    organization.platform_fee_fixed_cents !== null &&
+    organization.platform_fee_fixed_cents !== undefined
+  ) {
+    return {
+      feeBps: organization.platform_fee_bps,
+      feeFixedCents: organization.platform_fee_fixed_cents,
+      source: "organization",
+    };
+  }
+  return {
+    feeBps: platformDefault?.platform_fee_bps ?? 0,
+    feeFixedCents: platformDefault?.platform_fee_fixed_cents ?? 0,
+    source: "default",
+  };
+}

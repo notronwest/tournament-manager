@@ -115,8 +115,8 @@ export default function SiteAdminPage() {
         <Card
           to="/admin/platform"
           icon={<Settings2 size={20} />}
-          title="Platform settings"
-          body="Stripe platform fee (percentage + fixed) applied to every checkout."
+          title="Platform fees"
+          body="The platform's cut of each registration — a default for everyone, a rate for one organizer, or a rate for a single tournament."
         />
         <Card
           to="/admin/quotes"

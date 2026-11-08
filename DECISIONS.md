@@ -1824,51 +1824,6 @@ worked by hand every day. Reading "no PR carries an approve verdict" as "approva
 without checking whether the last one merged. Adding a repo to `NEVER-AUTO-MERGE-REPOS` to slow
 a pile down — the pile is inflow, and merging is what removes it.
 
-### D-0132 — A worktree is retired by the mechanism that made it, and "merged" is proven by content
-
-*2026-10-12 · scope: `infrastructure/worktrees/**` · source: daemon STATUS 2026-10-12 (136 registered worktrees across 12 repos; D-0069 recovered from an orphaned directory in /private/tmp)*
-
-**Promoted to `active` by Ron, 2026-10-12** ("and promote"), in the same change that
-landed the mechanism.
-
-**Decision.** Two rules, one cause.
-
-1. **A mechanism that creates worktrees retires them.** `new-worktree.sh` reaps worktrees
-   whose branch is merged and whose tree is clean, on every run. Isolation (D-0005) is only
-   useful while `git worktree list` shows live work; a list of finished branches is not a
-   smaller problem than no isolation, because a registered worktree **holds its branch
-   checked out**, so `git branch -D` refuses even after the PR merged.
-
-2. **"Merged" is proven against content, never inferred from a PR's state or a branch name.**
-   The accepted proofs are: `HEAD` is an ancestor of `origin/main`, **or** every file the
-   branch touched is byte-identical on `origin/main`. Nothing else counts.
-
-**Why.** Measured on 2026-10-12: **136 registered worktrees across 12 repos** on one laptop,
-plus ~34 orphaned directories no repo still referenced. Three costs, all observed.
-
-A registered worktree pins its branch, so cleanup needed a manual `worktree remove --force`
-twice on 2026-10-11. A session reading the list cannot separate live work from residue — 23
-of the 136 were real. And an orphaned directory is **outside git's protection entirely**: one
-held the only copy of **D-0069**, absent from `origin/main`, as loose files in `/private/tmp`,
-which macOS clears.
-
-Rule 2 is the sharp one, because the obvious shortcut is wrong in both directions. A **squash
-merge** makes ancestry *and* `git cherry` report "unmerged" on a branch that is fully shipped —
-the squashed commit shares no SHA and no patch-id with the branch's commits. And in the other
-direction, **6 branches whose PR was MERGED had diverged from the merged head afterwards**
-(reused or rebased branch names), so "PR merged → delete" would have destroyed real commits.
-Neither a PR's state nor ancestry alone is evidence; the content test is.
-
-**Forbids.** Deleting a worktree on an inference — a PR's state, a branch's name, or ancestry
-alone. Reaping a worktree whose `git status --porcelain` is non-empty: uncommitted and
-untracked files are the only thing a worktree holds that the repository does not. Reaping with
-`--force`, which would defeat git's own independent refusal.
-
-**Guard (D-0097 rule 2).** The block is in code, not prose: dry run is the default, removal
-requires an empty status, removal runs without `--force`, and `.no-reap` exempts a directory.
-Every uncertainty — detached HEAD, missing `origin/main`, a failed removal — resolves to KEEP.
-Design and the verification of all three paths: `infrastructure/worktrees/DESIGN.md`.
-
 ### D-0134 — Third Shot Academy is its own Cairn operation, and a repo belongs to exactly one decision register
 
 *2026-10-12 · scope: `decisions/**, DECISIONS.md, infrastructure/decision-register/**, framework/**` · source: Ron, 2026-10-12 — "I am ready to build Third Shot Academy as its own Cairn application with its own dashboard and its own context" and, asked the two open questions, "TSA gets its own decision register". Table run per PROCESS.md: four voices, four concerns, no veto.*
@@ -4124,6 +4079,192 @@ reading), D-0049, D-0071 (every clause above is a hook, a guard or a required ch
 (the new required-check step is host-independent, network-free and credential-free, and
 measured). Pillar 5 `docs/design-system.md`, Pillar 2 `docs/change-discipline.md`.
 
+### D-0264 — A hold on a page is enforced by a switch, never by withholding the branch; a held promotion stands the deploy-lag alarm down for 14 days
+
+*2026-10-31 · scope: `infrastructure/heartbeat/**` · source: daemon#1106 — the watchdog's deploy-lag alarm on third-shot-academy escalated after 72h. Measured 2026-10-31: production is 88 commits behind main (33 that ship code), and the only open promotions are third-shot-academy#724 (opened 2026-10-22, its own title "HELD — do not merge") and #727 (the Archive alone, whose ship_prod approval Ron DENIED 2026-10-29). Ron's words of 2026-10-27, on the three public Archive pages: "lets not publicize 3 yet." every review-gate pass on #724 since 2026-10-22 (thirteen) escalated the same PR for the same reason.*
+
+**Decision.** Ron holding *one piece* of a release is a decision about that piece. It is never a
+decision to freeze everything else merged behind it, and the fleet must not let the first turn
+silently into the second.
+
+1. **A hold is carried by a switch in the code, not by keeping `main` unpromoted.** When the owner
+   holds a page or feature that is already on `main` (D-0007: `main` is TEST), the held thing is put
+   behind a switch that is **on for TEST and off for PROD** — a build-time environment value the
+   repo already distinguishes, never a new secret — so the next promotion carries everything else and
+   the held thing ships dark. Publishing it later is a one-value change that is itself a promotion
+   (stop list row 3), so the owner's word is still the only thing that turns it on.
+
+2. **A promotion PR that the owner has held carries the label `held`**, and its body quotes his words
+   and their date. The label is applied by whoever recorded the hold — never inferred from a title.
+   An owner's *denied* promotion (a `ship_prod` approval answered no) is **closed**, not left open:
+   an open PR that has been refused is a second copy of a question already answered.
+
+3. **The deploy-lag alarm stands down for a held promotion for 14 days, then alarms with a
+   different sentence.** A `held` promotion younger than `PROMOTE_HELD_D` (14 days) is logged, not
+   alarmed — the owner has answered; asking him again every 15 minutes is noise, and the 24h tier
+   would put a ledger line in front of him for a question he already settled. Past 14 days it alarms
+   as `held-stale`: *the held work is still blocking everything behind it on main — put it behind a
+   switch (D-0264 rule 1) and promote the rest.* A held promotion is therefore never a permanent mute;
+   the clock is the PR's age, so re-labelling cannot reset it.
+
+4. **The un-held 72h rule is unchanged** (daemon#734): an open, un-held promotion older than
+   PROMOTE_WAIT_H still alarms "merge it or close it".
+
+**Why.** On third-shot-academy the hold on three pages became, by default, a hold on 33 code
+commits, including a 44-file fix for the class of bug that broke the lesson write-up. Nobody chose
+that. The alarm was right that something was stuck and wrong about whose move it was: it told the
+owner to merge or close a PR he had already answered, and the Reviewer re-escalated the same
+held PR thirteen times. The fault is in the shape — held content sharing a branch with everything
+else, with no switch between them.
+
+**Forbids.**
+- Holding a page by leaving a promotion PR open indefinitely (rule 1).
+- Inferring a hold from a PR title or body text; only the `held` label counts (rule 2).
+- A hold that mutes deploy-lag with no end date, or a clock that restarts when the label is
+  re-applied (rule 3).
+- Narrowing a promotion by cherry-picking around held content on `production` — it forks the two
+  branches and the next full promotion re-carries the held thing. The switch is the only way round.
+
+### D-0268 — A merged pull request is a third proof, bound to the commit it merged
+
+*2026-11-02 · scope: `infrastructure/worktrees/**` · source: daemon STATUS 2026-10-29 (a sweep of 56 worktrees across 19 repos reaped 21 and kept most of the remaining merged ones forever, because `origin/main` had edited their files after the squash merge); the owner, 2026-11-02, on the offer to teach the reaper to read the pull request — "Yes, teach it"*
+
+**Decision.** Three rules, one cause. Rules 1 and 2 are D-0132's, restated because this
+record replaces it; rule 3 is what changes.
+
+1. **A mechanism that creates worktrees retires them.** `new-worktree.sh` reaps worktrees
+   whose branch is merged and whose tree is clean, on every run. Isolation (D-0005) is only
+   useful while `git worktree list` shows live work; a list of finished branches is not a
+   smaller problem than no isolation, because a registered worktree **holds its branch
+   checked out**, so `git branch -D` refuses even after the pull request merged.
+
+2. **"Merged" is proven, never inferred from a branch name.** Two content proofs, both
+   git-only: `HEAD` is an ancestor of `origin/main`, **or** every file the branch touched is
+   byte-identical on `origin/main`.
+
+3. **A third proof: the branch's own pull request is MERGED *and* this `HEAD` is contained
+   in the commit that pull request merged.** The containment half is not a refinement, it is
+   the proof. A pull request stays MERGED after someone pushes to its branch again, so the
+   state **alone** says nothing about the commits sitting in the directory — which is why
+   D-0132 refused pull-request state outright. Bound to the merged head oid it says exactly
+   the right thing: everything here went through that pull request.
+
+**Why.** D-0132's rule 2 is correct and insufficient, and the insufficiency compounds with
+time. Content proof (b) asks whether `origin/main`'s copy of each touched file is still
+byte-identical to the branch's — so it is false for exactly the branches that merged
+**longest ago**, because `origin/main` has had the most time to edit those files since.
+
+Measured 2026-10-29 across 56 worktrees in 19 repos: 21 were reapable, and the merged ones
+that were kept were kept for that reason, permanently. That is what grew the list back to 56
+after a sweep had taken it to 35. Re-measured 2026-11-02 against 108 registrations on the
+same laptop: the content proofs offer up 4, the three proofs together offer up 8. The four it
+adds are all MERGED with `HEAD` equal to the merged head — verified one by one against the
+API before the proof was accepted.
+
+The reason D-0132 refused pull-request state is unchanged and is honoured here: on 2026-10-12
+**6 branches whose pull request was MERGED had diverged from the merged head afterwards**
+(reused or rebased branch names), so "MERGED → delete" would have destroyed real commits. The
+oid is the whole of the answer to that, and it is the case the test suite asserts first.
+
+This proof is the only one that needs the network, so it is also the only one that can be
+unavailable. Every way `gh` can fail — absent, unauthenticated, offline, rate-limited,
+answering about a repository with no pull requests — produces no proof, and no proof means
+KEEP. The failure direction is the safe one, which is why the lock may be added at all.
+
+**Forbids.** Reaping a worktree because its pull request is MERGED, without proving `HEAD`
+is contained in the commit that pull request merged. Reading the pull request **before** the
+two content proofs, which would make the reaper's steady-state behaviour depend on the
+network. Treating a `gh` failure as anything but "no proof". Reaping a worktree whose
+`git status --porcelain` is non-empty: uncommitted and untracked files are the only thing a
+worktree holds that the repository does not. Reaping with `--force`, which would defeat
+git's own independent refusal. Reporting "merged + clean" without naming which proof
+answered — an operator who cannot see which lock opened cannot audit the one that is new.
+
+**Guard (D-0097 rule 2).** The block is in code, not prose: dry run is the default, removal
+requires an empty status, removal runs without `--force`, `.no-reap` exempts a directory, and
+proof (c) requires the ancestry check to pass. Proof (c) has a kill switch (`WMPC_REAP_GH=0`)
+because a proof nobody can roll back is a proof nobody can retract. Every uncertainty
+resolves to KEEP. Design and the verification of all three proofs:
+`infrastructure/worktrees/DESIGN.md`.
+
+### D-0293 — A job on the mini that acts on production runs from a release clone an approved commit moved, never from a checkout that follows main
+
+*2026-11-06 · scope: `infrastructure/release/**, infrastructure/deploy-branch-watch/**, infrastructure/heartbeat/watchdog.sh, infrastructure/fleet-sync/**, setup.sh, deploy/**, DEPLOYMENT.md` · source: daemon#1276, measured 2026-11-06 carrying out ship_prod approval ced8cec3 — the refund drain ran commit ea7ece9 from the 19:51 sync with no approval covering it*
+
+**Decision.** `scope.to_commit` is the limit of Ron's yes (D-0278), and it holds for every process a repo runs on the mini, not only the ones that stay up. Rule 3 of the stop list has no carve-out for a job that happens to start fresh.
+
+1. **A release clone is what runs.** On the mini each repo named in rule 4 has a plain `git clone` at `~/data/web/wmpc/releases/<repo>`, detached at the approved commit, with its own `venv` or `node_modules`. Every plist of that repo points into it, because `setup.sh` derives its paths from where it runs. The shared checkout stays on `main`, still synced, for sessions to read and worktrees to branch from.
+2. **One way in.** `infrastructure/release/release.sh <repo> <commit> <approval-id>` fetches, checks that commit out in the clone, runs that clone's `setup.sh` non-interactively, verifies, and appends to a release record `~/.local/state/wmpc-release/<repo>.jsonl` (commit, approval id, time, previous commit). It refuses unless the row is `approved`, `action_kind='ship_prod'`, and names that repo and that commit. Before moving anything it takes D-0292's cases, and the last line of the release record is what is live: an approved commit that is not ahead of it moves nothing, so an older yes never replaces a newer release. A failed verify rolls back to the previous commit and reports failed. `scope.execute` text written before a repo's cutover is read as this command at `scope.to_commit`.
+3. **The old command cannot undo it.** `setup.sh` refuses when a release clone for its repo exists on this machine and it is not running from it. Before a cutover, and on every laptop, no clone exists, so it behaves as it does today. This is the only reason a `git pull && ./setup.sh` from memory does not silently re-point every job at `main`.
+4. **Which repos, measured 2026-11-06 from the plists on the mini.**
+   - `courtreserve-api`: 24 jobs, 3 long-running, 21 timed — every money and membership drain.
+   - `qbo-api`: 6 jobs, 1 long-running, 5 timed — weekly posting and donations write the books.
+   - `court-reserve-scheduler`: 7 jobs, 1 long-running, 6 timed — they book courts.
+   - `tournament-manager` `pbcom-driver`: not loaded today, log stops 2026-10-05. A hand-placed `com.wmpc.pbcom-pull` does `git reset --hard origin/main` every five minutes before writing to PickleballBrackets.com, the plainest case of the shape. Its committed installer moves to the clone before the push is next switched on.
+   - **Not this shape.** `rating-session-manager`'s timed jobs run gitignored compiled output that only its approved build moves; only their shell wrappers follow the sync. `daemon` deploys by merging, on purpose: its merge is off the stop list (D-0207) and self-update depends on it. `amazon-music-mini` is long-running only; `marketing-api` has no job on the mini.
+5. **A whole repo moves together.** One commit per repo. Splitting money jobs from the rest would run two versions of one package against one schema.
+6. **Runtime state is not released.** Gitignored state stays where it is in the shared checkout and the clone symlinks to it, from a tracked `RELEASE-LINKS` file per repo: `.env` and `ts/.env`, and the scheduler's `logs/`, `state/` and `history/` (the 8:30 catch-up reads the 8:00 ledger there, and an empty one could re-book). So credential rotation and every outside reader of `.env` keep working, and rollback carries no data migration.
+7. **A committed switch ships with its commit.** `BILLING-HOST`, `ACCOUNT-CREDIT-DRAIN-ENABLED` and their siblings take effect at the next release. Stopping is never gated: `launchctl bootout` of a job is immediate and is not a release, and rolling back to a commit in the release record needs no new row when a member is being harmed (D-0197), reported afterwards.
+8. **The lag is measured and routed.** Watchdog check 8 (D-0092) reads the release record instead of the checkout's `HEAD`, with the same inert paths and thresholds. Past them it files one `daemon` channel row; that run reads the diff and writes one plain `ship_prod` card. One pending card per repo: a newer one withdraws the older (D-0258). A pending card stands the alarm down, as a promotion PR does (D-0264).
+9. **D-0257 is carried forward whole for every other checkout**, and its forbids stand. A release clone answers a different test: detached is correct, its `HEAD` equals the last line of its release record, its tree is clean, and that commit is an ancestor of `origin/main`.
+10. **Order.** The daemon half first. Then each repo's first move, each its own `ship_prod` card: `courtreserve-api`, `qbo-api`, `court-reserve-scheduler`. Until a repo's move, a merge still reaches its timed jobs within the hour, and its `DEPLOYMENT.md` says so. Money stays gated by its own approved rows in that window.
+
+**Why.** The sync fast-forwards each shared checkout hourly and a timed job execs fresh code from it, so every merge became a production deploy of those jobs. `ea7ece9`, a fix to the refund drain, was running from 19:51 on 2026-11-06 with no approval, and its repo's `DEPLOYMENT.md` said pushing to `main` deploys nothing. It failed closed and no refund ran, but that was luck of the diff, not a control. Reviewer auto-merge (D-0052) is only safe because a merge is not a deploy; this makes that true again.
+
+**What it costs.** Measured over the 14 days to 2026-11-06, `courtreserve-api` merged 61 PRs against 3 `ship_prod` rows, `court-reserve-scheduler` 12 and `qbo-api` 4. So fixes that used to arrive within the hour now wait for a press, and the busiest repo produces roughly a card a working day. Accepted: that is the promotion valve (D-0082, D-0096) applied to the jobs that had been skipping it.
+
+**Rejected.** Making fleet-sync skip these checkouts: any session's `git pull` would still deploy, and sessions would read stale code, a trap measured twice. A `git worktree`: the reaper removes clean merged worktrees, and it shares the shared clone's refs. Per-commit directories behind a symlink: atomic, but it re-creates `venv` and links per release to solve a race no job has. A non-editable install: it pins Python only, leaving `deploy/*.sh`, fact files and the TypeScript repo unpinned. Pinning only the money jobs: rule 5.
+
+**Forbids.** Pointing a plist of a repo in rule 4 back at a checkout that follows `main`. Moving a release clone by hand. A job that resets itself to `origin/main` before acting on production. Treating a merge, a green check or a current shared checkout as evidence of what those jobs run. Reverting `ea7ece9` on the strength of this record, which daemon#1276 ruled out.
+
+### D-0295 — An agreed build goes to Mr. Robot as a card, not into the session that agreed it — and the lane is checked every 5 minutes
+
+*2026-11-07 · scope: `infrastructure/builder-dispatch/**, infrastructure/build-route-gate/**, infrastructure/reviewer-dispatch/**, infrastructure/heartbeat/RAILS, infrastructure/heartbeat/JOBS, infrastructure/daemon-sync/reconcile.sh, agents/**PROMPT*, infrastructure/daemon-dispatch/DAEMON-PROMPT.md, CLAUDE.md, docs/ai-agents.md, docs/synchronization.md` · source: Ron, 2026-11-07, answering daemon#1220 ("Send agreed builds to Mr. Robot | Keep building them with me"): "send agreements and change Mr. Robots cadence to every 5 minutes (assumubg these checks don't use tokens)". The measurement behind the question (daemon#1220, Builder host log 2026-09-16 → 11-06): 646 ticks, 48 found work, 48 of 48 built unassisted, 598 found an empty lane — because every agreement was built in the session that reached it.*
+
+**Decision.** Seven rules.
+
+1. **When a session and Ron agree how something in a repo Mr. Robot builds (BUILDER-REPOS) gets
+   built, the session files it and stops.** `infrastructure/builder-dispatch/file-build-card.sh`
+   — right repo, an `area:` label, the agreement as the body with an `## Acceptance` checklist,
+   label `build:agreed`, Agent Ready. Ron is told it is up (one sentence in the reply, and a silent
+   line from the filer in the channel his cards arrive in). The session does not build it while he waits.
+2. **`build:agreed` is the explicit ask that lets the dispatcher move a card out of Backlog.**
+   Each tick it queues any OPEN issue in a served repo carrying the label, adding it to the board
+   first if a cloud session (which has no Projects access) could not. A Backlog card without it stays
+   human territory, unchanged. A human who parks an agreed card removes the label.
+3. **What stays in the session:** the paths the Builder refuses by design (D-0089 rule 1's
+   daemon-only groups — `agents/**`, `decisions/**`, `infrastructure/*-dispatch/**`,
+   `docs/ai-agents.md` — and the rest of daemon, which the Builder does not serve, D-0152);
+   a member being harmed right now (D-0197: put it right first); anything Ron says to build now,
+   in those words; and a fix to work already in flight (a rework on an open PR, a failing check).
+   The session says which, in the PR body: `In-session-build: <reason>`.
+4. **The gate** (`build-route-gate`) refuses a session-built PR in a served repo that names no
+   such reason. It is a routing check, so it fails open on anything it cannot read.
+5. **Ron is told when it ships, and his phone does not ring for it.** When the reviewer merges a
+   PR whose issue carries `build:agreed`, it posts one line to the channel his cards arrive in: what
+   finished, and the link. Before this, an unassisted build finished with no word anywhere. Both this
+   line and rule 1's are news, not asks, so they whisper (D-0211 rule 2 names completions; Ron,
+   2026-11-06, of builder alerts: "Should only notify me when its crtiical", D-0296).
+6. **The dispatcher ticks every 5 minutes** (was 30). Ron's premise held: an idle tick runs no
+   model — `claude -p` is called in exactly one place, `run_item`, reached only with a work item.
+   Its only cost is GitHub GraphQL points from the hourly pool the mini's jobs share, so the tick
+   now meters its own spend (`graphql_pts=` in the summary) and stands down below a floor of 1,500
+   points remaining. A run that outlasts the tick cannot be doubled: a lock is reclaimed only when
+   it is old AND its recorded holder is gone.
+7. **The dispatcher's self-update pull keeps its old 30-minute frequency**, and reconcile never
+   reloads the launchd job it is running inside (it defers to the next sync from outside).
+
+**Why.** The machine was never the constraint — supply was. 48 of 48 queued items built
+unassisted; 598 of 646 ticks found nothing, because agreement turned into session work instead
+of a card. A card also outlives the session: the agreement is written down where the reviewer
+and the next run read it. Five minutes makes "it gets built" feel immediate; at 30 a card waited
+up to half an hour to start.
+
+**Forbids.** Building an agreed change in a served repo in-session without an
+`In-session-build:` reason; filing a card without acceptance criteria or an area label; treating
+an unlabelled Backlog card as queued; moving the tick under 5 minutes, or removing the floor, the
+meter or the live-holder lock check, without new measurements.
+
 ## Proposed (not binding yet)
 
 _None._
@@ -4135,5 +4276,6 @@ _None._
 - D-0011 — A "Tournament Management" income account for the $5 platform fee (2026-08-30) → superseded by D-0012
 - D-0016 — daemon is the architect of record; decisions live in a register and each repo carries its slice (2026-09-16) → superseded by D-0134
 - D-0130 — The fleet watchdog lives off the fleet, and a quiet agent is an alarm (2026-10-11) → superseded by D-0155
+- D-0132 — A worktree is retired by the mechanism that made it, and "merged" is proven by content (2026-10-12) → superseded by D-0268
 - D-0161 — A pause covers one phase, and the phase it covers is named in code (2026-10-13) → superseded by D-0181
 - D-0177 — Every reply is a short summary; a question or an action for Ron is unmistakable (2026-10-14) → superseded by D-0189
