@@ -5,6 +5,42 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-08 — promoted to PROD; per-bracket pricing is invisible on the public page (#1218)
+
+Ron: "Promote it", then "Can we update the pricing on the tournament pages to signify that a
+particular event has a different price?"
+
+- **Promoted** (PR #1217, `main` → `production`, merged 12:54 UTC, production now `525cf82`).
+  Shipped: the conditional header buttons (#1215), the `ubuntu-24.04` runner pin and the
+  non-run guard (#1210), the design-gate verdict, and docs. **No migration, no new secret** —
+  frontend + CI only, so no production schema change.
+- **Verified on the live site, not on a green tick.** Bundle moved
+  `index-CVhhZcvq.js` → `index-DHnER_P_.js`. The one published PROD tournament (2026 Loon Race
+  Team, 3 brackets with start times, 0 matches played) now renders `🕘 START TIMES` and
+  `Contact organizers →` with **no Live results button** — the exact state the change targets.
+- **The runner pin reaches `production` for the first time**, so the production post-deploy
+  smoke can install chromium again. It had been failing to install since `ubuntu-latest` moved
+  to 26.04, which is why the previous promotion deployed with no automated verification.
+
+### The new finding: the page never says a bracket is priced differently
+
+PROD has exactly one bracket with its own price — **Kids 18 & Under Doubles, $35.00**, under an
+active tier of **$45 first / $5 additional**. The public tournament page shows `$45 to register`
+in the header, the bracket card shows name + status + start time, and the pricing-schedule panel
+lists only tiers. **Nothing on the page says $35.** The charge is correct (both `computeLineItems`
+and `compute_checkout_total` handle the override, fixed earlier this week), but the page misleads
+on the way in — and an organizer setting a *higher* premium price has no way to show it at all.
+
+Filed as a build card with acceptance criteria covering four surfaces: the bracket card, the
+header price block, the pricing-schedule panel, and the `override` line-item label on register +
+checkout (which currently falls through to the word "additional", which is wrong).
+
+### Unrelated, seen while verifying — organizer data, not code
+
+The Loon Race Team description prose says "Registration is $55 per player through December 19,
+then $65 starting December 20", while its configured tiers charge **$45 / $5**. The page shows
+both. Someone should reconcile the tiers with the prose before registration volume picks up.
+
 ## 2026-11-07 — the header stops offering pages that are empty (#1215, PR #1214)
 
 Ron: "The 'Start Times' and 'Live Results' should not be showing in the header until their are
