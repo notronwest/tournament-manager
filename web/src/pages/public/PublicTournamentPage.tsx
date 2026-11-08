@@ -902,7 +902,7 @@ export default function PublicTournamentPage({
                 </div>
               )}
               {hasOwnPrices && (
-                <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
+                <div style={{ fontSize: 12, color: inkSoft, marginTop: 1 }}>
                   Some brackets are priced separately
                 </div>
               )}
@@ -1029,7 +1029,7 @@ export default function PublicTournamentPage({
                   style={{
                     fontFamily: monoFontStack,
                     fontSize: 11,
-                    color: courtBlue,
+                    color: ink,
                     textTransform: "uppercase",
                     letterSpacing: "0.1em",
                     padding: "10px 0 2px",
