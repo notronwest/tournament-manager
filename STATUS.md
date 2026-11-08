@@ -5,6 +5,43 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-07 — promoted to PROD; the production smoke test never ran
+
+Ron: "Merge the promotion" / "And promote". Merged `main` → `production` (#1203, 39 commits,
+tip `918bc5e`). **PROD now has the three-level platform fee screen, the per-event-fee pricing
+fix, the definer→invoker fee-guard fix and the Supabase CLI pin.**
+
+- **Verified on PROD directly, not from a green check:** both `organizations.platform_fee_*`
+  columns present; migration `20261106120000` recorded in `schema_migrations`;
+  `compute_checkout_total` carries `partition by (override_cents > 0)` and its `prosrc` md5 is
+  **byte-identical to TEST's** (`c4622aef…`, 2842 bytes) — the same build whose real-path
+  re-run on TEST produced $140.00 / $160.00 / $75.00; all three fee guards report
+  `prosecdef = false` (invoker). `https://bertanderne.com` returns 200 and the live bundle
+  (`assets/index-CVhhZcvq.js`) contains "Platform fee levels" / "Search organizers" /
+  "Organizer unavailable", which exist only in the new screen — and PROD's previous tip
+  (`12faca8`, 2026-10-29) predates that screen, so the served bundle is from this promotion,
+  whose tree carries the pricing fix.
+- **No organizer's fee changed.** PROD's default is still 0% + $0.00, no tournament and no
+  organization sets its own, and the one event with its own fee (a kids bracket at $35.00
+  against first-event tiers of $55.00 / $45.00) prices as it always did.
+- **Migrations + edge functions: success. Post-deploy smoke: FAILURE — and it never ran a
+  test.** `npx playwright install --with-deps chromium` exited 1 with "Playwright does not
+  support chromium on ubuntu26.04-x64": GitHub moved `ubuntu-latest` to Ubuntu 26.04 and
+  Playwright 1.60 has no chromium for it. Pre-existing (the nightly suite has failed this way
+  since at least 2026-11-05), not caused by the deploy — but it means **this promotion
+  deployed with its automated smoke unexecuted**, and the manual checks above are the only
+  verification it got.
+- **Written up as #1210 with acceptance criteria, NOT built.** The fix is a one-line pin of
+  both browser-test workflows to `ubuntu-24.04` (plus the reason and the unpin exit condition,
+  beside the Supabase CLI pin in `DEPLOYMENT.md`). A session PR for it was refused by the
+  build-route gate — self-initiated builds in this repo belong on Mr. Robot's lane — and Ron
+  has not agreed this one, so it is a story awaiting his go, not a card marked agreed. The
+  working patch is in this session's scratchpad if someone wants it rather than a rebuild.
+- **Third silent-check failure this week** — the Supabase CLI `latest` break that stopped
+  migrations reaching TEST while merges showed green, the nightly browser suite, and this.
+  All three shared one shape: green or quiet, therefore assumed fine. Worth a convention, not
+  three separate fixes.
+
 ## 2026-11-07 — a premium per-event fee cancelled the entry fee (#1206, PRs #1207 + the screen)
 
 An event with its own fee (`events.event_fee_cents > 0`) is a flat charge that replaces the
