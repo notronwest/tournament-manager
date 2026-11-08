@@ -5,6 +5,133 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-07 — the header stops offering pages that are empty (#1215, PR #1214)
+
+Ron: "The 'Start Times' and 'Live Results' should not be showing in the header until their are
+brackets that have started". Both pill buttons rendered unconditionally on the public
+tournament page, so before a schedule was published or a ball struck, two of the three header
+actions led to empty pages.
+
+- **Two conditions, deliberately different.** Start times appears once ANY bracket has a
+  `scheduled_start_at` — it is the question players ask the week before, so gating it on play
+  would surface it only after it stopped being useful. Live results waits for a match that is
+  `in_progress` or `completed`.
+- **"Under way" is read from `matches`, not `events.status`** — a bracket can sit at `ready`
+  with a full draw and no game played, and `LiveResultsPage` counts a game the same way. Same
+  signal both sides, so a visible button cannot open an empty page.
+- **Verified rendered, at 375px, against TEST** — all three states: times-and-no-play
+  (start times only), nothing-set (contact link alone, row intact), match-in-progress (both).
+  The third needed a match no test tournament had; one was inserted and deleted afterwards.
+  Typecheck clean, lint identical to base (31/4, all pre-existing), 465 unit tests pass, build ok.
+- **Design gate PASS, 0 blocking findings** (`47f30a2141bcddf6`), graded live at 375×812 and
+  1280×800. Row measured at 20px with the link alone and 84px with two pills plus the wrapped
+  link; no horizontal scroll in any state.
+- **Carried forward, not fixed here** (fixing them would invalidate the verdict):
+  the in-page Results tab uses a LOOSER threshold than the pill — it renders as soon as a match
+  row exists, so a drawn-but-unplayed bracket shows 0–0 standings there while the pill is
+  hidden, and the pill's threshold is the better one; and with both pills hidden
+  `Contact organizers →` is the card's only interactive element at 114×20px, which clears the
+  supplementary-link carve-out but would be better at ≥44px.
+- **Nothing says "times coming soon", and nothing should** — the Events tab already prints
+  "Start time to be announced" under every untimed event and the Results tab says scores appear
+  as games are played. A disabled pill would be a third copy in a louder place.
+- **Gap: no automated test covers the three header states.** The browser suite has no reference
+  to either button. Checked by hand; a test waits on the 12 newly-visible suite failures (#1212)
+  being triaged, since adding a state-dependent test to a red suite buys nothing.
+
+## 2026-11-07 — the browser tests never ran: runner pinned, a non-run now says so, and 12 hidden failures surfaced (#1210 → PR #1211; #1213 opened)
+
+Ron: "Fix the smoke test" — his go-ahead, and the build-route gate's stated exception, so this
+built in-session rather than going to Mr. Robot's lane. **PR #1211 merged to `main`.**
+
+**The defect.** `post-deploy-smoke.yml` and `regression.yml` ran on `ubuntu-latest`. GitHub
+moved that label to Ubuntu 26.04; Playwright 1.60 ships no chromium for it, so
+`playwright install --with-deps chromium` exits 1 **before any test runs**: `ERROR: Playwright
+does not support chromium on ubuntu26.04-x64`. Four consecutive nightly runs died there
+(2026-11-06 16:43 and 22:07, 2026-11-07 15:38 and 20:54, all `main`, all at the install step),
+and on 2026-11-07 it took the **production** post-deploy smoke with it on the night of the real
+promotion — PROD shipped unsmoked.
+
+**Part 1 — runners pinned to `ubuntu-24.04`**, reason and unpin exit condition inline at each
+`runs-on` and in `DEPLOYMENT.md`, beside the Supabase CLI pin recorded there the day before for
+the same class of break. Not a Playwright bump: that is the unpin, later, and its own change.
+
+**Part 2 — the reporting, which is why this went unnoticed for three days.** Checked the step
+lists rather than assuming: the nightly's Discord step **ran and succeeded on every failed
+night**, so the alert fired all along — it was simply *wrong about what it reported*, posting "a
+previously-fixed behavior may have regressed" when no test had run. That sent any reader hunting
+a regression that did not exist while zero coverage stayed hidden. A skipped suite now says it
+did not run. The production smoke, separately, reported **nothing at all**; it now posts on any
+non-pass and names which of three stages broke — deploy never served / browser would not install
+(**no test ran**) / a public page is broken — and with no webhook set it annotates the run
+rather than passing quietly.
+
+**Proven by a run, not by the diff** (run `42430247031`, branch, against TEST): install
+**success** (was failure), seed **success** (was skipped), suite **ran 6.2 minutes** (was
+skipped) → `12 failed, 3 flaky, 1 skipped, 48 passed`. The pin's claim was narrow — browsers
+install, tests execute — and it is met. The suite is **not green** and the PR does not say it is.
+
+**The 12 failures are what was hidden, filed as #1213** (pre-existing: no test had run since
+2026-11-05 and #1211 touched no app code). Triage order recorded there, led by
+`strict mode violation: getByRole('radiogroup', { name: /doubles self-rating/i }) resolved to 2
+elements` on the admin rating picker — a selector that used to match once is the shape of a real
+regression. Two others are **test data, not app bugs**: the public recap and credit-landing
+smokes render their empty states correctly ("This recap isn't available", "This offer isn't
+available") because the fixtures aren't there. That matters because **the production smoke runs
+that same spec** — production's own run of it passed on 2026-10-29, so this is not a prediction
+it will go red, but it is the first thing to check if it does.
+
+**Deliberately not done:** no shared notifier extracted (four workflows post via inline `curl`;
+worth a card, but a four-workflow refactor inside a CI repair makes the repair the hard part to
+review); `@playwright/test` not bumped; nothing merged to `production` and nothing promoted.
+
+**Still open:** the pin and the new reporting are on `main`, so the **production** smoke stays
+broken until a promotion carries these workflows to `production` — next promotion's job, Ron's
+call. And #1213's 12 failures.
+
+**Pattern, not three fixes.** Third silent-check failure this week, all the same shape — green
+or quiet, therefore assumed fine: the CLI `latest` break that stopped migrations reaching TEST
+for nine days behind green merges; this browser-suite break; a production smoke that told
+nobody. The generalisation — *a check that cannot run must not be able to look like a check that
+passed* — belongs in a convention and is written nowhere yet.
+
+## 2026-11-07 — promoted to PROD; the production smoke test never ran
+
+Ron: "Merge the promotion" / "And promote". Merged `main` → `production` (#1203, 39 commits,
+tip `918bc5e`). **PROD now has the three-level platform fee screen, the per-event-fee pricing
+fix, the definer→invoker fee-guard fix and the Supabase CLI pin.**
+
+- **Verified on PROD directly, not from a green check:** both `organizations.platform_fee_*`
+  columns present; migration `20261106120000` recorded in `schema_migrations`;
+  `compute_checkout_total` carries `partition by (override_cents > 0)` and its `prosrc` md5 is
+  **byte-identical to TEST's** (`c4622aef…`, 2842 bytes) — the same build whose real-path
+  re-run on TEST produced $140.00 / $160.00 / $75.00; all three fee guards report
+  `prosecdef = false` (invoker). `https://bertanderne.com` returns 200 and the live bundle
+  (`assets/index-CVhhZcvq.js`) contains "Platform fee levels" / "Search organizers" /
+  "Organizer unavailable", which exist only in the new screen — and PROD's previous tip
+  (`12faca8`, 2026-10-29) predates that screen, so the served bundle is from this promotion,
+  whose tree carries the pricing fix.
+- **No organizer's fee changed.** PROD's default is still 0% + $0.00, no tournament and no
+  organization sets its own, and the one event with its own fee (a kids bracket at $35.00
+  against first-event tiers of $55.00 / $45.00) prices as it always did.
+- **Migrations + edge functions: success. Post-deploy smoke: FAILURE — and it never ran a
+  test.** `npx playwright install --with-deps chromium` exited 1 with "Playwright does not
+  support chromium on ubuntu26.04-x64": GitHub moved `ubuntu-latest` to Ubuntu 26.04 and
+  Playwright 1.60 has no chromium for it. Pre-existing (the nightly suite has failed this way
+  since at least 2026-11-05), not caused by the deploy — but it means **this promotion
+  deployed with its automated smoke unexecuted**, and the manual checks above are the only
+  verification it got.
+- **Written up as #1210 with acceptance criteria, NOT built.** The fix is a one-line pin of
+  both browser-test workflows to `ubuntu-24.04` (plus the reason and the unpin exit condition,
+  beside the Supabase CLI pin in `DEPLOYMENT.md`). A session PR for it was refused by the
+  build-route gate — self-initiated builds in this repo belong on Mr. Robot's lane — and Ron
+  has not agreed this one, so it is a story awaiting his go, not a card marked agreed. The
+  working patch is in this session's scratchpad if someone wants it rather than a rebuild.
+- **Third silent-check failure this week** — the Supabase CLI `latest` break that stopped
+  migrations reaching TEST while merges showed green, the nightly browser suite, and this.
+  All three shared one shape: green or quiet, therefore assumed fine. Worth a convention, not
+  three separate fixes.
+
 ## 2026-11-07 — a premium per-event fee cancelled the entry fee (#1206, PRs #1207 + the screen)
 
 An event with its own fee (`events.event_fee_cents > 0`) is a flat charge that replaces the

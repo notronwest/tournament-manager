@@ -15,7 +15,13 @@ on:
 
 jobs:
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: GitHub moved `latest` to Ubuntu 26.04, for which
+    # Playwright 1.60 ships no chromium build, so `playwright install` exits 1 and
+    # the job fails before running a single test. It failed that way unnoticed from
+    # at least 2026-11-05, and on 2026-11-07 it took the production post-deploy
+    # smoke with it — a promotion deployed with its smoke never executed. Unpin once
+    # a Playwright release supports 26.04 and this repo is on it (see DEPLOYMENT.md).
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: web
@@ -93,10 +99,19 @@ jobs:
           TEST_RESULTS_WEBHOOK: ${{ secrets.DISCORD_TEST_RESULTS_WEBHOOK }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Three outcomes, not two. From 2026-11-05 this job could not install its
+          # browser, so the suite never ran — and every night it reported "a
+          # previously-fixed behavior may have regressed", sending whoever read it
+          # hunting for a regression that did not exist while the real fault (no
+          # tests at all) stayed hidden. A setup that never reached the tests must
+          # not be able to describe itself as a test failure.
           if [ "${{ steps.tests.outcome }}" = "success" ]; then
             msg="✅ Nightly regression: all acceptance-criteria tests passed."
+          elif [ "${{ steps.tests.outcome }}" = "skipped" ]; then
+            msg="❌ Nightly regression DID NOT RUN — setup failed before any test started, so nothing was checked tonight. This is not a regression; it is no coverage. $run_url"
           else
-            msg="❌ Nightly regression FAILED — a previously-fixed behavior may have regressed. ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            msg="❌ Nightly regression FAILED — a previously-fixed behavior may have regressed. $run_url"
           fi
           body="$(jq -Rn --arg m "$msg" '{content:$m}')"
           post() { curl -fsS -m 20 -X POST -H "Content-Type: application/json" -d "$body" "$1" >/dev/null; }
