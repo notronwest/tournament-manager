@@ -74,6 +74,18 @@ export function priceTiers(
   };
 }
 
+/**
+ * The brackets that carry their own flat price (event_fee_cents > 0), in the
+ * order given. A bracket priced by the tier is left out, so callers can show
+ * the "own price" treatment only where it carries information. Display only —
+ * the charge itself is `priceTiers` / `computeLineItems`.
+ */
+export function bracketsWithOwnPrice<T extends Event & { name: string }>(
+  events: T[],
+): T[] {
+  return events.filter((e) => e.event_fee_cents > 0);
+}
+
 export type LineItem = {
   event: Event;
   cents: number;

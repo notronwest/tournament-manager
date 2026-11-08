@@ -16,7 +16,7 @@
 // The matching proof that the database function now returns the same totals
 // for these same baskets is in the migration PR; this file guards the screen.
 import { describe, expect, it } from "vitest";
-import { computeLineItems, formatUsd, priceTiers } from "./pricing";
+import { bracketsWithOwnPrice, computeLineItems, formatUsd, priceTiers } from "./pricing";
 
 // The tier used for every case in the issue's table: $50.00 for the first
 // event, $20.00 for each additional, entry covers one event.
@@ -181,5 +181,29 @@ describe("priceTiers indicative prices (#1206)", () => {
       fullPrice: 5000,
       additionalPrice: 2000,
     });
+  });
+});
+
+describe("brackets that carry their own price are surfaced for display", () => {
+  const named = (id: string, ownFeeCents = 0) => ({ ...ev(id, ownFeeCents), name: id });
+
+  it("no bracket prices: nothing to show", () => {
+    expect(bracketsWithOwnPrice([named("a"), named("b")])).toEqual([]);
+  });
+
+  it("a bracket priced below the tier is listed, tier brackets are not", () => {
+    const out = bracketsWithOwnPrice([named("adult"), named("kids", 3500)]);
+    expect(out.map((e) => [e.id, e.event_fee_cents])).toEqual([["kids", 3500]]);
+    expect(3500).toBeLessThan(RATES.firstEventFeeCents);
+  });
+
+  it("a bracket priced above the tier is listed too", () => {
+    const out = bracketsWithOwnPrice([named("premium", 9000), named("adult")]);
+    expect(out.map((e) => e.id)).toEqual(["premium"]);
+    expect(9000).toBeGreaterThan(RATES.firstEventFeeCents);
+  });
+
+  it("the charged line item for such a bracket is the 'override' tier", () => {
+    expect(price([ev("kids", 3500)]).tierOf("kids")).toBe("override");
   });
 });

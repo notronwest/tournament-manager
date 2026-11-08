@@ -13,7 +13,7 @@ import { PartnerSearch } from "../../components/PartnerSearch";
 import { SectionTabs } from "../../components/SectionTabs";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { usePendingPayments, type PendingTournamentGroup } from "../../components/PendingPaymentsContext";
-import { formatUsd } from "../../lib/pricing";
+import { bracketsWithOwnPrice, formatUsd } from "../../lib/pricing";
 import { parseDescription } from "../../lib/descriptionBlocks";
 import { fetchTournamentRegCounts } from "../../lib/registrationCounts";
 import {
@@ -754,6 +754,11 @@ export default function PublicTournamentPage({
   // get the additional-event fee. Mirrors compute_checkout_total.
   const includedEvents = Math.max(1, activeTier?.first_events_included ?? 1);
   const isMultiTier = tiers.length > 1;
+  // Brackets with their own flat price replace the tier for that bracket, so
+  // the header and pricing panel have to say so or the tier price misleads.
+  const ownPriceBrackets = bracketsWithOwnPrice(events);
+  const hasOwnPrices = ownPriceBrackets.length > 0;
+  const showPricingPanel = isMultiTier || hasOwnPrices;
 
   // Does the signed-in player already hold an active registration in
   // THIS tournament? If so, any further event they register is an
@@ -896,6 +901,11 @@ export default function PublicTournamentPage({
                   +${(additionalFeeCents / 100).toFixed(0)} each additional event
                 </div>
               )}
+              {hasOwnPrices && (
+                <div style={{ fontSize: 12, color: inkMuted, marginTop: 1 }}>
+                  Some brackets are priced separately
+                </div>
+              )}
               {isMultiTier && activeTier && (
                 <div
                   style={{
@@ -913,7 +923,7 @@ export default function PublicTournamentPage({
                     : " · ongoing"}
                 </div>
               )}
-              {isMultiTier && (
+              {showPricingPanel && (
                 <button
                   onClick={() => setPricingExpanded((e) => !e)}
                   style={{
@@ -939,7 +949,7 @@ export default function PublicTournamentPage({
           )}
         </div>
         {/* Full pricing schedule — expanded on demand, inside the header. */}
-        {isMultiTier && pricingExpanded && (
+        {showPricingPanel && pricingExpanded && (
           <div
             style={{
               marginTop: 14,
@@ -1013,6 +1023,49 @@ export default function PublicTournamentPage({
                 </div>
               );
             })}
+            {hasOwnPrices && (
+              <>
+                <div
+                  style={{
+                    fontFamily: monoFontStack,
+                    fontSize: 11,
+                    color: courtBlue,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    padding: "10px 0 2px",
+                  }}
+                >
+                  Brackets with their own price
+                </div>
+                {ownPriceBrackets.map((b) => (
+                  <div
+                    key={b.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: 12,
+                      padding: "5px 0",
+                      borderBottom: `1px solid ${rule}`,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, color: ink, minWidth: 0 }}>
+                      {b.name}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: ink,
+                        textAlign: "right",
+                        flexShrink: 0,
+                      }}
+                    >
+                      ${(b.event_fee_cents / 100).toFixed(0)}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
         <span
@@ -2963,6 +3016,11 @@ function EventCard({
             >
               {event.name}
             </h3>
+            {event.event_fee_cents > 0 && (
+              <Pill bg={cream} fg={ink}>
+                ${(event.event_fee_cents / 100).toFixed(0)} · own price
+              </Pill>
+            )}
             {myStatus?.state === "paid" && (
               <Pill bg={successBg} fg={successFg}>Registered</Pill>
             )}

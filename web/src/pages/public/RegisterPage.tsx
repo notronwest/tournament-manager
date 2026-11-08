@@ -1605,7 +1605,7 @@ export default function RegisterPage() {
                     additional === 1 ? "1 extra event" : `${additional} extra events`,
                   );
                 if (override > 0)
-                  parts.push(`${override} flat-fee`);
+                  parts.push(`${override} own price`);
                 return parts.length > 0 ? (
                   <span style={{ color: inkSoft }}>
                     {" "}
@@ -2036,7 +2036,7 @@ function EventRow({
                       ? "included in entry"
                       : lineItem.tier === "additional"
                         ? "extra event"
-                        : "flat fee"}
+                        : "own price"}
                   )
                 </span>
               </div>
