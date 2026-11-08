@@ -5,6 +5,37 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-08 (later) — Loon's PROD pricing tiers corrected to match its own description
+
+Ron: "Fix the tiers". The public page advertised two different prices for the same tournament —
+the header price block read the tiers, the description prose read what the organizer wrote.
+
+| Tier | Window | Was | Now | Description says |
+|---|---|---|---|---|
+| Early bird | → 2026-12-20 05:00Z (Dec 19 EST) | $45.00 | **$55.00** | $55 through Dec 19 |
+| Regular | 2026-12-20 05:00Z → | $55.00 | **$65.00** | $65 starting Dec 20 |
+
+The *date windows were already right*; only the amounts were $10 low in each tier.
+`additional_event_fee_cents` is `0` on both and was not touched, so the header renders no
+"+$X each additional event" line.
+
+- **Nobody was repriced.** Checked before writing: `registrations` and `event_registrations`
+  for this tournament are both **empty** — zero rows in any status. No member's account was
+  touched, nothing was re-charged, and no paid registration captured the old number.
+- **Written by hand against PROD** through the Supabase MCP, dry-run in a
+  `begin … select … rollback` first (the rollback returned the exact intended rows), then the
+  two guarded `update`s — each carries `and first_event_fee_cents = <old>` so a re-run is inert.
+  Tier ids `e9082f96…` (early bird) and `03b2af2f…` (regular).
+- **Verified on the live page**, not on the write: bertanderne.com now reads **$55 · to register
+  · includes 1 event · EARLY BIRD · ENDS DEC 20**, agreeing with the prose two screens below it.
+
+### Left deliberately alone
+
+The **Kids 18 & Under Doubles** bracket keeps its own price of **$35.00**. Against the old $45
+tier that was a $10 discount; against $55 it is now **$20 below** the adult price. That may be
+exactly what LRT wants, but nobody has said so — and it is still invisible on the page until
+the per-bracket price display ships (#1218).
+
 ## 2026-11-08 — promoted to PROD; per-bracket pricing is invisible on the public page (#1218)
 
 Ron: "Promote it", then "Can we update the pricing on the tournament pages to signify that a
