@@ -5,6 +5,40 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-07 — the header stops offering pages that are empty (#1215, PR #1214)
+
+Ron: "The 'Start Times' and 'Live Results' should not be showing in the header until their are
+brackets that have started". Both pill buttons rendered unconditionally on the public
+tournament page, so before a schedule was published or a ball struck, two of the three header
+actions led to empty pages.
+
+- **Two conditions, deliberately different.** Start times appears once ANY bracket has a
+  `scheduled_start_at` — it is the question players ask the week before, so gating it on play
+  would surface it only after it stopped being useful. Live results waits for a match that is
+  `in_progress` or `completed`.
+- **"Under way" is read from `matches`, not `events.status`** — a bracket can sit at `ready`
+  with a full draw and no game played, and `LiveResultsPage` counts a game the same way. Same
+  signal both sides, so a visible button cannot open an empty page.
+- **Verified rendered, at 375px, against TEST** — all three states: times-and-no-play
+  (start times only), nothing-set (contact link alone, row intact), match-in-progress (both).
+  The third needed a match no test tournament had; one was inserted and deleted afterwards.
+  Typecheck clean, lint identical to base (31/4, all pre-existing), 465 unit tests pass, build ok.
+- **Design gate PASS, 0 blocking findings** (`47f30a2141bcddf6`), graded live at 375×812 and
+  1280×800. Row measured at 20px with the link alone and 84px with two pills plus the wrapped
+  link; no horizontal scroll in any state.
+- **Carried forward, not fixed here** (fixing them would invalidate the verdict):
+  the in-page Results tab uses a LOOSER threshold than the pill — it renders as soon as a match
+  row exists, so a drawn-but-unplayed bracket shows 0–0 standings there while the pill is
+  hidden, and the pill's threshold is the better one; and with both pills hidden
+  `Contact organizers →` is the card's only interactive element at 114×20px, which clears the
+  supplementary-link carve-out but would be better at ≥44px.
+- **Nothing says "times coming soon", and nothing should** — the Events tab already prints
+  "Start time to be announced" under every untimed event and the Results tab says scores appear
+  as games are played. A disabled pill would be a third copy in a louder place.
+- **Gap: no automated test covers the three header states.** The browser suite has no reference
+  to either button. Checked by hand; a test waits on the 12 newly-visible suite failures (#1212)
+  being triaged, since adding a state-dependent test to a red suite buys nothing.
+
 ## 2026-11-07 — the browser tests never ran: runner pinned, a non-run now says so, and 12 hidden failures surfaced (#1210 → PR #1211; #1213 opened)
 
 Ron: "Fix the smoke test" — his go-ahead, and the build-route gate's stated exception, so this
