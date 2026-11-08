@@ -33,6 +33,7 @@ jobs:
       # Timing out here FAILS the job — a deploy that never arrives is exactly
       # as bad as one that arrives broken, and must not pass quietly.
       - name: Wait for the new bundle to be serving
+        id: landed
         run: |
           url="https://bertanderne.com"
           before="$(curl -fsS --max-time 20 "$url" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
@@ -51,14 +52,47 @@ jobs:
         with: { node-version: "20", cache: npm, cache-dependency-path: web/package-lock.json }
       - run: npm ci
         working-directory: web
-      - run: npx playwright install --with-deps chromium
+      - name: Install the test browser
+        id: browsers
+        run: npx playwright install --with-deps chromium
         working-directory: web
 
       - name: Smoke the public pages
+        id: smoke
         working-directory: web
         env:
           E2E_BASE_URL: https://bertanderne.com
         run: npx playwright test e2e/smoke-public.spec.ts --project=chromium --reporter=line
+
+      # A production smoke that fails where nobody is told is not a safety net.
+      # Until 2026-11-07 this job reported NOTHING: it went red on the night of a
+      # real promotion and the only reason anyone knew was that someone went and
+      # looked. It also matters WHICH stage broke — "the deploy never landed",
+      # "the browser would not install" and "a public page is broken" need three
+      # different responses, and the middle one means no test ran at all.
+      # Inline curl rather than a shared notifier because that is this repo's
+      # existing shape (see migrations.yml and edge-functions.yml).
+      - name: Say so if the production smoke did not pass
+        if: always() && steps.smoke.outcome != 'success'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if [ "${{ steps.landed.outcome }}" != "success" ]; then
+            msg="❌ PROD smoke: the deploy never started serving. The promotion merged but bertanderne.com is still on the old bundle. $run_url"
+          elif [ "${{ steps.browsers.outcome }}" != "success" ]; then
+            msg="❌ PROD smoke DID NOT RUN — the test browser would not install, so production shipped unsmoked. This is not a failing test; it is no test. $run_url"
+          else
+            msg="❌ PROD smoke FAILED on a real check — a public page on bertanderne.com is broken after the promotion. $run_url"
+          fi
+          echo "$msg"
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "::warning::no webhook configured — this failure reached no channel, which looks exactly like a quiet pass"
+            exit 0
+          fi
+          curl -fsS -m 20 -X POST -H "Content-Type: application/json" \
+            -d "$(jq -Rn --arg m "$msg" '{content:$m}')" "$DISCORD_WEBHOOK" >/dev/null \
+            || echo "::warning::the webhook refused the post — this failure reached no channel"
 
       - uses: actions/upload-artifact@v4
         if: failure()
