@@ -5,6 +5,161 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-08 (evening) — "own price" replaced with what it costs to enter (#1221, PR #1220)
+
+Ron, shown the bracket pill on a preview of his own tournament: "I don't like Own Price." Given
+three alternatives he picked **"to enter"**. The label was the data model's word for
+`events.event_fee_cents` on a public page — **"own" has no referent for a player**, who has no
+idea there is a tier this price is an alternative to.
+
+| Where | Was | Now |
+|---|---|---|
+| Bracket card pill | `$35 · own price` | `$35 to enter` |
+| Pricing-schedule heading | `Brackets with their own price` | `Brackets priced separately` |
+| Register + checkout line parenthetical | `own price` | `bracket price` |
+| Register summary parts | `2 own price` | `2 brackets priced separately` |
+
+No layout, colour, spacing or component change. `bracket price` sits in the series beside
+`registration` / `included in registration` / `additional event`; the singular is no longer the
+fragment `1 own price`.
+
+- **"to enter" is complete-admission, not a surcharge.** Entering that bracket costs $35 flat
+  whatever the tier, whatever the pick order, and regardless of `alreadyHasPaidEvent` — overrides
+  are filtered out of the entry-fee ordering, and the tournament-level entry fee column went away
+  in `20260529160000`. A surcharge reading would need a `+`, which the sibling line one row up
+  does use.
+- **Design gate PASS** (`3c05c93c5e49e4ff`), graded against the running app at 390×844 and
+  1280×800. The pill got *narrower*: 99.8px against 115.9px, so the flex-wrap row it shares with
+  Registered / Pending payment / Awaiting partner is strictly improved. Ink on cream 15.4:1.
+- Typecheck, build and 20/20 pricing tests pass; lint unchanged from `main`.
+- **Verified on the test site at 390px** after the rebuild: the kids bracket reads `$35 TO ENTER`,
+  the other two brackets carry no price, and the pricing panel's section reads `BRACKETS PRICED
+  SEPARATELY / Kids 18 & Under Doubles — $35` under the $45 and $55 tiers.
+
+### A throwaway fixture now lives on TEST
+
+`e2e-test/loon-preview` is a copy of the real Loon tournament — same three brackets, same times,
+$45/$55 tiers, $35 kids bracket — seeded so Ron could click the change with his own numbers
+instead of a dummy $30/$20 one. Fixed ids under `5100a1ee-…`; delete it when it stops earning
+its keep.
+
+### Carried, not fixed
+
+The design critic's one note, deliberately not blocking: the register summary's
+`N brackets priced separately` names the *object* where its siblings name a *charge* (`Entry`,
+`1 included`, `1 extra event`). Something charge-shaped (`1 bracket price`) would sit in the
+series better. Fixing it would have invalidated the PASS verdict for another round.
+
+Bigger than this diff: `PartnerAcceptPage` labels this same number "Entry fee" while the rest of
+the product uses *entry* for the charge it replaces. Pre-dates this change; not widened by it.
+
+### Still on test only
+
+None of the per-bracket price work — the display or this wording — is on the live site.
+
+## 2026-11-08 (latest) — SUPERSEDES the entry below it: Loon is $45 / $55, and the description now says so
+
+Ron: "We changed the price down and forgot to update the description." I had it backwards.
+The entry below reconciled the two by **raising the tiers** to match the prose. Wrong direction —
+the $45 / $55 tiers were the newer, deliberate price **cut**, and the prose was the stale half.
+
+**Live state now, both halves agreeing:**
+
+| Tier | Window | first_event_fee_cents |
+|---|---|---|
+| Early bird | → 2026-12-20 05:00Z | **4500** ($45) |
+| Regular | 2026-12-20 05:00Z → | **5500** ($55) |
+
+Description sentence now reads: *"Registration is $45 per player through December 19, then $55
+starting December 20."*
+
+- Tiers reverted to their pre-session values; the description edited in the same transaction-shaped
+  pass. Dry-run `begin … select … rollback` first, then guarded `update`s (`and
+  first_event_fee_cents = <old>`, and a `description like '%<old sentence>%'` guard), so a re-run
+  is inert.
+- **Still nobody repriced** — `registrations` and `event_registrations` for this tournament remain
+  empty, as they were before the first change. The whole round trip touched no member's account.
+- **Verified on bertanderne.com**: header reads **$45 · to register · includes 1 event · EARLY
+  BIRD · ENDS DEC 20**, and the paragraph below it reads $45 / $55.
+- The **Kids 18 & Under** bracket at **$35** is back to being a $10 break against the adult price,
+  which is what it was designed as. No longer an open question.
+
+### The real defect underneath
+
+A tournament's price lives in **two places that are maintained by hand and drifted**: the pricing
+tiers (what the player is actually charged) and the free-text description (what the organizer typed).
+Nothing links them and nothing warns when they disagree — which is how a live page advertised two
+different prices for the same tournament, and how a session "fixing" it could pick the wrong one.
+Worth a card: either the description should not carry prices at all, or the editor should flag prose
+whose dollar figures contradict the configured tiers.
+
+## 2026-11-08 (later) — Loon's PROD pricing tiers corrected to match its own description
+
+Ron: "Fix the tiers". The public page advertised two different prices for the same tournament —
+the header price block read the tiers, the description prose read what the organizer wrote.
+
+| Tier | Window | Was | Now | Description says |
+|---|---|---|---|---|
+| Early bird | → 2026-12-20 05:00Z (Dec 19 EST) | $45.00 | **$55.00** | $55 through Dec 19 |
+| Regular | 2026-12-20 05:00Z → | $55.00 | **$65.00** | $65 starting Dec 20 |
+
+The *date windows were already right*; only the amounts were $10 low in each tier.
+`additional_event_fee_cents` is `0` on both and was not touched, so the header renders no
+"+$X each additional event" line.
+
+- **Nobody was repriced.** Checked before writing: `registrations` and `event_registrations`
+  for this tournament are both **empty** — zero rows in any status. No member's account was
+  touched, nothing was re-charged, and no paid registration captured the old number.
+- **Written by hand against PROD** through the Supabase MCP, dry-run in a
+  `begin … select … rollback` first (the rollback returned the exact intended rows), then the
+  two guarded `update`s — each carries `and first_event_fee_cents = <old>` so a re-run is inert.
+  Tier ids `e9082f96…` (early bird) and `03b2af2f…` (regular).
+- **Verified on the live page**, not on the write: bertanderne.com now reads **$55 · to register
+  · includes 1 event · EARLY BIRD · ENDS DEC 20**, agreeing with the prose two screens below it.
+
+### Left deliberately alone
+
+The **Kids 18 & Under Doubles** bracket keeps its own price of **$35.00**. Against the old $45
+tier that was a $10 discount; against $55 it is now **$20 below** the adult price. That may be
+exactly what LRT wants, but nobody has said so — and it is still invisible on the page until
+the per-bracket price display ships (#1218).
+
+## 2026-11-08 — promoted to PROD; per-bracket pricing is invisible on the public page (#1218)
+
+Ron: "Promote it", then "Can we update the pricing on the tournament pages to signify that a
+particular event has a different price?"
+
+- **Promoted** (PR #1217, `main` → `production`, merged 12:54 UTC, production now `525cf82`).
+  Shipped: the conditional header buttons (#1215), the `ubuntu-24.04` runner pin and the
+  non-run guard (#1210), the design-gate verdict, and docs. **No migration, no new secret** —
+  frontend + CI only, so no production schema change.
+- **Verified on the live site, not on a green tick.** Bundle moved
+  `index-CVhhZcvq.js` → `index-DHnER_P_.js`. The one published PROD tournament (2026 Loon Race
+  Team, 3 brackets with start times, 0 matches played) now renders `🕘 START TIMES` and
+  `Contact organizers →` with **no Live results button** — the exact state the change targets.
+- **The runner pin reaches `production` for the first time**, so the production post-deploy
+  smoke can install chromium again. It had been failing to install since `ubuntu-latest` moved
+  to 26.04, which is why the previous promotion deployed with no automated verification.
+
+### The new finding: the page never says a bracket is priced differently
+
+PROD has exactly one bracket with its own price — **Kids 18 & Under Doubles, $35.00**, under an
+active tier of **$45 first / $5 additional**. The public tournament page shows `$45 to register`
+in the header, the bracket card shows name + status + start time, and the pricing-schedule panel
+lists only tiers. **Nothing on the page says $35.** The charge is correct (both `computeLineItems`
+and `compute_checkout_total` handle the override, fixed earlier this week), but the page misleads
+on the way in — and an organizer setting a *higher* premium price has no way to show it at all.
+
+Filed as a build card with acceptance criteria covering four surfaces: the bracket card, the
+header price block, the pricing-schedule panel, and the `override` line-item label on register +
+checkout (which currently falls through to the word "additional", which is wrong).
+
+### Unrelated, seen while verifying — organizer data, not code
+
+The Loon Race Team description prose says "Registration is $55 per player through December 19,
+then $65 starting December 20", while its configured tiers charge **$45 / $5**. The page shows
+both. Someone should reconcile the tiers with the prose before registration volume picks up.
+
 ## 2026-11-07 — the header stops offering pages that are empty (#1215, PR #1214)
 
 Ron: "The 'Start Times' and 'Live Results' should not be showing in the header until their are
@@ -3963,3 +4118,8 @@ skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in 
 - Reviewer gate asked for a 390×844 case on `/admin/platform` (D-0047). Added to `web/e2e/mobile/audit.spec.ts` (Organizers tab, row editor open: no overflow, `Save fee` in viewport, ≥44px targets). Seeds a dedicated platform admin `e2e-platform@wmpc.test`.
 - Not run green: needs the E2E test-DB secrets, and the regression workflow targets deployed TEST, which lacks this screen until merge. Typecheck + lint on changed files clean.
 - Next: reviewer re-reviews on push; first nightly after merge is the real run of the new case.
+
+## 2026-11-08 — #1218 bracket own-price display (Builder)
+- Branch `feature/issue-1218-bracket-own-price`: bracket card Pill, header line, pricing-panel section, and `own price` line-item label on register/checkout. Display only; pricing math untouched. Helper `bracketsWithOwnPrice` + tests in `pricing.test.ts`.
+- Pricing panel/toggle now also appears for single-tier tournaments that have an own-price bracket.
+- Next: design-gate verdict, push, open PR, move card to In Review (board moves were rate-limited earlier).

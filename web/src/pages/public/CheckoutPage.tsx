@@ -1071,7 +1071,7 @@ export default function CheckoutPage() {
                         ? "included in registration"
                         : it.tier === "additional"
                           ? "additional event"
-                          : "event fee"}
+                          : "bracket price"}
                     )
                   </span>
                 </span>
