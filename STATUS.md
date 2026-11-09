@@ -5,6 +5,39 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-09 — per-bracket pricing is LIVE; the kids bracket says what it costs (PR #1222)
+
+Ron: "Pr, merge and promote to production". Promoted `main` → `production`, merged 01:07 UTC,
+production now `bc68a0b`, live bundle `index-DHnER_P_.js` → `index-DBMLbv8w.js`.
+
+**Verified on the real live tournament at 390px**, bertanderne.com, not on a green tick:
+
+- header: `$45 · to register · includes 1 event` **+ `Some brackets are priced separately`**
+- **Kids 18 & Under Doubles** card: **`$35 TO ENTER`**, sitting above its start time and beside
+  the `≤18` age pill, nothing wrapping or overflowing
+- Social Doubles and Competitive Doubles: **no price at all** — they are the $45, so the label
+  only appears where it carries information
+- pricing panel: `Early bird $45 / Regular $55 / BRACKETS PRICED SEPARATELY — Kids 18 & Under
+  Doubles $35`
+
+That closes the gap opened earlier the same day: the page advertised $45 while that bracket
+charged $35, and nothing on it said so.
+
+**Blast radius was display-only.** No migration, no new secret, no edge function. `computeLineItems`
+and `compute_checkout_total` untouched — nobody's charge changed by a cent. Exactly one bracket in
+one tournament carries `event_fee_cents > 0` on production, so exactly one card gained a label.
+
+**Shipped in this promotion:** the per-bracket price display (#1218), the wording change from
+"own price" to "to enter" (#1221), and the STATUS entries for the day.
+
+### Open
+
+- The register summary's `N brackets priced separately` still names the object where its siblings
+  name a charge. Accurate, out of step, not worth another design-gate round on its own.
+- `PartnerAcceptPage` calls this same number "Entry fee" while the rest of the product uses *entry*
+  for the charge it replaces. Pre-dates all of this.
+- The throwaway `e2e-test/loon-preview` fixture is still on TEST.
+
 ## 2026-11-08 (evening) — "own price" replaced with what it costs to enter (#1221, PR #1220)
 
 Ron, shown the bracket pill on a preview of his own tournament: "I don't like Own Price." Given
