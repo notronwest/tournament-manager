@@ -5,6 +5,42 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-08 (latest) — SUPERSEDES the entry below it: Loon is $45 / $55, and the description now says so
+
+Ron: "We changed the price down and forgot to update the description." I had it backwards.
+The entry below reconciled the two by **raising the tiers** to match the prose. Wrong direction —
+the $45 / $55 tiers were the newer, deliberate price **cut**, and the prose was the stale half.
+
+**Live state now, both halves agreeing:**
+
+| Tier | Window | first_event_fee_cents |
+|---|---|---|
+| Early bird | → 2026-12-20 05:00Z | **4500** ($45) |
+| Regular | 2026-12-20 05:00Z → | **5500** ($55) |
+
+Description sentence now reads: *"Registration is $45 per player through December 19, then $55
+starting December 20."*
+
+- Tiers reverted to their pre-session values; the description edited in the same transaction-shaped
+  pass. Dry-run `begin … select … rollback` first, then guarded `update`s (`and
+  first_event_fee_cents = <old>`, and a `description like '%<old sentence>%'` guard), so a re-run
+  is inert.
+- **Still nobody repriced** — `registrations` and `event_registrations` for this tournament remain
+  empty, as they were before the first change. The whole round trip touched no member's account.
+- **Verified on bertanderne.com**: header reads **$45 · to register · includes 1 event · EARLY
+  BIRD · ENDS DEC 20**, and the paragraph below it reads $45 / $55.
+- The **Kids 18 & Under** bracket at **$35** is back to being a $10 break against the adult price,
+  which is what it was designed as. No longer an open question.
+
+### The real defect underneath
+
+A tournament's price lives in **two places that are maintained by hand and drifted**: the pricing
+tiers (what the player is actually charged) and the free-text description (what the organizer typed).
+Nothing links them and nothing warns when they disagree — which is how a live page advertised two
+different prices for the same tournament, and how a session "fixing" it could pick the wrong one.
+Worth a card: either the description should not carry prices at all, or the editor should flag prose
+whose dollar figures contradict the configured tiers.
+
 ## 2026-11-08 (later) — Loon's PROD pricing tiers corrected to match its own description
 
 Ron: "Fix the tiers". The public page advertised two different prices for the same tournament —
