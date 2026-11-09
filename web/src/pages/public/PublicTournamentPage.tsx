@@ -1035,7 +1035,7 @@ export default function PublicTournamentPage({
                     padding: "10px 0 2px",
                   }}
                 >
-                  Brackets with their own price
+                  Brackets priced separately
                 </div>
                 {ownPriceBrackets.map((b) => (
                   <div
@@ -3018,7 +3018,7 @@ function EventCard({
             </h3>
             {event.event_fee_cents > 0 && (
               <Pill bg={cream} fg={ink}>
-                ${(event.event_fee_cents / 100).toFixed(0)} · own price
+                ${(event.event_fee_cents / 100).toFixed(0)} to enter
               </Pill>
             )}
             {myStatus?.state === "paid" && (
