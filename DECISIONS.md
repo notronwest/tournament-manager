@@ -4265,6 +4265,60 @@ up to half an hour to start.
 an unlabelled Backlog card as queued; moving the tick under 5 minutes, or removing the floor, the
 meter or the live-holder lock check, without new measurements.
 
+### D-0304 — A promotion waits for him only when its diff loses data, touches money, or changes what a member sees — not simply because it is a promotion
+
+*2026-11-08 · scope: `agents/STOP-LIST.md, conventions/stop-list-claude-block.md, .wmpc/stop-list/STOP-LIST.md, .github/workflows/**, infrastructure/claude-settings/commands/promote.md` · source: Ron 2026-11-08 — "So I have to approve every promotion?? That's ridiculous", and on being shown the measurement and the proposed split, "Yes. Three exceptions". Measured the same night across the four branch-routed apps: 81 production promotions in 30 days (club-dashboard 44, wmpc-web 16, tournament-manager 13, third-shot-academy 8), EVERY one already a bundle, so the old row meant 81 presses — while only 1 of the 90 open ledger asks was a promotion and 1 of the 8 most recent dashboard promotions carried an authorisation line.*
+
+**Decision.**
+
+1. **A promotion is not on the stop list because it is a promotion.** It is on the list when its
+   `main`→`production` diff carries one of **three** things:
+   - **(a) it deletes or rewrites existing club data** — destructive DDL, a data delete, a
+     backfill that overwrites rows. *Not* an additive migration (a new table, a new column, a new
+     view), which is what nearly all of them are.
+   - **(b) it touches money** — billing, charges, credits, pricing a member pays.
+   - **(c) it changes something a member sees or receives** — a public page, a price members can
+     see, a send.
+
+   None of the three → it promotes once it is reviewed and green, and the session says it did.
+
+2. **The classification is read off the diff, and recorded.** Never inferred from the PR title,
+   never left to whoever is asking, and never asserted without the evidence (D-0097). The verdict
+   and what produced it go into the promotion PR, so a later reader can see why a promotion did
+   not wait. The classifier **fails closed**: a diff it cannot classify is his.
+
+3. **Rows 1 and 2 are untouched, and they are the real backstop.** Anything a member receives
+   (row 1) and money on a member's account (row 2) wait for him wherever they originate — so
+   exception (c) is not the only thing standing between a promotion and a member, and a promotion
+   that ships a send still cannot send without him.
+
+4. **His press, where it is still required, is still a row he pressed.** D-0236 is unchanged: for
+   any actor that is not the session he is typing in, the only admissible evidence is a
+   `public.cos_approvals` row he decided. Narrowing *when* the press is needed does not weaken
+   *what counts as* the press.
+
+5. **`ship_prod` stays a stop-list kind.** The action kind is unchanged and no migration is
+   needed; what changed is which promotions produce one.
+
+**Why.** The row was written as a subject — *promotion* — and D-0302 had just established that a
+row names an **act**. Read as a subject it meant 81 presses in 30 days, about three a day, every
+promotion already bundled so there was nothing left to bundle. And it was not happening: 1 of 90
+open asks was a promotion, and 1 of the 8 most recent dashboard promotions carried an authorisation
+line. The 81 went through sessions he was typing in (D-0204), which is legitimate — so the written
+rule and the practice had come apart, and the written rule was the one that was wrong.
+
+The obvious narrowing was rejected on measurement rather than taste: "no schema change promotes
+itself" would barely help, because **37 migration files reached the dashboard's live branch across
+those 44 promotions** (`fd17f9f3`..`origin/production`, 574 files changed). Schema change is routine
+here. What is *not* routine is a schema change that destroys something — which is why (a) is about
+data loss and not about migrations.
+
+**Forbids.** Requiring his press for a promotion whose diff carries none of the three. Deciding
+which it is from the PR title, the branch name, or the asking actor rather than from the diff.
+Promoting a diff the classifier could not read. Treating this as any loosening of rows 1 and 2, or
+of what counts as his approval (D-0236). Recording a promotion as unattended without the verdict
+that justified it.
+
 ## Proposed (not binding yet)
 
 _None._
