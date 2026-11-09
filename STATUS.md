@@ -5,6 +5,58 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-08 (evening) — "own price" replaced with what it costs to enter (#1221, PR #1220)
+
+Ron, shown the bracket pill on a preview of his own tournament: "I don't like Own Price." Given
+three alternatives he picked **"to enter"**. The label was the data model's word for
+`events.event_fee_cents` on a public page — **"own" has no referent for a player**, who has no
+idea there is a tier this price is an alternative to.
+
+| Where | Was | Now |
+|---|---|---|
+| Bracket card pill | `$35 · own price` | `$35 to enter` |
+| Pricing-schedule heading | `Brackets with their own price` | `Brackets priced separately` |
+| Register + checkout line parenthetical | `own price` | `bracket price` |
+| Register summary parts | `2 own price` | `2 brackets priced separately` |
+
+No layout, colour, spacing or component change. `bracket price` sits in the series beside
+`registration` / `included in registration` / `additional event`; the singular is no longer the
+fragment `1 own price`.
+
+- **"to enter" is complete-admission, not a surcharge.** Entering that bracket costs $35 flat
+  whatever the tier, whatever the pick order, and regardless of `alreadyHasPaidEvent` — overrides
+  are filtered out of the entry-fee ordering, and the tournament-level entry fee column went away
+  in `20260529160000`. A surcharge reading would need a `+`, which the sibling line one row up
+  does use.
+- **Design gate PASS** (`3c05c93c5e49e4ff`), graded against the running app at 390×844 and
+  1280×800. The pill got *narrower*: 99.8px against 115.9px, so the flex-wrap row it shares with
+  Registered / Pending payment / Awaiting partner is strictly improved. Ink on cream 15.4:1.
+- Typecheck, build and 20/20 pricing tests pass; lint unchanged from `main`.
+- **Verified on the test site at 390px** after the rebuild: the kids bracket reads `$35 TO ENTER`,
+  the other two brackets carry no price, and the pricing panel's section reads `BRACKETS PRICED
+  SEPARATELY / Kids 18 & Under Doubles — $35` under the $45 and $55 tiers.
+
+### A throwaway fixture now lives on TEST
+
+`e2e-test/loon-preview` is a copy of the real Loon tournament — same three brackets, same times,
+$45/$55 tiers, $35 kids bracket — seeded so Ron could click the change with his own numbers
+instead of a dummy $30/$20 one. Fixed ids under `5100a1ee-…`; delete it when it stops earning
+its keep.
+
+### Carried, not fixed
+
+The design critic's one note, deliberately not blocking: the register summary's
+`N brackets priced separately` names the *object* where its siblings name a *charge* (`Entry`,
+`1 included`, `1 extra event`). Something charge-shaped (`1 bracket price`) would sit in the
+series better. Fixing it would have invalidated the PASS verdict for another round.
+
+Bigger than this diff: `PartnerAcceptPage` labels this same number "Entry fee" while the rest of
+the product uses *entry* for the charge it replaces. Pre-dates this change; not widened by it.
+
+### Still on test only
+
+None of the per-bracket price work — the display or this wording — is on the live site.
+
 ## 2026-11-08 (latest) — SUPERSEDES the entry below it: Loon is $45 / $55, and the description now says so
 
 Ron: "We changed the price down and forgot to update the description." I had it backwards.
