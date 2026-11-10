@@ -111,7 +111,7 @@ export default function TournamentWaitlistPage() {
         supabase
           .from("event_registrations")
           .select(
-            "id, event_id, player_id, status, partner_status, waitlist_position, registered_at, players(id, first_name, last_name, email, phone), events!inner(tournament_id)",
+            "id, event_id, player_id, status, partner_status, waitlist_position, registered_at, players!event_registrations_player_id_fkey(id, first_name, last_name, email, phone), events!inner(tournament_id)",
           )
           .eq("events.tournament_id", t.id)
           .is("deleted_at", null)

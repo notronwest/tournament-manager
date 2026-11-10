@@ -136,7 +136,7 @@ function ExportSection({
     const { data, error: regErr } = await supabase
       .from("event_registrations")
       .select(
-        "id, event_id, partner_registration_id, status, seed, players(first_name, last_name, email, phone, city, state, gender, dob), events!inner(tournament_id, deleted_at)",
+        "id, event_id, partner_registration_id, status, seed, players!event_registrations_player_id_fkey(first_name, last_name, email, phone, city, state, gender, dob), events!inner(tournament_id, deleted_at)",
       )
       .eq("events.tournament_id", tournament.id)
       .is("deleted_at", null)

@@ -104,7 +104,7 @@ export async function fetchPlayerRegistrations(
   if (partnerRegIds.length > 0) {
     const { data: partnerRegs, error: pErr } = await supabase
       .from("event_registrations")
-      .select("id, players(first_name, last_name)")
+      .select("id, players!event_registrations_player_id_fkey(first_name, last_name)")
       .in("id", partnerRegIds);
     if (pErr) throw new Error(pErr.message);
     type RawPartner = {
@@ -418,7 +418,7 @@ export async function fetchEventRegistrants(eventId: string): Promise<
 > {
   const { data, error } = await supabase
     .from("event_registrations")
-    .select("id, player_id, partner_status, players(first_name, last_name)")
+    .select("id, player_id, partner_status, players!event_registrations_player_id_fkey(first_name, last_name)")
     .eq("event_id", eventId)
     .is("deleted_at", null)
     .not("status", "in", INACTIVE_STATUSES);
