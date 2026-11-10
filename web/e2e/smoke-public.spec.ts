@@ -27,7 +27,16 @@ import { SEED } from "./fixtures";
 // so there the recap is the seeded completed tournament and /credit correctly
 // says "isn't available". Asserting production's content on TEST made both
 // recap/credit checks fail every night for a reason that was not a bug.
-const IS_PROD = /(^|\/\/|\.)bertanderne\.com/i.test(process.env.E2E_BASE_URL ?? "");
+// Exact host match: `test.bertanderne.com` (TEST) must NOT count as prod. An
+// unset or unparseable base is non-prod.
+const IS_PROD = (() => {
+  try {
+    const host = new URL(process.env.E2E_BASE_URL ?? "").hostname.toLowerCase();
+    return host === "bertanderne.com" || host === "www.bertanderne.com";
+  } catch {
+    return false;
+  }
+})();
 
 const PAGES = [
   { name: "home", path: "/", expect: /pickleball/i, skip: false },
