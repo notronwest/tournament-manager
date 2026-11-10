@@ -177,7 +177,10 @@ async function seedScenario(kind: ScenarioKind): Promise<{ data: ScenarioData; c
     // The test creates this player through the UI "add new player" form —
     // we only need a run-unique email so it can never collide with another
     // run's leftover (the old fixed "e2e-newpartner@wmpc.test" was #546).
-    data.newPartner = { first: "Nina", last: `Newcomer${id}`, email: `e2e-newpartner-${id}@wmpc.test` };
+    // NOT `e2e-newpartner-${id}`: the registrant is `e2e-${kind}-${id}` and
+    // kind is "newPartner", so that address is the registrant's own once the
+    // case is folded — the "new" partner would be the registrant themselves.
+    data.newPartner = { first: "Nina", last: `Newcomer${id}`, email: `e2e-nina-${id}@wmpc.test` };
     extraEmails.push(data.newPartner.email);
   }
 
