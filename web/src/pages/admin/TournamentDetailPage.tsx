@@ -180,7 +180,7 @@ export default function TournamentDetailPage() {
       supabase
         .from("event_registrations")
         .select(
-          "id, withdrawal_requested_at, withdrawal_reason, entitled_refund_cents, players(first_name, last_name), events!inner(name, event_fee_cents, tournament_id)",
+          "id, withdrawal_requested_at, withdrawal_reason, entitled_refund_cents, players!event_registrations_player_id_fkey(first_name, last_name), events!inner(name, event_fee_cents, tournament_id)",
         )
         .eq("events.tournament_id", tData.id)
         .not("withdrawal_requested_at", "is", null)
@@ -356,7 +356,7 @@ export default function TournamentDetailPage() {
     // "*" so the lagging-typed checked_in_at column comes back at runtime.
     const { data, error: gErr } = await supabase
       .from("event_registrations")
-      .select("*, players(id, first_name, last_name, email, phone)")
+      .select("*, players!event_registrations_player_id_fkey(id, first_name, last_name, email, phone)")
       .eq("event_id", eventId)
       .is("deleted_at", null)
       .in("status", SPOT_HOLDING_STATUSES);

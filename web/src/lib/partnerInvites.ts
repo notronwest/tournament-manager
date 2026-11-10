@@ -125,7 +125,7 @@ export async function fetchPendingPartnerInvites(tournamentId: string): Promise<
   const affectedEventIds = [...new Set(rows.map((r) => r.event_id))];
   const { data: regData, error: rErr } = await supabase
     .from("event_registrations")
-    .select("id, event_id, player_id, status, partner_status, partner_registration_id, players(first_name, last_name, email)")
+    .select("id, event_id, player_id, status, partner_status, partner_registration_id, players!event_registrations_player_id_fkey(first_name, last_name, email)")
     .in("event_id", affectedEventIds)
     .is("deleted_at", null);
   if (rErr) throw new Error(rErr.message);

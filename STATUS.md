@@ -4156,3 +4156,9 @@ skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in 
 - Branch `feature/issue-1218-bracket-own-price`: bracket card Pill, header line, pricing-panel section, and `own price` line-item label on register/checkout. Display only; pricing math untouched. Helper `bracketsWithOwnPrice` + tests in `pricing.test.ts`.
 - Pricing panel/toggle now also appears for single-tier tournaments that have an own-price bracket.
 - Next: design-gate verdict, push, open PR, move card to In Review (board moves were rate-limited earlier).
+
+## 2026-11-10 — #1216 nightly E2E partner-step failures (Builder)
+- Cause: the guardian-registrations migration (`20261027120000`) added `event_registrations.registered_by_player_id → players`, a second FK to `players`. Every bare `players(...)` embed on `event_registrations` became ambiguous, so PostgREST refused it ("more than one relationship") — the Manage-registration dialog showed that alert and never closed on Assign partner.
+- Fix: named the constraint (`players!event_registrations_player_id_fkey(...)`, as AttendeesPage already does) in the 8 remaining bare embeds. App code; no spec changed.
+- Not verified here: no E2E secrets in a build run. After merge + TEST deploy, dispatch **Nightly regression (E2E)** on `main` and link the run on the card. `registration.spec.ts:30`/`:49` may share the cause; if either still fails, it is a separate (flaky-on-first-load) problem.
+- Seen, not touched: other red specs in the same run (#55, #860, #862, smoke-public) — #860/#862 trip on the new TEST-environment banner being a second `role=status`.
