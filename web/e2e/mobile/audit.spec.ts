@@ -200,16 +200,16 @@ test.describe("mobile audit — layout assertions", () => {
   });
 
   // ── Public recap page (#1108), signed out: the summary report must render
-  //    (not the "isn't available" empty state) and the "Create your account"
-  //    CTA at the foot of the page must be reachable and tappable — this is
+  //    (not the "isn't available" empty state) and the "Learn More" CTA at the
+  //    foot of the page must be reachable and tappable — this is
   //    the surface the thank-you email link actually opens on a phone.
-  test("recap page — Create your account CTA usable", async ({ page }, ti) => {
+  test("recap page — Learn More CTA usable", async ({ page }, ti) => {
     await page.goto(`/t/${SEED.orgSlug}/${SEED.recap.tournamentSlug}/recap`);
     await snap(page, ti, "tournament-recap");
 
     await expect(page.getByText(/this recap isn't available/i)).not.toBeVisible();
-    const cta = page.getByRole("link", { name: /create your account/i });
-    await assertCtaUsable(page, cta, "recap page — Create your account CTA");
+    const cta = page.getByRole("link", { name: /learn more/i });
+    await assertCtaUsable(page, cta, "recap page — Learn More CTA");
   });
 
   // ── Guardian surfaces (#1169), populated: Gwen has one dependent (Kit) with
@@ -233,7 +233,8 @@ test.describe("mobile audit — layout assertions", () => {
     await loginAs(page, SEED.family.guardianEmail);
     await gotoRegister(page, SEED.orgSlug, SEED.family.tournamentSlug);
     await tapClear(page.getByRole("button", { name: /^register$/i }).first());
-    const chooser = page.getByLabel("Registering for");
+    // exact: the open card is also a dialog labelled "Registering for <event>".
+    const chooser = page.getByLabel("Registering for", { exact: true });
     await expect(chooser).toBeVisible();
     await snap(page, ti, "registering-for-chooser");
     await assertNoPageOverflow(page, "Registering-for chooser");
