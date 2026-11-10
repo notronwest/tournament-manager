@@ -4,14 +4,15 @@ import { getEnvLabel } from "../lib/env";
 // environment (TEST / DEV). Renders nothing on production — see getEnvLabel(),
 // which is fail-safe toward prod. Kept in normal document flow (not sticky) so
 // it doesn't collide with the sticky SiteHeader / impersonation-banner stack.
+// Deliberately NOT role="status": it is a static label, not a live region, and
+// a second status region on every TEST page made the app's real save
+// confirmations ambiguous to assistive tech and to getByRole("status") specs.
 export default function EnvBanner() {
   const label = getEnvLabel();
   if (!label) return null;
 
   return (
     <div
-      role="status"
-      aria-live="polite"
       style={{
         width: "100%",
         background: "var(--warning, #d97706)",

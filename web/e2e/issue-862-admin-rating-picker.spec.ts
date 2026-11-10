@@ -37,7 +37,7 @@ test.describe("#862 admin player profile: rating picker + gender parity", () => 
 
     // AC 1 — same component (chip radiogroup, not a number box) for all three
     // rating fields, with the Profile page's labels.
-    const doubles = page.getByRole("radiogroup", { name: /doubles self-rating/i });
+    const doubles = page.getByRole("radiogroup", { name: /^doubles self-rating$/i });
     const mixed = page.getByRole("radiogroup", { name: /mixed doubles self-rating/i });
     const singles = page.getByRole("radiogroup", { name: /singles self-rating/i });
     await expect(doubles).toBeVisible();
@@ -66,7 +66,7 @@ test.describe("#862 admin player profile: rating picker + gender parity", () => 
     // Reload — the saved value (number or null) persists exactly as stored,
     // not just held in local component state.
     await page.reload();
-    const chip40Again = page.getByRole("radiogroup", { name: /doubles self-rating/i }).getByRole("radio", { name: "4.0" });
+    const chip40Again = page.getByRole("radiogroup", { name: /^doubles self-rating$/i }).getByRole("radio", { name: "4.0" });
     await expect(chip40Again).toHaveAttribute("aria-checked", wasSelected ? "false" : "true");
 
     // Restore the original value so this spec is idempotent across reruns.
@@ -82,7 +82,7 @@ test.describe("#862 admin player profile: rating picker + gender parity", () => 
     await loginAs(page, SEED.organizerEmail);
     await page.goto(`/admin/players/${playerId}?org=${SEED.orgSlug}`);
 
-    const doubles = page.getByRole("radiogroup", { name: /doubles self-rating/i });
+    const doubles = page.getByRole("radiogroup", { name: /^doubles self-rating$/i });
     await expect(doubles).toBeVisible();
     const chips = doubles.getByRole("radio");
     const count = await chips.count();
