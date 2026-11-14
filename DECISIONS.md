@@ -4406,7 +4406,7 @@ any part of this record.
 
 ### D-0324 — A tournament launch is one fact sheet that fans out — the new launch repo orchestrates, and never owns a second login, a second asset pipeline or a second approval path
 
-*2026-11-14 · scope: `"**tournament-launch*, **launch-kit*, **flyer*, **tournament-listing*"` · source: Ron 2026-11-14 — "We do 3 major tournaments a year … Each tournament needs a tournament added to PickleballTournaments.com and Bert & Erne. We need a pt.com image, an 8x11 flyer that can be printed and emailed and a social media image and post. Each site needs different data. I'd love this to be as hands off for me as possible." Then four answers in session: start from last year's copy and confirm only what changed; artwork changes words and dates only; ONE press releases the whole kit; launch kit only, no run-up.*
+*2026-11-14 · scope: `"**tournament-launch*, **launch-kit*, **flyer*, **tournament-listing*, **pbcom*"` · source: Ron 2026-11-14 — "We do 3 major tournaments a year … Each tournament needs a tournament added to PickleballTournaments.com and Bert & Erne. We need a pt.com image, an 8x11 flyer that can be printed and emailed and a social media image and post. Each site needs different data. I'd love this to be as hands off for me as possible." Then four answers in session: start from last year's copy and confirm only what changed; artwork changes words and dates only; ONE press releases the whole kit; launch kit only, no run-up.*
 
 **Decision.** The club's three majors a year are launched from **one fact sheet per edition** — dates,
 divisions, fees, deadlines, venue, format, one photo slot — held in a **new repo, `tournament-launch`**.
