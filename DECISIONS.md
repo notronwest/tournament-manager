@@ -4404,6 +4404,50 @@ superseded here, not reverted in a branch; adding an `-ink` sibling for a hue wh
 to be darkened anyway; and citing a contrast script that does not exist as the enforcer of
 any part of this record.
 
+### D-0324 — A tournament launch is one fact sheet that fans out — the new launch repo orchestrates, and never owns a second login, a second asset pipeline or a second approval path
+
+*2026-11-14 · scope: `"**tournament-launch*, **launch-kit*, **flyer*, **tournament-listing*"` · source: Ron 2026-11-14 — "We do 3 major tournaments a year … Each tournament needs a tournament added to PickleballTournaments.com and Bert & Erne. We need a pt.com image, an 8x11 flyer that can be printed and emailed and a social media image and post. Each site needs different data. I'd love this to be as hands off for me as possible." Then four answers in session: start from last year's copy and confirm only what changed; artwork changes words and dates only; ONE press releases the whole kit; launch kit only, no run-up.*
+
+**Decision.** The club's three majors a year are launched from **one fact sheet per edition** — dates,
+divisions, fees, deadlines, venue, format, one photo slot — held in a **new repo, `tournament-launch`**.
+A new edition **opens as a copy of the last one** and asks only for what moved. Everything downstream is
+derived from that sheet, so the two listings and the three images cannot disagree.
+
+**The new repo orchestrates; it owns no second copy of anything that already exists:**
+
+1. **The PickleballTournaments.com listing** is driven by the **existing tournament-site driver** in
+   `tournament-manager` (`pbcom-driver`), reusing the mini's persistent director session and its
+   `PBCOM-PUSH-HOST` singleton + OTP re-auth ping (D-0045, D-0050). Adding *listing creation* to a driver
+   that today only creates brackets and pushes scores is **traced first, exactly as D-0045 required for
+   the push** — the create flow, and whether it carries a fee or a terms click, are unknown until the
+   capture. No second login, no second profile, no headless credential.
+2. **The listing in Bert & Erne** is written through `tournament-manager`'s own API as the club tenant. It is
+   club ops consuming the product, not a new product feature.
+3. **The three images and the post copy** are produced **without a design tool**: the drill-studio shape
+   (`pb-drills`) — a spec rendering to a self-contained page, screenshotted deterministically — gives a
+   print-resolution 8.5×11" flyer, the tournament-site image and the social image from the same sheet.
+   **This is why no Canva tier is on the critical path.** When a template ever needs Canva autofill or a
+   Meta post, it goes through **`marketing-api`**, which keeps the Canva and Meta custody (D-0019). The
+   launch repo never holds those keys and is not a second marketing service.
+4. **One press releases the kit.** The drafted listings and images arrive as a **single Hopper card**;
+   Ron's press is a `cos_approvals` row (D-0236) and only then do the listings go public. **The social
+   post is delivered as image + caption for Ron to post** — Facebook app review is still with Meta, and
+   group posting is gone from the Graph API for good.
+
+**Scope is the launch kit only.** No deadline reminders, no filling-up counter, no recap — Ron's call,
+revisited after one tournament has run through it.
+
+**Why.** His ask was a new repo; three of the four moving parts already have homes with credentials,
+singletons and gates built. A repo that re-logged into the tournament site, re-held a Canva key or
+re-invented the approval path would duplicate the fleet's three most sensitive custodies to save a
+function call. The orchestrator is thin on purpose: the sheet, the fan-out, the one card.
+
+**Forbids.** No tournament-site credential, Canva key or Meta token in the launch repo. No second
+PickleballTournaments.com session or profile — the mini's director session is the only path. No listing
+published without the pressed approval row. No listing-create build before the director-session trace.
+No auto-posting to public social. No asset pipeline in the launch repo once `marketing-api` covers a
+case — extend that service instead.
+
 ## Proposed (not binding yet)
 
 _None._
