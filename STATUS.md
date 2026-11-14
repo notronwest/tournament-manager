@@ -4178,3 +4178,8 @@ Rework (same day, reviewer): smoke-public `IS_PROD` regex also matched `test.ber
 - Nightly E2E still red after #1226: iphone-only failure in the PB.com import preview audit. Cause: the import page's file input is disabled until the tournament loads and `onFile` drops earlier files; the test uploaded immediately and lost the race on WebKit.
 - Fix (PR #1229): test waits for the input to be enabled before `setInputFiles`. No app change.
 - Next: green on the next nightly run on `main` is the proof; red files a new card.
+
+## 2026-11-14 — #1230 driver alerts ring the phone (Builder)
+- `pbcom-driver/src/alert.ts` posted to Discord with no suppress-notifications flag. Alert payload now built by `alertPayload()`: `flags: 4096` plus `allowed_mentions: {parse: []}`. New `tests/alert.test.ts` stubs fetch and asserts both on the outgoing body (PR #1231).
+- Known: 3 host-gate tests (auto, partners, run) fail on `main` too; untouched.
+- Next: merge; the next driver alert should arrive silently.
