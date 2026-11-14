@@ -69,6 +69,18 @@ function safe(kind: string): string {
   return kind.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 64);
 }
 
+/** Discord SUPPRESS_NOTIFICATIONS flag: the post whispers instead of buzzing a phone (D-0308). */
+const SUPPRESS_NOTIFICATIONS = 4096;
+
+/** The webhook body: quiet (flags 4096, OR'd so no other flag is lost) and mention-proof. */
+export function alertPayload(message: string): {
+  content: string;
+  flags: number;
+  allowed_mentions: { parse: never[] };
+} {
+  return { content: message, flags: 0 | SUPPRESS_NOTIFICATIONS, allowed_mentions: { parse: [] } };
+}
+
 /** Posts to a Discord webhook. Best-effort, deduped, never throws. */
 export class DiscordAlerter implements Alerter {
   constructor(private readonly webhookUrl: string | null) {}
@@ -90,7 +102,7 @@ export class DiscordAlerter implements Alerter {
       const res = await fetch(this.webhookUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content: message }),
+        body: JSON.stringify(alertPayload(message)),
       });
       if (!res.ok) {
         log.warn("discord alert POST returned non-2xx", { kind, status: res.status });
