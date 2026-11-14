@@ -163,7 +163,11 @@ test.describe("mobile audit — layout assertions", () => {
       "LastName,FirstName,Email,AttendeeHeaderID,ActivityID,TeamID,Event 1,ServiceFee_Total",
       "Rivera,Alex,mobile-audit-alex@example.com,mobile-audit-header-1,mobile-audit-act-1,,Mens Doubles Skill: (3.0 To 3.49),65.00",
     ].join("\n");
-    await page.locator('input[type="file"]').setInputFiles({
+    // The input is disabled until the tournament row loads, and onFile ignores
+    // a file chosen before that — WebKit (iphone) won it the race too often.
+    const fileInput = page.locator('input[type="file"]');
+    await expect(fileInput).toBeEnabled();
+    await fileInput.setInputFiles({
       name: "pb-mobile-audit.csv",
       mimeType: "text/csv",
       buffer: Buffer.from(csv, "utf-8"),
