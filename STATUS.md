@@ -4173,3 +4173,8 @@ Four test-side causes, none a product bug: recap CTA copy is "Learn More" (spec 
 Update (same day): fifth cause is product code — PublicTournamentPage reload() raced itself (signed-out run finishing after the signed-in one wrote me=null, so Register bounced a signed-in player to /profile); now only the newest run writes identity state. The family fixture's child was seeded WITH a login, which makes is_guardian_of() inert (checkout read "Nothing to pay for"); seeded account-less now. Regression run on this branch (against TEST, which does not yet have the app fix): 88 passed, 2 flaky, 1 failed — the failure and flakes are all the /profile bounce.
 
 Rework (same day, reviewer): smoke-public `IS_PROD` regex also matched `test.bertanderne.com`, so TEST would still assert prod-only content. Now an exact hostname match (`bertanderne.com`/`www`); unset/unparseable = non-prod. Next: reviewer re-review; after merge + TEST deploy, dispatch Nightly regression on main.
+
+## 2026-11-14 — #1228 PB import phone check race (Builder)
+- Nightly E2E still red after #1226: iphone-only failure in the PB.com import preview audit. Cause: the import page's file input is disabled until the tournament loads and `onFile` drops earlier files; the test uploaded immediately and lost the race on WebKit.
+- Fix (PR #1229): test waits for the input to be enabled before `setInputFiles`. No app change.
+- Next: green on the next nightly run on `main` is the proof; red files a new card.
