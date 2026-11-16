@@ -1070,6 +1070,14 @@ export default function SchedulePage() {
         </div>
       )}
 
+      {/* Sits above the plan whose times it changes, so it's on the first
+          screen on a phone rather than under the plan list. */}
+      <EstimateAtMaxNotice
+        rows={rows}
+        on={estimateAtMax}
+        onChange={setEstimateAtMax}
+      />
+
       {locked && tournament.schedule_locked_at && (
         <div
           role="status"
@@ -1154,7 +1162,7 @@ export default function SchedulePage() {
               </p>
               {rows.some((r) => r.atMax) && (
                 <p style={{ margin: "0 0 8px" }}>
-                  Times are estimated with every event at its max teams, so events that don't fill will finish early.
+                  Events that aren't full are timed at their max teams, so any that don't fill will finish early.
                 </p>
               )}
               <p style={{ margin: 0 }}>
@@ -1187,11 +1195,6 @@ export default function SchedulePage() {
           >
             Print schedule
           </button>
-          <EstimateAtMaxNotice
-            rows={rows}
-            on={estimateAtMax}
-            onChange={setEstimateAtMax}
-          />
           {/* Stats strip */}
           <div
             style={{
@@ -2682,7 +2685,7 @@ function EstimateAtMaxNotice({
     <div
       role="note"
       style={{
-        marginTop: 16,
+        marginTop: 12,
         padding: 12,
         background: on ? warnBg : bg,
         border: `1px solid ${on ? warnFg : rule}`,
@@ -2717,8 +2720,10 @@ function EstimateAtMaxNotice({
         style={{
           minHeight: 44,
           padding: "8px 16px",
-          background: on ? "#ffffff" : courtBlue,
-          color: on ? courtBlue : "#ffffff",
+          // A view toggle, not the page's primary action — outlined so it
+          // never competes with the filled Auto-schedule button.
+          background: "#ffffff",
+          color: courtBlue,
           border: `1px solid ${courtBlue}`,
           borderRadius: 6,
           fontSize: 13,
