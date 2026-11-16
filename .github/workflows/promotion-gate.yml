@@ -1,0 +1,20 @@
+# Required check on every pull request whose base is `production`, and no other (#1232).
+# Make "Promotion gate / gate" a required status check on the `production` branch.
+name: Promotion gate
+
+on:
+  pull_request:
+    branches: [production]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    uses: ./.github/workflows/promotion-gate-reusable.yml
+    secrets: inherit

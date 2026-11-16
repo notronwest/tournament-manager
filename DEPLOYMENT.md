@@ -91,6 +91,26 @@ how a magic link generated on localhost ends up pointing at production.
 
 Runbook: [`docs/RELEASE_PROCESS.md`](./docs/RELEASE_PROCESS.md) · Pages setup detail is in [`CLAUDE.md`](./CLAUDE.md)
 
+### promotion gate — required check on `production`
+
+Every `main`→`production` pull request runs `.github/workflows/promotion-gate.yml`
+(job `gate`, calling `promotion-gate-reusable.yml`), so the check context is
+**`gate / gate`**. It reads the diff and writes a verdict into the PR: a promotion
+that (a) deletes or rewrites data (destructive DDL, deletes, or an edited/removed
+migration), (b) touches money (pricing, quotes, fees, coupons, donations, checkout,
+refunds, Stripe), or (c) ships to the public site or sends (`web/src`, `web/public`,
+edge functions, email templates) — or that it cannot classify — waits for a decided
+approval row. Fails closed. Rules: `scripts/promotion-gate/rules.mjs`; tests:
+`node --test scripts/promotion-gate/*.test.mjs`. `promotion-gate-probe.yml` runs
+daily and proves the lookup works.
+
+Secrets (repo Actions secrets, both set): `PROMOTION_GATE_SUPABASE_URL`,
+`PROMOTION_GATE_SUPABASE_KEY` (a publishable key — the probe fails if it is
+service-role). Optional `PROMOTION_GATE_ALERT_WEBHOOK` for a phone alert.
+Making `gate / gate` a **required** check on `production` is a branch-ruleset
+setting done outside this repo, after the first green run — until then it reports
+but does not block.
+
 ### migrations — supabase-migrations
 
 `.github/workflows/migrations.yml` picks PROD-vs-TEST secrets by triggering
