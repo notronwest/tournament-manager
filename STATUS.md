@@ -4183,3 +4183,5 @@ Rework (same day, reviewer): smoke-public `IS_PROD` regex also matched `test.ber
 - `pbcom-driver/src/alert.ts` posted to Discord with no suppress-notifications flag. Alert payload now built by `alertPayload()`: `flags: 4096` plus `allowed_mentions: {parse: []}`. New `tests/alert.test.ts` stubs fetch and asserts both on the outgoing body (PR #1231).
 - Known: 3 host-gate tests (auto, partners, run) fail on `main` too; untouched.
 - Next: merge; the next driver alert should arrive silently.
+## 2026-11-15 — #1232 promotion gate
+Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to `production`, daily probe, `scripts/promotion-gate/` (rules tuned to this repo: money = pricing/quotes/fees/Stripe/checkout; member-facing = web/src, web/public, edge functions, email templates; migrations judged by content). 39 unit tests pass. DEPLOYMENT.md updated. Next: first green run on a real promotion PR, then daemon makes the check required on `production`.

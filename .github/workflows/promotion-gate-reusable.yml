@@ -1,0 +1,49 @@
+# Promotion gate, reusable (#1232, D-0304). A main -> production promotion waits for Ron only when
+# its diff (a) deletes or rewrites club data, (b) touches money, or (c) changes what a member sees
+# or receives. Reads the DIFF; fails closed; the only evidence accepted is a decided
+# public.cos_approvals row (D-0236). Ported from club-dashboard (#1232);
+# runs the scripts in this repo. The rule lists live in scripts/promotion-gate/rules.mjs.
+name: Promotion gate (reusable)
+
+on:
+  workflow_call:
+    secrets:
+      PROMOTION_GATE_SUPABASE_URL:
+        required: false
+      PROMOTION_GATE_SUPABASE_KEY:
+        required: false
+      PROMOTION_GATE_ALERT_WEBHOOK:
+        description: Discord webhook that puts a gate fault on Ron's phone
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Probe the approval lookup (fails loudly and alerts; the verdict below still posts)
+        continue-on-error: true
+        env:
+          PROMOTION_GATE_SUPABASE_URL: ${{ secrets.PROMOTION_GATE_SUPABASE_URL }}
+          PROMOTION_GATE_SUPABASE_KEY: ${{ secrets.PROMOTION_GATE_SUPABASE_KEY }}
+          PROMOTION_GATE_ALERT_WEBHOOK: ${{ secrets.PROMOTION_GATE_ALERT_WEBHOOK }}
+        run: node scripts/promotion-gate/probe.mjs
+      - name: Classify the promotion and look for an approval row
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_GATE_SUPABASE_URL: ${{ secrets.PROMOTION_GATE_SUPABASE_URL }}
+          PROMOTION_GATE_SUPABASE_KEY: ${{ secrets.PROMOTION_GATE_SUPABASE_KEY }}
+          PROMOTION_GATE_ALERT_WEBHOOK: ${{ secrets.PROMOTION_GATE_ALERT_WEBHOOK }}
+        run: node scripts/promotion-gate/run.mjs
