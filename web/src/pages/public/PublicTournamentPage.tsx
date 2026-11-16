@@ -240,6 +240,7 @@ export default function PublicTournamentPage({
   // price meta shown in the header and the math used at checkout.
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [loading, setLoading] = useState(true);
+  const reloadSeq = useRef(0);
   const [error, setError] = useState<string | null>(null);
   // The signed-in user's player record. Needed for the inline
   // register/cancel actions (we insert event_registrations.player_id
@@ -343,6 +344,13 @@ export default function PublicTournamentPage({
   const reload = useCallback(async () => {
     if (!orgSlug || !tournamentSlug) return;
     setError(null);
+    // reload() re-runs whenever `user` changes, and the first run (signed out,
+    // before the session is restored) can still be awaiting when the second
+    // (signed in) finishes. Without this, the slow signed-out run landed last
+    // and wrote me = null over a signed-in player, so Register read "signed in
+    // with no profile" and bounced them to /profile. Only the newest run may
+    // write the identity-dependent state.
+    const seq = ++reloadSeq.current;
 
     // Fetch org → tournament → events. Anon-keyed Supabase client
     // hits the same RLS as a logged-in non-member: published-only.
@@ -465,6 +473,7 @@ export default function PublicTournamentPage({
     }
 
     if (!user || !evs || evs.length === 0) {
+      if (seq !== reloadSeq.current) return;
       // Anon visitor — clear any stale state from a previous session.
       setMe(null);
       setMyStatus(new Map());
@@ -483,6 +492,7 @@ export default function PublicTournamentPage({
       .eq("auth_user_id", user.id)
       .is("deleted_at", null)
       .maybeSingle();
+    if (seq !== reloadSeq.current) return;
     setMe(myPlayer ?? null);
 
     if (!myPlayer) {
@@ -682,9 +692,9 @@ export default function PublicTournamentPage({
   }, [orgSlug, tournamentSlug, user]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     void reload();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [reload]);
 
   // Open every tournament on Details first. The component instance persists

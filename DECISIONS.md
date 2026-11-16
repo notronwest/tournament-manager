@@ -2752,57 +2752,6 @@ Re-labelling an issue that carries `ruled`. Adding a rail's own artifact to a re
 allowlist instead of excluding it at the writer (D-0144). Installing a rail whose committed enable
 fact says `no`, or re-filing an approval Ron has denied.
 
-### D-0157 — A colour is measured where it is used, and a brand fill is not text ink
-
-*2026-10-13 · scope: `web/src/tokens.css, design-system/tokens.css, docs/DESIGN_PREFERENCES.md, docs/BRAND.md, infrastructure/design-gate/**` · source: Ron 2026-10-13, on the table's output — "yes to D-0157, do the wmpc-meta tokens first". Originally: club-dashboard's design gate (D-0065) measured --primary #007cff at 3.94:1 on white, on every link and button label in the dashboard, and left it below the line on five consecutive passes because repainting a brand colour is not a branch's call (club-dashboard #507, 2026-10-12). Table of five repo voices run 2026-10-13 — five concerns, no veto; every ratio below computed from the token files on origin/main, not quoted.*
-
-**Decision.** Four parts, and part 2 is the one that is usually got wrong.
-
-1. **The floor binds where a colour is used, not where it is declared.** 4.5:1 for text under
-   24px (19px bold), 3:1 for larger text and for the boundary of a control — measured against the
-   surface the text actually sits on. For this fleet that is **two** surfaces, not one: `--surface`
-   / `--bg` *and* `--surface-sunken` (table zebra, wells, inset rows). A value that passes on white
-   and fails in a table row fails.
-2. **A fill that carries a label is measured against its label.** "Brand fill is not text ink" is
-   half the rule, and alone it is wrong, because contrast is symmetric: white on `#f97316` is the
-   same 2.80:1 as `#f97316` on white. So a brand keeps its fill only if the label on it passes —
-   by darkening the fill, or by putting a dark label on it (navy `#05052d` on TSA orange is
-   **7.03:1**). An ink token does not rescue a filled button.
-3. **Text gets an ink token of the same hue; no brand value is repainted as "drift".**
-   `--<name>-ink` is a darkened sibling that passes on both surfaces; links, labels and
-   meaning-bearing icons use it, the fill token fills. club-dashboard already ships exactly this
-   (`--brand-green-ink #2f7a00`, 5.38:1) and third-shot-academy's brand brief already names its
-   ink (`#C2410C`, 4.88:1 on its cream). **`#007cff` and `#2563eb` are declared brand values, not
-   drift** — the first session to look called club-dashboard's blue drift and was wrong.
-4. **wmpc-meta fixes its own template first.** The canonical set violates the rule it would
-   publish: `--primary #1a73e8` is 4.51:1 on white but **4.05:1 on `--surface-sunken`**;
-   `--text-subtle #9ca3af` is **2.54:1** while being declared for "empty-state" (disabled and
-   placeholder are exempt under WCAG 1.4.3; empty-state prose is not), `--warning #d97706` is
-   **3.19:1**. Each gets a measured ink sibling or a recorded exemption naming which use is exempt.
-
-Then each product repo converts in its own change, behind its own D-0047 phone gate.
-
-**Why.** The number was already written (design checklist #14) and still shipped, because it bound
-on diffs instead of on the thing that decides thousands of pixels at once. Five voices priced it and
-none of them disputed the floor; what they showed is that the obvious enforcement is theatre. A
-check over declared tokens reports green in **tournament-manager** while 50 raw `#2563eb` literals
-and 26 inline `color:` declarations render the customer-facing registration path, and in
-**rating-session-manager** while the brand blue is hardcoded as 12–13px link text and `#999`
-(2.85:1) dates sit on white. That is why enforcement stays on rendered pixels. The bill is real, and
-Ron accepted it when he made this active (2026-10-13): 124 `color: var(--primary)` call sites in
-club-dashboard, 60 in third-shot-academy across 29 files, a hex-to-token migration in the other two,
-and a hand-copy propagation step in wmpc-meta, which has no CI to hang a check on. Active does not
-mean paid: it is paid in the order the Decision sets — wmpc-meta's tokens first (wmpc-meta#51), then
-each product repo converts in its own change — and until a repo's change lands, its unconverted call
-sites are known debt under this record, not evidence that the record is not yet binding.
-
-**Forbids.** Shipping a colour as text without measuring it against every surface it lands on.
-Calling another repo's declared brand value "drift" and repainting it. Claiming the ink/fill split
-fixes a filled button. Letting a token-level checker stand in for the rendered-pixel gate, or a
-repo report compliance while its colour is raw hex at the call site. Re-arguing the ratio in a
-design-gate pass once this record is active — a value that fails is fixed here, in the register,
-not noted again below the line.
-
 ### D-0169 — A session never writes in a shared checkout
 
 *2026-10-13 · scope: `infrastructure/git-guards/**, infrastructure/presence/**, infrastructure/worktrees/**` · source: Ron, 2026-10-13 — "do all three"; loop plan step 3, "the one that actually ends it"*
@@ -4240,6 +4189,15 @@ resolves to KEEP. Design and the verification of all three proofs:
    The session says which, in the PR body: `In-session-build: <reason>`.
 4. **The gate** (`build-route-gate`) refuses a session-built PR in a served repo that names no
    such reason. It is a routing check, so it fails open on anything it cannot read.
+   **A promotion is not a build and never needed a reason** — base `production`, head `main`. It is
+   a release of code the lane already built and the reviewer already passed, carrying no commits of
+   its own, and the lane has no way to take one: its branches are `feature|db|fn/issue-<N>-…` opened
+   against `main`, and nothing in BUILDER-REPOS promotes. The gate shipped reading only the head, so
+   it refused one on 2026-11-09 and offered a build card as the route — which is not a place a
+   release can go. It now reads the base too, and exempts exactly that pair; a feature branch onto
+   `production`, `main` onto `main`, and `main` onto any other branch are all still refused
+   (negative-controlled in `test-build-route-gate.sh`). Whether the promotion itself waits for Ron is
+   a different question with its own gate and its own record (D-0304).
 5. **Ron is told when it ships, and his phone does not ring for it.** When the reviewer merges a
    PR whose issue carries `build:agreed`, it posts one line to the channel his cards arrive in: what
    finished, and the link. Before this, an unassisted build finished with no word anywhere. Both this
@@ -4265,6 +4223,306 @@ up to half an hour to start.
 an unlabelled Backlog card as queued; moving the tick under 5 minutes, or removing the floor, the
 meter or the live-holder lock check, without new measurements.
 
+### D-0304 — A promotion waits for him only when its diff loses data, touches money, or changes what a member sees — not simply because it is a promotion
+
+*2026-11-08 · scope: `agents/STOP-LIST.md, conventions/stop-list-claude-block.md, .wmpc/stop-list/STOP-LIST.md, .github/workflows/**, infrastructure/claude-settings/commands/promote.md` · source: Ron 2026-11-08 — "So I have to approve every promotion?? That's ridiculous", and on being shown the measurement and the proposed split, "Yes. Three exceptions". Measured the same night across the four branch-routed apps: 81 production promotions in 30 days (club-dashboard 44, wmpc-web 16, tournament-manager 13, third-shot-academy 8), EVERY one already a bundle, so the old row meant 81 presses — while only 1 of the 90 open ledger asks was a promotion and 1 of the 8 most recent dashboard promotions carried an authorisation line.*
+
+**Decision.**
+
+1. **A promotion is not on the stop list because it is a promotion.** It is on the list when its
+   `main`→`production` diff carries one of **three** things:
+   - **(a) it deletes or rewrites existing club data** — destructive DDL, a data delete, a
+     backfill that overwrites rows. *Not* an additive migration (a new table, a new column, a new
+     view), which is what nearly all of them are.
+   - **(b) it touches money** — billing, charges, credits, pricing a member pays.
+   - **(c) it changes something a member sees or receives** — a public page, a price members can
+     see, a send.
+
+   None of the three → it promotes once it is reviewed and green, and the session says it did.
+
+2. **The classification is read off the diff, and recorded.** Never inferred from the PR title,
+   never left to whoever is asking, and never asserted without the evidence (D-0097). The verdict
+   and what produced it go into the promotion PR, so a later reader can see why a promotion did
+   not wait. The classifier **fails closed**: a diff it cannot classify is his.
+
+3. **Rows 1 and 2 are untouched, and they are the real backstop.** Anything a member receives
+   (row 1) and money on a member's account (row 2) wait for him wherever they originate — so
+   exception (c) is not the only thing standing between a promotion and a member, and a promotion
+   that ships a send still cannot send without him.
+
+4. **His press, where it is still required, is still a row he pressed.** D-0236 is unchanged: for
+   any actor that is not the session he is typing in, the only admissible evidence is a
+   `public.cos_approvals` row he decided. Narrowing *when* the press is needed does not weaken
+   *what counts as* the press.
+
+5. **`ship_prod` stays a stop-list kind.** The action kind is unchanged and no migration is
+   needed; what changed is which promotions produce one.
+
+**Why.** The row was written as a subject — *promotion* — and D-0302 had just established that a
+row names an **act**. Read as a subject it meant 81 presses in 30 days, about three a day, every
+promotion already bundled so there was nothing left to bundle. And it was not happening: 1 of 90
+open asks was a promotion, and 1 of the 8 most recent dashboard promotions carried an authorisation
+line. The 81 went through sessions he was typing in (D-0204), which is legitimate — so the written
+rule and the practice had come apart, and the written rule was the one that was wrong.
+
+The obvious narrowing was rejected on measurement rather than taste: "no schema change promotes
+itself" would barely help, because **37 migration files reached the dashboard's live branch across
+those 44 promotions** (`fd17f9f3`..`origin/production`, 574 files changed). Schema change is routine
+here. What is *not* routine is a schema change that destroys something — which is why (a) is about
+data loss and not about migrations.
+
+**Forbids.** Requiring his press for a promotion whose diff carries none of the three. Deciding
+which it is from the PR title, the branch name, or the asking actor rather than from the diff.
+Promoting a diff the classifier could not read. Treating this as any loosening of rows 1 and 2, or
+of what counts as his approval (D-0236). Recording a promotion as unattended without the verdict
+that justified it.
+
+### D-0307 — Every deployed surface owes an end-to-end check, and a daily sweep names the ones without
+
+*2026-11-08 · scope: `**e2e*, **playwright*, .github/workflows/**, **COVERAGE-ROOTS*` · source: Ron, 2026-11-08 — "come up with E2E testing that could be created and create it ... a schedule is created to check daily if E2E testing needs to be updated"*
+
+**Decision.** Every repo with a **deployed surface** — a site, a Worker, an API a
+member or Ron can reach — owes two things: an end-to-end check that drives that
+surface, and a workflow that runs it. Every other repo owes tests that something
+actually runs. Which repos owe which is a committed fact,
+`infrastructure/e2e-coverage/COVERAGE-ROOTS`, and `expect: none` requires a
+written reason on the line.
+
+A gap is not a matter of opinion: `audit.sh` reads each repo's own facts —
+tracked files, its workflows, its router, its git log, its last green run — and
+names the gap. A **sweep that cannot run is a fault**, not a pass: unreadable or
+empty roots exits 2 and says to treat the day as unchecked.
+
+**Why.** On 2026-11-08 eight of thirteen repos carried tests that **nothing ever
+ran**, and three deployed surfaces had no end-to-end check at all — including the
+club's phone system, where a break means the club stops answering. A `test`
+script with no CI looked identical to a covered repo, and its existence was the
+evidence that the behaviour was covered. That is D-0093's failure repeated: the
+guard was built and nobody watched the thing that watches.
+
+It is deliberately **arithmetic, not an agent**. The fleet already ran the other
+shape — a daily `claude -p` testing agent — and it died in a stale lock for
+eleven days while every tick logged "skip" and nothing alarmed. Its own retirement
+note wrote the rebuild conditions: a heartbeat on a completed run, a stale reclaim
+on the lock, a `JOBS` line, and an answer to "what tells me this stopped
+working?". All four bind here, and a `grep`-and-`git` judgement cannot quietly
+become vague the way a prompt can.
+
+The alert fingerprints the **whole finding set**, so a standing list of gaps
+speaks once and a gap that appears tomorrow speaks tomorrow. A daily nag gets
+muted inside a week, and a muted coverage check is worse than none because it
+looks like cover.
+
+**Forbids.** Adding a repo to `COVERAGE-ROOTS` with `expect: none` to silence a
+real gap. Marking a surface covered on the strength of tests no workflow runs.
+Letting the sweep report a clean fleet it did not check — a missing checkout, an
+empty roots file or an unreadable `gh` is reported as unknown or as a fault, never
+as green. Replacing the deterministic audit with a model-driven one without first
+answering, in its own `DESIGN.md`, the four conditions the retired agent failed.
+
+### D-0313 — A token that is both a fill and an ink is darkened, and the brand value is recorded beside it
+
+*2026-11-10 · scope: `web/src/tokens.css, design-system/tokens.css, docs/DESIGN_PREFERENCES.md, docs/BRAND.md, infrastructure/design-gate/**` · source: Ron 2026-11-10 — "Darken it." Raised by club-dashboard#594 / PR #776, where D-0157's parts 2 and 3 prescribed different fixes for one token and the branch could satisfy only one of them. Table of six repo voices run 2026-11-10 on origin/main — three no objection, three concerns, no veto; every ratio below computed from the token files, not quoted.*
+
+**Decision.** Five parts. One to four carry D-0157 forward unchanged, restated in full
+because D-0157 goes `superseded` and a superseded record is not published into the repo
+slices. **Part five amends part three rather than clarifying it**: part three's default and
+its `#007cff` example are replaced here.
+
+1. **The floor binds where a colour is used, not where it is declared.** 4.5:1 for text
+   under 24px (19px bold), 3:1 for larger text and for the boundary of a control — measured
+   against the surface the text actually sits on. For this fleet that is **every** light
+   ground in the palette, not one: `--surface` / `--bg`, `--page-bg`, `--surface-sunken`
+   (table zebra, wells, inset rows), any tint a token is painted on, and the status washes.
+   A value that passes on white and fails in a table row fails.
+2. **A fill that carries a label is measured against its label.** "Brand fill is not text
+   ink" is half the rule, and alone it is wrong, because contrast is symmetric: white on
+   `#f97316` is the same 2.80:1 as `#f97316` on white. So a brand keeps its fill only if the
+   label on it passes — by darkening the fill, or by putting a dark label on it. **An ink
+   token does not rescue a filled button.**
+3. **Text gets an ink token of the same hue, and a brand value is not repainted as "drift".**
+   `--<name>-ink` is a darkened sibling that passes on every ground it lands on; links,
+   labels and meaning-bearing icons use it, the fill token fills. club-dashboard ships this
+   for its green (`--brand-green-ink #2f7a00`, 5.38:1). The first session to look at a
+   declared brand value and call it drift was wrong. **Part five says when this part does
+   not apply.**
+4. **wmpc-meta fixes its own template first**, then each product repo converts in its own
+   change, behind its own D-0047 phone gate. A repo's unconverted call sites are known debt
+   under this part, not a violation of this record.
+5. **When a single token is both a fill that carries a label and the ink of text, part two
+   governs.** The fill is darkened until it clears the text floor, and **no ink sibling is
+   added for that hue** — once the fill is dark enough to be read as text, the sibling has
+   nothing left to do. A brand value darkened for this reason is **not "drift"**: the
+   brand's own value stays recorded in the token file's palette block and in that repo's
+   `docs/DESIGN_PREFERENCES.md` or `docs/BRAND.md`, each stating why the shipped token is a
+   step darker. Part three's `-ink` sibling remains correct for a fill that carries no label,
+   and for a hue **whose bright fill keeps its brightness because a dark label that clears
+   the floor is shipped on it** — shipped, not available: a repo whose label is still white
+   and failing has not earned that carve-out.
+
+**Why.** Contrast is symmetric, so a filled button's white label and its blue fill are the
+same pair read the other way round — which part 2 already said, and which makes part 3's
+remedy unable to fix the commonest case. In club-dashboard one token was the ink of ~130
+text uses, the fill of ~26 buttons under white labels, and also hairlines, icons and chart
+marks. At `#007cff` it failed **all eight** distinct light grounds in that palette
+(3.32–3.94:1). Both of part 2's options were measured rather than assumed: a dark label does
+pass (`--text` `#111827` 4.50:1, navy `#05052d` 5.00:1) but repaints ~26 labels and leaves
+all 130 text uses failing. Only darkening fixed both, at `#0062cc` — 5.80:1 on white, 5.13:1
+on its tint, clearing all eight grounds. Darkening only gains contrast against a light
+ground, so nothing that cleared the 3:1 non-text floor stopped clearing it, and one adjacent
+pair crossed that floor for the first time.
+
+The cost of leaving part 3 as written is measured, not predicted. **48 call sites across 23
+files had each worked around that one token privately**, many re-deriving the 3.94:1 ratio by
+hand in their own comment — and **16 of them, in 7 further files, were written during the ten
+days the fix sat in review**, including the active-tab label on the screen `/` lands on. The
+defect reproduced itself eleven times while its own fix was open, because every author who
+checked the floor correctly fixed their screen and had no way to see that the token was the
+thing that was wrong. A rule that forbids repainting a declared value, with no precedence for
+the case where the value cannot do its jobs, converts one wrong token into an unbounded
+number of correct-looking local workarounds — and each one becomes a stale record the moment
+the token does move.
+
+The table priced it. **third-shot-academy's concern corrected this record before it was
+written**: part 3's carve-out had been drafted citing its orange under a navy label as a
+shipped fact, and on origin/main that label is `#ffffff` at **2.80:1** — itself under the
+floor, with the brand's text ink a warm brown and no navy in the token file at all. Hence the
+conditional wording of 5 ("because a dark label that clears the floor **is shipped** on it")
+rather than naming a repo as an example. **rating-session-manager** noted that darkening a
+token reaches nothing there until 42 raw hex literals are converted, which part 4 already
+governs and this record does not accelerate. **daemon** required that this replace part 3's
+sentence and D-0157's Forbids wording rather than append to them, that it be called an
+amendment plainly, and that it carry a Forbids line so a darkened value is not later
+"restored" as a brand correction. All three are in the text above.
+
+**Forbids.** Everything D-0157 forbids, except its "calling another repo's declared brand
+value drift and repainting it", which is replaced by: repainting a brand value for any reason
+other than a measured floor failure in a role that token actually serves, or darkening one
+without recording the brand's own value and the reason beside it. Also forbids: **restoring a
+token darkened under 5 back to its brand value** — that is a floor regression, and it is
+superseded here, not reverted in a branch; adding an `-ink` sibling for a hue whose fill had
+to be darkened anyway; and citing a contrast script that does not exist as the enforcer of
+any part of this record.
+
+### D-0324 — A tournament launch is one fact sheet that fans out — the new launch repo orchestrates, and never owns a second login, a second asset pipeline or a second approval path
+
+*2026-11-14 · scope: `"**tournament-launch*, **launch-kit*, **flyer*, **tournament-listing*, **pbcom*"` · source: Ron 2026-11-14 — "We do 3 major tournaments a year … Each tournament needs a tournament added to PickleballTournaments.com and Bert & Erne. We need a pt.com image, an 8x11 flyer that can be printed and emailed and a social media image and post. Each site needs different data. I'd love this to be as hands off for me as possible." Then four answers in session: start from last year's copy and confirm only what changed; artwork changes words and dates only; ONE press releases the whole kit; launch kit only, no run-up.*
+
+**Decision.** The club's three majors a year are launched from **one fact sheet per edition** — dates,
+divisions, fees, deadlines, venue, format, one photo slot — held in a **new repo, `tournament-launch`**.
+A new edition **opens as a copy of the last one** and asks only for what moved. Everything downstream is
+derived from that sheet, so the two listings and the three images cannot disagree.
+
+**The new repo orchestrates; it owns no second copy of anything that already exists:**
+
+1. **The PickleballTournaments.com listing** is driven by the **existing tournament-site driver** in
+   `tournament-manager` (`pbcom-driver`), reusing the mini's persistent director session and its
+   `PBCOM-PUSH-HOST` singleton + OTP re-auth ping (D-0045, D-0050). Adding *listing creation* to a driver
+   that today only creates brackets and pushes scores is **traced first, exactly as D-0045 required for
+   the push** — the create flow, and whether it carries a fee or a terms click, are unknown until the
+   capture. No second login, no second profile, no headless credential.
+2. **The listing in Bert & Erne** is written through `tournament-manager`'s own API as the club tenant. It is
+   club ops consuming the product, not a new product feature.
+3. **The three images and the post copy** are produced **without a design tool**: the drill-studio shape
+   (`pb-drills`) — a spec rendering to a self-contained page, screenshotted deterministically — gives a
+   print-resolution 8.5×11" flyer, the tournament-site image and the social image from the same sheet.
+   **This is why no Canva tier is on the critical path.** When a template ever needs Canva autofill or a
+   Meta post, it goes through **`marketing-api`**, which keeps the Canva and Meta custody (D-0019). The
+   launch repo never holds those keys and is not a second marketing service.
+4. **One press releases the kit.** The drafted listings and images arrive as a **single Hopper card**;
+   Ron's press is a `cos_approvals` row (D-0236) and only then do the listings go public. **The social
+   post is delivered as image + caption for Ron to post** — Facebook app review is still with Meta, and
+   group posting is gone from the Graph API for good.
+
+**Scope is the launch kit only.** No deadline reminders, no filling-up counter, no recap — Ron's call,
+revisited after one tournament has run through it.
+
+**Why.** His ask was a new repo; three of the four moving parts already have homes with credentials,
+singletons and gates built. A repo that re-logged into the tournament site, re-held a Canva key or
+re-invented the approval path would duplicate the fleet's three most sensitive custodies to save a
+function call. The orchestrator is thin on purpose: the sheet, the fan-out, the one card.
+
+**Forbids.** No tournament-site credential, Canva key or Meta token in the launch repo. No second
+PickleballTournaments.com session or profile — the mini's director session is the only path. No listing
+published without the pressed approval row. No listing-create build before the director-session trace.
+No auto-posting to public social. No asset pipeline in the launch repo once `marketing-api` covers a
+case — extend that service instead.
+
+### D-0329 — The card brief and the card Stop gate reach a work session in every club repo, not only daemon
+
+*2026-11-15 · scope: `infrastructure/session-cards/**, infrastructure/daemon-sync/reconcile.sh, infrastructure/decision-register/REPOS` · source: Ron 2026-11-15 — "There are a lot of things waiting for me in open sessions -- but most sessions didn't have access to the card service in the MCP -- can you fix that problem"; widens D-0314, which he directed on 2026-11-10*
+
+**Decision.** D-0314 stands and is widened in one respect: its first three rules bind a work
+session in **every repo of the club operation**, not only one opened in daemon.
+
+1. **Every club session is told about its card at start.** A global SessionStart hook prints the
+   "your card" block in every repo on `infrastructure/decision-register/REPOS`, less the ones
+   named in `infrastructure/session-cards/EXCLUDE`, except daemon, whose own start hook already
+   prints it. The repo is read from the origin remote and then the clone's folder, case and
+   punctuation aside, so a worktree folder named after a branch, or a checkout spelled
+   differently on another machine, is still its repo.
+2. **Every club session is held to it at stop.** A global Stop hook hands the stop to the same
+   `stop-gate.sh` daemon runs — one gate, one set of tests. It is silent in daemon, so one stop
+   is never refused twice.
+3. **A question with no card goes through `needs_ron`, and the brief says so.** D-0314 rule 3
+   already left `needs_ron` as the way to ask when there is no card; a session outside daemon
+   will often find none, because `card_read` lists the cards daemon owns. A session **started
+   by another session** sends what it did and its question to that session, which holds the
+   card, so one ask reaches him once. What is forbidden is the third place: the reply.
+4. **Unattended runs and other operations are untouched.** Both hooks are silent when
+   `WMPC_ACTOR` is set (Mr. Robot, the reviewer), when the run carries Rachel's board key, in a
+   repo that is not on the list (`personal` and `watchlist` are another operation — D-0131 —
+   and never see a club card), in a repo named in `EXCLUDE` (third-shot-academy, its own
+   operation under D-0134, from the start), and in a folder that is not a repo.
+5. **A session that cannot load the card tools says so in its first line.** A session's tool
+   list is fixed when it starts, so one opened before the tools existed, or while the
+   connector's sign-in had lapsed, never gains them. That is a fault to restart out of, not a
+   licence to ask in prose.
+
+**Why.** The connector is on the account, so the card tools are offered to every session in every
+folder; the instruction to use them lived in daemon's project hook alone. Measured 2026-11-15 over
+every transcript since the tools shipped (2026-11-12): four sessions in two other repos, the two
+tools in each one's list, **zero calls**. All four were helpers started by one daemon session
+that held the card and wrote to it, so most of their work did reach the board second-hand; one
+of them still ended "One thing still waiting on you … Want
+me to write them next?" — an ask that existed only in a reply nobody was reading. This is the
+smaller of the two things behind his words and the only one still open. A
+reminder in each repo's CLAUDE.md would be a convention without a gate (D-0071), and a copy of the
+hook in sixteen repos would be sixteen things to keep in step; the fleet's existing answer is one
+global hook whose logic lives here.
+
+**The larger cause was already repaired.** The connector's thirty-day sign-in lapsed on
+2026-11-15 from 02:41 to 17:08 UTC (STATUS 2026-11-15, wmpc-mcp#53); for those fourteen hours no
+session anywhere could load a card tool, which is the "most sessions" he saw. A third, smaller
+case: a long-running session that predated the tools and said so (2026-11-14). Neither is
+something a hook can repair in a session that is already open; rule 5 makes such a session say so.
+
+**What tells us it stopped working (D-0084).** `test-global-hooks.sh`, run beside `test-stop-gate.sh`; and
+on any machine, a transcript scan — a session in a club repo other than daemon that edited files
+and made no `card_read` call was either refused once at stop or the hook is not installed.
+`reconcile.sh` logs the installer's result on every sync.
+
+**The table (2026-11-15).** The change adds no file to any repo but daemon. Voices were taken
+from the three repos other than daemon in which interactive sessions have actually been opened
+since the tools shipped. Two no objection, one concern, no veto. *courtreserve-api:* no
+objection; it could not see from its own tree that Rachel's unattended runs mark themselves — they
+do not set `WMPC_ACTOR`, so both hooks are also silent on her board key (rule 4, tested).
+*court-reserve-scheduler:* no objection; its launchd jobs are not sessions and load no hook.
+*third-shot-academy:* **concern** — D-0134 makes it its own operation, the register's list is a
+publishing artifact rather than a statement of membership, and the day it leaves that list the
+gate would vanish with no handover. **Taken in full:** membership is the register's list **minus
+`infrastructure/session-cards/EXCLUDE`**, a committed file, and the Academy is named in it from
+the start. No session in that repo has opened since the tools shipped, so this costs nothing today;
+its work keeps reaching the club board through a daemon session, as it has so far.
+
+**Forbids.**
+- A work session in any club repo leaving a question for Ron only in its reply.
+- Copying the brief or the gate into another repo's own hooks; the logic lives here once.
+- Showing a club card, or this brief, to a session in `personal`, `watchlist` or any repo not on
+  the register's list.
+- Running the gate twice for one stop (registering `stop-gate.sh` globally as well as through
+  the wrapper).
+
 ## Proposed (not binding yet)
 
 _None._
@@ -4277,5 +4535,6 @@ _None._
 - D-0016 — daemon is the architect of record; decisions live in a register and each repo carries its slice (2026-09-16) → superseded by D-0134
 - D-0130 — The fleet watchdog lives off the fleet, and a quiet agent is an alarm (2026-10-11) → superseded by D-0155
 - D-0132 — A worktree is retired by the mechanism that made it, and "merged" is proven by content (2026-10-12) → superseded by D-0268
+- D-0157 — A colour is measured where it is used, and a brand fill is not text ink (2026-10-13) → superseded by D-0313
 - D-0161 — A pause covers one phase, and the phase it covers is named in code (2026-10-13) → superseded by D-0181
 - D-0177 — Every reply is a short summary; a question or an action for Ron is unmistakable (2026-10-14) → superseded by D-0189

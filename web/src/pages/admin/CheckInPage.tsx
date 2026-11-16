@@ -92,7 +92,7 @@ export default function CheckInPage() {
         supabase
           .from("event_registrations")
           .select(
-            "*, players(id, first_name, last_name, email, phone), events!inner(tournament_id)",
+            "*, players!event_registrations_player_id_fkey(id, first_name, last_name, email, phone), events!inner(tournament_id)",
           )
           .eq("events.tournament_id", t.id)
           .is("deleted_at", null)

@@ -627,18 +627,32 @@ async function main() {
   await resetEvent(famA);
   await resetEvent(famB);
   const gwenId = await ensurePlayer("e2e-gwen-family@wmpc.test", "Gwen", "Guardian");
-  const kitId = await ensurePlayer("e2e-kit-family@wmpc.test", "Kit", "Guardian");
+  // Kit must be ACCOUNT-LESS: is_guardian_of() is inert once a dependent has an
+  // auth_user_id, so a Kit made with ensurePlayer() (which creates a login) was
+  // invisible to Gwen — her checkout read "Nothing to pay for here". Kit is
+  // found again through Gwen's existing link (his email is null, so there is
+  // nothing else to look him up by) and is otherwise created as a bare row, the
+  // way add_dependent() makes one.
   const kitDob = new Date();
   kitDob.setFullYear(kitDob.getFullYear() - 10);
-  ok(
-    await db.from("players").update({ dob: kitDob.toISOString().slice(0, 10), email: null }).eq("id", kitId).select("id").single(),
-    "kit dob",
-  );
-  await db.from("player_guardians").delete().eq("guardian_player_id", gwenId).eq("dependent_player_id", kitId);
+  const kitFields = { first_name: "Kit", last_name: "Guardian", dob: kitDob.toISOString().slice(0, 10), email: null, auth_user_id: null };
+  const kitLink = await db
+    .from("player_guardians")
+    .select("dependent_player_id")
+    .eq("guardian_player_id", gwenId)
+    .is("deleted_at", null)
+    .limit(1);
+  const priorKitId = (kitLink.data?.[0] as { dependent_player_id: string } | undefined)?.dependent_player_id;
+  const kitId = (
+    priorKitId
+      ? ok(await db.from("players").update(kitFields).eq("id", priorKitId).select("id").single(), "kit update")
+      : ok(await db.from("players").insert(kitFields).select("id").single(), "kit insert")
+  ) as { id: string };
+  await db.from("player_guardians").delete().eq("guardian_player_id", gwenId).eq("dependent_player_id", kitId.id);
   ok(
     await db
       .from("player_guardians")
-      .insert({ guardian_player_id: gwenId, dependent_player_id: kitId, relationship: "parent" })
+      .insert({ guardian_player_id: gwenId, dependent_player_id: kitId.id, relationship: "parent" })
       .select("id")
       .single(),
     "gwen→kit guardian link",
@@ -646,7 +660,7 @@ async function main() {
   ok(
     await db
       .from("event_registrations")
-      .insert({ event_id: famA, player_id: kitId, registered_by_player_id: gwenId, status: "pending_payment", partner_status: "seeking", event_fee_cents: 0 })
+      .insert({ event_id: famA, player_id: kitId.id, registered_by_player_id: gwenId, status: "pending_payment", partner_status: "seeking", event_fee_cents: 0 })
       .select("id")
       .single(),
     "kit family reg",

@@ -1,0 +1,27 @@
+# Daily proof that the promotion gate's approval lookup works against the live table (#875).
+# A gate whose lookup is unset or broken fails closed on every promotion without anyone noticing;
+# this fails red and pings Ron's phone instead.
+name: Promotion gate probe
+
+on:
+  schedule:
+    - cron: "17 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Probe the approval lookup
+        env:
+          PROMOTION_GATE_SUPABASE_URL: ${{ secrets.PROMOTION_GATE_SUPABASE_URL }}
+          PROMOTION_GATE_SUPABASE_KEY: ${{ secrets.PROMOTION_GATE_SUPABASE_KEY }}
+          PROMOTION_GATE_ALERT_WEBHOOK: ${{ secrets.PROMOTION_GATE_ALERT_WEBHOOK }}
+        run: node scripts/promotion-gate/probe.mjs

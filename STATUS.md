@@ -5,6 +5,39 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-09 — per-bracket pricing is LIVE; the kids bracket says what it costs (PR #1222)
+
+Ron: "Pr, merge and promote to production". Promoted `main` → `production`, merged 01:07 UTC,
+production now `bc68a0b`, live bundle `index-DHnER_P_.js` → `index-DBMLbv8w.js`.
+
+**Verified on the real live tournament at 390px**, bertanderne.com, not on a green tick:
+
+- header: `$45 · to register · includes 1 event` **+ `Some brackets are priced separately`**
+- **Kids 18 & Under Doubles** card: **`$35 TO ENTER`**, sitting above its start time and beside
+  the `≤18` age pill, nothing wrapping or overflowing
+- Social Doubles and Competitive Doubles: **no price at all** — they are the $45, so the label
+  only appears where it carries information
+- pricing panel: `Early bird $45 / Regular $55 / BRACKETS PRICED SEPARATELY — Kids 18 & Under
+  Doubles $35`
+
+That closes the gap opened earlier the same day: the page advertised $45 while that bracket
+charged $35, and nothing on it said so.
+
+**Blast radius was display-only.** No migration, no new secret, no edge function. `computeLineItems`
+and `compute_checkout_total` untouched — nobody's charge changed by a cent. Exactly one bracket in
+one tournament carries `event_fee_cents > 0` on production, so exactly one card gained a label.
+
+**Shipped in this promotion:** the per-bracket price display (#1218), the wording change from
+"own price" to "to enter" (#1221), and the STATUS entries for the day.
+
+### Open
+
+- The register summary's `N brackets priced separately` still names the object where its siblings
+  name a charge. Accurate, out of step, not worth another design-gate round on its own.
+- `PartnerAcceptPage` calls this same number "Entry fee" while the rest of the product uses *entry*
+  for the charge it replaces. Pre-dates all of this.
+- The throwaway `e2e-test/loon-preview` fixture is still on TEST.
+
 ## 2026-11-08 (evening) — "own price" replaced with what it costs to enter (#1221, PR #1220)
 
 Ron, shown the bracket pill on a preview of his own tournament: "I don't like Own Price." Given
@@ -4123,3 +4156,32 @@ skill range and no age cap belongs in `seed.sql`; filed rather than smuggled in 
 - Branch `feature/issue-1218-bracket-own-price`: bracket card Pill, header line, pricing-panel section, and `own price` line-item label on register/checkout. Display only; pricing math untouched. Helper `bracketsWithOwnPrice` + tests in `pricing.test.ts`.
 - Pricing panel/toggle now also appears for single-tier tournaments that have an own-price bracket.
 - Next: design-gate verdict, push, open PR, move card to In Review (board moves were rate-limited earlier).
+
+## 2026-11-10 — #1216 nightly E2E partner-step failures (Builder)
+- Cause: the guardian-registrations migration (`20261027120000`) added `event_registrations.registered_by_player_id → players`, a second FK to `players`. Every bare `players(...)` embed on `event_registrations` became ambiguous, so PostgREST refused it ("more than one relationship") — the Manage-registration dialog showed that alert and never closed on Assign partner.
+- Fix: named the constraint (`players!event_registrations_player_id_fkey(...)`, as AttendeesPage already does) in the 8 remaining bare embeds. App code; no spec changed.
+- Not verified here: no E2E secrets in a build run. After merge + TEST deploy, dispatch **Nightly regression (E2E)** on `main` and link the run on the card. `registration.spec.ts:30`/`:49` may share the cause; if either still fails, it is a separate (flaky-on-first-load) problem.
+- Seen, not touched: other red specs in the same run (#55, #860, #862, smoke-public) — #860/#862 trip on the new TEST-environment banner being a second `role=status`.
+
+## 2026-11-10 — #1224 nightly E2E still red after #1216 (Builder)
+- Run 42827015708 (commit 4645b07) failures, by cause: (1) #860 x2 — the TEST-environment banner is a second `role="status"`, so `getByRole("status")` is ambiguous (AC 1) / non-empty (AC 2); the `closed → published` retry failure is attempt 1 having already reopened the seed tournament. Fix: the banner is a static label, no longer `role="status"`/`aria-live`. (2) #862 x2 — `/doubles self-rating/i` also matches "Mixed doubles self-rating"; the spec's regex was wrong, anchored it. (3) `issue-10:45` failed once on a 20s first-load timeout and passed on retry in the same run — flake. (4) `registration.spec.ts:30` (new partner) — NOT fixed: trace shows the Save click completed but no `players` insert or any write fired and no error rendered. Cause not found without E2E secrets.
+- Next: after merge + TEST deploy, dispatch Nightly regression (E2E) on main. If `registration.spec.ts:30` is still red it needs a run with a browser against TEST (check whether `onSubmitRegister` in PublicTournamentPage returns silently before the partner insert).
+
+## 2026-11-10 — #1226 nightly E2E still red after #1224 (Builder)
+Four test-side causes, none a product bug: recap CTA copy is "Learn More" (spec still said "Create your account"); the "Registering for" label also matches the open card's dialog (strict-mode, now `exact`); smoke-public asserted production's Leaf Peeper recap + flag-on credit page against TEST (now env-aware; credit skipped on TEST, flag is off by design); the new-partner fixture email equalled the registrant's own address once case-folded (`newPartner` vs `newpartner`). Not changed: #10 partner-notice failed once and passed on retry (flake). Verify by dispatching Nightly regression on the PR branch. Next: read that run; if anything remains red, file it as its own card.
+
+Update (same day): fifth cause is product code — PublicTournamentPage reload() raced itself (signed-out run finishing after the signed-in one wrote me=null, so Register bounced a signed-in player to /profile); now only the newest run writes identity state. The family fixture's child was seeded WITH a login, which makes is_guardian_of() inert (checkout read "Nothing to pay for"); seeded account-less now. Regression run on this branch (against TEST, which does not yet have the app fix): 88 passed, 2 flaky, 1 failed — the failure and flakes are all the /profile bounce.
+
+Rework (same day, reviewer): smoke-public `IS_PROD` regex also matched `test.bertanderne.com`, so TEST would still assert prod-only content. Now an exact hostname match (`bertanderne.com`/`www`); unset/unparseable = non-prod. Next: reviewer re-review; after merge + TEST deploy, dispatch Nightly regression on main.
+
+## 2026-11-14 — #1228 PB import phone check race (Builder)
+- Nightly E2E still red after #1226: iphone-only failure in the PB.com import preview audit. Cause: the import page's file input is disabled until the tournament loads and `onFile` drops earlier files; the test uploaded immediately and lost the race on WebKit.
+- Fix (PR #1229): test waits for the input to be enabled before `setInputFiles`. No app change.
+- Next: green on the next nightly run on `main` is the proof; red files a new card.
+
+## 2026-11-14 — #1230 driver alerts ring the phone (Builder)
+- `pbcom-driver/src/alert.ts` posted to Discord with no suppress-notifications flag. Alert payload now built by `alertPayload()`: `flags: 4096` plus `allowed_mentions: {parse: []}`. New `tests/alert.test.ts` stubs fetch and asserts both on the outgoing body (PR #1231).
+- Known: 3 host-gate tests (auto, partners, run) fail on `main` too; untouched.
+- Next: merge; the next driver alert should arrive silently.
+## 2026-11-15 — #1232 promotion gate
+Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to `production`, daily probe, `scripts/promotion-gate/` (rules tuned to this repo: money = pricing/quotes/fees/Stripe/checkout; member-facing = web/src, web/public, edge functions, email templates; migrations judged by content). 39 unit tests pass. DEPLOYMENT.md updated. Next: first green run on a real promotion PR, then daemon makes the check required on `production`.
