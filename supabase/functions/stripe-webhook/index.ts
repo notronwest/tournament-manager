@@ -246,26 +246,34 @@ async function handleSucceeded(pi: any) {
 async function sendDeferredInvites(regIds: string[], pi: any) {
   if (regIds.length === 0) return;
 
-  const inviterPlayerId = pi.metadata?.player_id;
-  if (!inviterPlayerId) return;
-
-  // Resolve the events covered by this payment's registrations.
+  // Resolve the (event, registrant) pairs covered by this payment. The
+  // registrant is the inviter — for a guardian's basket that is the child,
+  // not the payer, so keying on the payer alone missed every child's invite.
   const { data: regs } = await admin
     .from("event_registrations")
-    .select("event_id")
+    .select("event_id, player_id")
     .in("id", regIds);
+  const pairs = new Set(
+    (regs ?? []).map((r: any) => `${r.event_id}|${r.player_id}`),
+  );
   const eventIds = Array.from(
     new Set((regs ?? []).map((r: any) => r.event_id).filter(Boolean)),
   );
-  if (eventIds.length === 0) return;
+  const playerIds = Array.from(
+    new Set((regs ?? []).map((r: any) => r.player_id).filter(Boolean)),
+  );
+  if (eventIds.length === 0 || playerIds.length === 0) return;
 
-  // The payer's still-pending outbound invites for those events.
-  const { data: invites } = await admin
+  // The registrants' still-pending outbound invites for those events.
+  const { data: inviteRows } = await admin
     .from("partner_invites")
-    .select("id, invitee_email")
-    .eq("inviter_player_id", inviterPlayerId)
+    .select("id, invitee_email, event_id, inviter_player_id")
+    .in("inviter_player_id", playerIds)
     .eq("status", "pending")
     .in("event_id", eventIds);
+  const invites = (inviteRows ?? []).filter((i: any) =>
+    pairs.has(`${i.event_id}|${i.inviter_player_id}`)
+  );
 
   // Base URL captured at checkout (origin the player paid from), with a
   // prod fallback if an older intent has no base_url in metadata.
