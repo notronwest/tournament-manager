@@ -531,21 +531,34 @@ async function sendFreeInvites(
   baseUrl?: string,
 ) {
   if (regIds.length === 0) return;
+  // The inviter is each registration's registrant — for a guardian's basket
+  // that is the child, not the payer (inviterPlayerId), so key on the
+  // (event, registrant) pairs actually being confirmed.
   const { data: regs } = await admin
     .from("event_registrations")
-    .select("event_id")
+    .select("event_id, player_id")
     .in("id", regIds);
-  const eventIds = Array.from(
-    new Set((regs ?? []).map((r: { event_id: string }) => r.event_id).filter(Boolean)),
+  type Reg = { event_id: string; player_id: string };
+  const regRows = (regs ?? []) as Reg[];
+  const pairs = new Set(regRows.map((r) => `${r.event_id}|${r.player_id}`));
+  const eventIds = Array.from(new Set(regRows.map((r) => r.event_id).filter(Boolean)));
+  const playerIds = Array.from(
+    new Set([inviterPlayerId, ...regRows.map((r) => r.player_id)].filter(Boolean)),
   );
   if (eventIds.length === 0) return;
 
-  const { data: invites } = await admin
+  const { data: inviteRows } = await admin
     .from("partner_invites")
-    .select("id, invitee_email")
-    .eq("inviter_player_id", inviterPlayerId)
+    .select("id, invitee_email, event_id, inviter_player_id")
+    .in("inviter_player_id", playerIds)
     .eq("status", "pending")
     .in("event_id", eventIds);
+  const invites = ((inviteRows ?? []) as {
+    id: string;
+    invitee_email: string | null;
+    event_id: string;
+    inviter_player_id: string;
+  }[]).filter((i) => pairs.has(`${i.event_id}|${i.inviter_player_id}`));
 
   const base =
     (baseUrl ?? "").replace(/\/+$/, "") || "https://tournament-manager.pages.dev";
