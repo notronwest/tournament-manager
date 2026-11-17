@@ -4185,3 +4185,10 @@ Rework (same day, reviewer): smoke-public `IS_PROD` regex also matched `test.ber
 - Next: merge; the next driver alert should arrive silently.
 ## 2026-11-15 — #1232 promotion gate
 Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to `production`, daily probe, `scripts/promotion-gate/` (rules tuned to this repo: money = pricing/quotes/fees/Stripe/checkout; member-facing = web/src, web/public, edge functions, email templates; migrations judged by content). 39 unit tests pass. DEPLOYMENT.md updated. Next: first green run on a real promotion PR, then daemon makes the check required on `production`.
+
+## 2026-11-17 — Guardian doubles: "No partner picked" at checkout
+- Cause: `partner_invites` policies only allowed `inviter_player_id = current_player_id()`. A parent registering a child writes the invite with the CHILD as inviter, so the insert was refused (error swallowed when the form closed), the reg sat at partner_status `pending` with no invite, and checkout blocked payment. Confirmed on TEST (Kids 18 & Under Doubles).
+- Fix: migration `20261117120000_guardian_partner_invites.sql` adds `or is_guardian_of(...)` to all four invite policies. Verified on TEST in a rolled-back transaction: before = refused, after = allowed, guardian can read it, still can't forge an invite as an unrelated player.
+- Also: pay-time partner-email senders (stripe-webhook, create-payment-intent free path) keyed on the payer only, so a child's partner never got the email. Now keyed on (event, registrant) pairs.
+- Existing stuck child regs need the partner re-picked after the migration lands on TEST.
+- Not done: the register form still closes over an invite-setup error; worth surfacing it.
