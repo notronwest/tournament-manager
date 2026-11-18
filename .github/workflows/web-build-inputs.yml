@@ -1,0 +1,19 @@
+name: Website build inputs
+
+# The production post-deploy smoke decides whether to wait for a new bundle by
+# diffing the paths in scripts/web-build-inputs.txt. A file the website imports
+# from outside that list would change the bundle without being noticed.
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["web/src/**", "scripts/web-build-inputs.txt", "scripts/check-web-build-inputs.mjs"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: node scripts/check-web-build-inputs.mjs
