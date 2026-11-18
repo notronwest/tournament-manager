@@ -26,15 +26,34 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the push's before..sha range can be diffed below.
+          fetch-depth: 0
 
       # Cloudflare Pages builds asynchronously and we hold no API token, so we
       # cannot ask "is the deploy done?". We can ask the page: wait until the
       # JS bundle hash is no longer the one that was live when this run began.
       # Timing out here FAILS the job — a deploy that never arrives is exactly
       # as bad as one that arrives broken, and must not pass quietly.
+      #
+      # A promotion that changes nothing the bundle is built from (the paths in
+      # scripts/web-build-inputs.txt: web/ and the shared files it imports; not
+      # other edge functions, migrations or docs) rebuilds a byte-identical
+      # bundle, so the hash never changes and
+      # the wait would fail a deploy that landed fine. In that case skip the wait
+      # (the step still succeeds, so the alert below never calls it "not landed")
+      # and go on to the page smoke. workflow_dispatch, or a before sha that is
+      # missing, all-zero or unreadable, counts as "web changed".
       - name: Wait for the new bundle to be serving
         id: landed
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
+          if [ "$(scripts/web-changed.sh "$EVENT_NAME" "$BEFORE_SHA" "$GITHUB_SHA")" = "no" ]; then
+            echo "Nothing the website bundle is built from changed in this push (see scripts/web-build-inputs.txt), so the bundle is unchanged — skipping the bundle-hash wait and running the page smoke."
+            exit 0
+          fi
           url="https://bertanderne.com"
           before="$(curl -fsS --max-time 20 "$url" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
           echo "bundle before: ${before:-unknown}"

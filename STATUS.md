@@ -5,6 +5,22 @@ before you wrap.** Newest on top; new entries supersede old — don't rewrite.
 Entries before 2026-08-15 were moved to [`STATUS-ARCHIVE.md`](./STATUS-ARCHIVE.md)
 on 2026-08-27 to keep this lean; nothing was lost.
 
+## 2026-11-17 — Parent paying for a child got "your cart looks empty"
+
+**State:** fix PR open against `main` (TEST); needs promotion to PROD.
+
+- ✅ Root cause: `20261107100000_override_does_not_consume_first_event` re-created
+  `compute_checkout_total` from the pre-guardian body, dropping the dependents loop
+  (#1169) and `waitlisted_pending_payment`. A guardian's server-side basket was empty →
+  `create-payment-intent` returned `nothing_to_charge`. Confirmed live on PROD: a parent
+  tried 4× (16–17 Nov) to pay a child's Kids 18 & Under Doubles entry; each pending reg
+  was swept.
+- ✅ `20261117130000_restore_guardian_checkout_total.sql`: guardian body + the override
+  ranking fix in one definition. Dry-run on TEST in a rolled-back txn: guardian basket
+  returns the child's lines ($75 first + $35 override = $110).
+- 🔜 Merge, promote to PROD; then the parent re-registers (their child's pending
+  registration was swept).
+
 ## 2026-11-09 — per-bracket pricing is LIVE; the kids bracket says what it costs (PR #1222)
 
 Ron: "Pr, merge and promote to production". Promoted `main` → `production`, merged 01:07 UTC,
@@ -4192,3 +4208,7 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 - Also: pay-time partner-email senders (stripe-webhook, create-payment-intent free path) keyed on the payer only, so a child's partner never got the email. Now keyed on (event, registrant) pairs.
 - Existing stuck child regs need the partner re-picked after the migration lands on TEST.
 - Not done: the register form still closes over an invite-setup error; worth surfacing it.
+
+## 2026-11-18 — Post-deploy smoke counts shared imports as website changes (#1243, PR #1244)
+- Added `scripts/web-build-inputs.txt` (one list: `web/`, `supabase/functions/_shared/`), `scripts/web-changed.sh` (used by `post-deploy-smoke.yml`), and a PR check `web-build-inputs.yml` that fails on uncovered imports from outside `web/`. DEPLOYMENT.md updated.
+- Next: Ron reviews/merges #1244; it rides with the next promotion. Not yet exercised in a real Actions run.
