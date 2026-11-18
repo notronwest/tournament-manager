@@ -36,8 +36,10 @@ jobs:
       # Timing out here FAILS the job — a deploy that never arrives is exactly
       # as bad as one that arrives broken, and must not pass quietly.
       #
-      # A promotion that changes nothing under web/ (edge functions, migrations,
-      # docs only) rebuilds a byte-identical bundle, so the hash never changes and
+      # A promotion that changes nothing the bundle is built from (the paths in
+      # scripts/web-build-inputs.txt: web/ and the shared files it imports; not
+      # other edge functions, migrations or docs) rebuilds a byte-identical
+      # bundle, so the hash never changes and
       # the wait would fail a deploy that landed fine. In that case skip the wait
       # (the step still succeeds, so the alert below never calls it "not landed")
       # and go on to the page smoke. workflow_dispatch, or a before sha that is
@@ -48,14 +50,9 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "$EVENT_NAME" = "push" ] \
-             && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] \
-             && git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null \
-             && changed="$(git diff --name-only "$BEFORE_SHA" "$GITHUB_SHA" -- web/)"; then
-            if [ -z "$changed" ]; then
-              echo "No files under web/ changed in this push, so the website bundle is unchanged — skipping the bundle-hash wait and running the page smoke."
-              exit 0
-            fi
+          if [ "$(scripts/web-changed.sh "$EVENT_NAME" "$BEFORE_SHA" "$GITHUB_SHA")" = "no" ]; then
+            echo "Nothing the website bundle is built from changed in this push (see scripts/web-build-inputs.txt), so the bundle is unchanged — skipping the bundle-hash wait and running the page smoke."
+            exit 0
           fi
           url="https://bertanderne.com"
           before="$(curl -fsS --max-time 20 "$url" | grep -oE 'index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
