@@ -4208,3 +4208,7 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 - Also: pay-time partner-email senders (stripe-webhook, create-payment-intent free path) keyed on the payer only, so a child's partner never got the email. Now keyed on (event, registrant) pairs.
 - Existing stuck child regs need the partner re-picked after the migration lands on TEST.
 - Not done: the register form still closes over an invite-setup error; worth surfacing it.
+
+## 2026-11-18 — Post-deploy smoke counts shared imports as website changes (#1243, PR #1244)
+- Added `scripts/web-build-inputs.txt` (one list: `web/`, `supabase/functions/_shared/`), `scripts/web-changed.sh` (used by `post-deploy-smoke.yml`), and a PR check `web-build-inputs.yml` that fails on uncovered imports from outside `web/`. DEPLOYMENT.md updated.
+- Next: Ron reviews/merges #1244; it rides with the next promotion. Not yet exercised in a real Actions run.
