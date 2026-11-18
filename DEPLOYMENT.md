@@ -154,6 +154,13 @@ so it went red on the night of a real promotion and the only reason anyone knew 
 that someone went and looked. With no webhook set it annotates the run instead of
 passing quietly.
 
+**The bundle-hash wait is skipped when `web/` did not change.** A promotion that
+touches only edge functions, migrations or docs rebuilds a byte-identical bundle,
+so the hash never changes. `post-deploy-smoke.yml` diffs the push's before..sha
+range for `web/` and, when nothing changed, logs why and goes straight to the page
+smoke. A manual run, or a before sha that is missing, all-zero or unreadable, is
+treated as "web changed" and keeps the 15-minute wait.
+
 **Scheduled jobs live in the database, not in CI.** `pg_cron` (enabled by
 migration `20260914200000`) runs `sweep-stale-pending-regs` every 5 minutes on
 whichever project the migration applied to — there is no external cron and no
