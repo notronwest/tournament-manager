@@ -4212,3 +4212,7 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 ## 2026-11-18 — Post-deploy smoke counts shared imports as website changes (#1243, PR #1244)
 - Added `scripts/web-build-inputs.txt` (one list: `web/`, `supabase/functions/_shared/`), `scripts/web-changed.sh` (used by `post-deploy-smoke.yml`), and a PR check `web-build-inputs.yml` that fails on uncovered imports from outside `web/`. DEPLOYMENT.md updated.
 - Next: Ron reviews/merges #1244; it rides with the next promotion. Not yet exercised in a real Actions run.
+## 2026-11-16 — Schedule page: estimate at max teams
+- Schedule page now shows a notice when any event is below its Max teams ("3 events aren't full yet (X: 0 of 16 teams)") with an **Estimate at max teams** button. On, every not-full event is timed at its cap (durations, court needs, auto-schedule plan, tournament time); the Teams column shows `n / max` plus "est. at max". URL-driven (`?teams=max`); the auto-schedule confirm says when it is on. Branch `feature/schedule-estimate-at-max`.
+- Verified on the local stack (seed tournament given a venue + caps 16/12/8) at 375px: toggle flips, numbers move, no horizontal scroll. Typecheck + eslint clean.
+- Not changed: the print modal still prints registered team counts (durations follow the toggle).
