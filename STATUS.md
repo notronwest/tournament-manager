@@ -4216,3 +4216,7 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 - Schedule page now shows a notice when any event is below its Max teams ("3 events aren't full yet (X: 0 of 16 teams)") with an **Estimate at max teams** button. On, every not-full event is timed at its cap (durations, court needs, auto-schedule plan, tournament time); the Teams column shows `n / max` plus "est. at max". URL-driven (`?teams=max`); the auto-schedule confirm says when it is on. Branch `feature/schedule-estimate-at-max`.
 - Verified on the local stack (seed tournament given a venue + caps 16/12/8) at 375px: toggle flips, numbers move, no horizontal scroll. Typecheck + eslint clean.
 - Not changed: the print modal still prints registered team counts (durations follow the toggle).
+
+## 2026-11-19 — Schedule estimate-at-max merged (PR #1235)
+- Merged to main on Ron's go (reviewer had escalated only for the missing per-PR 390px Playwright check). TEST Pages deploy green on 8572269.
+- Next: rides with the next promotion to PROD. Owed separately: a per-PR phone-width check that covers the schedule page.
