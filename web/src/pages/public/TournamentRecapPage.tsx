@@ -12,19 +12,14 @@ import {
 } from "../../lib/tournamentSummary";
 import { TournamentSummaryReport } from "../../components/TournamentSummaryReport";
 import {
-  buildCreditLandingHref,
-  buildLoginHref,
   captureCampaign,
   recordRecapViewEvent,
   resolveTournamentCampaign,
 } from "../../lib/campaignCapture";
-import { CREDIT_OFFER_AMOUNT_USD, isCreditOfferEnabled } from "../../lib/featureFlags";
 import {
   bodyFontStack,
   contentColStyle,
   courtRed,
-  cream,
-  ctaPrimaryStyle,
   displayFontStack,
   ink,
   inkMuted,
@@ -64,9 +59,6 @@ export default function TournamentRecapPage() {
   const { orgSlug, tournamentSlug } = useParams<{ orgSlug: string; tournamentSlug: string }>();
   const [searchParams] = useSearchParams();
   const taggedCampaign = searchParams.get("c");
-  // The campaign resolved from the server when the link carried no `?c=`.
-  const [fallbackCampaign, setFallbackCampaign] = useState<string | null>(null);
-  const campaign = taggedCampaign ?? fallbackCampaign;
   const [payload, setPayload] = useState<RecapPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +107,6 @@ export default function TournamentRecapPage() {
         taggedCampaign ??
         (await resolveTournamentCampaign(orgSlug, tournamentSlug));
       if (cancelled || !resolved) return;
-      if (!taggedCampaign) setFallbackCampaign(resolved);
       // Persist for the credit → login → signup hops, with the tournament
       // it was captured on so the later `signup` row can name it too.
       captureCampaign(resolved, tournamentSlug);
@@ -152,12 +143,6 @@ export default function TournamentRecapPage() {
       venueAddress: t.venue_address,
     };
   }, [payload]);
-
-  const creditOfferEnabled = isCreditOfferEnabled();
-  const ctaHref =
-    creditOfferEnabled && orgSlug
-      ? buildCreditLandingHref(orgSlug, campaign)
-      : buildLoginHref(campaign);
 
   if (loading) {
     return (
@@ -208,69 +193,8 @@ export default function TournamentRecapPage() {
           </Link>
         </div>
 
-        {/* THE OFFER GOES FIRST. It shipped below the fold, under the footer
-            rule, in grey — Ron, 2026-10-09: "Move the CTA to the top and add
-            some color -- make it noticeable." A player opens this link for the
-            results; the offer only works if it is the first thing they see.
-            courtRed is the brand accent, used nowhere else on this page. */}
-        <div
-          style={{
-            margin: "0 0 26px",
-            padding: "20px 22px",
-            borderRadius: 12,
-            background: cream,
-            border: `2px solid ${courtRed}`,
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: 16,
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
-            {creditOfferEnabled ? (
-              <>
-                <p
-                  style={{
-                    margin: "0 0 6px",
-                    fontFamily: displayFontStack,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.02em",
-                    lineHeight: 1.1,
-                    fontSize: 26,
-                    color: courtRed,
-                  }}
-                >
-                  ${CREDIT_OFFER_AMOUNT_USD} toward your next {header.orgName} tournament
-                </p>
-                <p style={{ margin: 0, fontSize: 14, color: inkSoft, fontFamily: bodyFontStack, lineHeight: 1.45 }}>
-                  Create your account and we&rsquo;ll add a ${CREDIT_OFFER_AMOUNT_USD} credit, good on any
-                  tournament {header.orgName} runs. Our tournaments only — it isn&rsquo;t cash and
-                  can&rsquo;t be used at other clubs.
-                </p>
-              </>
-            ) : (
-              <p style={{ margin: 0, fontSize: 15, color: inkSoft, fontFamily: bodyFontStack }}>
-                Want to see your own tournament history and sign up for the next one?
-              </p>
-            )}
-          </div>
-          <Link
-            to={ctaHref}
-            style={{
-              ...ctaPrimaryStyle,
-              flex: "none",
-              background: courtRed,
-              color: cream,
-              fontSize: 15,
-              padding: "13px 24px",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Learn More →
-          </Link>
-        </div>
-
+        {/* No offer banner — Ron, 2026-11-20: "Remove the $20 banner on the
+            recap page". The view is still attributed to its campaign above. */}
         <TournamentSummaryReport header={header} summary={summary} note="" />
       </div>
       <SiteFooter />
