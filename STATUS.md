@@ -4230,3 +4230,8 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 - Merged to main (PR #1247, closes #1248) after a design-critic FAIL→PASS round (error after reload for half-failed moves, contrast, lede line). TEST deploy green.
 - Promotion PR #1249 (main→production, also carries schedule estimate-at-max #1235) is blocked only by the promotion gate (member-visible pages). ship_prod approval card raised on Standup; a background loop re-runs the gate and merges once he presses it.
 - Also: PROD data fix on Ron's ask — Linwood PB Club Invitational event "Copy of High School" renamed to "High School" (name only; 9 completed scores untouched).
+
+## 2026-11-19 — Court picker LIVE on PROD
+- Promotion #1249 was refused because my STATUS push moved main past the approval's pinned head; it was superseded by #1250 (pinned 1cfa6ff), approved, merged → 281c2e3. PROD Pages deploy green, bertanderne.com 200.
+- Lesson: don't push to main between raising a pinned ship_prod card and merging the promotion.
+- Also on Ron's ask: all 12 HS matches (Linwood PB Club Invitational) ended_at set to 5:24 PM ET; scores untouched.
