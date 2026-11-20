@@ -4220,3 +4220,8 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 ## 2026-11-19 — Schedule estimate-at-max merged (PR #1235)
 - Merged to main on Ron's go (reviewer had escalated only for the missing per-PR 390px Playwright check). TEST Pages deploy green on 8572269.
 - Next: rides with the next promotion to PROD. Owed separately: a per-PR phone-width check that covers the schedule page.
+
+## 2026-11-19 — Court Manager: re-point courts after the bracket is built (crisis fix, in flight)
+- Ron: courts were locked once the bracket was set. Root cause: the tournament Court Manager only read `event_courts`; nothing on that screen could change it on game day. Fix on branch `fix/court-manager-reassign`: a "Court for" select on every court card (in-play events + Unassigned) rewrites that court's `event_courts` row for in-play events only. No migration.
+- Typecheck, vitest (469), build green; the one eslint error in that file pre-exists on main. Not yet checked at 390px in a browser.
+- Next: design-gate verdict → PR → merge to main → main→production promotion (Ron directed "all the way through to production").
