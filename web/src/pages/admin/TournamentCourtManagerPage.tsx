@@ -494,8 +494,11 @@ export default function TournamentCourtManagerPage() {
         .from("event_courts")
         .insert({ event_id: eventId, court_number: courtNumber });
       if (insErr) {
-        setError(insErr.message);
+        // The delete landed, so the court is now free. Reload first (reload
+        // clears the error), then say which half failed.
         await reload();
+        const evName = activeEvents.find((e) => e.id === eventId)?.name ?? "that event";
+        setError(`Court ${courtNumber} was freed but couldn't be given to ${evName}: ${insErr.message}`);
         return;
       }
     }
@@ -665,6 +668,9 @@ export default function TournamentCourtManagerPage() {
             {activeEvents.length === 1 ? "active event" : "active events"} ·{" "}
             {completedCount} completed · {inProgressCount} in progress ·{" "}
             {pendingCount} pending
+          </p>
+          <p style={{ color: inkSoft, margin: "4px 0 0", fontSize: 13, fontFamily: bodyFontStack }}>
+            Use “Court for” on any court to move it to another event.
           </p>
         </div>
         <button
@@ -1264,7 +1270,7 @@ function CourtForSelect({ courtName, courtFor }: { courtName: string; courtFor: 
         gap: 8,
         marginTop: 6,
         fontSize: 12,
-        color: inkMuted,
+        color: inkSoft,
         fontFamily: bodyFontStack,
       }}
     >
@@ -1287,7 +1293,7 @@ function CourtForSelect({ courtName, courtFor }: { courtName: string; courtFor: 
           fontFamily: bodyFontStack,
           color: ink,
           background: "#fff",
-          border: `1px solid ${rule}`,
+          border: `1px solid ${inkMuted}`,
           borderRadius: 6,
           cursor: saving ? "wait" : "pointer",
         }}
