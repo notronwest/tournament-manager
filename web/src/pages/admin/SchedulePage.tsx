@@ -88,7 +88,13 @@ type EventCourt = Database["public"]["Tables"]["event_courts"]["Row"];
 
 type EventRow = {
   event: Event;
+  // Teams actually holding a spot.
   teamCount: number;
+  // Teams the estimate is computed on: teamCount, or max_teams when the
+  // organizer chose "Estimate at max teams" and the event isn't full yet.
+  estTeams: number;
+  // True when estTeams was lifted to max_teams by that option.
+  atMax: boolean;
   teamsPerPool: number;
   courts: number;
   courtNumbers: number[];
@@ -163,6 +169,16 @@ export default function SchedulePage() {
     const next = new URLSearchParams(searchParams);
     if (v === "table") next.delete("view");
     else next.set("view", v);
+    setSearchParams(next, { replace: true });
+  };
+  // "Estimate at max teams": plan every not-yet-full event as if it fills to
+  // its Max teams, so the TD sees the worst-case day before registration
+  // closes. URL-driven (?teams=max) like the view tab.
+  const estimateAtMax = searchParams.get("teams") === "max";
+  const setEstimateAtMax = (on: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    if (on) next.set("teams", "max");
+    else next.delete("teams");
     setSearchParams(next, { replace: true });
   };
   const [tournament, setTournament] = useState<Tournament | null>(null);
@@ -307,6 +323,9 @@ export default function SchedulePage() {
     }
     return events.map((event) => {
       const teamCount = teamsByEvent.get(event.id) ?? 0;
+      const atMax =
+        estimateAtMax && event.max_teams != null && teamCount < event.max_teams;
+      const estTeams = atMax ? event.max_teams! : teamCount;
       const courtNumbers = (courtsByEvent.get(event.id) ?? []).sort(
         (a, b) => a - b,
       );
@@ -315,7 +334,7 @@ export default function SchedulePage() {
       // and Start-time steps so they can never disagree (see eventPlacement).
       const facts = eventPlacementFacts({
         event,
-        teamCount,
+        teamCount: estTeams,
         courtNumbers,
         // Venue court count caps court needs; fall back to the event's own
         // allocation when the venue's isn't known yet.
@@ -343,6 +362,8 @@ export default function SchedulePage() {
       return {
         event,
         teamCount,
+        estTeams,
+        atMax,
         teamsPerPool: estimate.teamsPerPool,
         courts: facts.courts,
         courtNumbers: facts.courtNumbers,
@@ -360,7 +381,7 @@ export default function SchedulePage() {
         facts,
       };
     });
-  }, [events, eventCourts, teamsByEvent, tournament, playersByEvent]);
+  }, [events, eventCourts, teamsByEvent, tournament, playersByEvent, estimateAtMax]);
 
   // The auto-schedule PLAN, recomputed live from order / anchor / buffer so
   // the page can say what parallelism it found before anything is written.
@@ -1049,6 +1070,14 @@ export default function SchedulePage() {
         </div>
       )}
 
+      {/* Sits above the plan whose times it changes, so it's on the first
+          screen on a phone rather than under the plan list. */}
+      <EstimateAtMaxNotice
+        rows={rows}
+        on={estimateAtMax}
+        onChange={setEstimateAtMax}
+      />
+
       {locked && tournament.schedule_locked_at && (
         <div
           role="status"
@@ -1131,6 +1160,11 @@ export default function SchedulePage() {
               <p style={{ margin: "0 0 8px" }}>
                 Sets a start time for all {plan.length} events in the order shown, running events side by side where their courts fit ({fmtDuration(planSpanMinutes)} total).
               </p>
+              {rows.some((r) => r.atMax) && (
+                <p style={{ margin: "0 0 8px" }}>
+                  Events that aren't full are timed at their max teams, so any that don't fill will finish early.
+                </p>
+              )}
               <p style={{ margin: 0 }}>
                 <strong style={{ color: ink }}>Court allocations will be replaced</strong> with each event's slice for its window (e.g. courts 1–4 for one event, 5–8 for the other). You can still adjust courts on the tournament page afterwards.
               </p>
@@ -1389,6 +1423,14 @@ export default function SchedulePage() {
                     }}
                   >
                     {r.teamCount}
+                    {r.event.max_teams != null && (
+                      <span style={{ color: inkMuted }}> / {r.event.max_teams}</span>
+                    )}
+                    {r.atMax && (
+                      <div style={{ fontSize: 10, color: warnFg, marginTop: 2 }}>
+                        est. at {r.estTeams}
+                      </div>
+                    )}
                   </td>
                   <td
                     style={tdStyle}
@@ -1405,7 +1447,7 @@ export default function SchedulePage() {
                     />
                     <div
                       style={{ fontSize: 10, color: inkMuted, marginTop: 2 }}
-                      title={`${r.event.pool_count} pool${r.event.pool_count === 1 ? "" : "s"} × floor(${r.teamsPerPool} teams ÷ 2) matches at once — the most courts this event can keep busy${r.teamCount < 2 ? " (planning on max teams)" : ""}.`}
+                      title={`${r.event.pool_count} pool${r.event.pool_count === 1 ? "" : "s"} × floor(${r.teamsPerPool} teams ÷ 2) matches at once — the most courts this event can keep busy${r.estTeams < 2 || r.atMax ? " (planning on max teams)" : ""}.`}
                     >
                       needs {r.courtsNeeded} of {courtCount}
                       {r.medalCourtsNeeded > 0 ? ` · medal round ${r.medalCourtsNeeded}` : ""}
@@ -1418,8 +1460,8 @@ export default function SchedulePage() {
                       color: inkSoft,
                     }}
                   >
-                    {r.teamCount < 2 ? "—" : fmtDuration(r.poolMinutes)}
-                    {r.teamCount >= 2 &&
+                    {r.estTeams < 2 ? "—" : fmtDuration(r.poolMinutes)}
+                    {r.estTeams >= 2 &&
                       r.poolBindingConstraint === "team" && (
                         <div
                           style={{
@@ -1449,10 +1491,10 @@ export default function SchedulePage() {
                       ...tdStyle,
                       textAlign: "right",
                       fontWeight: 600,
-                      color: r.teamCount < 2 ? inkMuted : ink,
+                      color: r.estTeams < 2 ? inkMuted : ink,
                     }}
                   >
-                    {r.teamCount < 2 ? "—" : fmtDuration(r.totalMinutes)}
+                    {r.estTeams < 2 ? "—" : fmtDuration(r.totalMinutes)}
                   </td>
                   <td style={tdStyle}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -1530,7 +1572,7 @@ export default function SchedulePage() {
                         onPatch={(patch) => void onPatchEvent(r.event.id, patch)}
                         onToggleCourt={(c) => void onToggleCourt(r.event.id, c)}
                       />
-                      {r.teamCount >= 2 ? (
+                      {r.estTeams >= 2 ? (
                         <EstimateDetails id={`estimate-${r.event.id}`} row={r} />
                       ) : (
                         <div id={`estimate-${r.event.id}`} style={{ fontSize: 12, color: inkMuted, padding: "8px 0 0" }}>
@@ -1744,7 +1786,7 @@ function SetupPanel({
         ) : (
           <>
         <label style={label}>
-          <span>Pools <span style={{ color: inkMuted }}>· {teams} teams{row.teamCount < 2 ? " (max)" : ""}</span></span>
+          <span>Pools <span style={{ color: inkMuted }}>· {teams} teams{row.teamCount < 2 || row.atMax ? " (max)" : ""}</span></span>
           <select
             value={event.pool_count}
             disabled={busy}
@@ -2620,3 +2662,78 @@ const tdStyle: CSSProperties = {
 };
 
 
+
+// Offers "Estimate at max teams" whenever an event is below its Max teams,
+// and says so plainly while it's on. Hidden when every event is full or has
+// no cap — there's nothing to estimate up to.
+function EstimateAtMaxNotice({
+  rows,
+  on,
+  onChange,
+}: {
+  rows: EventRow[];
+  on: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  const short = rows.filter(
+    (r) => r.event.max_teams != null && r.teamCount < r.event.max_teams,
+  );
+  if (short.length === 0) return null;
+  const n = short.length;
+  const example = short[0];
+  return (
+    <div
+      role="note"
+      style={{
+        marginTop: 12,
+        padding: 12,
+        background: on ? warnBg : bg,
+        border: `1px solid ${on ? warnFg : rule}`,
+        borderRadius: 6,
+        display: "flex",
+        gap: 12,
+        alignItems: "center",
+        flexWrap: "wrap",
+        fontSize: 13,
+        color: on ? warnFg : inkSoft,
+        lineHeight: 1.5,
+      }}
+    >
+      <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+        {on ? (
+          <>
+            <strong>Estimating at max teams.</strong> {n === 1 ? "1 event that isn't full is" : `${n} events that aren't full are`} timed as if they fill — this is the longest the day can run.
+          </>
+        ) : (
+          <>
+            <strong>
+              {n === 1 ? "1 event isn't full yet" : `${n} events aren't full yet`}
+            </strong>{" "}
+            ({example.event.name}: {example.teamCount} of {example.event.max_teams} teams). Times below use the teams registered so far.
+          </>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(!on)}
+        aria-pressed={on}
+        style={{
+          minHeight: 44,
+          padding: "8px 16px",
+          // A view toggle, not the page's primary action — outlined so it
+          // never competes with the filled Auto-schedule button.
+          background: "#ffffff",
+          color: courtBlue,
+          border: `1px solid ${courtBlue}`,
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: "pointer",
+          fontFamily: bodyFontStack,
+        }}
+      >
+        {on ? "Use registered teams" : "Estimate at max teams"}
+      </button>
+    </div>
+  );
+}

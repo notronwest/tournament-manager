@@ -470,6 +470,41 @@ export default function TournamentCourtManagerPage() {
     await reload();
   };
 
+  // Move a court to a different event (or free it) mid-tournament. The
+  // bracket being built must not freeze court allocation: the director
+  // re-points a court here and the suggestions follow. Only the court's
+  // rows for events in play are touched — a not-yet-started event's
+  // planned courts stay as they were.
+  const onReassignCourt = async (courtNumber: number, eventId: string | null) => {
+    setError(null);
+    const activeIds = activeEvents.map((e) => e.id);
+    if (activeIds.length > 0) {
+      const { error: delErr } = await supabase
+        .from("event_courts")
+        .delete()
+        .eq("court_number", courtNumber)
+        .in("event_id", activeIds);
+      if (delErr) {
+        setError(delErr.message);
+        return;
+      }
+    }
+    if (eventId) {
+      const { error: insErr } = await supabase
+        .from("event_courts")
+        .insert({ event_id: eventId, court_number: courtNumber });
+      if (insErr) {
+        // The delete landed, so the court is now free. Reload first (reload
+        // clears the error), then say which half failed.
+        await reload();
+        const evName = activeEvents.find((e) => e.id === eventId)?.name ?? "that event";
+        setError(`Court ${courtNumber} was freed but couldn't be given to ${evName}: ${insErr.message}`);
+        return;
+      }
+    }
+    await reload();
+  };
+
   const [simulating, setSimulating] = useState(false);
 
   // Dev/test helper: load every empty court with its current
@@ -634,6 +669,9 @@ export default function TournamentCourtManagerPage() {
             {completedCount} completed · {inProgressCount} in progress ·{" "}
             {pendingCount} pending
           </p>
+          <p style={{ color: inkSoft, margin: "4px 0 0", fontSize: 13, fontFamily: bodyFontStack }}>
+            Use “Court for” on any court to move it to another event.
+          </p>
         </div>
         <button
           onClick={onSimulateRound}
@@ -744,6 +782,11 @@ export default function TournamentCourtManagerPage() {
               onLoad={(matchId) => onLoad(matchId, courtName)}
               onCancel={onCancel}
               onSubmitScore={onSubmitScore}
+              courtFor={{
+                ownerId,
+                events: activeEvents,
+                onChange: (evId) => onReassignCourt(cn, evId),
+              }}
               pickerOptions={
                 ownerId
                   ? (rankedByEvent.get(ownerId) ?? [])
@@ -860,6 +903,7 @@ function CourtCard({
   onLoad,
   onCancel,
   onSubmitScore,
+  courtFor,
 }: {
   courtName: string;
   owner: Event | null;
@@ -873,6 +917,7 @@ function CourtCard({
   onLoad: (matchId: string) => Promise<void>;
   onCancel: (matchId: string) => Promise<void>;
   onSubmitScore: (m: Match, a: number, b: number) => Promise<void>;
+  courtFor: CourtForProps;
 }) {
   const [busy, setBusy] = useState(false);
   const [scoreA, setScoreA] = useState("");
@@ -923,6 +968,7 @@ function CourtCard({
           eventName={assignedEvent?.name ?? null}
           status="In progress"
           statusColor={successFg}
+          courtFor={courtFor}
         />
         <StageBadge label={assignedStageLabel} />
         <div style={teamRow}>
@@ -1052,6 +1098,7 @@ function CourtCard({
           eventName={null}
           status="Unassigned"
           statusColor={inkMuted}
+          courtFor={courtFor}
         />
         <div
           style={{
@@ -1062,7 +1109,7 @@ function CourtCard({
             fontFamily: bodyFontStack,
           }}
         >
-          Assign this court to an event from the tournament page.
+          Pick an event above to use this court.
         </div>
       </div>
     );
@@ -1075,6 +1122,7 @@ function CourtCard({
         eventName={owner.name}
         status="Empty"
         statusColor={inkMuted}
+        courtFor={courtFor}
       />
       <StageBadge label={suggestionStageLabel} />
 
@@ -1203,16 +1251,76 @@ function CourtCard({
   );
 }
 
+type CourtForProps = {
+  ownerId: string | null;
+  events: Event[];
+  onChange: (eventId: string | null) => Promise<void>;
+};
+
+// "Court for" picker on every court card — re-points the court at another
+// event in play (or frees it) at any time, including after the bracket is
+// built. Mobile: full-width select, 44px tap target.
+function CourtForSelect({ courtName, courtFor }: { courtName: string; courtFor: CourtForProps }) {
+  const [saving, setSaving] = useState(false);
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginTop: 6,
+        fontSize: 12,
+        color: inkSoft,
+        fontFamily: bodyFontStack,
+      }}
+    >
+      <span style={{ whiteSpace: "nowrap" }}>Court for</span>
+      <select
+        aria-label={`Event using ${courtName}`}
+        value={courtFor.ownerId ?? ""}
+        disabled={saving}
+        onChange={async (e) => {
+          setSaving(true);
+          await courtFor.onChange(e.target.value || null);
+          setSaving(false);
+        }}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 44,
+          padding: "6px 8px",
+          fontSize: 14,
+          fontFamily: bodyFontStack,
+          color: ink,
+          background: "#fff",
+          border: `1px solid ${inkMuted}`,
+          borderRadius: 6,
+          cursor: saving ? "wait" : "pointer",
+        }}
+      >
+        <option value="">Unassigned</option>
+        {courtFor.events.map((ev) => (
+          <option key={ev.id} value={ev.id}>
+            {ev.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function CardHeader({
   courtName,
   eventName,
   status,
   statusColor,
+  courtFor,
 }: {
   courtName: string;
   eventName: string | null;
   status: string;
   statusColor: string;
+  courtFor?: CourtForProps;
 }) {
   return (
     <div style={{ marginBottom: 12 }}>
@@ -1236,11 +1344,12 @@ function CardHeader({
           {status}
         </span>
       </div>
-      {eventName && (
+      {eventName && (!courtFor || eventName !== courtFor.events.find((e) => e.id === courtFor.ownerId)?.name) && (
         <div style={{ fontSize: 12, color: inkSoft, marginTop: 2, fontFamily: bodyFontStack }}>
           {eventName}
         </div>
       )}
+      {courtFor && <CourtForSelect courtName={courtName} courtFor={courtFor} />}
     </div>
   );
 }

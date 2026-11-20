@@ -4212,3 +4212,16 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 ## 2026-11-18 — Post-deploy smoke counts shared imports as website changes (#1243, PR #1244)
 - Added `scripts/web-build-inputs.txt` (one list: `web/`, `supabase/functions/_shared/`), `scripts/web-changed.sh` (used by `post-deploy-smoke.yml`), and a PR check `web-build-inputs.yml` that fails on uncovered imports from outside `web/`. DEPLOYMENT.md updated.
 - Next: Ron reviews/merges #1244; it rides with the next promotion. Not yet exercised in a real Actions run.
+## 2026-11-16 — Schedule page: estimate at max teams
+- Schedule page now shows a notice when any event is below its Max teams ("3 events aren't full yet (X: 0 of 16 teams)") with an **Estimate at max teams** button. On, every not-full event is timed at its cap (durations, court needs, auto-schedule plan, tournament time); the Teams column shows `n / max` plus "est. at max". URL-driven (`?teams=max`); the auto-schedule confirm says when it is on. Branch `feature/schedule-estimate-at-max`.
+- Verified on the local stack (seed tournament given a venue + caps 16/12/8) at 375px: toggle flips, numbers move, no horizontal scroll. Typecheck + eslint clean.
+- Not changed: the print modal still prints registered team counts (durations follow the toggle).
+
+## 2026-11-19 — Schedule estimate-at-max merged (PR #1235)
+- Merged to main on Ron's go (reviewer had escalated only for the missing per-PR 390px Playwright check). TEST Pages deploy green on 8572269.
+- Next: rides with the next promotion to PROD. Owed separately: a per-PR phone-width check that covers the schedule page.
+
+## 2026-11-19 — Court Manager: re-point courts after the bracket is built (crisis fix, in flight)
+- Ron: courts were locked once the bracket was set. Root cause: the tournament Court Manager only read `event_courts`; nothing on that screen could change it on game day. Fix on branch `fix/court-manager-reassign`: a "Court for" select on every court card (in-play events + Unassigned) rewrites that court's `event_courts` row for in-play events only. No migration.
+- Typecheck, vitest (469), build green; the one eslint error in that file pre-exists on main. Not yet checked at 390px in a browser.
+- Next: design-gate verdict → PR → merge to main → main→production promotion (Ron directed "all the way through to production").
