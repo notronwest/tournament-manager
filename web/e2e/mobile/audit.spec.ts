@@ -204,16 +204,16 @@ test.describe("mobile audit — layout assertions", () => {
   });
 
   // ── Public recap page (#1108), signed out: the summary report must render
-  //    (not the "isn't available" empty state) and the "Learn More" CTA at the
-  //    foot of the page must be reachable and tappable — this is
-  //    the surface the thank-you email link actually opens on a phone.
-  test("recap page — Learn More CTA usable", async ({ page }, ti) => {
+  //    (not the "isn't available" empty state) and fit the phone viewport. The
+  //    "Learn More" offer banner was removed on purpose (#1251), so the test
+  //    no longer looks for it.
+  test("recap page — report renders and fits the viewport", async ({ page }, ti) => {
     await page.goto(`/t/${SEED.orgSlug}/${SEED.recap.tournamentSlug}/recap`);
     await snap(page, ti, "tournament-recap");
 
     await expect(page.getByText(/this recap isn't available/i)).not.toBeVisible();
-    const cta = page.getByRole("link", { name: /learn more/i });
-    await assertCtaUsable(page, cta, "recap page — Learn More CTA");
+    await expect(page.getByRole("link", { name: /learn more/i })).toHaveCount(0);
+    await assertNoPageOverflow(page, "Recap page");
   });
 
   // ── Guardian surfaces (#1169), populated: Gwen has one dependent (Kit) with
