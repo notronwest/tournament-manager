@@ -4523,6 +4523,53 @@ its work keeps reaching the club board through a daemon session, as it has so fa
 - Running the gate twice for one stop (registering `stop-gate.sh` globally as well as through
   the wrapper).
 
+### D-0344 — A gated repo's production code reaches production only from its production branch, deployed by the release — never by hand from main
+
+*2026-11-23 · scope: `.github/workflows/**, DEPLOYMENT.md, supabase/functions/**, workers/**, infrastructure/promote-dispatch/**` · source: daemon#1588 — found while executing the approved ship_prod 6bcff057 (wmpc-web#470 at 10149d5, pressed 2026-11-24T02:37Z). The promotion gate held that release for the owner because wmpc-concierge-think changes what a member sees, but the live function was already byte-identical to 10149d5 — wmpc-concierge-think v22 had been hand-deployed 2026-11-23T23:39Z, about three hours before the press, and wmpc-command's live source matched too (`supabase functions download` + `cmp` against a clean checkout). wmpc-web's DEPLOYMENT.md says the edge functions and the scheduled-campaigns Worker are "deployed by hand … not carried by a merge", while tournament-manager and third-shot-academy already deploy theirs from CI on a push to `production`. So in one gated repo out of three the press governed the site and not the code behind it.*
+
+**Decision.**
+
+1. **The release is the deploy, for every production target of a gated repo.** In a repo whose
+   `main`→`production` promotion carries the promotion gate (D-0304) — today wmpc-web,
+   club-dashboard, tournament-manager and third-shot-academy — every piece of code that runs in
+   production (the site, edge functions, workers) is deployed **by CI from
+   a push to `production`**, from exactly the commit that was merged there. The merge the
+   release step makes after a passing gate, or after his press, is the deploy; nothing else is.
+
+2. **A hand deploy to production from a gated repo is refused.** `supabase functions deploy`
+   or `wrangler deploy` aimed at a production target, run by an agent session from `main`, a
+   branch or a laptop checkout, is the act this record forbids. A push to `main` may deploy to a
+   TEST project where one exists; where none does (wmpc-web's functions share a single
+   production project), a merge to `main` deploys nothing and the change waits for the release.
+
+3. **The one exception is putting a member right.** When a member is being harmed now, a
+   rollback to the commit `production` already holds may be hand-deployed at once and reported
+   afterwards (D-0197, as `release.sh --rollback` is under D-0293). Rolling *forward* by hand is
+   never the exception — that is a release, and it goes through the gate.
+
+4. **Drift is checked, not assumed.** Each gated repo whose production code is not visible in
+   the Pages build carries a scheduled check that reads what is actually live and compares it
+   with the `production` head, and alarms on a difference. A green release proves the merge; only
+   the live read proves nothing went out around it.
+
+5. **Schema stays where D-0312 rule 3 puts it.** A repo's database changes are applied by the
+   release's migration hook where one exists. wmpc-web's hand-applied `schema.sql` is outside
+   this record; it is the next hand path to close and is not decided here.
+
+**Why.** The gate read wmpc-web#470's diff, found a member-facing change and held it for him —
+correctly — and his press was then decorative, because the function that carried the change had
+gone live from `main` three hours earlier. A gate that governs the branch and not the thing the
+branch describes is the gap D-0293 closed for the mini: production moves only on an approved
+commit. Two of the three gated repos with functions already deploy them from `production`
+(written there as "never hand-run `supabase functions deploy`"); wmpc-web was the one still
+following its own older DEPLOYMENT.md. Binding the deploy to the release fixes it in one shape
+the fleet already runs, rather than a second classifier on the hand path.
+
+**Forbids.** Deploying an edge function or Worker to production from a gated repo by hand, or
+from any ref other than the `production` head. Treating a promotion as approved when a target it
+carries was already live from `main`. Closing the hand path before the CI path has deployed
+once. A rollback that moves forward. Reading this as covering wmpc-web's `schema.sql`.
+
 ## Proposed (not binding yet)
 
 _None._
