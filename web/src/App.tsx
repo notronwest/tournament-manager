@@ -33,6 +33,7 @@ import QuoteEditorPage from "./pages/admin/quotes/QuoteEditorPage";
 import CatalogAdminPage from "./pages/admin/quotes/CatalogAdminPage";
 import ContractPage from "./pages/admin/quotes/ContractPage";
 import OrgStripeSettingsPage from "./pages/admin/OrgStripeSettingsPage";
+import OrgUsersPage from "./pages/admin/OrgUsersPage";
 import OrgContactsPage from "./pages/admin/OrgContactsPage";
 import EmailPage from "./pages/admin/EmailPage";
 import OrgDangerZonePage from "./pages/admin/OrgDangerZonePage";
@@ -421,6 +422,10 @@ export default function App() {
         }
       >
         <Route index element={<Navigate to="tournaments" replace />} />
+        <Route
+          path="settings/users"
+          element={<OrgUsersPage />}
+        />
         <Route
           path="settings/stripe"
           element={<OrgStripeSettingsPage />}

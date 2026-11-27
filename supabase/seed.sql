@@ -224,3 +224,84 @@ begin
   update public.event_registrations set partner_registration_id = v_reg_a
     where id = v_reg_b and partner_registration_id is null;
 end $$;
+
+-- ─────────────────────────────────────────────────────────────────────
+-- Two more org logins, so "Users and Roles" has something to grade.
+-- ─────────────────────────────────────────────────────────────────────
+--
+-- The page's whole job is the rows it renders for OTHER people: a role
+-- picker, a Remove button, an "has never signed in" line. With only the
+-- director seeded, every one of those is unreachable -- the director's own
+-- row is deliberately locked, so a single-member org renders a page with no
+-- controls at all and the design gate has nothing to look at. Same lesson as
+-- the youth fixture rows: a branch no fixture can reach is a branch nobody
+-- grades.
+--
+-- One admin who has signed in (so the "Last signed in" line renders), one
+-- staff member who never has (so its counterpart renders), and one account
+-- with no membership at all so the "Add a person" form has an email that
+-- actually works. All local-only throwaway logins, same as the director.
+do $$
+declare
+  v_org_id uuid;
+  v_admin  uuid := '00000000-0000-0000-0000-0000000d2345';
+  v_staff  uuid := '00000000-0000-0000-0000-0000000d3456';
+  v_spare  uuid := '00000000-0000-0000-0000-0000000d4567';
+  r        record;
+begin
+  select id into v_org_id from public.organizations where slug = 'wmpc';
+  if v_org_id is null then
+    return;
+  end if;
+
+  for r in
+    select *
+      from (values
+        (v_admin, 'assistant@offline.local', 'Avery', 'Assistant', 'admin'::org_role, now()),
+        (v_staff, 'desk@offline.local',      'Dana',  'Desk',      'staff'::org_role, null::timestamptz),
+        -- An account with NO membership: the one input the "Add a person"
+        -- form needs to succeed. Without it the only reachable outcome of
+        -- that form is the "no account with that email" refusal.
+        (v_spare, 'newcoach@offline.local',  'Noa',   'Newcoach',  null::org_role,    now())
+      ) as t(user_id, email, first_name, last_name, member_role, last_sign_in_at)
+  loop
+    insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password,
+      email_confirmed_at, confirmation_token, recovery_token,
+      email_change_token_new, email_change, created_at, updated_at,
+      last_sign_in_at, raw_app_meta_data, raw_user_meta_data, is_super_admin
+    )
+    values (
+      '00000000-0000-0000-0000-000000000000',
+      r.user_id, 'authenticated', 'authenticated',
+      r.email,
+      extensions.crypt('bert-and-erne-offline', extensions.gen_salt('bf')),
+      now(), '', '', '', '', now(), now(),
+      r.last_sign_in_at,
+      '{"provider":"email","providers":["email"]}',
+      '{}',
+      false
+    )
+    on conflict (id) do nothing;
+
+    insert into auth.identities (
+      id, provider_id, user_id, identity_data, provider, created_at, updated_at
+    )
+    values (
+      gen_random_uuid(), r.user_id::text, r.user_id,
+      jsonb_build_object('sub', r.user_id::text, 'email', r.email),
+      'email', now(), now()
+    )
+    on conflict (provider_id, provider) do nothing;
+
+    insert into public.players (auth_user_id, first_name, last_name, email)
+    values (r.user_id, r.first_name, r.last_name, r.email)
+    on conflict (auth_user_id) do nothing;
+
+    if r.member_role is not null then
+      insert into public.organization_members (organization_id, user_id, role)
+      values (v_org_id, r.user_id, r.member_role)
+      on conflict (organization_id, user_id) do nothing;
+    end if;
+  end loop;
+end $$;
