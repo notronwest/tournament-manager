@@ -4235,3 +4235,7 @@ Ported the promotion gate from club-dashboard: `gate / gate` workflow on PRs to 
 - Promotion #1249 was refused because my STATUS push moved main past the approval's pinned head; it was superseded by #1250 (pinned 1cfa6ff), approved, merged → 281c2e3. PROD Pages deploy green, bertanderne.com 200.
 - Lesson: don't push to main between raising a pinned ship_prod card and merging the promotion.
 - Also on Ron's ask: all 12 HS matches (Linwood PB Club Invitational) ended_at set to 5:24 PM ET; scores untouched.
+
+## 2026-11-27 — Builder: nightly e2e install fix (#1256)
+- Nightly regression failed at `playwright install --with-deps` (Microsoft apt source 403), not on a test. PR #1257 drops that apt source first.
+- Next: after merge, re-run Nightly regression on main; consider the same fix in post-deploy-smoke.yml.
